@@ -1,20 +1,7 @@
 import { type MutableRefObject, useEffect, useMemo, useState } from "react";
 import type { CandidateOverview, CandidatePipelineHistory } from "../../../../types/domain";
 import { pipelineService } from "../../../../services/pipelineService";
-
-const STAGE_LABEL: Record<string, string> = {
-  entry: "Recebido",
-  screening: "Triagem",
-  hr_interview: "Entrevista RH",
-  technical_interview: "Entrevista Técnica",
-  final: "Final",
-  offer: "Proposta",
-  hired: "Contratado",
-  pre_admission: "Pré-admissão",
-  protheus: "Protheus",
-  admitted: "Admitido",
-  rejected: "Reprovado",
-};
+import { STAGE_LABEL } from "../../utils/profile";
 
 const TRIGGER_LABEL: Record<string, string> = {
   manual: "Movido manualmente",

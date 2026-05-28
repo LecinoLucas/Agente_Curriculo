@@ -25,8 +25,10 @@ import {
 import type {
   CandidatePipelineHistory,
   PipelineStage,
+  PreAdmissionEnvelope,
   TransferCandidateJobResponse,
 } from "../../types/domain";
+import { getPreAdmission } from "../../services/preAdmissionService";
 import { type PanelTab, usePipeline } from "../../features/pipeline/PipelineContext";
 import {
   buildAnalysisDecisionToast,
@@ -99,6 +101,7 @@ function TabFallback() {
 }
 
 const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
+const ADMISSION_STAGES = new Set<PipelineStage>(["hired", "pre_admission", "protheus"]);
 
 function interviewTypeForStage(stage: PipelineStage | null) {
   return stage === "technical_interview" ? "technical" : "hr";
@@ -176,6 +179,7 @@ export function CandidateDrawer({
 
   const [stageSavingCandidateId, setStageSavingCandidateId] = useState<string | null>(null);
   const [linkSavingCandidateId, setLinkSavingCandidateId] = useState<string | null>(null);
+  const [preAdmissionEnvelope, setPreAdmissionEnvelope] = useState<PreAdmissionEnvelope | null>(null);
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(null);
   const [profileTabKey, setProfileTabKey] = useState<ProfileTabKey>("overview");
   const [detailTabsVisible, setDetailTabsVisible] = useState(true);
@@ -260,6 +264,38 @@ export function CandidateDrawer({
   useEffect(() => {
     setVisitedTabs(new Set(["overview", "score"]));
   }, [selectedCandidateId]);
+
+  const canAccessPreAdmission =
+    user?.role === "admin" || user?.role === "hr" || user?.role === "recruiter";
+
+  // Reset envelope whenever the candidate or job context changes
+  useEffect(() => {
+    setPreAdmissionEnvelope(null);
+  }, [selectedCandidateId, candidateActiveJobId]);
+
+  // Fetch the pre-admission envelope only in admission stages so the callout
+  // can differentiate "no case yet" from "case already open".
+  useEffect(() => {
+    if (!candidate?.id || !candidateActiveJobId || !canAccessPreAdmission) return;
+    if (!currentStage || !ADMISSION_STAGES.has(currentStage)) return;
+
+    let cancelled = false;
+
+    void getPreAdmission(candidateActiveJobId, candidate.id)
+      .then((payload) => {
+        if (cancelled) return;
+        setPreAdmissionEnvelope(payload);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Silently fall back — callout shows without case-aware differentiation
+        setPreAdmissionEnvelope(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [candidate?.id, candidateActiveJobId, canAccessPreAdmission, currentStage]);
 
   // Dev-mode timing: track when drawer is open
   useEffect(() => {
@@ -831,6 +867,7 @@ export function CandidateDrawer({
           onOpenTransferJob={handleOpenTransferJob}
           pipelineStatus={primaryPipelineEntry?.relationship_status ?? null}
           activeJobDecision={candidateOverview.active_job_decision?.decision ?? null}
+          hasPreAdmission={Boolean(preAdmissionEnvelope?.case)}
           userRole={user?.role ?? "candidate"}
         >
           {profileTabKey === "overview" ? (
@@ -955,6 +992,20 @@ export function CandidateDrawer({
                   onOpenHiringDecision={
                     candidate?.id
                       ? () => navigate(`/candidatos/${candidate.id}?tab=workflow&focus=hiring_decision`)
+                      : undefined
+                  }
+                  onCaseCreated={
+                    candidateActiveJobId && candidate?.id
+                      ? async () => {
+                          const jobId = candidateActiveJobId;
+                          const candidateId = candidate.id;
+                          try {
+                            const payload = await getPreAdmission(jobId, candidateId);
+                            setPreAdmissionEnvelope(payload);
+                          } catch {
+                            // keep stale envelope — callout will still show the case was just created
+                          }
+                        }
                       : undefined
                   }
                 />

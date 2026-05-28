@@ -82,7 +82,7 @@ describe("profile terminal post-hire states", () => {
     // sem contexto (preAdmissionContext undefined): fallback conservador
     ["hired", "Registrar decisão", "Registre a decisão de contratação para prosseguir", "workflow:hiring_decision"],
     ["pre_admission", "Acompanhar pré-admissão", "Acesse a aba de pré-admissão para acompanhar o processo", "workflow"],
-    ["protheus", "Ver integração Protheus", "Confira o caso admissional antes da integração", "pre_admission"],
+    ["protheus", "Ver integração ERP", "Confira o caso admissional antes da integração", "pre_admission"],
   ] as const)("sem contexto de pré-admissão, %s retorna label conservadora", (stage, label, hint, targetTab) => {
     const overview: CandidateOverview = {
       ...admittedOverview,
@@ -268,6 +268,132 @@ describe("profile terminal post-hire states", () => {
       label: "Abrir pré-admissão",
       hint: "Acompanhe checklist, pendências e readiness",
       targetTab: "pre_admission",
+      actionable: true,
+    });
+  });
+
+  it("quando candidato em final tem gate hiring_decision_required, CTA mostra Registrar decisão", () => {
+    const overview: CandidateOverview = {
+      ...admittedOverview,
+      resumes: [
+        {
+          resume_id: "r1",
+          title: "CV",
+          status: "active",
+          current_version: 1,
+          current_version_id: "v1",
+          current_file_name: "cv.pdf",
+          extraction_status: "completed",
+          updated_at: "2026-05-25T10:00:00Z",
+        },
+      ],
+      latest_analysis: {
+        analysis_id: "a1",
+        job_id: "job-1",
+        resume_id: "r1",
+        resume_title: "CV",
+        status: "completed",
+        started_at: null,
+        completed_at: "2026-05-25T10:00:00Z",
+        failed_at: null,
+        failure_reason: null,
+        used_real_ai: true,
+        task_id: null,
+        worker_id: null,
+        seniority_level: null,
+        total_experience_years: null,
+        created_at: "2026-05-25T09:00:00Z",
+        updated_at: "2026-05-25T10:00:00Z",
+      },
+      pipeline_entries: [
+        {
+          ...admittedOverview.pipeline_entries[0],
+          stage: "final",
+          relationship_status: "active",
+          is_terminal: false,
+          candidate_status: "Final",
+        },
+      ],
+      preview_pendencies: [
+        {
+          id: "hiring_decision_required",
+          label: "Decisão de contratação obrigatória",
+          tone: "block",
+          action: "open_decision",
+          description: "Registre a decisão de contratação antes de avançar para a etapa de oferta.",
+        },
+      ],
+    };
+
+    const activeEntry = getActivePipelineEntry(overview);
+
+    expect(deriveNextAction(overview, activeEntry)).toEqual({
+      label: "Registrar decisão",
+      hint: "Registre a decisão de contratação antes de avançar para a etapa de oferta.",
+      targetTab: "workflow:hiring_decision",
+      actionable: true,
+    });
+  });
+
+  it("quando candidato em hired tem gate hiring_decision_required, CTA mostra Registrar decisão", () => {
+    const overview: CandidateOverview = {
+      ...admittedOverview,
+      resumes: [
+        {
+          resume_id: "r2",
+          title: "CV",
+          status: "active",
+          current_version: 1,
+          current_version_id: "v2",
+          current_file_name: "cv.pdf",
+          extraction_status: "completed",
+          updated_at: "2026-05-25T10:00:00Z",
+        },
+      ],
+      latest_analysis: {
+        analysis_id: "a2",
+        job_id: "job-1",
+        resume_id: "r2",
+        resume_title: "CV",
+        status: "completed",
+        started_at: null,
+        completed_at: "2026-05-25T10:00:00Z",
+        failed_at: null,
+        failure_reason: null,
+        used_real_ai: true,
+        task_id: null,
+        worker_id: null,
+        seniority_level: null,
+        total_experience_years: null,
+        created_at: "2026-05-25T09:00:00Z",
+        updated_at: "2026-05-25T10:00:00Z",
+      },
+      pipeline_entries: [
+        {
+          ...admittedOverview.pipeline_entries[0],
+          stage: "hired",
+          relationship_status: "active",
+          is_terminal: false,
+          candidate_status: "Contratado",
+        },
+      ],
+      preview_pendencies: [
+        {
+          id: "hiring_decision_required",
+          label: "Decisão de contratação obrigatória",
+          tone: "block",
+          action: "open_decision",
+          description: "Registre a decisão de contratar antes de iniciar a pré-admissão.",
+        },
+      ],
+    };
+
+    const activeEntry = getActivePipelineEntry(overview);
+
+    expect(deriveNextAction(overview, activeEntry)).toEqual({
+      label: "Registrar decisão",
+      hint: "Registre a decisão de contratar antes de iniciar a pré-admissão.",
+      targetTab: "workflow:hiring_decision",
       actionable: true,
     });
   });

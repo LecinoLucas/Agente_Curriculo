@@ -147,13 +147,13 @@ export function TransferJobModal({
         aria-hidden="true"
       />
 
-      <div className="ui-card fixed left-1/2 top-1/2 z-[70] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl">
+      <div className="bg-surface shadow-sm text-text border border-border fixed left-1/2 top-1/2 z-[70] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-text">
               Transferir/corrigir vaga
             </h2>
-            <p className="ui-text-muted mt-0.5 text-sm">
+            <p className="text-text-muted mt-0.5 text-sm">
               O vínculo atual será desativado e o candidato entrará em{" "}
               <code>entry</code> na vaga destino publicada.
             </p>
@@ -187,7 +187,7 @@ export function TransferJobModal({
               value={jobId}
               onChange={(event) => setJobId(event.target.value)}
               disabled={saving || jobsLoading || availableJobs.length === 0}
-              className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-50"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg px-3 text-sm disabled:opacity-50"
             >
               {jobsLoading ? (
                 <option value="">Carregando vagas…</option>
@@ -223,7 +223,7 @@ export function TransferJobModal({
               rows={4}
               disabled={saving}
               placeholder="Explique o impacto desta correção de vaga."
-              className="ui-input rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-lg px-3 py-2 text-sm disabled:opacity-50"
             />
           </label>
         </div>

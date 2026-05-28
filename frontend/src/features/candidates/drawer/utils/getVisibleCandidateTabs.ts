@@ -20,6 +20,8 @@ export interface GetVisibleCandidateTabsInput {
   showAll: boolean;
 }
 
+const ADMISSION_STAGES = new Set<PipelineStage>(["hired", "pre_admission", "protheus"]);
+
 export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): TabKey[] {
   const {
     pipelineStage,
@@ -31,6 +33,7 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
     hasScorecard,
     hasHiringDecision,
     hasPreAdmission,
+    hasAdmissionPackage,
     hasCollaboration,
     userRole,
     showAll,
@@ -42,12 +45,18 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
     userRole === "admin" ||
     userRole === "manager" ||
     userRole === "hr";
-  const canSeePreAdmission = userRole === "admin" || userRole === "hr";
+  const canSeePreAdmission = userRole === "admin" || userRole === "hr" || userRole === "recruiter";
 
   // Resume is always visible
   visible.add("overview");
 
-  const canShowPreAdmission = canSeePreAdmission && hasPreAdmission;
+  const isAdmissionStage = pipelineStage !== null && ADMISSION_STAGES.has(pipelineStage);
+  // Show pre_admission tab when:
+  // - the case is already open (hasPreAdmission), OR
+  // - the candidate is in an admission stage and the document package is still pending
+  //   (prompt admin/hr to create the case and upload documents)
+  const canShowPreAdmission =
+    canSeePreAdmission && (hasPreAdmission || (isAdmissionStage && !hasAdmissionPackage));
 
   // If showing all, return all tabs allowed by the current data contract.
   if (showAll) {

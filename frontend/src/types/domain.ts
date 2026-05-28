@@ -729,6 +729,12 @@ export type AddCandidateToJobPayload = {
   initial_stage?: PipelineStage;
 };
 
+export type ReconsiderCandidateJobPayload = {
+  job_id: string;
+  initial_stage?: PipelineStage;
+  reason: string;
+};
+
 export type PipelineAnalysisDecision = {
   analysis_id: string | null;
   status:
@@ -759,6 +765,8 @@ export type AddCandidateToJobResponse = {
   updated_at: string;
   analysis?: PipelineAnalysisDecision | null;
 };
+
+export type ReconsiderCandidateJobResponse = AddCandidateToJobResponse;
 
 export type TransferCandidateJobPayload = {
   from_job_id: string;

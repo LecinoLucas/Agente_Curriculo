@@ -43,7 +43,7 @@ describe("usePipelineGateActionResolver", () => {
     expect(onAfterNavigate).toHaveBeenCalledTimes(1);
   });
 
-  it("faz fallback para /admissao/novo com candidateId e jobId quando case_id não existe", () => {
+  it("faz fallback para perfil do candidato com tab=pre_admission quando case_id não existe", () => {
     const onAfterNavigate = vi.fn();
     const { result } = renderHook(() => usePipelineGateActionResolver(onAfterNavigate), { wrapper });
 
@@ -58,7 +58,7 @@ describe("usePipelineGateActionResolver", () => {
     });
 
     expect(handled).toBe(true);
-    expect(navigateMock).toHaveBeenCalledWith("/admissao/novo?candidateId=cand-1&jobId=job-1");
+    expect(navigateMock).toHaveBeenCalledWith("/candidatos/cand-1?tab=pre_admission&jobId=job-1");
     expect(onAfterNavigate).toHaveBeenCalledTimes(1);
   });
 

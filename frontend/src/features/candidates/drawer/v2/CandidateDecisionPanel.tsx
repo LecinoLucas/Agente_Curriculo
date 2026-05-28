@@ -47,7 +47,12 @@ function getRecommendation(
   if (currentStage === "hired" || currentStage === "pre_admission" || currentStage === "protheus") {
     return {
       type: "advance",
-      label: currentStage === "hired" ? "Contratado" : currentStage === "pre_admission" ? "Pré-admissão" : "Protheus",
+      label:
+        currentStage === "hired"
+          ? "Contratado / iniciar admissão"
+          : currentStage === "pre_admission"
+            ? "Pré-admissão"
+            : "Integração ERP",
       color: "text-emerald-950",
       bgColor: "border-emerald-200 bg-emerald-50/85",
       icon: CheckCircle2,
@@ -212,9 +217,9 @@ export function CandidateDecisionPanel({
       : currentStage === "hired"
       ? "Candidato contratado. Próxima etapa: pré-admissão."
       : currentStage === "pre_admission"
-        ? "Candidato em pré-admissão. Próxima etapa: Protheus."
+        ? "Candidato em pré-admissão. Próxima etapa: integração ERP."
         : currentStage === "protheus"
-          ? "Candidato em Protheus. Próxima etapa: admissão."
+          ? "Candidato em integração ERP. Próxima etapa: admissão."
       : currentStage === "rejected"
         ? "Ação aplicada. O candidato foi marcado como reprovado para esta vaga."
         : semantics.contextLine;

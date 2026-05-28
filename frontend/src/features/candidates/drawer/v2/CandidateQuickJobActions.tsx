@@ -1,32 +1,19 @@
 import { useEffect, useState } from "react";
 import type { Job, PipelineStage } from "../../../../types/domain";
-
-const STAGE_LABEL: Record<string, string> = {
-  entry: "Recebido",
-  screening: "Triagem",
-  hr_interview: "RH",
-  technical_interview: "Técnica",
-  final: "Final",
-  offer: "Proposta",
-  hired: "Contratado",
-  pre_admission: "Pré-admissão",
-  protheus: "Protheus",
-  admitted: "Admitido",
-  rejected: "Reprovado",
-};
+import { STAGE_LABEL } from "../../utils/profile";
 
 const STAGE_OPTIONS: { value: PipelineStage; label: string }[] = [
-  { value: "entry", label: "Recebido" },
+  { value: "entry", label: "Entrada" },
   { value: "screening", label: "Triagem" },
-  { value: "hr_interview", label: "RH" },
-  { value: "technical_interview", label: "Técnica" },
-  { value: "final", label: "Final" },
-  { value: "offer", label: "Proposta" },
-  { value: "hired", label: "Contratado" },
+  { value: "hr_interview", label: "Entrevista RH" },
+  { value: "technical_interview", label: "Entrevista técnica" },
+  { value: "final", label: "Decisão" },
+  { value: "offer", label: "Oferta" },
+  { value: "hired", label: "Contratado / iniciar admissão" },
   { value: "pre_admission", label: "Pré-admissão" },
-  { value: "protheus", label: "Protheus" },
+  { value: "protheus", label: "Integração ERP" },
   { value: "admitted", label: "Admitido" },
-  { value: "rejected", label: "Reprovado" },
+  { value: "rejected", label: "Encerrado" },
 ];
 
 const TERMINAL_STAGES: PipelineStage[] = ["admitted", "rejected"];

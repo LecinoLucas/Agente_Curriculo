@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Zap, ArrowRight } from "lucide-react";
 import type { CandidateListSummary, JobRanking, JobRankingEntry } from "../../types/domain";
 import { candidatesService } from "../../services/candidatesService";
+import { formatContextError } from "../../services/errorMessages";
+import { HttpError } from "../../services/http";
 import { pipelineService } from "../../services/pipelineService";
 import { toast } from "../../shared/utils/toast";
 import { scoreColorClass } from "../candidates/drawer/hooks/useCandidateDecision";
@@ -31,6 +33,14 @@ export function CandidateSearchModal({
   onCreateNew,
   onOpenCandidate,
 }: CandidateSearchModalProps) {
+  function isReactivationConflict(error: unknown): error is HttpError {
+    return (
+      error instanceof HttpError &&
+      error.status === 409 &&
+      /v[ií]nculo já existe ou foi alterado/i.test(error.message)
+    );
+  }
+
   const [search, setSearch] = useState("");
   const [summaries, setSummaries] = useState<CandidateListSummary[]>([]);
   const [summariesLoading, setSummariesLoading] = useState(false);
@@ -42,11 +52,13 @@ export function CandidateSearchModal({
     candidateName: string;
     lastStage: string;
     result: string;
-    closedAt: string;
+    closedAt: string | null;
   } | null>(null);
+  const [previousProcessError, setPreviousProcessError] = useState<string | null>(null);
 
   // FIX #3: Use a ref to track the latest request version and avoid race conditions
   const fetchVersionRef = useRef(0);
+  const pendingAddIdsRef = useRef<Set<string>>(new Set());
 
   // FIX #2 + #3: Wrap fetchSummaries in useCallback and handle race conditions with AbortController
   const fetchSummaries = useCallback(async (q: string) => {
@@ -94,6 +106,8 @@ export function CandidateSearchModal({
       setAddedIds(new Set());
       setErrors({});
       setPreviousProcessPrompt(null);
+      setPreviousProcessError(null);
+      pendingAddIdsRef.current.clear();
       // Reset fetch version so stale requests from previous session are ignored
       fetchVersionRef.current = 0;
     }
@@ -141,21 +155,58 @@ export function CandidateSearchModal({
     }
   }
 
+  function getClosedProcessFromCandidate(candidate: CandidateListSummary) {
+    const status = candidate.latest_relationship_status?.toLowerCase() ?? null;
+    const isSameJob = candidate.latest_job_id === activeJobId;
+    const isClosed = status
+      ? ["rejected", "hired", "withdrawn", "archived", "removed", "transferred"].includes(status)
+      : false;
+
+    if (!isSameJob || !isClosed) return null;
+
+    return {
+      candidateId: candidate.id,
+      candidateName: candidate.full_name,
+      lastStage: candidate.latest_job_stage ?? "entry",
+      result: status === "rejected" ? "Não selecionado" : status,
+      closedAt: null,
+    };
+  }
+
+  const summaryByCandidateId = useMemo(() => {
+    const map = new Map<string, CandidateListSummary>();
+    for (const summary of summaries) {
+      map.set(summary.id, summary);
+    }
+    return map;
+  }, [summaries]);
+
   async function handleAdd(
     candidateId: string,
     candidateName: string,
     options: { skipPreviousCheck?: boolean } = {},
   ) {
+    if (pendingAddIdsRef.current.has(candidateId) || addedIds.has(candidateId)) {
+      return;
+    }
+
+    pendingAddIdsRef.current.add(candidateId);
     setAddingIds((prev) => new Set(prev).add(candidateId));
     setErrors((prev) => ({ ...prev, [candidateId]: "" }));
     try {
       if (!options.skipPreviousCheck && await hasPreviousClosedProcess(candidateId, candidateName)) {
         return;
       }
-      const linkResult = await pipelineService.addCandidateToJob(candidateId, {
-        job_id: activeJobId,
-        initial_stage: "entry",
-      });
+      const linkResult = options.skipPreviousCheck
+        ? await pipelineService.reconsiderCandidateJob(candidateId, {
+          job_id: activeJobId,
+          initial_stage: "entry",
+          reason: "Reabertura manual do processo pela pipeline.",
+        })
+        : await pipelineService.addCandidateToJob(candidateId, {
+          job_id: activeJobId,
+          initial_stage: "entry",
+        });
       const analysisToast = buildAnalysisDecisionToast(linkResult.analysis);
       if (analysisToast) {
         if (analysisToast.tone === "success") toast.success(analysisToast.message);
@@ -164,12 +215,58 @@ export function CandidateSearchModal({
         if (analysisToast.tone === "error") toast.error(analysisToast.message);
       }
       setPreviousProcessPrompt(null);
+      setPreviousProcessError(null);
       setAddedIds((prev) => new Set(prev).add(candidateId));
       await onAdded();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao adicionar";
+      if (!options.skipPreviousCheck && isReactivationConflict(err)) {
+        try {
+          const reconsidered = await pipelineService.reconsiderCandidateJob(candidateId, {
+            job_id: activeJobId,
+            initial_stage: "entry",
+            reason: "Reabertura automática após conflito de vínculo histórico.",
+          });
+          const analysisToast = buildAnalysisDecisionToast(reconsidered.analysis);
+          if (analysisToast) {
+            if (analysisToast.tone === "success") toast.success(analysisToast.message);
+            if (analysisToast.tone === "info") toast.info(analysisToast.message);
+            if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
+            if (analysisToast.tone === "error") toast.error(analysisToast.message);
+          }
+          setPreviousProcessPrompt(null);
+          setPreviousProcessError(null);
+          setAddedIds((prev) => new Set(prev).add(candidateId));
+          await onAdded();
+          return;
+        } catch {
+          // keep original message path below when reconsideration also fails
+        }
+      }
+
+      if (
+        err instanceof HttpError &&
+        err.status === 409 &&
+        err.message.includes("já está ativo nesta vaga")
+      ) {
+        setPreviousProcessPrompt(null);
+        setAddedIds((prev) => new Set(prev).add(candidateId));
+        toast.info("Candidato já está vinculado a esta vaga.");
+        await onAdded();
+        return;
+      }
+
+      const message = formatContextError(
+        err,
+        "Não foi possível vincular o candidato à vaga.",
+        "Recarregue a lista e tente novamente.",
+      );
+      if (options.skipPreviousCheck) {
+        setPreviousProcessError(message);
+        return;
+      }
       setErrors((prev) => ({ ...prev, [candidateId]: message }));
     } finally {
+      pendingAddIdsRef.current.delete(candidateId);
       setAddingIds((prev) => {
         const s = new Set(prev);
         s.delete(candidateId);
@@ -193,7 +290,11 @@ export function CandidateSearchModal({
             <div className="mt-4 space-y-2 text-sm text-text-muted">
               <p>Última etapa: {previousProcessPrompt.lastStage}</p>
               <p>Último resultado: {previousProcessPrompt.result}</p>
-              <p>Encerrado em: {new Date(previousProcessPrompt.closedAt).toLocaleDateString("pt-BR")}</p>
+              {previousProcessPrompt.closedAt ? (
+                <p>Encerrado em: {new Date(previousProcessPrompt.closedAt).toLocaleDateString("pt-BR")}</p>
+              ) : (
+                <p>Processo anterior encerrado nesta vaga.</p>
+              )}
               <p>
                 Ao iniciar novo processo, entrevistas, scorecards e decisões anteriores
                 permanecem no histórico, mas não liberam etapas do novo processo.
@@ -203,7 +304,10 @@ export function CandidateSearchModal({
               <button
                 type="button"
                 className="rounded-lg border border-border px-3 py-2 text-sm text-text transition hover:bg-surface-muted"
-                onClick={() => setPreviousProcessPrompt(null)}
+                onClick={() => {
+                  setPreviousProcessPrompt(null);
+                  setPreviousProcessError(null);
+                }}
               >
                 Cancelar
               </button>
@@ -216,22 +320,29 @@ export function CandidateSearchModal({
                     `/candidatos/${previousProcessPrompt.candidateId}?tab=history&job_id=${activeJobId}`,
                   );
                   setPreviousProcessPrompt(null);
+                  setPreviousProcessError(null);
                 }}
               >
                 Ver histórico anterior
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90"
+                disabled={addingIds.has(previousProcessPrompt.candidateId)}
+                className="rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void handleAdd(
                   previousProcessPrompt.candidateId,
                   previousProcessPrompt.candidateName,
                   { skipPreviousCheck: true },
                 )}
               >
-                Iniciar novo processo
+                {addingIds.has(previousProcessPrompt.candidateId) ? "Iniciando…" : "Iniciar novo processo"}
               </button>
             </div>
+            {previousProcessError ? (
+              <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {previousProcessError}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -303,7 +414,18 @@ export function CandidateSearchModal({
                       isAdding={addingIds.has(entry.candidate_id)}
                       isAdded={addedIds.has(entry.candidate_id)}
                       error={errors[entry.candidate_id]}
-                      onAdd={() => void handleAdd(entry.candidate_id, entry.candidate_name)}
+                      onAdd={() => {
+                        const summary = summaryByCandidateId.get(entry.candidate_id);
+                        if (summary) {
+                          const previousProcess = getClosedProcessFromCandidate(summary);
+                          if (previousProcess) {
+                            setPreviousProcessError(null);
+                            setPreviousProcessPrompt(previousProcess);
+                            return;
+                          }
+                        }
+                        void handleAdd(entry.candidate_id, entry.candidate_name);
+                      }}
                     />
                   ))}
                 </div>
@@ -344,7 +466,15 @@ export function CandidateSearchModal({
                       isAdding={addingIds.has(candidate.id)}
                       isAdded={addedIds.has(candidate.id)}
                       error={errors[candidate.id]}
-                      onAdd={() => void handleAdd(candidate.id, candidate.full_name)}
+                      onAdd={() => {
+                        const previousProcess = getClosedProcessFromCandidate(candidate);
+                        if (previousProcess) {
+                          setPreviousProcessError(null);
+                          setPreviousProcessPrompt(previousProcess);
+                          return;
+                        }
+                        void handleAdd(candidate.id, candidate.full_name);
+                      }}
                       onOpen={() =>
                         onOpenCandidate?.(
                           candidate.id,

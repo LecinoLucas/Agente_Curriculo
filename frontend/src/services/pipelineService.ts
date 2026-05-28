@@ -8,6 +8,8 @@ import type {
   PipelineAnalysisDecision,
   PipelineStage,
   PipelineStageTransition,
+  ReconsiderCandidateJobPayload,
+  ReconsiderCandidateJobResponse,
   TransferCandidateJobPayload,
   TransferCandidateJobResponse,
 } from "../types/domain";
@@ -301,6 +303,31 @@ export const pipelineService = {
       body: {
         job_id: payload.job_id,
         initial_stage: payload.initial_stage ?? "entry",
+      },
+    });
+
+    return {
+      candidate_id: item?.candidate_id ?? candidateId,
+      job_id: item?.job_id ?? payload.job_id,
+      stage: item?.stage ?? (payload.initial_stage ?? "entry"),
+      candidate_status: item?.candidate_status ?? "Recebido",
+      status: item?.status ?? "active",
+      transition_id: item?.transition_id ?? "",
+      updated_at: item?.updated_at ?? new Date(0).toISOString(),
+      analysis: normalizeAnalysisDecision(item?.analysis),
+    };
+  },
+
+  async reconsiderCandidateJob(
+    candidateId: string,
+    payload: ReconsiderCandidateJobPayload,
+  ): Promise<ReconsiderCandidateJobResponse> {
+    const item = await httpRequest<any>(`/api/v1/pipeline/${candidateId}/reconsider-job`, {
+      method: "POST",
+      body: {
+        job_id: payload.job_id,
+        initial_stage: payload.initial_stage ?? "entry",
+        reason: payload.reason,
       },
     });
 

@@ -30,6 +30,12 @@ vi.mock("../../../../../services/preAdmissionService", () => ({
   createPreAdmission: vi.fn(),
 }));
 
+vi.mock("../../../../../services/preAdmissionChecklistTemplatesService", () => ({
+  preAdmissionChecklistTemplatesService: {
+    listTemplates: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 vi.mock("../../../../../shared/utils/toast", () => ({
   toast: {
     success: vi.fn(),
@@ -452,12 +458,90 @@ describe("CandidatePreAdmissionPanel.summaryCard", () => {
     expect(screen.queryByTestId("pre-admission-start-drawer")).not.toBeInTheDocument();
   });
 
-  it("bloqueia recruiter sem chamar endpoints sensíveis", () => {
+  it("recruiter acessa o painel sem mensagem de restrição", () => {
     renderPanel({ userRole: "recruiter" });
 
-    expect(screen.getByText("Pré-admissão restrita ao RH.")).toBeInTheDocument();
-    expect(admissionWorkspaceService.getWorkspace).not.toHaveBeenCalled();
-    expect(admissionWorkspaceService.getOverview).not.toHaveBeenCalled();
+    expect(screen.queryByText("Pré-admissão sem permissão de acesso.")).not.toBeInTheDocument();
+    // caseId fornecido → não chama getPreAdmission para descoberta
     expect(getPreAdmission).not.toHaveBeenCalled();
+  });
+
+  describe("stage hired — sem caso de pré-admissão", () => {
+    beforeEach(() => {
+      vi.mocked(getPreAdmission).mockResolvedValue({
+        case: null,
+        can_create: true,
+        hiring_decision_outcome: "hire",
+      });
+    });
+
+    it("mostra título 'Iniciar admissão' quando stage é hired e can_create=true", async () => {
+      render(
+        <MemoryRouter>
+          <CandidatePreAdmissionPanel
+            jobId="job-1"
+            candidateId="cand-1"
+            userRole="hr"
+            currentStage="hired"
+          />
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByText("Iniciar admissão")).toBeInTheDocument();
+    });
+
+    it("mostra descrição correta do Case 1 quando stage é hired e can_create=true", async () => {
+      render(
+        <MemoryRouter>
+          <CandidatePreAdmissionPanel
+            jobId="job-1"
+            candidateId="cand-1"
+            userRole="hr"
+            currentStage="hired"
+          />
+        </MemoryRouter>,
+      );
+
+      expect(
+        await screen.findByText(
+          "O candidato foi marcado como contratado, mas o caso de pré-admissão ainda não foi criado.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("botão diz 'Iniciar pré-admissão' quando stage é hired e can_create=true", async () => {
+      render(
+        <MemoryRouter>
+          <CandidatePreAdmissionPanel
+            jobId="job-1"
+            candidateId="cand-1"
+            userRole="hr"
+            currentStage="hired"
+          />
+        </MemoryRouter>,
+      );
+
+      expect(
+        await screen.findByRole("button", { name: /Iniciar pré-admissão/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Criar caso admissional/i })).not.toBeInTheDocument();
+    });
+
+    it("título e botão usam labels genéricos quando currentStage não é hired", async () => {
+      render(
+        <MemoryRouter>
+          <CandidatePreAdmissionPanel
+            jobId="job-1"
+            candidateId="cand-1"
+            userRole="hr"
+            currentStage="pre_admission"
+          />
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByText("Caso admissional ainda não aberto")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Criar caso admissional/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Iniciar pré-admissão/i })).not.toBeInTheDocument();
+    });
   });
 });

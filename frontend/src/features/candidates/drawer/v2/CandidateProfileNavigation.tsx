@@ -53,8 +53,7 @@ export function CandidateProfileNavigation({
 }: CandidateProfileNavigationProps) {
   const [showAll, setShowAll] = useState(false);
 
-  // Ensure activeTab is visible; otherwise redirect to overview
-  const visibleTabs = getVisibleCandidateTabs({
+  const tabInput = {
     pipelineStage,
     pipelineStatus,
     activeJobDecision,
@@ -67,8 +66,11 @@ export function CandidateProfileNavigation({
     hasAdmissionPackage,
     hasCollaboration,
     userRole,
-    showAll,
-  });
+  };
+
+  const defaultTabs = getVisibleCandidateTabs({ ...tabInput, showAll: false });
+  const allPermittedTabs = getVisibleCandidateTabs({ ...tabInput, showAll: true });
+  const visibleTabs = showAll ? allPermittedTabs : defaultTabs;
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) {
@@ -76,11 +78,8 @@ export function CandidateProfileNavigation({
     }
   }, [visibleTabs, activeTab, onChange]);
 
-  const tabsToRender = showAll
-    ? TABS
-    : TABS.filter(({ key }) => visibleTabs.includes(key));
-
-  const hasMoreTabs = visibleTabs.length < TABS.length;
+  const tabsToRender = TABS.filter(({ key }) => visibleTabs.includes(key));
+  const hasMoreTabs = allPermittedTabs.length > defaultTabs.length;
 
   return (
     <div className="shrink-0 border-b border-border/30 bg-surface px-5 py-3">

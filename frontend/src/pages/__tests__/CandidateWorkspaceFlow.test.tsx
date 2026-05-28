@@ -992,7 +992,7 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Avançar para proposta");
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Avançar para oferta");
     expect(screen.queryByRole("button", { name: /^Vincular vaga$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Mover etapa$/i })).not.toBeInTheDocument();
 
@@ -1044,8 +1044,8 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Avançar para proposta");
-    expect(screen.getByTestId("candidate-profile-next-action-button")).toHaveTextContent("Avançar para proposta");
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Avançar para oferta");
+    expect(screen.getByTestId("candidate-profile-next-action-button")).toHaveTextContent("Avançar para oferta");
 
     await user.click(screen.getByTestId("candidate-profile-next-action-button"));
 
@@ -1101,7 +1101,7 @@ describe("Candidate workspace flow", () => {
     expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Abrir pré-admissão");
   });
 
-  it("candidato em Protheus mostra Ver integração Protheus como ação principal", async () => {
+  it("candidato em integração ERP mostra Ver integração ERP como ação principal", async () => {
     vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
       case: {
         id: "case-1",
@@ -1145,7 +1145,7 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Ver integração Protheus");
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Ver integração ERP");
   });
 
   it("decisão contratar sem caso ativo abre drawer de início da pré-admissão e cria o caso para HR/Admin", async () => {
@@ -1746,7 +1746,9 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Entrevista técnica")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText("Entrevista técnica").length).toBeGreaterThan(0);
+    });
     expect(screen.getByText("Técnica")).toBeInTheDocument();
     expect(screen.getByText("Concluída")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Preencher scorecard/i })).toBeInTheDocument();
@@ -1809,7 +1811,9 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Entrevista técnica")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText("Entrevista técnica").length).toBeGreaterThan(0);
+    });
     await user.click(screen.getByRole("button", { name: /Registrar feedback/i }));
 
     expect(screen.getByLabelText(/Feedback da entrevista/i)).toBeInTheDocument();
@@ -2017,7 +2021,9 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Entrevista técnica")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText("Entrevista técnica").length).toBeGreaterThan(0);
+    });
     expect(screen.getByText("Agendada")).toBeInTheDocument();
     expect(screen.getByText("A entrevista precisa ser concluída antes do scorecard.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Marcar como concluída/i })).toBeInTheDocument();
@@ -2585,9 +2591,9 @@ describe("Candidate workspace flow", () => {
   });
 
   it.each([
-    ["hired", "Contratado", "active", false],
+    ["hired", "Contratado / iniciar admissão", "active", false],
     ["pre_admission", "Pré-admissão", "active", false],
-    ["protheus", "Protheus", "active", false],
+    ["protheus", "Integração ERP", "active", false],
     ["admitted", "Admitido", "hired", true],
   ] as const)("candidato em %s permanece vinculado à vaga no perfil", async (stage, label, relationshipStatus, isTerminal) => {
     vi.mocked(candidatesService.getOverview).mockResolvedValue({

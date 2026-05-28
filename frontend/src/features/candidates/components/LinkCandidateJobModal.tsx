@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BriefcaseBusiness, LoaderCircle, Search } from "lucide-react";
 
 import { Modal } from "../../../components/common/Modal";
 import { formatContextError } from "../../../services/errorMessages";
+import { HttpError } from "../../../services/http";
 import { listJobs } from "../../../services/jobsService";
 import { pipelineService } from "../../../services/pipelineService";
 import { toast } from "../../../shared/utils/toast";
@@ -49,6 +50,7 @@ export function LinkCandidateJobModal({
   const [loading, setLoading] = useState(false);
   const [linkingJobId, setLinkingJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const pendingLinkJobIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -122,7 +124,9 @@ export function LinkCandidateJobModal({
 
   async function handleLink(jobId: string) {
     if (!candidateId) return;
+    if (pendingLinkJobIdRef.current) return;
 
+    pendingLinkJobIdRef.current = jobId;
     setLinkingJobId(jobId);
     setError(null);
 
@@ -143,6 +147,17 @@ export function LinkCandidateJobModal({
       await onLinked?.(jobId);
       onClose();
     } catch (err: unknown) {
+      if (
+        err instanceof HttpError &&
+        err.status === 409 &&
+        err.message.includes("já está ativo nesta vaga")
+      ) {
+        toast.info("Candidato já está vinculado a esta vaga.");
+        await onLinked?.(jobId);
+        onClose();
+        return;
+      }
+
       setError(
         formatContextError(
           err,
@@ -152,6 +167,7 @@ export function LinkCandidateJobModal({
       );
       toast.error("Não foi possível vincular o candidato à vaga");
     } finally {
+      pendingLinkJobIdRef.current = null;
       setLinkingJobId(null);
     }
   }

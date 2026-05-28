@@ -105,8 +105,7 @@ describe("getVisibleCandidateTabs", () => {
       hasScorecard: true,
       hasCollaboration: true,
       hasPreAdmission: true,
-      hasAdmissionPackage: true,
-      userRole: "recruiter",
+          userRole: "recruiter",
       showAll: false,
     };
     const result = getVisibleCandidateTabs(input);
@@ -119,24 +118,42 @@ describe("getVisibleCandidateTabs", () => {
     expect(result).toContain("collaboration");
   });
 
-  it.each(["hired", "pre_admission", "protheus", "admitted"] as const)(
-    "should not show pre_admission in %s stage without a real case",
+  it.each(["hired", "pre_admission", "protheus"] as const)(
+    "should show pre_admission tab for hr in %s stage even without case (prompt to add documents)",
     (pipelineStage) => {
-    const input = { ...defaultInput, pipelineStage, userRole: "hr" };
-    const result = getVisibleCandidateTabs(input);
-    expect(result).not.toContain("pre_admission");
+      const input = { ...defaultInput, pipelineStage, userRole: "hr", hasAdmissionPackage: false };
+      const result = getVisibleCandidateTabs(input);
+      expect(result).toContain("pre_admission");
     },
   );
 
-  it("should hide pre_admission for recruiter in admission stages", () => {
+  it("should not show pre_admission for hr in admitted stage without a case", () => {
+    const input = { ...defaultInput, pipelineStage: "admitted", userRole: "hr", hasPreAdmission: false };
+    const result = getVisibleCandidateTabs(input);
+    expect(result).not.toContain("pre_admission");
+  });
+
+  it("should not show pre_admission for hr in admission stage when package exists but no case", () => {
     const input = {
       ...defaultInput,
       pipelineStage: "pre_admission",
-      hasPreAdmission: true,
-      userRole: "recruiter",
+      userRole: "hr",
+      hasPreAdmission: false,
+      hasAdmissionPackage: true,
     };
     const result = getVisibleCandidateTabs(input);
     expect(result).not.toContain("pre_admission");
+  });
+
+  it("should show pre_admission for recruiter in admission stages when package is pending", () => {
+    const input = {
+      ...defaultInput,
+      pipelineStage: "pre_admission",
+      hasAdmissionPackage: false,
+      userRole: "recruiter",
+    };
+    const result = getVisibleCandidateTabs(input);
+    expect(result).toContain("pre_admission");
   });
 
   it("should prioritize important tabs when exceeding max", () => {
@@ -147,8 +164,7 @@ describe("getVisibleCandidateTabs", () => {
       hasScorecard: true,
       hasCollaboration: true,
       hasPreAdmission: true,
-      hasAdmissionPackage: true,
-      userRole: "recruiter",
+          userRole: "recruiter",
       showAll: false,
     };
     const result = getVisibleCandidateTabs(input);

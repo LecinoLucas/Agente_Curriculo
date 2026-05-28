@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { CandidateOverview, AnalysisResult, JobRankingEntry, PipelineStage, Job } from "../../../../types/domain";
 import type { ScoreExplanationResponse } from "../../../../services/scoreExplanationService";
 import type { ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, LoaderCircle, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, LoaderCircle, Sparkles } from "lucide-react";
 import { CandidateProfileHeader } from "./CandidateProfileHeader";
 import { CandidateDecisionPanel } from "./CandidateDecisionPanel";
 import { CandidateQuickActions } from "./CandidateQuickActions";
@@ -293,6 +293,21 @@ export function CandidateProfileView({
             compact={true}
           />
         ) : null}
+
+        {!isLoading &&
+          (currentStage === "hired" || currentStage === "pre_admission" || currentStage === "protheus") &&
+          !hasAdmissionPackage ? (
+          <AdmissionDocumentCallout
+            userRole={userRole}
+            currentStage={currentStage}
+            hasPreAdmission={hasPreAdmission}
+            onOpenPreAdmission={
+              userRole === "admin" || userRole === "hr" || userRole === "recruiter"
+                ? () => onTabChange("pre_admission")
+                : undefined
+            }
+          />
+        ) : null}
       </div>
 
       {/* Sticky footer for compact mode */}
@@ -410,6 +425,79 @@ function ActionFeedbackBanner({
         <div className="min-w-0">
           <p className="text-sm font-semibold">{feedback.title}</p>
           {feedback.detail ? <p className="mt-1 text-xs opacity-80">{feedback.detail}</p> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdmissionDocumentCallout({
+  userRole,
+  currentStage,
+  hasPreAdmission,
+  onOpenPreAdmission,
+}: {
+  userRole: UserRole;
+  currentStage: PipelineStage | null;
+  hasPreAdmission: boolean;
+  onOpenPreAdmission?: () => void;
+}) {
+  const canAct = userRole === "admin" || userRole === "hr" || userRole === "recruiter";
+
+  let title: string;
+  let body: string;
+  let actionLabel: string;
+
+  if (currentStage === "protheus") {
+    title = "Aguardando exportação para ERP";
+    body = canAct
+      ? "O caso admissional está pronto. Acesse a aba de pré-admissão para iniciar a exportação para o Protheus."
+      : "O candidato está aguardando integração com o sistema ERP para concluir a admissão.";
+    actionLabel = "Abrir pré-admissão";
+  } else if (currentStage === "pre_admission") {
+    title = hasPreAdmission ? "Pré-admissão em andamento" : "Pré-admissão pendente";
+    body = hasPreAdmission
+      ? canAct
+        ? "Acompanhe o checklist e os documentos do candidato na aba de pré-admissão."
+        : "O candidato está em processo de documentação admissional."
+      : canAct
+        ? "O candidato está em etapa de pré-admissão, mas o caso ainda não foi criado."
+        : "O candidato está aguardando o início do processo de documentação admissional.";
+    actionLabel = hasPreAdmission ? "Abrir pré-admissão" : "Iniciar pré-admissão";
+  } else {
+    // hired
+    if (hasPreAdmission) {
+      title = "Pré-admissão em andamento";
+      body = canAct
+        ? "Caso admissional aberto. Acompanhe o andamento na aba de pré-admissão."
+        : "O candidato possui um caso admissional em andamento.";
+      actionLabel = "Abrir pré-admissão";
+    } else {
+      title = "Iniciar admissão";
+      body = "O candidato foi marcado como contratado, mas o caso de pré-admissão ainda não foi criado.";
+      actionLabel = "Iniciar pré-admissão";
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3.5">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+          <ClipboardList className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-amber-900">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-amber-800">{body}</p>
+          {onOpenPreAdmission ? (
+            <button
+              type="button"
+              onClick={onOpenPreAdmission}
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-200"
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              {actionLabel}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { CandidateOverview, PipelineStage } from "../../../../types/domain";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { deriveScoreSemantics } from "../../utils/scoreSemantics";
+import { STAGE_LABEL } from "../../utils/profile";
 
 interface CandidateProfileHeaderProps {
   candidate: CandidateOverview["candidate"] | null | undefined;
@@ -150,16 +151,3 @@ export function CandidateProfileHeader({
   );
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  entry: "Recebido",
-  screening: "Triagem",
-  hr_interview: "RH",
-  technical_interview: "Técnica",
-  final: "Final",
-  offer: "Proposta",
-  hired: "Contratado",
-  pre_admission: "Pré-admissão",
-  protheus: "Protheus",
-  admitted: "Admitido",
-  rejected: "Reprovado",
-};

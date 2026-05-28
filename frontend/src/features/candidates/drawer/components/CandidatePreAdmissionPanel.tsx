@@ -58,11 +58,12 @@ export function CandidatePreAdmissionPanel({
   userRole = null,
   candidateName = null,
   jobTitle = null,
+  currentStage = null,
   onOpenHiringDecision,
   initialEnvelope = null,
   onCaseCreated,
 }: CandidatePreAdmissionPanelProps) {
-  const canAccessPreAdmission = userRole === "admin" || userRole === "hr";
+  const canAccessPreAdmission = userRole === "admin" || userRole === "hr" || userRole === "recruiter";
   const [resolvedCaseId, setResolvedCaseId] = useState<string | null>(caseId);
   const [envelope, setEnvelope] = useState<PreAdmissionEnvelope | null>(initialEnvelope);
   const [loading, setLoading] = useState(!caseId && canAccessPreAdmission);
@@ -107,7 +108,7 @@ export function CandidatePreAdmissionPanel({
     }
   }, [canAccessPreAdmission, candidateId, jobId]);
 
-  const handleCreateCase = useCallback(async (): Promise<PreAdmissionStartDrawerResult> => {
+  const handleCreateCase = useCallback(async (templateId: string | null = null): Promise<PreAdmissionStartDrawerResult> => {
     if (!canAccessPreAdmission || !jobId || !candidateId) {
       throw new HttpError(403, "Acesso restrito ao RH.");
     }
@@ -118,7 +119,11 @@ export function CandidatePreAdmissionPanel({
     setCreatingCase(true);
     setError(null);
     try {
-      const created = await createPreAdmission(jobId, candidateId, {});
+      const created = await createPreAdmission(
+        jobId,
+        candidateId,
+        templateId ? { checklist_template_id: templateId } : {},
+      );
       setEnvelope({
         case: created,
         can_create: false,
@@ -192,8 +197,8 @@ export function CandidatePreAdmissionPanel({
       <div className="bg-surface shadow-sm text-text rounded-lg border border-border p-6">
         <EmptyState
           icon="🔒"
-          title="Pré-admissão restrita ao RH."
-          description="A criação e gestão do caso admissional ficam disponíveis apenas para RH e administradores."
+          title="Pré-admissão sem permissão de acesso."
+          description="A criação e gestão do caso admissional ficam disponíveis para administradores, RH e recrutadores."
         />
       </div>
     );
@@ -241,25 +246,35 @@ export function CandidatePreAdmissionPanel({
   if (!resolvedCaseId) {
     const canCreateCase = envelope?.can_create ?? false;
     const hasHireDecision = envelope?.hiring_decision_outcome === "hire";
+    const isHiredStage = currentStage === "hired";
+
+    const emptyTitle = isHiredStage && canCreateCase
+      ? "Iniciar admissão"
+      : "Caso admissional ainda não aberto";
+
     const emptyDescription = canCreateCase
-      ? "Crie o caso admissional para iniciar checklist, documentos e integração."
+      ? isHiredStage
+        ? "O candidato foi marcado como contratado, mas o caso de pré-admissão ainda não foi criado."
+        : "Crie o caso admissional para iniciar checklist, documentos e integração."
       : hasHireDecision
         ? "A pré-admissão será liberada quando o candidato estiver em etapa compatível do pipeline."
         : candidateName && jobTitle
           ? `${candidateName} ainda não possui um caso ativo de pré-admissão para ${jobTitle}.`
           : "A pré-admissão fica disponível apenas após a decisão final de contratar.";
 
+    const createCaseLabel = isHiredStage ? "Iniciar pré-admissão" : "Criar caso admissional";
+
     return (
       <>
         <div className="bg-surface shadow-sm text-text rounded-lg border border-border p-6">
           <EmptyState
             icon="📋"
-            title="Caso admissional ainda não aberto"
+            title={emptyTitle}
             description={emptyDescription}
             action={
               canCreateCase
                 ? {
-                    label: "Criar caso admissional",
+                    label: createCaseLabel,
                     onClick: () => {
                       setStartDrawerOpen(true);
                     },

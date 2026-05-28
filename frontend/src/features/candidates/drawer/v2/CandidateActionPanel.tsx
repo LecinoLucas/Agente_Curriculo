@@ -1,32 +1,19 @@
 import { useEffect, useState } from "react";
 import type { Job, PipelineStage } from "../../../../types/domain";
-
-const STAGE_LABEL: Record<string, string> = {
-  entry: "Recebido",
-  screening: "Triagem",
-  hr_interview: "Entrevista RH",
-  technical_interview: "Entrevista Técnica",
-  final: "Final",
-  offer: "Proposta",
-  hired: "Contratado",
-  pre_admission: "Pré-admissão",
-  protheus: "Protheus",
-  admitted: "Admitido",
-  rejected: "Reprovado",
-};
+import { STAGE_LABEL } from "../../utils/profile";
 
 const STAGE_OPTIONS: { value: PipelineStage; label: string }[] = [
-  { value: "entry", label: "Recebido" },
+  { value: "entry", label: "Entrada" },
   { value: "screening", label: "Triagem" },
   { value: "hr_interview", label: "Entrevista RH" },
-  { value: "technical_interview", label: "Entrevista Técnica" },
-  { value: "final", label: "Final" },
-  { value: "offer", label: "Proposta" },
-  { value: "hired", label: "Contratado" },
+  { value: "technical_interview", label: "Entrevista técnica" },
+  { value: "final", label: "Decisão" },
+  { value: "offer", label: "Oferta" },
+  { value: "hired", label: "Contratado / iniciar admissão" },
   { value: "pre_admission", label: "Pré-admissão" },
-  { value: "protheus", label: "Protheus" },
+  { value: "protheus", label: "Integração ERP" },
   { value: "admitted", label: "Admitido" },
-  { value: "rejected", label: "Reprovado" },
+  { value: "rejected", label: "Encerrado" },
 ];
 
 const DANGEROUS_STAGES: PipelineStage[] = ["admitted", "rejected"];
@@ -148,7 +135,12 @@ export function CandidateActionPanel({
                         type="button"
                         onClick={() => void submitStage(confirmStage)}
                         disabled={stageSaving || interactionLocked}
-                        className="flex-1 rounded-lg bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+                        className={[
+                          "flex-1 rounded-lg px-2 py-1 text-xs font-medium text-white transition disabled:opacity-50",
+                          DANGEROUS_STAGES.includes(confirmStage)
+                            ? "bg-red-600 hover:bg-red-700"
+                            : "bg-blue-600 hover:bg-blue-700",
+                        ].join(" ")}
                       >
                         {stageSaving ? "Salvando…" : "Confirmar"}
                       </button>

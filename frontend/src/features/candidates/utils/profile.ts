@@ -8,17 +8,17 @@ import { POST_HIRING_ACTIVE_STAGES as POST_HIRING_ACTIVE_STAGE_SET } from "../..
 import { SUCCESS_TERMINAL_STAGES as SUCCESS_TERMINAL_STAGE_SET } from "../../../types/domain";
 
 export const STAGE_LABEL: Record<PipelineStage, string> = {
-  entry: "Recebido",
+  entry: "Entrada",
   screening: "Triagem",
   hr_interview: "Entrevista RH",
-  technical_interview: "Entrevista Técnica",
-  final: "Final",
-  offer: "Proposta",
-  hired: "Contratado",
+  technical_interview: "Entrevista técnica",
+  final: "Decisão",
+  offer: "Oferta",
+  hired: "Contratado / iniciar admissão",
   pre_admission: "Pré-admissão",
-  protheus: "Protheus",
+  protheus: "Integração ERP",
   admitted: "Admitido",
-  rejected: "Reprovado",
+  rejected: "Encerrado",
 };
 
 export const ANALYSIS_STATUS_LABEL: Record<string, string> = {
@@ -329,7 +329,7 @@ export function deriveNextAction(
     if (preAdmissionContext?.hasActiveCase) {
       if (activeEntry.stage === "protheus") {
         return {
-          label: "Ver integração Protheus",
+          label: "Ver integração ERP",
           hint: "Confira o caso admissional antes da integração",
           targetTab: "pre_admission",
           actionable: true,
@@ -404,7 +404,7 @@ export function deriveNextAction(
         activeEntry.stage === "hired"
           ? "Iniciar pré-admissão"
           : activeEntry.stage === "protheus"
-            ? "Ver integração Protheus"
+            ? "Ver integração ERP"
             : "Abrir admissão";
     }
 
@@ -471,7 +471,7 @@ export function deriveNextAction(
       }
       return { label: "Avançar candidato", hint: "Pendências da entrevista concluídas", targetTab: "workflow", actionable: true };
     case "final":
-      return { label: "Avançar para proposta", hint: "Etapa final", targetTab: "workflow", actionable: true };
+      return { label: "Avançar para oferta", hint: "Etapa de decisão", targetTab: "workflow", actionable: true };
     case "offer":
       return { label: "Mover para Contratado", hint: "Finalize a etapa na pipeline", targetTab: "workflow", actionable: true };
     case "hired":
@@ -482,7 +482,7 @@ export function deriveNextAction(
       // Sem contexto: não há como saber se o caso existe — ação neutra
       return { label: "Acompanhar pré-admissão", hint: "Acesse a aba de pré-admissão para acompanhar o processo", targetTab: "workflow", actionable: true };
     case "protheus":
-      return { label: "Ver integração Protheus", hint: "Confira o caso admissional antes da integração", targetTab: "pre_admission", actionable: true };
+      return { label: "Ver integração ERP", hint: "Confira o caso admissional antes da integração", targetTab: "pre_admission", actionable: true };
     case "admitted":
       return { label: "Sem ação pendente", hint: "Candidato admitido", actionable: false };
     default:

@@ -239,7 +239,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
               type="button"
               onClick={handlers.clearFile}
               disabled={uploadLoading}
-              className="ui-btn-secondary rounded-xl border px-3 py-2 text-sm font-medium disabled:opacity-40"
+              className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm rounded-xl border px-3 py-2 text-sm font-medium disabled:opacity-40"
             >
               Remover arquivo
             </button>
@@ -292,7 +292,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
                           <input
                             value={editTitle}
                             onChange={(event) => setEditTitle(event.target.value)}
-                            className="ui-input h-8 flex-1 rounded-lg px-3 text-sm"
+                            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-8 flex-1 rounded-lg px-3 text-sm"
                             autoFocus
                             onKeyDown={(event) => {
                               if (event.key === "Enter") void handlers.handleEditSave();

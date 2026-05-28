@@ -27,7 +27,7 @@ const TYPE_LABELS: Record<InterviewType, string> = {
   technical: "Técnica",
   manager: "Gestor",
   hr: "RH",
-  final: "Final",
+  final: "Decisão",
   other: "Outra",
 };
 
@@ -255,7 +255,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                 disabled={formMode === "reschedule"}
-                className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-60"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg px-3 text-sm disabled:opacity-60"
               />
             </label>
             <label className="space-y-1 text-sm">
@@ -264,7 +264,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
                 value={form.interview_type}
                 onChange={(event) => setForm((current) => ({ ...current, interview_type: event.target.value as InterviewType }))}
                 disabled={formMode === "reschedule"}
-                className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-60"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg px-3 text-sm disabled:opacity-60"
               >
                 {Object.entries(TYPE_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
@@ -277,7 +277,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
                 type="datetime-local"
                 value={form.scheduled_start}
                 onChange={(event) => setForm((current) => ({ ...current, scheduled_start: event.target.value }))}
-                className="ui-input h-10 rounded-lg px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg px-3 text-sm"
               />
             </label>
             <label className="space-y-1 text-sm">
@@ -286,7 +286,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
                 type="datetime-local"
                 value={form.scheduled_end}
                 onChange={(event) => setForm((current) => ({ ...current, scheduled_end: event.target.value }))}
-                className="ui-input h-10 rounded-lg px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg px-3 text-sm"
               />
             </label>
             <label className="space-y-1 text-sm">
@@ -294,7 +294,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
               <input
                 value={form.interviewer_name}
                 onChange={(event) => setForm((current) => ({ ...current, interviewer_name: event.target.value }))}
-                className="ui-input h-10 rounded-lg px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg px-3 text-sm"
               />
             </label>
             <label className="space-y-1 text-sm">
@@ -303,7 +303,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
                 type="email"
                 value={form.interviewer_email}
                 onChange={(event) => setForm((current) => ({ ...current, interviewer_email: event.target.value }))}
-                className="ui-input h-10 rounded-lg px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg px-3 text-sm"
               />
             </label>
           </div>

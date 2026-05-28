@@ -4,6 +4,8 @@ import { createPortal } from "react-dom";
 
 import { HttpError } from "../../../../services/http";
 import { formatContextError } from "../../../../services/errorMessages";
+import { preAdmissionChecklistTemplatesService } from "../../../../services/preAdmissionChecklistTemplatesService";
+import type { PreAdmissionChecklistTemplate } from "../../../../types/domain";
 
 export type PreAdmissionStartDrawerResult = {
   caseId: string;
@@ -15,7 +17,7 @@ type PreAdmissionStartDrawerProps = {
   candidateName?: string | null;
   jobTitle?: string | null;
   onClose: () => void;
-  onConfirm: () => Promise<PreAdmissionStartDrawerResult>;
+  onConfirm: (templateId: string | null) => Promise<PreAdmissionStartDrawerResult>;
   onSuccess?: (result: PreAdmissionStartDrawerResult) => void | Promise<void>;
 };
 
@@ -33,6 +35,114 @@ function DetailCard({
       </p>
       <p className="mt-1 text-sm font-semibold text-text">{value}</p>
     </div>
+  );
+}
+
+function TemplateSelector({
+  loading,
+  templates,
+  selectedId,
+  onSelect,
+}: {
+  loading: boolean;
+  templates: PreAdmissionChecklistTemplate[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  if (loading) {
+    return (
+      <section className="space-y-2">
+        <div className="h-3 w-36 animate-pulse rounded bg-surface-muted" />
+        <div className="h-[68px] animate-pulse rounded-2xl bg-surface-muted" />
+      </section>
+    );
+  }
+
+  if (templates.length === 0) {
+    return (
+      <section className="rounded-2xl border border-border bg-surface-muted px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+          Checklist de documentos
+        </p>
+        <p className="mt-2 text-sm font-semibold text-text">
+          Nenhum template ativo encontrado.
+        </p>
+        <p className="mt-1 text-xs text-text-muted">
+          O caso será criado sem template específico. O backend poderá aplicar o checklist padrão, se configurado.
+        </p>
+      </section>
+    );
+  }
+
+  if (templates.length === 1) {
+    const tpl = templates[0];
+    return (
+      <section className="rounded-2xl border border-border bg-surface-muted px-4 py-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+          Checklist de documentos
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-text">{tpl.name}</p>
+          {tpl.is_default && (
+            <span className="rounded-full bg-[hsl(var(--primary))]/10 px-2 py-0.5 text-[10px] font-semibold text-[hsl(var(--primary))]">
+              Padrão
+            </span>
+          )}
+          <span className="text-xs text-text-muted">
+            · {tpl.item_count} {tpl.item_count === 1 ? "documento" : "documentos"}
+          </span>
+        </div>
+        {tpl.description ? (
+          <p className="mt-1 text-xs text-text-muted">{tpl.description}</p>
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+        Checklist de documentos
+      </p>
+      <div className="mt-3 space-y-2">
+        {templates.map((tpl) => (
+          <label
+            key={tpl.id}
+            className={[
+              "flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition",
+              selectedId === tpl.id
+                ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/5"
+                : "border-border bg-surface-muted hover:border-[hsl(var(--primary))]/40",
+            ].join(" ")}
+          >
+            <input
+              type="radio"
+              name="checklist_template"
+              value={tpl.id}
+              checked={selectedId === tpl.id}
+              onChange={() => onSelect(tpl.id)}
+              className="mt-0.5 accent-[hsl(var(--primary))]"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-text">{tpl.name}</p>
+                {tpl.is_default && (
+                  <span className="rounded-full bg-[hsl(var(--primary))]/10 px-2 py-0.5 text-[10px] font-semibold text-[hsl(var(--primary))]">
+                    Padrão
+                  </span>
+                )}
+              </div>
+              {tpl.description ? (
+                <p className="mt-0.5 text-xs text-text-muted">{tpl.description}</p>
+              ) : null}
+              <p className="mt-1 text-xs text-text-muted">
+                {tpl.item_count} {tpl.item_count === 1 ? "documento" : "documentos"}
+              </p>
+            </div>
+          </label>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -67,12 +177,17 @@ export function PreAdmissionStartDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PreAdmissionStartDrawerResult | null>(null);
+  const [templates, setTemplates] = useState<PreAdmissionChecklistTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setSubmitting(false);
       setError(null);
       setResult(null);
+      setTemplates([]);
+      setSelectedTemplateId(null);
       return;
     }
 
@@ -84,6 +199,23 @@ export function PreAdmissionStartDrawer({
     };
 
     document.addEventListener("keydown", handleKeyDown);
+
+    setLoadingTemplates(true);
+    preAdmissionChecklistTemplatesService
+      .listTemplates()
+      .then((list) => {
+        const active = list.filter((t) => t.is_active);
+        setTemplates(active);
+        const def = active.find((t) => t.is_default) ?? active[0] ?? null;
+        setSelectedTemplateId(def?.id ?? null);
+      })
+      .catch(() => {
+        // silently fall back to backend default
+      })
+      .finally(() => {
+        setLoadingTemplates(false);
+      });
+
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
@@ -98,7 +230,7 @@ export function PreAdmissionStartDrawer({
     setSubmitting(true);
     setError(null);
     try {
-      const payload = await onConfirm();
+      const payload = await onConfirm(selectedTemplateId);
       if (onSuccess) {
         await onSuccess(payload);
       } else {
@@ -198,6 +330,13 @@ export function PreAdmissionStartDrawer({
                 <DetailCard label="Vaga" value={jobTitle ?? "Vaga ativa"} />
                 <DetailCard label="Decisão final" value="Contratar" />
               </section>
+
+              <TemplateSelector
+                loading={loadingTemplates}
+                templates={templates}
+                selectedId={selectedTemplateId}
+                onSelect={setSelectedTemplateId}
+              />
 
               <section className="rounded-2xl border border-border bg-surface-muted px-5 py-4">
                 <p className="text-sm font-semibold text-text">

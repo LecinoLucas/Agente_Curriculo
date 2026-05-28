@@ -472,7 +472,7 @@ describe("CandidatePreviewDrawer", () => {
     });
     renderDrawer();
 
-    await user.click(await screen.findByRole("button", { name: /Avançar para fase Final/i }));
+    await user.click(await screen.findByRole("button", { name: /Avançar para fase Decisão/i }));
 
     const modal = await screen.findByTestId("pipeline-transition-blocked-modal");
     expect(modal).toBeInTheDocument();
@@ -499,7 +499,7 @@ describe("CandidatePreviewDrawer", () => {
     });
     renderDrawer();
 
-    await user.click(await screen.findByRole("button", { name: /Avançar para fase Final/i }));
+    await user.click(await screen.findByRole("button", { name: /Avançar para fase Decisão/i }));
 
     expect(pipelineService.moveCandidateStage).toHaveBeenCalledWith("job-1", "candidate-1", {
       stage: "final",
