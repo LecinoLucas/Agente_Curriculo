@@ -96,7 +96,7 @@ export function CreateSkillModal({ open, initialName = "", onClose, onSuccess }:
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
             placeholder="Ex: React, Python, Scrum"
           />
         </label>
@@ -106,7 +106,7 @@ export function CreateSkillModal({ open, initialName = "", onClose, onSuccess }:
           <select
             value={category}
             onChange={(event) => setCategory(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
           >
             <option value="">Selecione uma categoria...</option>
             {CATEGORIES.map((option) => (
@@ -122,7 +122,7 @@ export function CreateSkillModal({ open, initialName = "", onClose, onSuccess }:
           <input
             value={aliases}
             onChange={(event) => setAliases(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
             placeholder="Ex: JS, JavaScript, EcmaScript (separados por vírgula)"
           />
         </label>
@@ -133,7 +133,7 @@ export function CreateSkillModal({ open, initialName = "", onClose, onSuccess }:
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={3}
-            className="ui-input min-h-[80px] w-full rounded-xl border-border bg-surface px-3 py-2.5 text-sm shadow-none"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] w-full rounded-xl border-border bg-surface px-3 py-2.5 text-sm shadow-none"
             placeholder="Breve descrição da skill"
           />
         </label>

@@ -453,10 +453,10 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                   <CardDescription>Refine o período, provider ou modelo para análise operacional.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3 md:grid-cols-4">
-                  <input type="date" value={aiFilters.date_from} onChange={(event) => setAiFilters((prev) => ({ ...prev, date_from: event.target.value }))} className="ui-input h-11 rounded-xl px-3 text-sm" />
-                  <input type="date" value={aiFilters.date_to} onChange={(event) => setAiFilters((prev) => ({ ...prev, date_to: event.target.value }))} className="ui-input h-11 rounded-xl px-3 text-sm" />
-                  <input placeholder="Provider" value={aiFilters.provider} onChange={(event) => setAiFilters((prev) => ({ ...prev, provider: event.target.value }))} className="ui-input h-11 rounded-xl px-3 text-sm" />
-                  <input placeholder="Modelo" value={aiFilters.model} onChange={(event) => setAiFilters((prev) => ({ ...prev, model: event.target.value }))} className="ui-input h-11 rounded-xl px-3 text-sm" />
+                  <input type="date" value={aiFilters.date_from} onChange={(event) => setAiFilters((prev) => ({ ...prev, date_from: event.target.value }))} className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm" />
+                  <input type="date" value={aiFilters.date_to} onChange={(event) => setAiFilters((prev) => ({ ...prev, date_to: event.target.value }))} className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm" />
+                  <input placeholder="Provider" value={aiFilters.provider} onChange={(event) => setAiFilters((prev) => ({ ...prev, provider: event.target.value }))} className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm" />
+                  <input placeholder="Modelo" value={aiFilters.model} onChange={(event) => setAiFilters((prev) => ({ ...prev, model: event.target.value }))} className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm" />
                   <div className="md:col-span-4 flex flex-wrap gap-2">
                     <Button type="button" onClick={() => void loadAIUsage()}>
                       Aplicar filtros

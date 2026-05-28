@@ -41,7 +41,7 @@ export function AnalysesTable({
         <p className="text-lg font-medium text-text-muted">
           {hasActiveFilters ? "Nenhuma análise corresponde aos filtros atuais" : "Ainda não há análises registradas"}
         </p>
-        <p className="ui-text-muted text-sm">
+        <p className="text-text-muted text-sm">
           {hasActiveFilters
             ? "Ajuste ou limpe os filtros para ver outras execuções."
             : "Envie um currículo e inicie uma análise para acompanhar as execuções aqui."}
@@ -70,10 +70,10 @@ export function AnalysesTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-muted">
-              <th className="ui-text-muted w-[200px] px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+              <th className="text-text-muted w-[200px] px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
                 Candidato
               </th>
-              <th className="ui-text-muted px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+              <th className="text-text-muted px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
                 Tipo / origem
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">

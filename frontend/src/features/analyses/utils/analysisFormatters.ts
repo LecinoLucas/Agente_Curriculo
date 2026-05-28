@@ -1,12 +1,12 @@
 export const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  waiting_extraction: { label: "Aguardando extração", cls: "ui-badge-warning" },
-  pending: { label: "Na fila", cls: "ui-badge-neutral" },
-  processing: { label: "Processando", cls: "ui-badge-info" },
-  retry_scheduled: { label: "Retry agendado", cls: "ui-badge-warning" },
-  completed: { label: "Concluída", cls: "ui-badge-success" },
-  failed: { label: "Falhou", cls: "ui-badge-danger" },
-  cancelled: { label: "Cancelado", cls: "ui-badge-warning" },
-  discarded: { label: "Descartada", cls: "ui-badge-warning" },
+  waiting_extraction: { label: "Aguardando extração", cls: "bg-warning-soft text-warning px-2 py-0.5 rounded-full text-xs font-medium" },
+  pending: { label: "Na fila", cls: "bg-surface-muted text-text-muted border border-border px-2 py-0.5 rounded-full text-xs font-medium" },
+  processing: { label: "Processando", cls: "bg-info-soft text-info px-2 py-0.5 rounded-full text-xs font-medium" },
+  retry_scheduled: { label: "Retry agendado", cls: "bg-warning-soft text-warning px-2 py-0.5 rounded-full text-xs font-medium" },
+  completed: { label: "Concluída", cls: "bg-success-soft text-success px-2 py-0.5 rounded-full text-xs font-medium" },
+  failed: { label: "Falhou", cls: "bg-danger-soft text-danger px-2 py-0.5 rounded-full text-xs font-medium" },
+  cancelled: { label: "Cancelado", cls: "bg-warning-soft text-warning px-2 py-0.5 rounded-full text-xs font-medium" },
+  discarded: { label: "Descartada", cls: "bg-warning-soft text-warning px-2 py-0.5 rounded-full text-xs font-medium" },
 };
 
 const SAFE_FAILURE_BY_TYPE: Record<string, string> = {

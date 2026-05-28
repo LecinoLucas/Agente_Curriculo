@@ -256,7 +256,7 @@ export function ImportPage() {
         <div className="space-y-6">
           <form
             onSubmit={handleSubmit}
-            className="ui-card flex flex-col gap-4 rounded-[32px] p-6"
+            className="bg-surface shadow-sm text-text border border-border flex flex-col gap-4 rounded-[32px] p-6"
             aria-label="Cadastrar candidato"
           >
             <h3 className="text-lg font-bold">Dados do candidato</h3>
@@ -268,7 +268,7 @@ export function ImportPage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Ex: Ana Souza"
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
                 disabled={submitting}
               />
             </label>
@@ -280,7 +280,7 @@ export function ImportPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ana@empresa.com"
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
                 disabled={submitting}
               />
             </label>
@@ -293,7 +293,7 @@ export function ImportPage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(11) 99999-0000"
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
                   disabled={submitting}
                 />
               </label>
@@ -305,7 +305,7 @@ export function ImportPage() {
                   value={cpf}
                   onChange={(e) => setCpf(e.target.value)}
                   placeholder="000.000.000-00"
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
                   disabled={submitting}
                 />
               </label>
@@ -381,7 +381,7 @@ export function ImportPage() {
           </div>
         </div>
 
-        <div className="ui-card flex min-h-[420px] flex-col rounded-[32px] p-6">
+        <div className="bg-surface shadow-sm text-text border border-border flex min-h-[420px] flex-col rounded-[32px] p-6">
           <div className="mb-6 flex items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold">Cadastros recentes</h3>

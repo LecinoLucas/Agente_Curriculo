@@ -195,14 +195,14 @@ function RowActions({
   compact?: boolean;
 }) {
   const buttonClass = compact
-    ? "ui-btn-secondary inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold"
-    : "ui-btn-secondary inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold";
+    ? "border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold"
+    : "border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold";
   const retryClass = compact
-    ? "ui-btn-primary inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold disabled:opacity-50"
-    : "ui-btn-primary inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold disabled:opacity-50";
+    ? "bg-[hsl(var(--primary))] text-white hover:opacity-90 transition shadow-sm inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold disabled:opacity-50"
+    : "bg-[hsl(var(--primary))] text-white hover:opacity-90 transition shadow-sm inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold disabled:opacity-50";
   const linkClass = compact
-    ? "ui-btn-secondary inline-flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 text-xs font-semibold"
-    : "ui-btn-secondary inline-flex h-9 items-center rounded-lg px-3 text-xs font-semibold";
+    ? "border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 text-xs font-semibold"
+    : "border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex h-9 items-center rounded-lg px-3 text-xs font-semibold";
 
   return (
     <div className={cn("flex gap-2", compact ? "flex-wrap" : "justify-end whitespace-nowrap")}>
@@ -485,7 +485,7 @@ export function AnalisesIaComportamentalPage() {
             type="button"
             onClick={() => void loadData()}
             disabled={loading}
-            className="ui-btn-secondary inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+            className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden="true" />
             Atualizar
@@ -515,14 +515,14 @@ export function AnalisesIaComportamentalPage() {
                 value={filters.search}
                 onChange={(event) => updateFilter("search", event.target.value)}
                 placeholder="Buscar candidato ou vaga"
-                className="ui-input h-10 w-full rounded-lg pl-9 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg pl-9 text-sm"
               />
             </label>
             <select
               aria-label="Status"
               value={filters.status}
               onChange={(event) => updateFilter("status", event.target.value as FilterState["status"])}
-              className="ui-input h-10 rounded-lg text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg text-sm"
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -532,7 +532,7 @@ export function AnalisesIaComportamentalPage() {
               aria-label="Status operacional"
               value={filters.operational_status}
               onChange={(event) => updateFilter("operational_status", event.target.value as FilterState["operational_status"])}
-              className="ui-input h-10 rounded-lg text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg text-sm"
             >
               {operationalStatusOptions.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -545,7 +545,7 @@ export function AnalisesIaComportamentalPage() {
                 value={filters.provider}
                 onChange={(event) => updateFilter("provider", event.target.value)}
                 placeholder="Provider"
-                className="ui-input h-10 w-full rounded-lg text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm"
               />
             </label>
             <datalist id="behavioral-ai-providers">
@@ -558,7 +558,7 @@ export function AnalisesIaComportamentalPage() {
                 value={filters.model}
                 onChange={(event) => updateFilter("model", event.target.value)}
                 placeholder="Modelo"
-                className="ui-input h-10 w-full rounded-lg text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm"
               />
             </label>
             <datalist id="behavioral-ai-models">
@@ -571,7 +571,7 @@ export function AnalisesIaComportamentalPage() {
                 value={filters.provider_error_type}
                 onChange={(event) => updateFilter("provider_error_type", event.target.value)}
                 placeholder="Tipo de erro"
-                className="ui-input h-10 w-full rounded-lg text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm"
               />
             </label>
             <datalist id="behavioral-ai-error-types">
@@ -581,7 +581,7 @@ export function AnalisesIaComportamentalPage() {
               type="button"
               onClick={clearFilters}
               disabled={!hasActiveFilters}
-              className="ui-btn-secondary inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold disabled:opacity-40"
+              className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold disabled:opacity-40"
             >
               <FilterX className="h-4 w-4" aria-hidden="true" />
               Limpar
@@ -594,7 +594,7 @@ export function AnalisesIaComportamentalPage() {
                 type="date"
                 value={filters.date_from}
                 onChange={(event) => updateFilter("date_from", event.target.value)}
-                className="ui-input mt-1 h-10 w-full rounded-lg text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1 h-10 w-full rounded-lg text-sm"
               />
             </label>
             <label className="text-xs font-semibold text-text-muted">
@@ -603,7 +603,7 @@ export function AnalisesIaComportamentalPage() {
                 type="date"
                 value={filters.date_to}
                 onChange={(event) => updateFilter("date_to", event.target.value)}
-                className="ui-input mt-1 h-10 w-full rounded-lg text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1 h-10 w-full rounded-lg text-sm"
               />
             </label>
           </div>
@@ -626,7 +626,7 @@ export function AnalisesIaComportamentalPage() {
             <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 p-8 text-center">
               <AlertTriangle className="h-8 w-8 text-rose-600" aria-hidden="true" />
               <p className="max-w-md text-sm text-text">{error}</p>
-              <button type="button" className="ui-btn-primary rounded-lg px-4 py-2 text-sm font-semibold" onClick={() => void loadData()}>
+              <button type="button" className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition shadow-sm rounded-lg px-4 py-2 text-sm font-semibold" onClick={() => void loadData()}>
                 Tentar novamente
               </button>
             </div>
@@ -777,7 +777,7 @@ export function AnalisesIaComportamentalPage() {
                     type="button"
                     disabled={retryingId === detail.evaluation_id}
                     onClick={() => void handleRetry(detail)}
-                    className="ui-btn-primary inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+                    className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition shadow-sm inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
                   >
                     {retryingId === detail.evaluation_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                     Reprocessar avaliação

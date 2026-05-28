@@ -591,7 +591,7 @@ export function BehavioralTemplateEditorPage() {
                     type="text"
                     defaultValue={template.name}
                     onBlur={(e) => void handleSaveGeneral(e.target.value, {})}
-                    className="ui-input w-full"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                     placeholder="Ex: Avaliação de Liderança Avançada"
                   />
                 </div>
@@ -601,7 +601,7 @@ export function BehavioralTemplateEditorPage() {
                   <textarea
                     defaultValue={parsedDesc.description}
                     onBlur={(e) => void handleSaveGeneral(template.name, { description: e.target.value })}
-                    className="ui-input w-full min-h-20"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full min-h-20"
                     placeholder="Descreva o propósito deste template..."
                   />
                 </div>
@@ -612,7 +612,7 @@ export function BehavioralTemplateEditorPage() {
                     <select
                       value={parsedDesc.category}
                       onChange={(e) => void handleSaveGeneral(template.name, { category: e.target.value })}
-                      className="ui-input w-full"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                     >
                       <option value="Administrativo">Administrativo</option>
                       <option value="Operacional">Operacional</option>
@@ -629,7 +629,7 @@ export function BehavioralTemplateEditorPage() {
                       type="number"
                       value={parsedDesc.duration}
                       onChange={(e) => void handleSaveGeneral(template.name, { duration: Number(e.target.value) })}
-                      className="ui-input w-full"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                     />
                   </div>
                 </div>
@@ -640,7 +640,7 @@ export function BehavioralTemplateEditorPage() {
                     type="text"
                     defaultValue={parsedDesc.target_audience}
                     onBlur={(e) => void handleSaveGeneral(template.name, { target_audience: e.target.value })}
-                    className="ui-input w-full"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                     placeholder="Ex: Cargos de Coordenação e Gerência"
                   />
                 </div>
@@ -872,7 +872,7 @@ export function BehavioralTemplateEditorPage() {
                         setLocalQuestText(parsedQuestMetadata.text);
                       }
                     }}
-                    className="ui-input w-full min-h-16"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full min-h-16"
                     placeholder="Enunciado ou provocação comportamental..."
                   />
                 </div>
@@ -889,7 +889,7 @@ export function BehavioralTemplateEditorPage() {
                           options_json: newType === "multiple_choice" ? ["Opção A", "Opção B"] : null,
                         });
                       }}
-                      className="ui-input w-full"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                     >
                       <option value="text">Texto Livre</option>
                       <option value="multiple_choice">Múltipla Escolha</option>
@@ -916,7 +916,7 @@ export function BehavioralTemplateEditorPage() {
                           e.currentTarget.blur();
                         }
                       }}
-                      className="ui-input w-full"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                     />
                   </div>
                 </div>
@@ -939,7 +939,7 @@ export function BehavioralTemplateEditorPage() {
                         e.currentTarget.blur();
                       }
                     }}
-                    className="ui-input w-full"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                   />
                 </div>
 
@@ -981,7 +981,7 @@ export function BehavioralTemplateEditorPage() {
                                 e.currentTarget.blur();
                               }
                             }}
-                            className="ui-input flex-1 text-xs"
+                            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring flex-1 text-xs"
                           />
                           <button
                             type="button"
@@ -1065,7 +1065,7 @@ export function BehavioralTemplateEditorPage() {
                                 e.currentTarget.blur();
                               }
                             }}
-                            className="ui-input col-span-10 text-xs"
+                            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring col-span-10 text-xs"
                             placeholder="Legenda correspondente..."
                           />
                         </div>
@@ -1092,7 +1092,7 @@ export function BehavioralTemplateEditorPage() {
                           void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
                         }
                       }}
-                      className="ui-input w-full min-h-14 text-xs"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full min-h-14 text-xs"
                       placeholder="Quais ações ou vivências o avaliador deve procurar?"
                     />
                   </div>
@@ -1108,7 +1108,7 @@ export function BehavioralTemplateEditorPage() {
                           void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
                         }
                       }}
-                      className="ui-input w-full min-h-14 text-xs"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full min-h-14 text-xs"
                       placeholder="O que diferencia uma resposta excelente das demais?"
                     />
                   </div>
@@ -1124,7 +1124,7 @@ export function BehavioralTemplateEditorPage() {
                           void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
                         }
                       }}
-                      className="ui-input w-full min-h-14 text-xs border-red-200 focus:border-red-400"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full min-h-14 text-xs border-red-200 focus:border-red-400"
                       placeholder="Atitudes, omissões ou discursos incompatíveis..."
                     />
                   </div>
@@ -1140,7 +1140,7 @@ export function BehavioralTemplateEditorPage() {
                           void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
                         }
                       }}
-                      className="ui-input w-full min-h-14 text-xs"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full min-h-14 text-xs"
                       placeholder="Outros direcionamentos ou detalhes operacionais da vaga..."
                     />
                   </div>

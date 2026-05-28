@@ -183,7 +183,7 @@ export function VagasPage() {
                         setSearchInput(event.target.value);
                       }}
                       placeholder="Buscar por título, área, senioridade ou local"
-                      className="ui-input h-10 w-full rounded-xl border-border-strong/45 bg-surface pl-10 pr-3 text-sm shadow-none"
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-xl border-border-strong/45 bg-surface pl-10 pr-3 text-sm shadow-none"
                     />
                   </div>
                 </label>
@@ -195,7 +195,7 @@ export function VagasPage() {
                       setPage(1);
                       setAreaFilter(event.target.value as JobAreaFilter);
                     }}
-                    className="ui-input h-10 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
                   >
                     <option value="all">Todas as áreas</option>
                     {areaOptions.map((area) => (
@@ -211,7 +211,7 @@ export function VagasPage() {
                       setPage(1);
                       setWorkModelFilter(event.target.value as JobWorkModelFilter);
                     }}
-                    className="ui-input h-10 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
                   >
                     <option value="all">Todos os modelos</option>
                     {workModelOptions.map((workModel) => (

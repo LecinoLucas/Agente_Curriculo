@@ -28,6 +28,12 @@ import {
   Moon,
   Sun,
   Flag,
+  Rocket,
+  HelpCircle,
+  Info,
+  Search,
+  Users,
+  Sparkles,
 } from "lucide-react";
 import { ChangeEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -313,18 +319,31 @@ function CandidateInterviewCard({ interview }: { interview: CandidatePortalPubli
   }
 
   return (
-    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs" data-testid="candidate-interview-card">
-      <CardHeader className="p-5 pb-3 border-b border-border">
-        <CardTitle className="text-base font-bold text-foreground">Entrevista</CardTitle>
-        <CardDescription className="text-xs font-semibold text-muted-foreground">
-          Acompanhe aqui os dados públicos da sua entrevista no processo atual.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-5 pt-2">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          {interview.status_label}
+    <Card className="overflow-hidden border border-border rounded-2xl bg-card shadow-sm" data-testid="candidate-interview-card">
+      <CardHeader className="p-4 pb-3 border-b border-border flex flex-row items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+          <Calendar className="h-4.5 w-4.5 text-foreground" strokeWidth={1.5} />
         </div>
-        <CandidateInterviewInfo interview={interview} />
+        <div>
+          <CardTitle className="text-sm font-semibold text-foreground tracking-tight">Entrevista</CardTitle>
+          <CardDescription className="text-xs text-muted-foreground mt-0.5">
+            Acompanhe aqui os dados públicos da sua entrevista no processo atual.
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4">
+        <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2.5">
+          {interview.status_label || "ENTREVISTA CONCLUÍDA"}
+        </div>
+        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/50 px-3.5 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span className="text-xs font-medium text-emerald-900">
+              Entrevista {interview.status === "completed" || interview.status === "awaiting_feedback" ? "concluída" : "agendada"} em {formatInterviewDate(interview.scheduled_at || "")}.
+            </span>
+          </div>
+          <Calendar className="h-4 w-4 text-emerald-600/40 shrink-0" />
+        </div>
       </CardContent>
     </Card>
   );
@@ -496,15 +515,32 @@ function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOve
   const isRejected = overview?.application_status === "rejected";
   const isDismissed = overview?.application_status === "dismissed";
 
+  // Map step keys to small icon badges shown below the bubbles
+  const stepIconMap: Record<string, JSX.Element> = {
+    application_received: <ClipboardCheck className="h-4 w-4" />,
+    resume_review: <Search className="h-4 w-4" />,
+    interview: <Users className="h-4 w-4" />,
+    next_update: <Sparkles className="h-4 w-4" />,
+    result: <CheckCircle2 className="h-4 w-4" />,
+    admission_completed: <CheckCircle2 className="h-4 w-4" />,
+  };
+
+  // Calculate fill percentage for the connecting line
+  const completedCount = visibleSteps.filter(s => s.status === "completed").length;
+  const totalGaps = visibleSteps.length - 1;
+  const fillPct = totalGaps > 0
+    ? Math.round((completedCount / totalGaps) * 100)
+    : 0;
+
   return (
-    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-4 sm:p-5">
-      <div className="flex items-center gap-2.5 mb-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <TrendingUp className="h-5 w-5" />
+    <Card className="overflow-hidden border border-border rounded-2xl bg-card shadow-sm p-5">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+          <Flag className="h-5 w-5" strokeWidth={2} />
         </div>
         <div>
-          <CardTitle className="text-base font-bold text-foreground">Sua jornada de candidatura</CardTitle>
-          <CardDescription className="text-xs font-semibold text-muted-foreground mt-0.5">
+          <CardTitle className="text-sm font-semibold text-foreground tracking-tight">Sua jornada de candidatura</CardTitle>
+          <CardDescription className="text-xs text-muted-foreground mt-0.5">
             {isDismissed
               ? "O vínculo admissional foi encerrado."
               : isRejected
@@ -514,72 +550,109 @@ function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOve
         </div>
       </div>
 
-      <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-3 py-2 px-1 md:px-2">
-        {/* Connecting lines for desktop */}
-        <div className="absolute left-[34px] right-[34px] top-[38px] hidden md:block h-0.5 bg-border -z-0">
-          <div
-            className="h-full bg-primary transition-all duration-500"
-            style={{
-              width: visibleSteps[1].status === "completed"
-                ? "100%"
-                : visibleSteps[1].status === "current"
-                ? "50%"
-                : "0%",
-            }}
-          />
+      {/* Stepper Row */}
+      <div className="relative px-2">
+        {/* Connecting line (full width, behind bubbles) */}
+        <div className="absolute top-5 left-[calc(12.5%)] right-[calc(12.5%)] h-0.5 hidden md:block">
+          {/* Solid fill up to completed */}
+          <div className="absolute inset-0 flex">
+            {/* Completed segment */}
+            <div
+              className="h-full bg-primary transition-all duration-700 rounded-l-full"
+              style={{ width: `${fillPct}%` }}
+            />
+            {/* Dashed remaining */}
+            <div
+              className="flex-1 h-full"
+              style={{
+                backgroundImage: "repeating-linear-gradient(90deg, #CBD5E1 0, #CBD5E1 8px, transparent 8px, transparent 16px)",
+              }}
+            />
+          </div>
         </div>
 
-        {visibleSteps.map((step, idx) => {
-          const isCompleted = step.status === "completed";
-          const isCurrent = step.status === "current";
-          const isNext = step.status === "next";
+        <div className="relative flex flex-col md:flex-row items-start md:items-start justify-between gap-6 md:gap-2">
+          {visibleSteps.map((step, idx) => {
+            const isCompleted = step.status === "completed";
+            const isCurrent = step.status === "current";
+            const isNext = step.status === "next";
+            const stepIcon = stepIconMap[step.key] ?? <Flag className="h-4 w-4" />;
 
-          return (
-            <div key={step.key} className="relative z-10 flex md:flex-col items-center md:text-center flex-1 gap-4 md:gap-3 w-full">
-              {/* Bubble */}
-              <div
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 ${
-                  isCompleted
-                    ? "bg-primary border-primary text-primary-foreground shadow-xs"
-                    : isCurrent
-                    ? "bg-card border-primary text-primary ring-4 ring-primary/10"
-                    : "bg-muted border-border text-muted-foreground"
-                }`}
-              >
-                {isCompleted ? (
-                  <CheckCircle2 className="h-5 w-5 stroke-[2.5]" />
-                ) : isCurrent ? (
-                  <div className="h-3 w-3 rounded-full bg-primary animate-pulse" />
-                ) : (
-                  <Circle className="h-4 w-4 text-muted-foreground" />
-                )}
-              </div>
+            return (
+              <div key={step.key} className="relative z-10 flex md:flex-col items-center md:text-center flex-1 gap-4 md:gap-0 w-full">
+                {/* Bubble */}
+                <div
+                  className={`flex shrink-0 items-center justify-center rounded-full transition-all duration-300 ${
+                    isCompleted
+                      ? "h-10 w-10 bg-emerald-500 text-white shadow-sm"
+                      : isCurrent
+                      ? "h-12 w-12 bg-primary text-white ring-[5px] ring-primary/20 shadow-lg"
+                      : "h-8 w-8 bg-slate-100 border-2 border-slate-200 text-slate-400"
+                  }`}
+                >
+                  {isCompleted ? (
+                    <CheckCircle2 className="h-6 w-6" strokeWidth={2.5} />
+                  ) : isCurrent ? (
+                    <div className="h-4 w-4 rounded-full bg-background" />
+                  ) : null}
+                </div>
 
-              {/* Text Content */}
-              <div className="flex flex-col md:items-center">
-                <p className={`text-sm font-bold tracking-tight ${isCurrent ? 'text-foreground' : 'text-muted-foreground'}`}>
-                  {step.title}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground font-medium max-w-[200px]">
-                  {step.description}
-                </p>
+                {/* Small icon badge below bubble */}
+                <div
+                  className={`hidden md:flex h-8 w-8 items-center justify-center rounded-full mt-3 ${
+                    isCompleted
+                      ? "bg-emerald-50 text-emerald-600"
+                      : isCurrent
+                      ? "bg-blue-50 text-primary"
+                      : "bg-slate-50 text-slate-400"
+                  }`}
+                >
+                  {stepIcon}
+                </div>
+
+                {/* Text Content */}
+                <div className="flex flex-col md:items-center md:mt-2">
+                  <p className={`text-xs font-semibold tracking-tight ${
+                    isCurrent ? 'text-primary' : isCompleted ? 'text-slate-700' : 'text-slate-400'
+                  }`}>
+                    {step.title}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground/80 font-medium max-w-[150px] leading-relaxed text-center">
+                    {step.description}
+                  </p>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      {/* Alerta discreto */}
-      <div className="mt-6 flex items-start gap-3 rounded-xl bg-muted border border-border p-4 text-xs text-muted-foreground leading-relaxed">
-        <svg className="h-5 w-5 text-primary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <div>
-          {isDismissed
-            ? "Seu histórico admissional segue registrado e o RH pode prestar suporte quando necessário."
-            : isRejected
-            ? "Seu perfil continuará disponível em nosso banco de talentos para futuras oportunidades compatíveis."
-            : "Nosso time está analisando seu perfil com cuidado. Se houver avanço no processo, entraremos em contato."}
+      {/* Info alert with envelope illustration */}
+      <div className="mt-8 flex items-center justify-between gap-4 rounded-xl bg-blue-50/60 border border-blue-100 p-5 overflow-hidden relative">
+        <div className="flex items-start gap-4 relative z-10">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-white shrink-0">
+            <Info className="h-4 w-4" strokeWidth={2.5} />
+          </div>
+          <div className="text-sm font-medium text-slate-700 leading-relaxed max-w-2xl">
+            {isDismissed
+              ? "Seu histórico admissional segue registrado e o RH pode prestar suporte quando necessário."
+              : isRejected
+              ? "Seu perfil continuará disponível em nosso banco de talentos para futuras oportunidades compatíveis."
+              : "Estamos analisando seu perfil com cuidado e atenção. Assim que tivermos novidades, entraremos em contato por aqui ou por e-mail. 🙂"}
+          </div>
+        </div>
+        {/* Abstract envelope illustration */}
+        <div className="hidden sm:block shrink-0 opacity-90 pointer-events-none">
+          <svg width="110" height="90" viewBox="0 0 110 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="15" width="80" height="58" rx="6" fill="#EFF6FF" stroke="#BFDBFE" strokeWidth="4"/>
+            <path d="M10 25L50 52L90 25" stroke="#93C5FD" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+            {/* Paper plane */}
+            <path d="M68 62L88 48L74 76L68 62Z" fill="#3B82F6" opacity="0.7"/>
+            <path d="M68 62L88 48" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round"/>
+            {/* Leaf decorations */}
+            <path d="M90 70C92 65 98 63 98 63C98 63 96 69 90 70Z" fill="#86EFAC" />
+            <path d="M96 75C94 70 96 64 96 64C96 64 100 69 96 75Z" fill="#4ADE80" opacity="0.7"/>
+          </svg>
         </div>
       </div>
     </Card>
@@ -1293,39 +1366,62 @@ export function CandidatePortalPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-[#F8FAFC]">
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 bg-[hsl(var(--nav-bg))] border-r border-[hsl(var(--nav-border))] transition-all duration-300 transform ${
+        className={`fixed inset-y-0 left-0 z-50 bg-[#0B1B3D] text-white transition-all duration-300 transform ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col w-56 shrink-0 shadow-xs`}
+        } md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col w-[220px] shrink-0 shadow-xl overflow-hidden`}
       >
-        <div className="flex items-center h-14 px-5 border-b border-[hsl(var(--nav-border))] justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shrink-0 shadow-sm font-bold text-lg">
-              M
+        {/* Wave background in sidebar */}
+        <div className="absolute inset-0 pointer-events-none opacity-20 z-0">
+          <svg className="absolute w-[200%] h-[150%] -left-1/2 -top-1/4" viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 400C200 300 400 500 800 300L800 800L0 800L0 400Z" fill="url(#paint0_linear)"/>
+            <path d="M0 500C200 400 500 600 800 400L800 800L0 800L0 500Z" fill="url(#paint1_linear)"/>
+            <defs>
+              <linearGradient id="paint0_linear" x1="400" y1="300" x2="400" y2="800" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#3B82F6" stopOpacity="0.8"/>
+                <stop offset="1" stopColor="#1E3A8A" stopOpacity="0"/>
+              </linearGradient>
+              <linearGradient id="paint1_linear" x1="400" y1="400" x2="400" y2="800" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#60A5FA" stopOpacity="0.5"/>
+                <stop offset="1" stopColor="#1E3A8A" stopOpacity="0"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <div className="flex items-center h-16 px-5 justify-between relative z-10">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 items-center justify-center">
+              {/* Marajó Abstract Triangle Logo */}
+              <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 5L35 30H5L20 5Z" fill="#38BDF8" opacity="0.8"/>
+                <path d="M20 15L30 30H10L20 15Z" fill="#0EA5E9"/>
+                <path d="M25 22L32 30H18L25 22Z" fill="#bae6fd"/>
+              </svg>
             </div>
             <div className="flex flex-col text-left">
-              <span className="font-heading text-sm font-black tracking-widest text-[hsl(var(--nav-text))] leading-none">
+              <span className="font-heading text-sm font-black tracking-[0.12em] text-white leading-none">
                 MARAJÓ
               </span>
-              <span className="text-[10px] font-extrabold text-[hsl(var(--nav-muted))] tracking-widest leading-none mt-1">
+              <span className="text-[9px] font-bold text-white/60 tracking-[0.2em] leading-none mt-0.5">
                 RH
               </span>
             </div>
           </div>
-          <button className="md:hidden p-1.5 rounded-lg hover:bg-white/10 text-[hsl(var(--nav-muted))] hover:text-[hsl(var(--nav-text))]" onClick={() => setIsSidebarOpen(false)}>
-            <X className="h-5 w-5" />
+          <button className="md:hidden p-1.5 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" onClick={() => setIsSidebarOpen(false)}>
+            <X className="h-4 w-4" />
           </button>
         </div>
         
-        <nav className="flex-1 py-4 px-3 space-y-1">
+        <nav className="flex-1 py-4 px-3 space-y-0.5 relative z-10">
           {[
-            { id: "inicio", label: "Dashboard", title: "Dashboard", icon: <Home className="h-5 w-5" /> },
-            { id: "situacao", label: "Situação", title: "Situação", icon: <ShieldCheck className="h-5 w-5" /> },
-            { id: "candidaturas", label: "Candidaturas", title: "Candidaturas", icon: <Briefcase className="h-5 w-5" /> },
-            { id: "mensagens", label: "Mensagens", title: "Mensagens", icon: <Mail className="h-5 w-5" /> },
-            { id: "perfil", label: "Perfil", title: "Perfil", icon: <User className="h-5 w-5" /> },
+            { id: "inicio", label: "Dashboard", title: "Dashboard", icon: <Home className="h-4 w-4" strokeWidth={2} /> },
+            { id: "situacao", label: "Situação", title: "Situação", icon: <ShieldCheck className="h-4 w-4" strokeWidth={2} /> },
+            { id: "candidaturas", label: "Candidaturas", title: "Candidaturas", icon: <Briefcase className="h-4 w-4" strokeWidth={2} /> },
+            { id: "mensagens", label: "Mensagens", title: "Mensagens", icon: <Mail className="h-4 w-4" strokeWidth={2} /> },
+            { id: "perfil", label: "Perfil", title: "Perfil", icon: <User className="h-4 w-4" strokeWidth={2} /> },
           ].map((item) => {
             const isActive = activeMenuId === item.id;
             return (
@@ -1333,34 +1429,38 @@ export function CandidatePortalPage() {
                 key={item.id}
                 onClick={() => handleMenuClick(item.id)}
                 title={item.title}
-                className={`flex items-center justify-between px-3.5 py-2.5 w-full text-sm rounded-xl transition-all duration-200 ${
+                className={`flex items-center justify-between px-3 py-2.5 w-full text-[13px] font-medium rounded-xl transition-all duration-200 group relative ${
                   isActive
-                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] font-bold shadow-xs"
-                    : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))] font-semibold"
+                    ? "bg-[#1E3A8A] text-white shadow-sm"
+                    : "text-white/60 hover:bg-white/5 hover:text-white/90"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
                   {item.icon}
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate tracking-wide">{item.label}</span>
                 </div>
                 {item.id === "mensagens" && unreadMessagesCount > 0 && (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground shrink-0 ml-2">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[9px] font-black text-white shrink-0 ml-2">
                     {unreadMessagesCount}
                   </span>
+                )}
+                {/* Active indicator bar */}
+                {isActive && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-blue-400 rounded-r-full" />
                 )}
               </button>
             );
           })}
         </nav>
         
-        <div className="p-3 border-t border-[hsl(var(--nav-border))]">
+        <div className="p-4 relative z-10">
           <Button 
             variant="outline" 
             onClick={handleLogout} 
             title="Sair"
-            className="w-full h-11 border-[hsl(var(--nav-border))] bg-transparent font-bold text-[hsl(var(--nav-muted))] hover:bg-rose-600 hover:text-white hover:border-transparent transition-all rounded-xl flex items-center justify-center text-xs"
+            className="w-full h-10 border-white/20 bg-transparent font-medium text-white/80 hover:bg-white/10 hover:text-white transition-all rounded-xl flex items-center justify-center text-xs tracking-wide"
           >
-            <LogOut className="h-4 w-4 mr-2" />
+            <LogOut className="h-3.5 w-3.5 mr-2 shrink-0" />
             <span className="truncate">Sair da conta</span>
           </Button>
         </div>
@@ -1369,23 +1469,20 @@ export function CandidatePortalPage() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-background">
         {/* Header */}
-        <header className="flex items-center justify-between h-16 px-4 sm:px-6 bg-card border-b border-border shrink-0">
+        <header className="sticky top-0 z-40 flex items-center justify-between h-14 w-full px-4 sm:px-6 bg-[linear-gradient(90deg,#1a0640_0%,#3b0f9e_45%,#1a0640_100%)] border-b border-white/10 shadow-sm shrink-0">
           <div className="flex items-center gap-4">
-            <button className="md:hidden p-1.5 rounded-lg hover:bg-muted text-muted-foreground" onClick={() => setIsSidebarOpen(true)}>
+            <button className="md:hidden p-1.5 rounded-lg hover:bg-white/10 text-white/90 transition-colors" onClick={() => setIsSidebarOpen(true)}>
               <Menu className="h-6 w-6" />
             </button>
             <div>
-              <h1 className="font-heading text-base sm:text-lg font-bold text-foreground">
+              <h1 className="font-heading text-sm sm:text-base font-bold text-white">
                 Olá, {overview ? overview.candidate.full_name.split(' ')[0] : 'Candidato'}! 👋
               </h1>
-              <p className="text-[11px] font-semibold text-muted-foreground mt-0.5">
-                Acompanhe o andamento da sua candidatura com a Marajó RH.
-              </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             {overview && (
-              <div className="hidden sm:flex items-center gap-2.5 text-xs font-bold text-foreground bg-muted px-3.5 py-2 rounded-full border border-border">
+              <div className="hidden sm:flex items-center gap-2 text-[11px] font-bold text-white bg-white/10 px-3 py-1.5 rounded-full border border-white/10">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -1394,45 +1491,20 @@ export function CandidatePortalPage() {
               </div>
             )}
             <button
-              onClick={() => void loadPortalData(true)}
-              disabled={isRefreshing || loading}
-              className="inline-flex items-center gap-2 border border-border bg-card hover:bg-muted disabled:opacity-50 text-foreground font-bold px-4 py-2.5 rounded-xl text-xs shadow-xs transition-all"
-            >
-              {isRefreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              ) : (
-                <RefreshCw className="h-4 w-4 text-primary" />
-              )}
-              Sincronizar
-            </button>
-            <button
-              onClick={() => setIsTipsOpen(true)}
-              className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-xs transition-colors hover:bg-muted"
-              title="Dicas de Candidatura"
-              data-testid="header-tips-button"
-            >
-              <Lightbulb className="h-4 w-4 text-amber-500" />
-            </button>
-            <button
               onClick={() => handleMenuClick("mensagens")}
-              className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-xs transition-colors hover:bg-muted"
-              title="Mensagens do sistema"
-              data-testid="header-mail-button"
+              className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white shadow-xs transition-colors hover:bg-white/10"
+              title="Mensagens"
             >
-              <Mail className="h-4 w-4 text-primary" />
+              <Mail className="h-4 w-4 text-white/80" />
               {unreadMessagesCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-black text-primary-foreground">
-                  {unreadMessagesCount > 99 ? "99+" : unreadMessagesCount}
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-400 text-[9px] font-bold text-white shadow-sm ring-2 ring-[#3b0f9e]">
+                  {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
                 </span>
               )}
             </button>
-            <button
-              onClick={toggleCandidateTheme}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-xs transition-colors hover:bg-muted"
-              title={isDarkCandidate ? "Mudar para tema claro" : "Mudar para tema escuro"}
-            >
-              {isDarkCandidate ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
+            <div className="h-8 w-8 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white font-bold shadow-sm text-sm">
+              {overview ? overview.candidate.full_name.charAt(0).toUpperCase() : 'L'}
+            </div>
           </div>
         </header>
 
@@ -1478,31 +1550,39 @@ export function CandidatePortalPage() {
                 <div className="space-y-6">
                   {/* Status Hero Card */}
                   <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
-                    <Card className="overflow-hidden border border-border rounded-2xl bg-card p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/5">
-                          <TrendingUp className="h-6 w-6 text-primary" />
+                    <Card className="relative overflow-hidden border-0 rounded-2xl bg-gradient-to-r from-cyan-50 to-blue-50 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+                      {/* Decorative abstract wave overlay */}
+                      <div className="absolute right-0 top-0 bottom-0 w-1/2 pointer-events-none overflow-hidden mix-blend-multiply opacity-40">
+                        <svg className="absolute h-[150%] w-[150%] -top-1/4 -right-1/4" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M400 0H0C100 100 200 150 400 200V0Z" fill="#bae6fd" />
+                          <path d="M400 100C300 150 150 250 0 400H400V100Z" fill="#e0f2fe" />
+                        </svg>
+                      </div>
+
+                      <div className="flex items-center gap-4 relative z-10">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
+                          <Rocket className="h-6 w-6 text-teal-500" strokeWidth={1.5} />
                         </div>
                         <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary block leading-none">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700 block mb-1">
                             STATUS ATUAL
                           </span>
-                          <h3 className="text-lg font-black text-foreground mt-1.5 leading-none">
+                          <h3 className="text-xl font-bold text-slate-900 leading-snug tracking-tight">
                             {currentStatusTitle}
                           </h3>
-                          <p className="text-xs text-muted-foreground mt-1.5 font-medium leading-relaxed">
+                          <p className="text-xs text-slate-500 mt-1 font-medium">
                             {currentStatusDesc}
                           </p>
                         </div>
                       </div>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         onClick={() => handleMenuClick("situacao")}
-                        className="h-10 text-primary hover:text-primary/95 hover:bg-primary/5 font-extrabold rounded-xl text-xs flex items-center gap-1.5 self-start sm:self-center shrink-0 border border-transparent hover:border-primary/15 transition-all"
+                        className="h-9 bg-white text-slate-600 hover:text-blue-600 hover:bg-blue-50 font-semibold rounded-xl text-xs flex items-center gap-1.5 self-start sm:self-center shrink-0 border border-slate-200 hover:border-blue-200 transition-all shadow-xs relative z-10 px-4"
                         data-testid="status-hero-view-details"
                       >
                         Ver situação completa
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-3.5 w-3.5 text-blue-400" />
                       </Button>
                     </Card>
                   </div>

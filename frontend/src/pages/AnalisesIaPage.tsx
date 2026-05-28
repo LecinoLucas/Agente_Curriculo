@@ -72,7 +72,7 @@ export function AnalisesIaPage() {
               type="button"
               onClick={fetchData}
               disabled={loading}
-              className="ui-btn-secondary flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40"
+              className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Atualizar
@@ -137,7 +137,7 @@ export function AnalisesIaPage() {
         {showInitialLoading ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-[hsl(var(--primary))] border-t-transparent" />
-            <p className="ui-text-muted text-sm">Carregando análises…</p>
+            <p className="text-text-muted text-sm">Carregando análises…</p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20">

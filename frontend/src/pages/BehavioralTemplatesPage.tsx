@@ -359,7 +359,7 @@ export function BehavioralTemplatesPage() {
                   placeholder="Buscar avaliações por nome ou descrição..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="ui-input pl-9 w-full"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring pl-9 w-full"
                 />
               </div>
 
@@ -593,7 +593,7 @@ export function BehavioralTemplatesPage() {
                   value={newTemplateName}
                   onChange={(e) => setNewTemplateName(e.target.value)}
                   placeholder="Ex: Avaliação de Atendimento ao Cliente"
-                  className="ui-input w-full"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                   aria-required="true"
                   aria-invalid={formSubmitted && !newTemplateName.trim() ? "true" : "false"}
                 />
@@ -607,7 +607,7 @@ export function BehavioralTemplatesPage() {
                   value={newTemplateDesc}
                   onChange={(e) => setNewTemplateDesc(e.target.value)}
                   placeholder="Explique os objetivos e os focos comportamentais analisados por este template..."
-                  className="ui-input w-full min-h-20 resize-none"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full min-h-20 resize-none"
                   aria-required="true"
                   aria-invalid={formSubmitted && !newTemplateDesc.trim() ? "true" : "false"}
                 />
@@ -621,7 +621,7 @@ export function BehavioralTemplatesPage() {
                   <select
                     value={newTemplateCategory}
                     onChange={(e) => setNewTemplateCategory(e.target.value)}
-                    className="ui-input w-full"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                   >
                     <option value="Administrativo">Administrativo</option>
                     <option value="Operacional">Operacional</option>
@@ -640,7 +640,7 @@ export function BehavioralTemplatesPage() {
                     type="number"
                     value={newTemplateDuration}
                     onChange={(e) => setNewTemplateDuration(Number(e.target.value))}
-                    className="ui-input w-full"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                     min={1}
                   />
                 </div>
@@ -655,7 +655,7 @@ export function BehavioralTemplatesPage() {
                   value={newTemplateAudience}
                   onChange={(e) => setNewTemplateAudience(e.target.value)}
                   placeholder="Ex: Consultores de Vendas, Operadores"
-                  className="ui-input w-full"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full"
                 />
               </div>
 

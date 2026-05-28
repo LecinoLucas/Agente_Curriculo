@@ -333,7 +333,7 @@ export function CandidateProfilePage() {
     () => PROFILE_TABS.filter((tab) => visibleProfileTabKeys.includes(tab.key as CandidateProfileTabKey)),
     [visibleProfileTabKeys],
   );
-  const canAccessPreAdmission = user?.role === "admin" || user?.role === "hr";
+  const canAccessPreAdmission = user?.role === "admin" || user?.role === "hr" || user?.role === "recruiter";
   const loadPreAdmissionEnvelope = useCallback(async () => {
     if (!candidateId || !profileJobId || !canAccessPreAdmission) {
       setPreAdmissionEnvelope(null);
@@ -1350,17 +1350,17 @@ function OverviewTab({
 }
 
 const STAGE_OPTIONS: Array<{ value: PipelineStage; label: string }> = [
-  { value: "entry", label: "Recebido" },
+  { value: "entry", label: "Entrada" },
   { value: "screening", label: "Triagem" },
   { value: "hr_interview", label: "Entrevista RH" },
-  { value: "technical_interview", label: "Entrevista Técnica" },
-  { value: "final", label: "Final" },
-  { value: "offer", label: "Proposta" },
-  { value: "hired", label: "Contratado" },
+  { value: "technical_interview", label: "Entrevista técnica" },
+  { value: "final", label: "Decisão" },
+  { value: "offer", label: "Oferta" },
+  { value: "hired", label: "Contratado / iniciar admissão" },
   { value: "pre_admission", label: "Pré-admissão" },
-  { value: "protheus", label: "Protheus" },
+  { value: "protheus", label: "Integração ERP" },
   { value: "admitted", label: "Admitido" },
-  { value: "rejected", label: "Reprovado" },
+  { value: "rejected", label: "Encerrado" },
 ];
 
 function WorkflowTab({
@@ -1426,11 +1426,13 @@ function WorkflowTab({
   const decisionPendency = (overview.preview_pendencies ?? []).find((pendency) =>
     pendency.id === "final_decision_not_submitted" ||
     pendency.id === "manager_decision_missing" ||
+    pendency.id === "hiring_decision_required" ||
     pendency.action === "open_decision"
   );
   const decisionDescription =
+    decisionPendency?.id === "hiring_decision_required" ||
     decisionPendency?.id === "manager_decision_missing"
-      ? "Esta vaga exige revisão do gestor antes de avançar."
+      ? "Registre a decisão de contratação antes de avançar para a etapa seguinte."
       : "Registro opcional para auditoria. A contratação acontece ao mover a pipeline para Contratado.";
 
   useEffect(() => {
@@ -1534,7 +1536,7 @@ function WorkflowTab({
                     disabled={saving}
                     primary
                   >
-                    {preAdmissionNeedsAction ? "Abrir pré-admissão" : "Mover para Protheus"}
+                    {preAdmissionNeedsAction ? "Abrir pré-admissão" : "Mover para Integração ERP"}
                   </ActionButton>
                 ) : null}
                 {canMoveToAdmitted ? (

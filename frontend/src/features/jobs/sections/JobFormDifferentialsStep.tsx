@@ -97,7 +97,7 @@ export function JobFormDifferentialsStep({
                 newBehavioralRequirement: event.target.value,
               })
             }
-            className="ui-input h-11 flex-1 rounded-xl px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 flex-1 rounded-xl px-3 text-sm"
             placeholder="Ex: Comunicação com áreas de negócio"
           />
           <Button type="button" onClick={onAddBehavioralRequirement}>

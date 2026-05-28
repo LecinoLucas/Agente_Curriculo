@@ -111,7 +111,7 @@ export function SkillsTable({
             </div>
 
             {/* Desktop table */}
-            <div className="ui-scrollbar hidden max-h-[68vh] overflow-y-auto md:block">
+            <div className="[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full hidden max-h-[68vh] overflow-y-auto md:block">
               <Table className="w-full table-fixed">
                 <TableHeader className="bg-surface-muted">
                   <TableRow className="hover:bg-surface-muted">
@@ -174,7 +174,7 @@ export function SkillsTable({
             </div>
 
             {/* Mobile list */}
-            <div className="ui-scrollbar grid max-h-[68vh] gap-3 overflow-y-auto p-4 sm:p-6 md:hidden">
+            <div className="[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full grid max-h-[68vh] gap-3 overflow-y-auto p-4 sm:p-6 md:hidden">
               {items.map((skill) => (
                 <div
                   key={skill.id}

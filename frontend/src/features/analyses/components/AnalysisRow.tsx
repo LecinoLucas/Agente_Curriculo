@@ -12,7 +12,7 @@ interface AnalysisRowProps {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const c = STATUS_CONFIG[status] ?? { label: status, cls: "ui-badge-neutral" };
+  const c = STATUS_CONFIG[status] ?? { label: status, cls: "bg-surface-muted text-text-muted border border-border px-2 py-0.5 rounded-full text-xs font-medium" };
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${c.cls}`}>
       {c.label}
@@ -21,13 +21,13 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function AiBadge({ used }: { used: boolean | null }) {
-  if (used === null) return <span className="ui-text-muted text-xs">—</span>;
+  if (used === null) return <span className="text-text-muted text-xs">—</span>;
   return used ? (
-    <span className="ui-badge-info inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
+    <span className="bg-info-soft text-info px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
       IA Real
     </span>
   ) : (
-    <span className="ui-badge-neutral inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
+    <span className="bg-surface-muted text-text-muted border border-border px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
       Mock
     </span>
   );
@@ -35,7 +35,7 @@ function AiBadge({ used }: { used: boolean | null }) {
 
 function TypeBadge({ type }: { type?: AnalysisGlobalItem["type"] }) {
   return (
-    <span className="ui-badge-neutral inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
+    <span className="bg-surface-muted text-text-muted border border-border px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
       {type === "behavioral_ai" ? "Comportamental" : "Currículo"}
     </span>
   );
@@ -117,10 +117,10 @@ export function AnalysisRow({
               hasCandidate ? "cursor-pointer text-[hsl(var(--primary))] hover:underline" : "text-text"
             }`}
           >
-            {item.candidate_name ?? <span className="ui-text-muted italic">Sem nome</span>}
+            {item.candidate_name ?? <span className="text-text-muted italic">Sem nome</span>}
           </div>
           {item.candidate_email ? (
-            <div className="ui-text-muted mt-0.5 text-xs">{item.candidate_email}</div>
+            <div className="text-text-muted mt-0.5 text-xs">{item.candidate_email}</div>
           ) : null}
         </button>
       </td>
@@ -141,7 +141,7 @@ export function AnalysisRow({
               {item.resume_file_name}
             </span>
           ) : (
-            <span className="ui-text-muted text-xs">—</span>
+            <span className="text-text-muted text-xs">—</span>
           )}
         </div>
       </td>
@@ -172,7 +172,7 @@ export function AnalysisRow({
             </span>
           ) : null}
           {item.retry_count > 0 ? (
-            <span className="ui-text-muted text-xs">
+            <span className="text-text-muted text-xs">
               {item.retry_count} tentativa{item.retry_count !== 1 ? "s" : ""}
             </span>
           ) : null}
@@ -183,7 +183,7 @@ export function AnalysisRow({
       <td className="px-4 py-4">
         {item.type === "behavioral_ai" ? (
           <div className="flex flex-col gap-1">
-            <span className="ui-badge-info inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-medium">
+            <span className="bg-info-soft text-info px-2 py-0.5 rounded-full text-xs font-medium inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-medium">
               {item.provider ?? "IA"}
             </span>
             <span className="max-w-[160px] truncate text-xs text-text-muted" title={item.model ?? undefined}>
@@ -202,7 +202,7 @@ export function AnalysisRow({
       </td>
 
       {/* Criado em */}
-      <td className="ui-text-muted px-4 py-4 text-xs">
+      <td className="text-text-muted px-4 py-4 text-xs">
         <div className="flex flex-col gap-1">
           <span>{fmtDate(item.created_at)}</span>
           {item.updated_at ? <span>Atualizada: {fmtDate(item.updated_at)}</span> : null}
@@ -210,7 +210,7 @@ export function AnalysisRow({
       </td>
 
       {/* Duração */}
-      <td className="ui-text-muted px-4 py-4 text-xs">
+      <td className="text-text-muted px-4 py-4 text-xs">
         {fmtDuration(item.started_at, item.completed_at ?? item.failed_at)}
       </td>
 

@@ -54,7 +54,7 @@ export function SkillFormModal({
                 value={form.canonical}
                 onChange={(e) => onFormChange({ canonical: e.target.value })}
                 placeholder="Ex: JavaScript, SQL, BI"
-                className="ui-input h-10 rounded-md px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-md px-3 text-sm"
               />
             </label>
 
@@ -65,7 +65,7 @@ export function SkillFormModal({
                   value={form.domainsInput}
                   onChange={(e) => onFormChange({ domainsInput: e.target.value })}
                   placeholder="Ex: technology, frontend"
-                  className="ui-input h-10 rounded-md px-3 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-md px-3 text-sm"
                 />
               </label>
 
@@ -74,7 +74,7 @@ export function SkillFormModal({
                 <select
                   value={form.strength}
                   onChange={(e) => onFormChange({ strength: e.target.value as typeof form.strength })}
-                  className="ui-input h-10 rounded-md px-3 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-md px-3 text-sm"
                 >
                   <option value="exact">Exact</option>
                   <option value="strong">Strong</option>
@@ -90,7 +90,7 @@ export function SkillFormModal({
                 value={form.type}
                 onChange={(e) => onFormChange({ type: e.target.value })}
                 placeholder="Ex: skill, tool, platform"
-                className="ui-input h-10 rounded-md px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-md px-3 text-sm"
               />
             </label>
 
@@ -113,7 +113,7 @@ export function SkillFormModal({
                     }
                   }}
                   placeholder="Ex: JS, TS, React"
-                  className="ui-input h-10 flex-1 rounded-md px-3 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 flex-1 rounded-md px-3 text-sm"
                 />
                 <Button type="button" variant="outline" onClick={onAddAlias}>
                   Adicionar

@@ -54,7 +54,7 @@ export function SkillsPage() {
               placeholder="Buscar equivalências..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="ui-input w-full pl-10 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full pl-10 text-sm"
             />
           </div>
         </div>

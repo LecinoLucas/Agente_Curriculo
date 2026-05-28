@@ -268,7 +268,7 @@ function SelectedSkillRow({
                 }
               }}
               disabled={isSaving}
-              className="ui-input h-10 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-xl px-3 text-sm"
             />
           </label>
 
@@ -280,7 +280,7 @@ function SelectedSkillRow({
                 void safeUpdate({ minimum_level: event.target.value || null })
               }
               disabled={isSaving}
-              className="ui-input h-10 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-xl px-3 text-sm"
             >
               <option value="">—</option>
               <option value="intern">Estagiário</option>
@@ -310,7 +310,7 @@ function SelectedSkillRow({
                 }
               }}
               disabled={isSaving}
-              className="ui-input h-10 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-xl px-3 text-sm"
               placeholder="—"
             />
           </label>
@@ -427,7 +427,7 @@ export function SkillSection({
                 value={search}
                 onChange={(event) => onSearchChange(event.target.value)}
                 placeholder="Digite nome de skill, ferramenta ou certificação"
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
               />
             </label>
             <div className="flex items-end">

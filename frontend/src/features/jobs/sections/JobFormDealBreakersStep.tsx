@@ -95,7 +95,7 @@ export function JobFormDealBreakersStep({
                   operator: (DEAL_BREAKER_OPERATORS[event.target.value] ?? ["equals"])[0],
                 })
               }
-              className="ui-input h-11 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
             >
               <option value="">Selecione</option>
               {DEAL_BREAKER_FIELDS.map((option) => (
@@ -113,7 +113,7 @@ export function JobFormDealBreakersStep({
                   operator: event.target.value as DealBreaker["operator"],
                 })
               }
-              className="ui-input h-11 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
             >
               {(DEAL_BREAKER_OPERATORS[dealBreakerDraft.field] ?? ["equals"]).map((operator) => (
                 <option key={operator} value={operator}>
@@ -130,7 +130,7 @@ export function JobFormDealBreakersStep({
                   value: event.target.value,
                 })
               }
-              className="ui-input h-11 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
               placeholder="Ex: remoto, inglês, 5 anos"
             />
           </Field>
@@ -142,7 +142,7 @@ export function JobFormDealBreakersStep({
                   reason: event.target.value,
                 })
               }
-              className="ui-input h-11 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
               placeholder="Explique por que esse critério elimina"
             />
           </Field>

@@ -318,14 +318,14 @@ export function CadastrosPage() {
                 placeholder="Buscar por nome ou alias..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="ui-input w-full pl-10 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full pl-10 text-sm"
               />
             </div>
 
             <select
               value={skillStatusFilter}
               onChange={(e) => setSkillStatusFilter(e.target.value as SkillStatusFilter)}
-              className="ui-input text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring text-sm"
             >
               {SKILL_STATUS_FILTERS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -337,7 +337,7 @@ export function CadastrosPage() {
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="ui-input text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring text-sm"
             >
               {CATEGORIES.map((cat) => (
                 <option key={cat.value} value={cat.value}>
@@ -426,7 +426,7 @@ export function CadastrosPage() {
                 placeholder="Buscar por nome..."
                 value={searchArea}
                 onChange={(e) => setSearchArea(e.target.value)}
-                className="ui-input w-full pl-10 text-sm"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full pl-10 text-sm"
               />
             </div>
 
@@ -547,7 +547,7 @@ export function CadastrosPage() {
                   placeholder="Buscar skill arquivada..."
                   value={archivedSkillSearch}
                   onChange={(e) => setArchivedSkillSearch(e.target.value)}
-                  className="ui-input w-full pl-10 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full pl-10 text-sm"
                 />
               </div>
 
@@ -600,7 +600,7 @@ export function CadastrosPage() {
                   placeholder="Buscar template comportamental arquivado..."
                   value={archivedTemplateSearch}
                   onChange={(e) => setArchivedTemplateSearch(e.target.value)}
-                  className="ui-input w-full pl-10 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full pl-10 text-sm"
                 />
               </div>
 
@@ -654,7 +654,7 @@ export function CadastrosPage() {
                   placeholder="Buscar vaga arquivada..."
                   value={archivedJobSearch}
                   onChange={(e) => setArchivedJobSearch(e.target.value)}
-                  className="ui-input w-full pl-10 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full pl-10 text-sm"
                 />
               </div>
 
@@ -700,7 +700,7 @@ export function CadastrosPage() {
                   placeholder="Buscar candidato arquivado..."
                   value={archivedCandidateSearch}
                   onChange={(e) => setArchivedCandidateSearch(e.target.value)}
-                  className="ui-input w-full pl-10 text-sm"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full pl-10 text-sm"
                 />
               </div>
 

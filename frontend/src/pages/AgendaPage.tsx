@@ -513,7 +513,7 @@ export function AgendaPage() {
           type="button"
           onClick={() => void handleConnectGoogle()}
           disabled={connectingGoogle || loadingGoogleConnection}
-          className="ui-btn-secondary h-10 rounded-lg border-border bg-surface px-4 text-sm font-medium text-text hover:bg-surface-muted disabled:opacity-60"
+          className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm h-10 rounded-lg border-border bg-surface px-4 text-sm font-medium text-text hover:bg-surface-muted disabled:opacity-60"
         >
           {connectingGoogle
             ? "Conectando..."

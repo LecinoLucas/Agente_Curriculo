@@ -194,7 +194,7 @@ export function CandidatesFilters({
             placeholder="Buscar nome, e-mail, CPF, telefone ou skill..."
             value={searchInput}
             onChange={(e) => onSearchInputChange(e.target.value)}
-            className="ui-input h-9 w-full rounded-lg pl-9 pr-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 w-full rounded-lg pl-9 pr-3 text-sm"
           />
         </div>
 
@@ -203,7 +203,7 @@ export function CandidatesFilters({
           value={city}
           onChange={(e) => onCityChange(e.target.value)}
           placeholder="Cidade"
-          className="ui-input h-9 w-[180px] rounded-lg px-3 text-sm"
+          className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 w-[180px] rounded-lg px-3 text-sm"
         />
 
         <input
@@ -212,7 +212,7 @@ export function CandidatesFilters({
           onChange={(e) => onStateChange(e.target.value.toUpperCase())}
           maxLength={2}
           placeholder="UF"
-          className="ui-input h-9 w-[80px] rounded-lg px-3 text-sm"
+          className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 w-[80px] rounded-lg px-3 text-sm"
         />
 
         <input
@@ -220,13 +220,13 @@ export function CandidatesFilters({
           value={skill}
           onChange={(e) => onSkillChange(e.target.value)}
           placeholder="Skill"
-          className="ui-input h-9 w-[170px] rounded-lg px-3 text-sm"
+          className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 w-[170px] rounded-lg px-3 text-sm"
         />
 
         <button
           type="button"
           onClick={onToggleAdvanced}
-          className="ui-btn-secondary h-9 rounded-lg px-3 text-sm"
+          className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm h-9 rounded-lg px-3 text-sm"
         >
           {showAdvanced ? "Ocultar avançados" : "Filtros avançados"}
         </button>
@@ -235,7 +235,7 @@ export function CandidatesFilters({
           <button
             type="button"
             onClick={onClearFilters}
-            className="ui-btn-secondary h-9 rounded-lg px-3 text-sm"
+            className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm h-9 rounded-lg px-3 text-sm"
           >
             Limpar filtros
           </button>
@@ -250,7 +250,7 @@ export function CandidatesFilters({
             value={salaryMin}
             onChange={(e) => onSalaryMinChange(e.target.value)}
             placeholder="Pretensão mín."
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           />
           <input
             type="number"
@@ -258,14 +258,14 @@ export function CandidatesFilters({
             value={salaryMax}
             onChange={(e) => onSalaryMaxChange(e.target.value)}
             placeholder="Pretensão máx."
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           />
           <select
             value={desiredContractTypeFilter}
             onChange={(e) =>
               onDesiredContractTypeFilterChange(e.target.value as DesiredContractTypeFilter)
             }
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           >
             <option value="all">Regime desejado</option>
             <option value="CLT">CLT</option>
@@ -276,7 +276,7 @@ export function CandidatesFilters({
           <select
             value={linkStatusFilter}
             onChange={(e) => onLinkStatusFilterChange(e.target.value as LinkStatusFilter)}
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           >
             <option value="all">Status de vínculo</option>
             <option value="with_active_job">Com vaga ativa</option>
@@ -287,7 +287,7 @@ export function CandidatesFilters({
           <select
             value={applicationSourceFilter}
             onChange={(e) => onApplicationSourceFilterChange(e.target.value as ApplicationSourceFilter)}
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           >
             <option value="all">Origem</option>
             <option value="public_application">Candidatura pública</option>
@@ -298,7 +298,7 @@ export function CandidatesFilters({
           <select
             value={resumeFilter}
             onChange={(e) => onResumeFilterChange(e.target.value as ResumeFilter)}
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           >
             <option value="all">Currículo</option>
             <option value="with">Com currículo</option>
@@ -308,7 +308,7 @@ export function CandidatesFilters({
           <select
             value={aiFilter}
             onChange={(e) => onAiFilterChange(e.target.value as AiStatusFilter)}
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           >
             <option value="all">Status IA</option>
             <option value="completed">Concluída</option>
@@ -321,7 +321,7 @@ export function CandidatesFilters({
             value={seniority}
             onChange={(e) => onSeniorityChange(e.target.value)}
             placeholder="Senioridade"
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           />
         </div>
       ) : null}

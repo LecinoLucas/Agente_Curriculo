@@ -55,14 +55,14 @@ export function AnalysisFilters({
           placeholder="Buscar por candidato…"
           value={searchInput}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="ui-input h-9 w-full rounded-lg pl-9 pr-3 text-sm"
+          className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 w-full rounded-lg pl-9 pr-3 text-sm"
         />
       </div>
 
       <select
         value={typeFilter}
         onChange={(e) => onTypeChange(e.target.value as AnalysisTypeFilter)}
-        className="ui-input h-9 rounded-lg px-3 text-sm"
+        className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
       >
         <option value="all">Todas</option>
         <option value="resume">Currículo</option>
@@ -72,7 +72,7 @@ export function AnalysisFilters({
       <select
         value={statusFilter}
         onChange={(e) => onStatusChange(e.target.value as StatusFilter)}
-        className="ui-input h-9 rounded-lg px-3 text-sm"
+        className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
       >
         <option value="all">Todos os status</option>
         <option value="waiting_extraction">Aguardando extração</option>
@@ -89,7 +89,7 @@ export function AnalysisFilters({
         value={aiFilter}
         onChange={(e) => onAiChange(e.target.value as AiFilter)}
         disabled={typeFilter === "behavioral_ai"}
-        className="ui-input h-9 rounded-lg px-3 text-sm disabled:opacity-50"
+        className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm disabled:opacity-50"
       >
         <option value="all">IA real e mock</option>
         <option value="real">Somente IA real</option>
@@ -101,7 +101,7 @@ export function AnalysisFilters({
           <select
             value={providerFilter}
             onChange={(e) => onProviderChange(e.target.value)}
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           >
             <option value="all">Todos os providers</option>
             {providerOptions.map((provider) => (
@@ -114,7 +114,7 @@ export function AnalysisFilters({
           <select
             value={modelFilter}
             onChange={(e) => onModelChange(e.target.value)}
-            className="ui-input h-9 rounded-lg px-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 rounded-lg px-3 text-sm"
           >
             <option value="all">Todos os modelos</option>
             {modelOptions.map((model) => (
@@ -130,7 +130,7 @@ export function AnalysisFilters({
         <button
           type="button"
           onClick={onClearFilters}
-          className="ui-btn-secondary h-9 rounded-lg px-3 text-sm"
+          className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm h-9 rounded-lg px-3 text-sm"
         >
           Limpar filtros
         </button>

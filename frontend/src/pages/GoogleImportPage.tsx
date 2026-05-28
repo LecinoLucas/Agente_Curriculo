@@ -170,7 +170,7 @@ export function GoogleImportPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - List of Submissions */}
         <div className="lg:col-span-1 space-y-4">
-          <div className="ui-card rounded-3xl p-4 flex flex-col gap-4">
+          <div className="bg-surface shadow-sm text-text border border-border rounded-3xl p-4 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg">Envios Recebidos</h3>
               <span className="bg-surface-muted text-text-muted px-2.5 py-1 rounded-full text-xs font-bold">
@@ -231,7 +231,7 @@ export function GoogleImportPage() {
         {/* Right Column - Detail and Flow Visualizer */}
         <div className="lg:col-span-2 space-y-6">
           {selectedSub ? (
-            <div className="ui-card rounded-3xl p-6 flex flex-col gap-6">
+            <div className="bg-surface shadow-sm text-text border border-border rounded-3xl p-6 flex flex-col gap-6">
               {/* Detail Header */}
               <div className="flex flex-col md:flex-row justify-between gap-4 border-b border-border pb-4">
                 <div>
@@ -334,7 +334,7 @@ export function GoogleImportPage() {
               </div>
             </div>
           ) : (
-            <div className="ui-card rounded-3xl p-6 flex flex-col items-center justify-center min-h-[400px] text-text-muted">
+            <div className="bg-surface shadow-sm text-text border border-border rounded-3xl p-6 flex flex-col items-center justify-center min-h-[400px] text-text-muted">
               <ClipboardList className="h-12 w-12 mb-4 opacity-50" />
               <p>Selecione um envio na lista para ver o detalhamento do fluxo.</p>
             </div>

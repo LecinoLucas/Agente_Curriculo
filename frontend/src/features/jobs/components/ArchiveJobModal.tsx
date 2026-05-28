@@ -36,7 +36,7 @@ export function ArchiveJobModal({ open, loading = false, onClose, onConfirm }: A
           <select
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
           >
             {REASONS.map((option) => (
               <option key={option} value={option}>
@@ -53,7 +53,7 @@ export function ArchiveJobModal({ open, loading = false, onClose, onConfirm }: A
             onChange={(event) => setNote(event.target.value)}
             rows={4}
             maxLength={1000}
-            className="ui-input min-h-[120px] w-full rounded-xl border-border bg-surface px-3 py-2.5 text-sm shadow-none"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[120px] w-full rounded-xl border-border bg-surface px-3 py-2.5 text-sm shadow-none"
             placeholder="Adicione um contexto para auditoria e histórico"
           />
         </label>

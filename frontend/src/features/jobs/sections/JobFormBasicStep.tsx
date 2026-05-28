@@ -46,7 +46,7 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
             <input
               value={form.title}
               onChange={(event) => onFormChange({ title: event.target.value })}
-              className="ui-input h-11 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
               placeholder="Ex: Analista de Dados Pleno"
             />
           </Field>
@@ -56,7 +56,7 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
               <select
                 value={form.job_area}
                 onChange={(event) => onFormChange({ job_area: event.target.value })}
-                className="ui-input h-11 rounded-xl px-3 text-sm flex-1"
+                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm flex-1"
                 disabled={loadingAreas}
               >
                 <option value="">Selecione</option>
@@ -81,7 +81,7 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
             <select
               value={form.seniority_level}
               onChange={(event) => onFormChange({ seniority_level: event.target.value })}
-              className="ui-input h-11 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
             >
               <option value="">Selecione</option>
               <option value="intern">Estagiário</option>
@@ -99,7 +99,7 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
               onChange={(event) =>
                 onFormChange({ priority: event.target.value as JobFormValues["priority"] })
               }
-              className="ui-input h-11 rounded-xl px-3 text-sm"
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm"
             >
               {PRIORITY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -114,7 +114,7 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
           <textarea
             value={form.description}
             onChange={(event) => onFormChange({ description: event.target.value })}
-            className="ui-input min-h-40 rounded-2xl px-3 py-3 text-sm"
+            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-40 rounded-2xl px-3 py-3 text-sm"
             placeholder="Explique a missão principal da vaga, contexto do time e objetivo da contratação."
           />
         </Field>
