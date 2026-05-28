@@ -57,7 +57,14 @@
       "Bash(npm --prefix frontend test -- --run src/pages/__tests__/PipelinePage.test.tsx)",
       "Bash(grep -v \"^--$\")",
       "Bash(python -c \"import pytest; print\\(pytest.__version__\\)\")",
-      "Bash(kill 16075 17118)"
+      "Bash(kill 16075 17118)",
+      "Bash(python3 -c \"from src.application.services.pre_admission_state_machine import assert_transition_allowed\")",
+      "Bash(python3 -c \"from src.application.services.pre_admission_service import PreAdmissionService\")",
+      "Bash(.venv/bin/pytest tests/integration/test_pre_admission_operational.py -q --no-cov)",
+      "Bash(python3 -c ' *)",
+      "Bash(.venv/bin/python -c \"from src.interface.api.dependencies import PreAdmissionAdmin; print\\('OK'\\)\")",
+      "Bash(python3 -m py_compile src/interface/api/dependencies.py src/interface/api/routers/pre_admission.py src/interface/api/schemas/pipeline_schemas.py src/application/services/pipeline_service.py)",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "/Users/lecinolucas/Developer/Agente_Curriculo/backend/alembic/versions"
