@@ -78,7 +78,7 @@ function expectTopNavMissing(labels: string[]) {
   }
 }
 
-describe("AppShell — TopNavbar", () => {
+describe("AppShell — Sidebar Nav", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     closeCandidateMock.mockClear();
@@ -86,55 +86,68 @@ describe("AppShell — TopNavbar", () => {
   });
 
   describe("renderização por role", () => {
-    it("renderiza a TopNavbar completa para admin", () => {
+    it("renderiza a navegação completa para admin", () => {
       renderShell("admin");
 
       expectTopNavLabels([
         "Dashboard",
-        "Pipeline",
         "Recrutamento",
         "Avaliações",
         "Admissão",
         "Gestores",
-        "IA & Automação",
-        "Adm",
+        "Administração",
+        "Outros",
       ]);
 
-      fireEvent.click(within(topNav()).getByRole("button", { name: "Adm" }));
-      expect(screen.getByRole("menuitem", { name: /Credenciais IA/ })).toBeInTheDocument();
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Administração" }));
+      expect(screen.getByRole("link", { name: /Credenciais IA/ })).toBeInTheDocument();
 
       fireEvent.click(within(topNav()).getByRole("button", { name: "Admissão" }));
-      expect(screen.getByRole("menuitem", { name: /Admitidos/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Admitidos/ })).toBeInTheDocument();
     });
 
-    it("renderiza a TopNavbar para recruiter sem áreas de gestor/admin", () => {
+    it("renderiza a navegação para recruiter sem áreas de gestor/admin totais", () => {
       renderShell("recruiter");
 
-      expectTopNavLabels(["Dashboard", "Pipeline", "Recrutamento", "Avaliações", "IA & Automação"]);
-      expectTopNavMissing(["Admissão", "Gestores", "Adm"]);
+      expectTopNavLabels(["Dashboard", "Recrutamento", "Avaliações", "Administração"]);
+      expectTopNavMissing(["Admissão", "Gestores", "Outros"]);
     });
 
     it("renderiza menu Admitidos para RH", () => {
       renderShell("hr");
 
-      expectTopNavLabels(["Dashboard", "Pipeline", "Recrutamento", "Admissão"]);
+      expectTopNavLabels(["Dashboard", "Recrutamento", "Admissão"]);
+      expectTopNavMissing(["Outros", "Administração", "Avaliações"]);
       fireEvent.click(within(topNav()).getByRole("button", { name: "Admissão" }));
-      expect(screen.getByRole("menuitem", { name: /Admitidos/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Admitidos/ })).toBeInTheDocument();
     });
 
-    it("renderiza a TopNavbar para manager com apenas grupos permitidos", () => {
+    it("renderiza a navegação para manager com apenas grupos permitidos", () => {
       renderShell("manager");
 
-      expectTopNavLabels(["Dashboard", "Pipeline", "Recrutamento", "Gestores"]);
-      expectTopNavMissing(["Avaliações", "IA & Automação", "Adm"]);
+      expectTopNavLabels(["Dashboard", "Recrutamento", "Gestores"]);
+      expectTopNavMissing(["Avaliações", "Administração", "Outros"]);
     });
 
-    it("não exibe IA & Automação para viewer", () => {
+    it("não exibe Avaliações para viewer", () => {
       renderShell("viewer");
 
-      expectTopNavLabels(["Dashboard", "Pipeline", "Recrutamento"]);
-      expectTopNavMissing(["Avaliações", "IA & Automação", "Gestores", "Adm"]);
+      expectTopNavLabels(["Dashboard", "Recrutamento"]);
+      expectTopNavMissing(["Avaliações", "Gestores", "Administração", "Outros"]);
     });
+
+    it("exibe Outros (Demo RH) para admin", () => {
+      renderShell("admin");
+      expect(topNavItem("Outros")).toBeInTheDocument();
+    });
+
+    it.each(["recruiter", "hr", "manager", "viewer"] as const)(
+      "não exibe Outros para %s",
+      (role) => {
+        renderShell(role);
+        expectTopNavMissing(["Outros"]);
+      },
+    );
 
     it("renderiza somente Portal do Candidato para candidate quando AppShell é usado nesse fluxo", () => {
       renderShell("candidate", "/candidato/portal");
@@ -142,12 +155,10 @@ describe("AppShell — TopNavbar", () => {
       expectTopNavLabels(["Portal do Candidato"]);
       expectTopNavMissing([
         "Dashboard",
-        "Pipeline",
         "Recrutamento",
         "Avaliações",
         "Gestores",
-        "IA & Automação",
-        "Adm",
+        "Administração",
       ]);
     });
   });
@@ -171,9 +182,12 @@ describe("AppShell — TopNavbar", () => {
 
       renderShell("recruiter");
 
-      expectTopNavLabels(["Dashboard", "Pipeline"]);
-      expectTopNavMissing(["Avaliações", "IA & Automação", "Gestores", "Adm"]);
-      expect(within(topNav()).queryByRole("button", { name: "Recrutamento" })).not.toBeInTheDocument();
+      expectTopNavLabels(["Dashboard", "Recrutamento"]);
+      expectTopNavMissing(["Avaliações", "Gestores", "Administração"]);
+      // Pipeline is allowed, so Recrutamento is visible, but Vagas/Candidatos/Agenda are hidden.
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
+      expect(screen.getByRole("link", { name: /Pipeline/ })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /Vagas/ })).not.toBeInTheDocument();
     });
 
     it("consegue ocultar Pipeline via app_screens_config sem esconder Dashboard permitido", () => {
@@ -191,12 +205,11 @@ describe("AppShell — TopNavbar", () => {
       renderShell("recruiter");
 
       expectTopNavLabels(["Dashboard", "Recrutamento"]);
-      expect(within(topNav()).queryByRole("link", { name: "Pipeline" })).not.toBeInTheDocument();
 
       fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
-      expect(screen.queryByRole("menuitem", { name: /Pipeline/ })).not.toBeInTheDocument();
-      expect(screen.getByRole("menuitem", { name: /Vagas/ })).toBeInTheDocument();
-      expect(screen.getByRole("menuitem", { name: /Candidatos/ })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /Pipeline/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Vagas/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Candidatos/ })).toBeInTheDocument();
     });
   });
 
@@ -205,98 +218,29 @@ describe("AppShell — TopNavbar", () => {
       ["/candidatos/candidate-1", "Recrutamento", "Candidatos"],
       ["/vagas/nova", "Recrutamento", "Vagas"],
       ["/vagas/job-1/editar", "Recrutamento", "Vagas"],
-    ])("destaca grupo e item ativo em %s", (route, groupLabel, itemLabel) => {
+    ])("abre grupo automaticamente se tem item ativo em %s", (route, groupLabel, itemLabel) => {
       renderShell("admin", route);
 
-      const groupTrigger = within(topNav()).getByRole("button", { name: groupLabel });
-      expect(groupTrigger).toHaveAttribute("aria-current", "page");
-
-      fireEvent.click(groupTrigger);
-      expect(screen.getByRole("menuitem", { name: new RegExp(itemLabel) })).toHaveAttribute("aria-current", "page");
+      const item = screen.getByRole("link", { name: new RegExp(itemLabel) });
+      expect(item).toHaveClass("bg-[hsl(var(--nav-active-bg))]/50");
     });
 
-    it("destaca Pipeline direto em /pipeline/:jobId", () => {
-      renderShell("admin", "/pipeline/job-1");
-
-      expect(within(topNav()).getByRole("link", { name: "Pipeline" })).toHaveAttribute("aria-current", "page");
-      expect(within(topNav()).getByRole("button", { name: "Recrutamento" })).not.toHaveAttribute("aria-current");
-    });
-
-    it("destaca Dashboard compacto como link ativo em /dashboard", () => {
+    it("destaca Dashboard como link ativo em /dashboard", () => {
       renderShell("admin", "/dashboard");
 
-      expect(within(topNav()).getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
-      expect(within(topNav()).getByRole("link", { name: "Dashboard" })).toHaveAttribute("title", "Dashboard");
-    });
-
-    it("mantém Pipeline fora do dropdown Recrutamento", () => {
-      renderShell("admin");
-
-      fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
-
-      expect(screen.queryByRole("menuitem", { name: /Pipeline/ })).not.toBeInTheDocument();
-      expect(screen.getByRole("menuitem", { name: /Vagas/ })).toBeInTheDocument();
-      expect(screen.getByRole("menuitem", { name: /Candidatos/ })).toBeInTheDocument();
-      expect(screen.getByRole("menuitem", { name: /Agenda/ })).toBeInTheDocument();
+      const link = within(topNav()).getByRole("link", { name: "Dashboard" });
+      expect(link).toHaveClass("bg-[hsl(var(--nav-active-bg))]");
     });
   });
 
   describe("interação", () => {
-    it("abre e fecha o drawer mobile pelo botão hamburger", () => {
+    it("chama closeCandidate ao navegar para Pipeline pela navegação", () => {
       renderShell("admin");
 
-      const hamburger = screen.getByRole("button", { name: "Abrir menu de navegação" });
-      expect(hamburger).toHaveAttribute("aria-expanded", "false");
-
-      fireEvent.click(hamburger);
-      const headerHamburger = within(screen.getByRole("banner")).getByRole("button", {
-        name: "Fechar menu de navegação",
-      });
-      expect(headerHamburger).toHaveAttribute("aria-expanded", "true");
-
-      fireEvent.click(headerHamburger);
-      expect(screen.getByRole("button", { name: "Abrir menu de navegação" })).toHaveAttribute("aria-expanded", "false");
-    });
-
-    it("fecha dropdown e drawer com Escape", () => {
-      renderShell("admin");
-
-      fireEvent.click(within(topNav()).getByRole("button", { name: "Adm" }));
-      expect(screen.getByRole("menu")).toBeInTheDocument();
-
-      fireEvent.keyDown(window, { key: "Escape" });
-      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-
-      fireEvent.click(screen.getByRole("button", { name: "Abrir menu de navegação" }));
-      expect(
-        within(screen.getByRole("banner")).getByRole("button", { name: "Fechar menu de navegação" }),
-      ).toHaveAttribute("aria-expanded", "true");
-
-      fireEvent.keyDown(window, { key: "Escape" });
-      expect(screen.getByRole("button", { name: "Abrir menu de navegação" })).toHaveAttribute("aria-expanded", "false");
-    });
-
-    it("chama closeCandidate ao navegar para Pipeline pela TopNavbar", () => {
-      renderShell("admin");
-
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
       fireEvent.click(within(topNav()).getByRole("link", { name: "Pipeline" }));
 
       expect(closeCandidateMock).toHaveBeenCalledTimes(1);
-    });
-
-    it("mantém Dashboard e Pipeline acessíveis no drawer mobile", () => {
-      renderShell("admin");
-
-      fireEvent.click(screen.getByRole("button", { name: "Abrir menu de navegação" }));
-
-      const drawer = screen.getByRole("complementary");
-      expect(within(drawer).getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
-      expect(within(drawer).getByRole("link", { name: "Pipeline" })).toBeInTheDocument();
-      expect(within(drawer).getByRole("button", { name: "Recrutamento" })).toBeInTheDocument();
-
-      fireEvent.click(within(drawer).getByRole("button", { name: "Recrutamento" }));
-      expect(within(drawer).queryByRole("link", { name: "Pipeline" })).toBeInTheDocument();
-      expect(screen.queryByRole("menuitem", { name: /Pipeline/ })).not.toBeInTheDocument();
     });
   });
 });
