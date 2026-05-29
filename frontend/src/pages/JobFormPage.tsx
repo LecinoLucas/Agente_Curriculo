@@ -1,4 +1,14 @@
-import { ArrowLeft, ArrowRight, CheckCircle2, ChevronLeft, Circle, Loader2, Save, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BarChart2,
+  CheckCircle2,
+  ChevronLeft,
+  Loader2,
+  Save,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -30,9 +40,16 @@ import { useJobFormState } from "../features/jobs/hooks/useJobFormState";
 import { useJobSkills } from "../features/jobs/hooks/useJobSkills";
 import { useJobPublication } from "../features/jobs/hooks/useJobPublication";
 import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
-import { getJob, getJobQuality, publishJob, type CreateJobRequestPayload, type UpdateJobRequestPayload, updateJob, createJob } from "../services/jobsService";
+import {
+  getJob,
+  getJobQuality,
+  publishJob,
+  type CreateJobRequestPayload,
+  type UpdateJobRequestPayload,
+  updateJob,
+  createJob,
+} from "../services/jobsService";
 import { jobSkillsService } from "../services/jobSkillsService";
-import { skillEquivalencesService } from "../services/skillEquivalencesService";
 import { toast } from "../shared/utils/toast";
 import type { Job, BehavioralAssessmentTemplate, JobQualityResult } from "../types/domain";
 import {
@@ -41,6 +58,8 @@ import {
   formatWorkModel,
   jobStatusTone,
 } from "../utils/jobFormatters";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type StepId =
   | "basic"
@@ -52,6 +71,11 @@ type StepId =
   | "assessment-policy"
   | "review";
 
+export type MacroStepId = "context" | "skills" | "evaluation" | "review";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+// Kept as-is — existing tests depend on these indices (assessment-policy=5, behavioral=6).
 export const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
   { id: "basic", label: "Dados básicos", hint: "Contexto e resumo da vaga" },
   { id: "requirements", label: "Requisitos mínimos", hint: "Base obrigatória do matching" },
@@ -63,6 +87,14 @@ export const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
   { id: "review", label: "Revisão e publicação", hint: "Checklist final e mensagens do backend" },
 ];
 
+export const MACRO_STEPS: Array<{ id: MacroStepId; label: string; steps: StepId[] }> = [
+  { id: "context", label: "Contexto da vaga", steps: ["basic", "requirements"] },
+  { id: "skills", label: "Competências", steps: ["mandatory-skills", "differentials", "deal-breakers"] },
+  { id: "evaluation", label: "Avaliação", steps: ["assessment-policy", "behavioral"] },
+  { id: "review", label: "Revisão e publicação", steps: ["review"] },
+];
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function JobFormPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -79,7 +111,9 @@ export function JobFormPage() {
     addDealBreaker,
     resetFormState,
   } = useJobFormState();
-  const [activeStep, setActiveStep] = useState<StepId>("basic");
+
+  const [activeMacroStep, setActiveMacroStep] = useState<MacroStepId>("context");
+  const [showQualityDrawer, setShowQualityDrawer] = useState(false);
   const [currentJob, setCurrentJob] = useState<Job | null>(null);
   const [pageLoading, setPageLoading] = useState(isEditing);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -88,14 +122,7 @@ export function JobFormPage() {
   const [selectedTemplateStatus, setSelectedTemplateStatus] =
     useState<BehavioralAssessmentTemplate["status"] | null>(null);
 
-  // Retorna o quality já fresco além de atualizar o estado. O retorno é
-  // necessário porque `setJobQuality` agenda a atualização para a próxima
-  // renderização — se o caller (ex.: handlePublish) ler `jobQuality` do
-  // escopo logo após o `await`, recebe o valor capturado da render atual
-  // (stale) e pode bloquear publicação de uma vaga já válida.
-  const refreshQuality = async (
-    jobIdToRefresh: string,
-  ): Promise<JobQualityResult | null> => {
+  const refreshQuality = async (jobIdToRefresh: string): Promise<JobQualityResult | null> => {
     try {
       const quality = await getJobQuality(jobIdToRefresh);
       setJobQuality(quality);
@@ -131,10 +158,7 @@ export function JobFormPage() {
     handleRemoveSkill,
     syncPendingSkills,
     onSkillCreated,
-  } = useJobSkills({
-    currentJob,
-    onRefreshQuality: refreshQuality,
-  });
+  } = useJobSkills({ currentJob, onRefreshQuality: refreshQuality });
 
   const {
     jobQuality,
@@ -144,16 +168,13 @@ export function JobFormPage() {
     frontendBlockers,
     publicationState,
     canTryPublishFrontend,
-  } = useJobPublication({
-    form,
-    currentJob,
-    mandatorySkillsCount: mandatorySkills.length,
-  });
+  } = useJobPublication({ form, currentJob, mandatorySkillsCount: mandatorySkills.length });
 
   const canManage = user?.role === "admin" || user?.role === "recruiter";
   const { alerts } = useJobConfigurationAlerts(form);
 
-
+  const currentMacroIndex = MACRO_STEPS.findIndex((s) => s.id === activeMacroStep);
+  const isReviewStep = activeMacroStep === "review";
 
   useEffect(() => {
     if (!isEditing || !jobId) {
@@ -185,9 +206,7 @@ export function JobFormPage() {
         setFormErrors(formatErrorDetails(handleApiError(error)));
       })
       .finally(() => {
-        if (!cancelled) {
-          setPageLoading(false);
-        }
+        if (!cancelled) setPageLoading(false);
       });
 
     return () => {
@@ -195,12 +214,9 @@ export function JobFormPage() {
     };
   }, [isEditing, jobId]);
 
-  const currentStepIndex = STEPS.findIndex((step) => step.id === activeStep);
-  const currentStep = STEPS[currentStepIndex];
-
   if (!canManage) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-6 py-10">
+      <div className="mx-auto w-full max-w-3xl px-6 py-10">
         <div className="rounded-3xl border border-[hsl(var(--danger))]/20 bg-danger-soft p-6 text-sm text-danger">
           Você não tem permissão para editar vagas.
         </div>
@@ -208,6 +224,7 @@ export function JobFormPage() {
     );
   }
 
+  // ─── Persist helpers ───────────────────────────────────────────────────────
 
   async function persistJob(options?: {
     requestedStatus?: string;
@@ -249,7 +266,6 @@ export function JobFormPage() {
     setSavingDraft(true);
     setFormErrors([]);
     setBackendPublishErrors([]);
-
     try {
       await persistJob({
         requestedStatus: currentJob?.status === "published" ? "published" : "draft",
@@ -269,7 +285,7 @@ export function JobFormPage() {
 
     if (!canTryPublishFrontend) {
       setBackendPublishErrors(frontendBlockers.map((blocker) => formatPublicationBlocker(blocker)));
-      setActiveStep("review");
+      setActiveMacroStep("review");
       setPublishing(false);
       return;
     }
@@ -280,11 +296,9 @@ export function JobFormPage() {
         silent: true,
       });
 
-      // Usa o retorno fresco — NÃO ler `jobQuality` do estado aqui, porque
-      // `setJobQuality` agendado pelo refreshQuality só vale na próxima render.
       const quality = await refreshQuality(saved.id);
       if (!quality || !quality.can_publish) {
-        setActiveStep("review");
+        setActiveMacroStep("review");
         setBackendPublishErrors(
           (quality?.publication_blockers ?? frontendBlockers).map((blocker) =>
             formatPublicationBlocker(blocker),
@@ -299,27 +313,29 @@ export function JobFormPage() {
       setForm((current) => ({ ...current, status: published.status }));
       await refreshQuality(saved.id);
       toast.success("Vaga publicada com sucesso");
-      setActiveStep("review");
+      setActiveMacroStep("review");
     } catch (error: unknown) {
       setBackendPublishErrors(extractPublication422Details(error));
-      setActiveStep("review");
+      setActiveMacroStep("review");
     } finally {
       setPublishing(false);
     }
   }
 
-  async function handleTabClick(stepId: StepId) {
+  async function handleMacroStepClick(id: MacroStepId) {
     if (isEditing && jobId) {
       try {
         await persistJob({ silent: true });
       } catch {
-        // Silent fail
+        // silent fail
       }
     }
-    setActiveStep(stepId);
+    setActiveMacroStep(id);
   }
 
-  function renderStepContent() {
+  // ─── Content rendering ─────────────────────────────────────────────────────
+
+  function renderMacroContent() {
     if (pageLoading) {
       return (
         <div className="rounded-3xl border border-border bg-surface p-8 text-sm text-text-muted">
@@ -328,321 +344,472 @@ export function JobFormPage() {
       );
     }
 
-    switch (activeStep) {
-      case "basic":
+    switch (activeMacroStep) {
+      case "context":
         return (
-          <JobFormBasicStep
-            form={form}
-            onFormChange={(updates) => setForm((current) => ({ ...current, ...updates }))}
-          />
+          <div className="space-y-6">
+            <JobFormBasicStep
+              form={form}
+              onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
+            />
+            <JobFormRequirementsStep
+              form={form}
+              onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
+            />
+          </div>
         );
 
-      case "requirements":
+      case "skills":
         return (
-          <JobFormRequirementsStep
-            form={form}
-            onFormChange={(updates) => setForm((current) => ({ ...current, ...updates }))}
-          />
+          <div className="space-y-6">
+            <JobFormMandatorySkillsStep
+              mandatorySkills={mandatorySkills}
+              availableSkills={availableSkills}
+              skillSearch={skillSearch}
+              onSearchChange={setSkillSearch}
+              skillCategoryFilter={skillCategoryFilter}
+              onSkillCategoryFilterChange={setSkillCategoryFilter}
+              skillCategoryOptions={skillCategoryOptions}
+              skillTypeFilter={skillTypeFilter}
+              onSkillTypeFilterChange={setSkillTypeFilter}
+              skillTypeOptions={skillTypeOptions}
+              savingSkillId={savingSkillId}
+              onAddSkill={handleAddSkill}
+              onUpdateSkill={handleUpdateSkill}
+              onRemoveSkill={handleRemoveSkill}
+              onSkillCreated={onSkillCreated}
+              jobContext={{ title: form.title, jobArea: form.job_area }}
+            />
+            <JobFormDifferentialsStep
+              form={{
+                behavioral_requirements: form.behavioral_requirements,
+                newBehavioralRequirement: form.newBehavioralRequirement,
+              }}
+              optionalSkills={optionalSkills}
+              availableSkills={availableSkills}
+              skillSearch={skillSearch}
+              onSearchChange={setSkillSearch}
+              skillCategoryFilter={skillCategoryFilter}
+              onSkillCategoryFilterChange={setSkillCategoryFilter}
+              skillCategoryOptions={skillCategoryOptions}
+              skillTypeFilter={skillTypeFilter}
+              onSkillTypeFilterChange={setSkillTypeFilter}
+              skillTypeOptions={skillTypeOptions}
+              onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
+              savingSkillId={savingSkillId}
+              onAddSkill={handleAddSkill}
+              onUpdateSkill={handleUpdateSkill}
+              onRemoveSkill={handleRemoveSkill}
+              onAddBehavioralRequirement={addBehavioralRequirement}
+              onSkillCreated={onSkillCreated}
+              jobContext={{ title: form.title, jobArea: form.job_area }}
+            />
+            <JobFormDealBreakersStep
+              form={form}
+              eliminatorySkills={eliminatorySkills}
+              availableSkills={availableSkills}
+              skillSearch={skillSearch}
+              onSearchChange={setSkillSearch}
+              skillCategoryFilter={skillCategoryFilter}
+              onSkillCategoryFilterChange={setSkillCategoryFilter}
+              skillCategoryOptions={skillCategoryOptions}
+              skillTypeFilter={skillTypeFilter}
+              onSkillTypeFilterChange={setSkillTypeFilter}
+              skillTypeOptions={skillTypeOptions}
+              savingSkillId={savingSkillId}
+              onAddSkill={handleAddSkill}
+              onUpdateSkill={handleUpdateSkill}
+              onRemoveSkill={handleRemoveSkill}
+              dealBreakerDraft={dealBreakerDraft}
+              onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
+              onDealBreakerDraftChange={(updates) =>
+                setDealBreakerDraft((c) => ({ ...c, ...updates }))
+              }
+              onAddDealBreaker={addDealBreaker}
+              onSkillCreated={onSkillCreated}
+            />
+          </div>
         );
 
-      case "mandatory-skills":
+      case "evaluation":
         return (
-          <JobFormMandatorySkillsStep
-            mandatorySkills={mandatorySkills}
-            availableSkills={availableSkills}
-            skillSearch={skillSearch}
-            onSearchChange={setSkillSearch}
-            skillCategoryFilter={skillCategoryFilter}
-            onSkillCategoryFilterChange={setSkillCategoryFilter}
-            skillCategoryOptions={skillCategoryOptions}
-            skillTypeFilter={skillTypeFilter}
-            onSkillTypeFilterChange={setSkillTypeFilter}
-            skillTypeOptions={skillTypeOptions}
-            savingSkillId={savingSkillId}
-            onAddSkill={handleAddSkill}
-            onUpdateSkill={handleUpdateSkill}
-            onRemoveSkill={handleRemoveSkill}
-            onSkillCreated={onSkillCreated}
-            jobContext={{ title: form.title, jobArea: form.job_area }}
-          />
-        );
-
-      case "differentials":
-        return (
-          <JobFormDifferentialsStep
-            form={{
-              behavioral_requirements: form.behavioral_requirements,
-              newBehavioralRequirement: form.newBehavioralRequirement,
-            }}
-            optionalSkills={optionalSkills}
-            availableSkills={availableSkills}
-            skillSearch={skillSearch}
-            onSearchChange={setSkillSearch}
-            skillCategoryFilter={skillCategoryFilter}
-            onSkillCategoryFilterChange={setSkillCategoryFilter}
-            skillCategoryOptions={skillCategoryOptions}
-            skillTypeFilter={skillTypeFilter}
-            onSkillTypeFilterChange={setSkillTypeFilter}
-            skillTypeOptions={skillTypeOptions}
-            onFormChange={(updates) => setForm((current) => ({ ...current, ...updates }))}
-            savingSkillId={savingSkillId}
-            onAddSkill={handleAddSkill}
-            onUpdateSkill={handleUpdateSkill}
-            onRemoveSkill={handleRemoveSkill}
-            onAddBehavioralRequirement={addBehavioralRequirement}
-            onSkillCreated={onSkillCreated}
-            jobContext={{ title: form.title, jobArea: form.job_area }}
-          />
-        );
-
-      case "deal-breakers":
-        return (
-          <JobFormDealBreakersStep
-            form={form}
-            eliminatorySkills={eliminatorySkills}
-            availableSkills={availableSkills}
-            skillSearch={skillSearch}
-            onSearchChange={setSkillSearch}
-            skillCategoryFilter={skillCategoryFilter}
-            onSkillCategoryFilterChange={setSkillCategoryFilter}
-            skillCategoryOptions={skillCategoryOptions}
-            skillTypeFilter={skillTypeFilter}
-            onSkillTypeFilterChange={setSkillTypeFilter}
-            skillTypeOptions={skillTypeOptions}
-            savingSkillId={savingSkillId}
-            onAddSkill={handleAddSkill}
-            onUpdateSkill={handleUpdateSkill}
-            onRemoveSkill={handleRemoveSkill}
-            dealBreakerDraft={dealBreakerDraft}
-            onFormChange={(updates) => setForm((current) => ({ ...current, ...updates }))}
-            onDealBreakerDraftChange={(updates) =>
-              setDealBreakerDraft((current) => ({ ...current, ...updates }))
-            }
-            onAddDealBreaker={addDealBreaker}
-            onSkillCreated={onSkillCreated}
-          />
+          <div className="space-y-6">
+            <JobAssessmentPolicyStep
+              form={form}
+              onChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
+            />
+            <BehavioralTemplateSelector
+              value={form.behavioral_template_id}
+              onChange={(id) =>
+                setForm((c) => ({ ...c, behavioral_template_id: id }))
+              }
+              requiresAssessment={form.requires_behavioral_assessment}
+              onTemplateStatusChange={setSelectedTemplateStatus}
+              onPopulateBehavioralRequirements={(requirements) =>
+                setForm((c) => ({
+                  ...c,
+                  behavioral_requirements: [
+                    ...c.behavioral_requirements.filter((r) => !requirements.includes(r)),
+                    ...requirements,
+                  ],
+                }))
+              }
+            />
+          </div>
         );
 
       case "review":
         return (
-          <JobFormReviewStep
-            form={form}
-            mandatorySkills={mandatorySkills}
-            optionalSkills={optionalSkills}
-            eliminatorySkills={eliminatorySkills}
-            jobQuality={jobQuality}
-            backendPublishErrors={backendPublishErrors}
-            selectedTemplateStatus={selectedTemplateStatus}
-          />
-        );
+          <div className="space-y-6">
+            {/* Inline quality panel — only in review step */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-3xl border border-border bg-surface p-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Painel de qualidade
+                </p>
+                <div className="mt-4">
+                  {jobQuality ? (
+                    <JobQualityBadge quality={jobQuality} />
+                  ) : (
+                    <div className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-muted">
+                      Salve a vaga para calcular a qualidade.
+                    </div>
+                  )}
+                </div>
+                <div
+                  className={`mt-4 rounded-2xl border px-4 py-4 ${getPanelToneClasses(publicationState.tone)}`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide">
+                    Status de publicação
+                  </p>
+                  <p className="mt-2 text-base font-semibold">{publicationState.label}</p>
+                  <p className="mt-2 text-sm opacity-90">{publicationState.description}</p>
+                </div>
+              </div>
 
-      case "behavioral":
-        return (
-          <BehavioralTemplateSelector
-            value={form.behavioral_template_id}
-            onChange={(id) => setForm((current) => ({ ...current, behavioral_template_id: id }))}
-            requiresAssessment={form.requires_behavioral_assessment}
-            onTemplateStatusChange={setSelectedTemplateStatus}
-            onPopulateBehavioralRequirements={(requirements) =>
-              setForm((current) => ({
-                ...current,
-                behavioral_requirements: [
-                  ...current.behavioral_requirements.filter((r) => !requirements.includes(r)),
-                  ...requirements,
-                ],
-              }))
-            }
-          />
-        );
+              <div className="rounded-3xl border border-border bg-surface p-5">
+                <p className="text-sm font-semibold text-text">Bloqueios obrigatórios</p>
+                <div className="mt-3 space-y-2">
+                  {frontendBlockers.map((blocker) => (
+                    <div
+                      key={blocker}
+                      className="rounded-2xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-3 py-3 text-sm text-danger"
+                    >
+                      {formatPublicationBlocker(blocker)}
+                    </div>
+                  ))}
+                  {frontendBlockers.length === 0 && (
+                    <div className="rounded-2xl border border-[hsl(var(--success))]/15 bg-success-soft px-3 py-3 text-sm text-success">
+                      Estrutura mínima preenchida no frontend.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
 
-      case "assessment-policy":
-        return (
-          <JobAssessmentPolicyStep
-            form={form}
-            onChange={(updates) => setForm((current) => ({ ...current, ...updates }))}
-          />
+            <JobFormReviewStep
+              form={form}
+              mandatorySkills={mandatorySkills}
+              optionalSkills={optionalSkills}
+              eliminatorySkills={eliminatorySkills}
+              jobQuality={jobQuality}
+              backendPublishErrors={backendPublishErrors}
+              selectedTemplateStatus={selectedTemplateStatus}
+            />
+
+            {alerts.length > 0 && (
+              <div className="rounded-3xl border border-border bg-surface p-5">
+                <p className="text-sm font-semibold text-text">Orientações de configuração</p>
+                <div className="mt-4 space-y-2">
+                  {alerts.map((alert) => (
+                    <div
+                      key={`${alert.level}-${alert.message}`}
+                      className={[
+                        "rounded-2xl border px-3 py-3 text-sm",
+                        alert.level === "critical"
+                          ? "border-[hsl(var(--danger))]/15 bg-danger-soft text-danger"
+                          : alert.level === "warning"
+                            ? "border-[hsl(var(--warning))]/15 bg-warning-soft text-warning"
+                            : "border-[hsl(var(--success))]/15 bg-success-soft text-success",
+                      ].join(" ")}
+                    >
+                      {alert.message}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         );
     }
   }
 
-  return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 sm:px-6 py-6 pb-12">
-      <div className="sticky top-[20px] z-20 rounded-3xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur mb-2">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex items-start gap-3">
-            <Button type="button" variant="outline" onClick={() => navigate("/vagas")}>
-              <ChevronLeft className="mr-1 h-4 w-4" />
-              Voltar
-            </Button>
-            <div>
-              <h1 className="text-2xl font-semibold text-text">
-                {isEditing ? "Editar vaga" : "Nova vaga"}
-              </h1>
-              <p className="mt-1 text-sm text-text-muted">
-                Estruture a vaga por etapas para melhorar a leitura e a publicação sem relaxar validações.
-              </p>
-            </div>
-          </div>
+  // ─── Quality Drawer content ────────────────────────────────────────────────
 
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusPill
-              label={currentJob ? formatJobStatus(currentJob.status) : "Rascunho"}
-              tone={currentJob ? jobStatusTone(currentJob.status) : "neutral"}
-            />
-            <Button type="button" variant="outline" onClick={() => void handleSaveDraft()} disabled={savingDraft || publishing}>
-              {savingDraft ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Salvar rascunho
-            </Button>
-            <Button type="button" onClick={() => void handlePublish()} disabled={publishing || savingDraft}>
-              {publishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              Publicar
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {formErrors.length > 0 ? (
-        <MessageList tone="danger" title="Problemas no formulário" items={formErrors} />
-      ) : null}
-
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-6">
-          <div className="flex border border-border bg-surface rounded-2xl overflow-x-auto shadow-sm">
-            {STEPS.map((step, index) => {
-              const isActive = step.id === activeStep;
-              const isDone = index < currentStepIndex;
-              return (
-                <button
-                  key={step.id}
-                  type="button"
-                  onClick={() => void handleTabClick(step.id)}
-                  className={`flex flex-1 flex-col items-center gap-2 p-4 text-center border-b-2 transition-colors min-w-[120px] ${
-                    isActive
-                      ? "border-b-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))]"
-                      : "border-b-transparent hover:bg-surface-muted"
-                  }`}
-                >
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold shrink-0 ${
-                    isDone ? "bg-[hsl(var(--success))] text-white" : isActive ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-text-muted"
-                  }`}>
-                    {isDone ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
-                  </span>
-                  <div className="flex flex-col items-center">
-                    <span className={`text-sm font-medium ${isActive ? "text-[hsl(var(--primary))]" : "text-text"}`}>{step.label}</span>
-                    <span className="text-[11px] text-text-muted hidden xl:block mt-0.5">{step.hint}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {renderStepContent()}
-
-          <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-3 rounded-3xl border border-border bg-surface/95 p-5 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-text">{currentStep.label}</p>
-              <p className="mt-1 text-sm text-text-muted">{currentStep.hint}</p>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={currentStepIndex === 0}
-                onClick={() => setActiveStep(STEPS[currentStepIndex - 1].id)}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Etapa anterior
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={currentStepIndex === STEPS.length - 1}
-                onClick={() => setActiveStep(STEPS[currentStepIndex + 1].id)}
-              >
-                Próxima etapa
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <aside className="space-y-4 xl:sticky xl:top-[148px] xl:self-start">
-          <div className="rounded-3xl border border-border bg-surface p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-              Painel de qualidade
+  function renderQualityDrawerContent() {
+    return (
+      <>
+        <div className="rounded-2xl border border-border bg-surface-muted p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-3">
+            Qualidade
+          </p>
+          {jobQuality ? (
+            <JobQualityBadge quality={jobQuality} />
+          ) : (
+            <p className="text-sm text-text-muted">
+              Salve a vaga para calcular a qualidade.
             </p>
-            <div className="mt-4">
-              {jobQuality ? (
-                <JobQualityBadge quality={jobQuality} />
-              ) : (
-                <div className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-muted">
-                  Salve a vaga para calcular a qualidade.
-                </div>
-              )}
-            </div>
-            <div className={`mt-4 rounded-2xl border px-4 py-4 ${getPanelToneClasses(publicationState.tone)}`}>
-              <p className="text-xs font-semibold uppercase tracking-wide">Status de publicação</p>
-              <p className="mt-2 text-base font-semibold">{publicationState.label}</p>
-              <p className="mt-2 text-sm opacity-90">{publicationState.description}</p>
-            </div>
+          )}
+          <div
+            className={`mt-3 rounded-2xl border px-3 py-3 text-sm ${getPanelToneClasses(publicationState.tone)}`}
+          >
+            <p className="font-semibold">{publicationState.label}</p>
+            <p className="mt-1 text-xs opacity-90">{publicationState.description}</p>
           </div>
+        </div>
 
-          <div className="rounded-3xl border border-border bg-surface p-5">
-            <p className="text-sm font-semibold text-text">Bloqueios obrigatórios</p>
-            <div className="mt-3 space-y-2">
-              {frontendBlockers.map((blocker) => (
+        <div className="rounded-2xl border border-border bg-surface-muted p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-3">
+            Bloqueios
+          </p>
+          <div className="space-y-2">
+            {frontendBlockers.map((blocker) => (
+              <div
+                key={blocker}
+                className="rounded-xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-3 py-2 text-xs text-danger"
+              >
+                {formatPublicationBlocker(blocker)}
+              </div>
+            ))}
+            {frontendBlockers.length === 0 && (
+              <div className="rounded-xl border border-[hsl(var(--success))]/15 bg-success-soft px-3 py-2 text-xs text-success">
+                Estrutura mínima preenchida.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-surface-muted p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-3">
+            Resumo rápido
+          </p>
+          <div className="space-y-2 text-sm">
+            <SummaryRow label="Essenciais" value={`${mandatorySkills.length}`} />
+            <SummaryRow label="Diferenciais" value={`${optionalSkills.length}`} />
+            <SummaryRow label="Eliminatórias" value={`${eliminatorySkills.length}`} />
+            <SummaryRow
+              label="Deal breakers"
+              value={`${(form.deal_breakers ?? []).filter((item) => item.is_active).length}`}
+            />
+            <SummaryRow label="Senioridade" value={formatSeniority(form.seniority_level || null)} />
+            <SummaryRow label="Modelo" value={formatWorkModel(form.work_model || null)} />
+          </div>
+        </div>
+
+        {alerts.length > 0 && (
+          <div className="rounded-2xl border border-border bg-surface-muted p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-3">
+              Alertas
+            </p>
+            <div className="space-y-2">
+              {alerts.slice(0, 4).map((alert) => (
                 <div
-                  key={blocker}
-                  className="rounded-2xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-3 py-3 text-sm text-danger"
+                  key={`${alert.level}-${alert.message}`}
+                  className={[
+                    "rounded-xl border px-3 py-2 text-xs",
+                    alert.level === "critical"
+                      ? "border-[hsl(var(--danger))]/15 bg-danger-soft text-danger"
+                      : alert.level === "warning"
+                        ? "border-[hsl(var(--warning))]/15 bg-warning-soft text-warning"
+                        : "border-[hsl(var(--success))]/15 bg-success-soft text-success",
+                  ].join(" ")}
                 >
-                  {formatPublicationBlocker(blocker)}
+                  {alert.message}
                 </div>
               ))}
-              {frontendBlockers.length === 0 ? (
-                <div className="rounded-2xl border border-[hsl(var(--success))]/15 bg-success-soft px-3 py-3 text-sm text-success">
-                  Estrutura mínima preenchida no frontend.
-                </div>
-              ) : null}
             </div>
           </div>
+        )}
+      </>
+    );
+  }
 
-          <div className="rounded-3xl border border-border bg-surface p-5">
-            <p className="text-sm font-semibold text-text">Resumo rápido</p>
-            <div className="mt-4 space-y-3 text-sm">
-              <SummaryRow label="Essenciais" value={`${mandatorySkills.length}`} />
-              <SummaryRow label="Diferenciais" value={`${optionalSkills.length}`} />
-              <SummaryRow label="Skills eliminatórias" value={`${eliminatorySkills.length}`} />
-              <SummaryRow label="Deal breakers ativos" value={`${(form.deal_breakers ?? []).filter((item) => item.is_active).length}`} />
-              <SummaryRow label="Senioridade" value={formatSeniority(form.seniority_level || null)} />
-              <SummaryRow label="Modelo de trabalho" value={formatWorkModel(form.work_model || null)} />
+  // ─── Page render ───────────────────────────────────────────────────────────
+
+  return (
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 sm:px-6 py-6 pb-28">
+      {/* ── Header ── */}
+      <div className="sticky top-[20px] z-20 rounded-3xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur">
+        <div className="flex items-center gap-3">
+          <Button type="button" variant="outline" size="sm" onClick={() => navigate("/vagas")}>
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Voltar
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg font-semibold text-text truncate">
+              {isEditing ? "Editar vaga" : "Nova vaga"}
+            </h1>
+            <div className="flex items-center gap-2 mt-0.5">
+              <StatusPill
+                label={currentJob ? formatJobStatus(currentJob.status) : "Rascunho"}
+                tone={currentJob ? jobStatusTone(currentJob.status) : "neutral"}
+              />
+              <span className="text-xs text-text-muted">
+                {currentMacroIndex + 1} de {MACRO_STEPS.length}
+              </span>
             </div>
           </div>
-
-          {alerts.length > 0 ? (
-            <div className="rounded-3xl border border-border bg-surface p-5">
-              <p className="text-sm font-semibold text-text">Orientações de configuração</p>
-              <div className="mt-4 space-y-2">
-                {alerts.slice(0, 4).map((alert) => (
-                  <div
-                    key={`${alert.level}-${alert.message}`}
-                    className={[
-                      "rounded-2xl border px-3 py-3 text-sm",
-                      alert.level === "critical"
-                        ? "border-[hsl(var(--danger))]/15 bg-danger-soft text-danger"
-                        : alert.level === "warning"
-                          ? "border-[hsl(var(--warning))]/15 bg-warning-soft text-warning"
-                          : "border-[hsl(var(--success))]/15 bg-success-soft text-success",
-                    ].join(" ")}
-                  >
-                    {alert.message}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </aside>
+        </div>
       </div>
+
+      {/* ── Form errors ── */}
+      {formErrors.length > 0 && (
+        <MessageList tone="danger" title="Problemas no formulário" items={formErrors} />
+      )}
+
+      {/* ── Macro-step stepper ── */}
+      <nav
+        aria-label="Etapas do formulário"
+        className="flex rounded-2xl border border-border bg-surface overflow-x-auto shadow-sm"
+      >
+        {MACRO_STEPS.map((step, i) => {
+          const isDone = i < currentMacroIndex;
+          const isActive = step.id === activeMacroStep;
+          return (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => void handleMacroStepClick(step.id)}
+              aria-current={isActive ? "step" : undefined}
+              className={`flex flex-1 items-center justify-center gap-2 px-3 py-3 text-sm font-medium border-b-2 transition-colors min-w-[120px] ${
+                isActive
+                  ? "border-b-[hsl(var(--primary))] text-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))]"
+                  : "border-b-transparent text-text-muted hover:bg-surface-muted hover:text-text"
+              }`}
+            >
+              <span
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  isDone
+                    ? "bg-[hsl(var(--success))] text-white"
+                    : isActive
+                      ? "bg-[hsl(var(--primary))] text-white"
+                      : "bg-border text-text-muted"
+                }`}
+              >
+                {isDone ? <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> : i + 1}
+              </span>
+              <span className="truncate">{step.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* ── Main content (full-width, no sidebar) ── */}
+      <div>{renderMacroContent()}</div>
+
+      {/* ── Bottom action bar ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur sm:px-6">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={currentMacroIndex === 0}
+            onClick={() => setActiveMacroStep(MACRO_STEPS[currentMacroIndex - 1].id)}
+          >
+            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+            Etapa anterior
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleSaveDraft()}
+              disabled={savingDraft || publishing}
+            >
+              {savingDraft ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Salvar rascunho
+            </Button>
+
+            {!isReviewStep && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowQualityDrawer(true)}
+                aria-label="Ver qualidade da vaga"
+              >
+                <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
+                Ver qualidade
+              </Button>
+            )}
+
+            {isReviewStep ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void handlePublish()}
+                disabled={publishing || savingDraft}
+              >
+                {publishing ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Publicar
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                disabled={currentMacroIndex === MACRO_STEPS.length - 1}
+                onClick={() => setActiveMacroStep(MACRO_STEPS[currentMacroIndex + 1].id)}
+              >
+                Próxima etapa
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Quality Drawer ── */}
+      {showQualityDrawer && (
+        <div
+          className="fixed inset-0 z-50 bg-black/30"
+          onClick={() => setShowQualityDrawer(false)}
+        >
+          <div
+            role="dialog"
+            aria-label="Qualidade da vaga"
+            className="absolute right-0 top-0 flex h-full w-80 flex-col border-l border-border bg-surface shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <p className="text-sm font-semibold text-text">Qualidade da vaga</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="Fechar painel de qualidade"
+                onClick={() => setShowQualityDrawer(false)}
+                className="h-7 w-7 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {renderQualityDrawerContent()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
