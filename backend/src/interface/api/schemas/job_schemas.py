@@ -1,9 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID
-
-from typing import Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -627,3 +625,76 @@ class AddCandidateToJobRequest(BaseModel):
 class RemoveCandidateFromJobResponse(BaseModel):
     success: bool
     message: str
+
+
+# ── Fase IA Vaga 2 — OCR response ─────────────────────────────────────────────
+
+class OcrSourceInfo(BaseModel):
+    filename: str
+    mime_type: str
+    size_bytes: int
+
+
+class OcrExtractResponse(BaseModel):
+    extracted_text: str
+    text_preview: str
+    character_count: int
+    confidence: float | None
+    source: OcrSourceInfo
+
+
+# ── Fase IA Vaga 3 — AI draft generation ──────────────────────────────────────
+
+class AiDraftSourceRequest(BaseModel):
+    text_used: bool = True
+    image_used: bool = False
+
+
+class AiDraftGenerateRequest(BaseModel):
+    text_input: str | None = Field(default=None, max_length=6000)
+    ocr_text: str | None = Field(default=None, max_length=12000)
+    source: AiDraftSourceRequest | None = None
+
+
+class AiDraftFieldsResponse(BaseModel):
+    title: str | None = None
+    area: str | None = None
+    seniority: str | None = None
+    work_model: str | None = None
+    unit: str | None = None
+    salary_min: float | None = None
+    salary_max: float | None = None
+    description: str | None = None
+    responsibilities: list[str] = Field(default_factory=list)
+    requirements: list[str] = Field(default_factory=list)
+    mandatory_skills: list[str] = Field(default_factory=list)
+    nice_to_have_skills: list[str] = Field(default_factory=list)
+    benefits: list[str] = Field(default_factory=list)
+    working_hours: str | None = None
+    screening_questions: list[str] = Field(default_factory=list)
+    pipeline_steps: list[str] = Field(default_factory=list)
+    matching_criteria: list[str] = Field(default_factory=list)
+    requires_manager_review: bool = True
+    requires_behavioral_assessment: bool = False
+
+
+class AiDraftUsageResponse(BaseModel):
+    provider: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    estimated_cost: float | None = None
+
+
+class AiDraftSourceResponse(BaseModel):
+    text_used: bool
+    ocr_used: bool
+    input_character_count: int
+
+
+class AiDraftGenerateResponse(BaseModel):
+    draft: AiDraftFieldsResponse
+    needs_review: list[str] = Field(default_factory=list)
+    source: AiDraftSourceResponse
+    usage: AiDraftUsageResponse

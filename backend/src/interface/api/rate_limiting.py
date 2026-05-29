@@ -57,6 +57,8 @@ _apply_item = parse_limit(settings.RATE_LIMIT_PUBLIC_APPLY)
 _analysis_item = parse_limit(settings.RATE_LIMIT_ANALYSIS_REQUEST)
 _retry_item = parse_limit(settings.RATE_LIMIT_ANALYSIS_RETRY)
 _admin_ai_credentials_item = parse_limit(settings.RATE_LIMIT_ADMIN_AI_CREDENTIALS)
+_ai_draft_ocr_item = parse_limit(settings.RATE_LIMIT_AI_DRAFT_OCR)
+_ai_draft_generate_item = parse_limit(settings.RATE_LIMIT_AI_DRAFT_GENERATE)
 
 
 async def _check(item, *keys: str, message: str) -> None:
@@ -153,6 +155,34 @@ async def rate_limit_admin_ai_credentials(
         key,
         "admin:ai-provider-credentials",
         message="Muitas operações de credenciais IA. Aguarde 1 minuto e tente novamente.",
+    )
+
+
+async def rate_limit_ai_draft_ocr(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """AI draft OCR: user-keyed, 20/minute. Prevents image-spam abuse."""
+    key = str(current_user.id) if current_user is not None else _ip(request)
+    await _check(
+        _ai_draft_ocr_item,
+        key,
+        "jobs:ai-draft:ocr",
+        message="Limite de leituras de imagem atingido. Aguarde 1 minuto e tente novamente.",
+    )
+
+
+async def rate_limit_ai_draft_generate(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """AI draft generate: user-keyed, 10/day. Controls AI token spend."""
+    key = str(current_user.id) if current_user is not None else _ip(request)
+    await _check(
+        _ai_draft_generate_item,
+        key,
+        "jobs:ai-draft:generate",
+        message="Limite de gerações de rascunho atingido. Tente novamente amanhã.",
     )
 
 

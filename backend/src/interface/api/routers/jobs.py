@@ -1,48 +1,66 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 import sqlalchemy as sa
 import structlog
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
-from src.core.log_sanitizer import sanitize_log_text
-from src.application.services.job_service import (
-    JobSkillConflictError,
-    JobSkillLinkNotFoundError,
-    InvalidJobTextError,
-    InvalidJobSalaryRangeError,
-    JobNotFoundError,
-    JobPublicationValidationError,
-    JobService,
-    SkillNotFoundError,
+from src.application.services.analysis_dispatch_service import CandidateJobAnalysisDispatcher
+from src.application.services.analysis_service import (
+    AnalysisNotCompletedError,
+    AnalysisResultNotFoundError,
+    AnalysisService,
 )
 from src.application.services.audit_service import AuditService
+from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
+from src.application.services.candidate_ranking_service import (
+    CandidateNotInActivePipelineError,
+    CandidateRankingService,
+    NoActiveScoreVersionError,
+    RankingJobNotFoundError,
+)
+from src.application.services.job_ai_draft_service import (
+    AiDraftAIError,
+    AiDraftParseError,
+    AiDraftValidationError,
+    JobAiDraftService,
+)
 from src.application.services.job_bulk_import_service import JobBulkImportService
 from src.application.services.job_bulk_payload_normalizer import (
     BulkJobPayloadNormalizationError,
     JobBulkPayloadNormalizer,
 )
 from src.application.services.job_bulk_update_service import JobBulkUpdateService
-from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
-from src.application.services.analysis_service import (
-    AnalysisNotCompletedError,
-    AnalysisResultNotFoundError,
-    AnalysisService,
+from src.application.services.job_ocr_service import (
+    MAX_OCR_IMAGE_BYTES,
+    JobOcrService,
+    OcrImageTooLargeError,
+    OcrProcessingError,
+    OcrValidationError,
 )
-from src.application.services.analysis_dispatch_service import CandidateJobAnalysisDispatcher
+from src.application.services.job_quality_validator_service import (
+    JobNotFoundForQualityError,
+    JobQualityValidatorService,
+)
 from src.application.services.job_score_explanation_service import (
     CandidateNotLinkedToJobError,
     CandidateScoreExplanationNotReadyError,
     JobScoreExplanationService,
 )
-from src.application.services.matching_observability_service import MatchingObservabilityService
-from src.application.services.job_quality_validator_service import (
-    JobQualityValidatorService,
-    JobNotFoundForQualityError,
+from src.application.services.job_service import (
+    InvalidJobSalaryRangeError,
+    InvalidJobTextError,
+    JobNotFoundError,
+    JobPublicationValidationError,
+    JobService,
+    JobSkillConflictError,
+    JobSkillLinkNotFoundError,
+    SkillNotFoundError,
 )
+from src.application.services.matching_observability_service import MatchingObservabilityService
 from src.application.services.pipeline_service import (
     PipelineCandidateAlreadyActiveInAnotherJobError,
     PipelineCandidateAlreadyActiveInSameJobError,
@@ -53,27 +71,40 @@ from src.application.services.pipeline_service import (
     PipelineJobNotFoundError,
     PipelineService,
 )
+from src.core.log_sanitizer import sanitize_log_text
 from src.domain.entities.user import UserRole
 from src.domain.exceptions import ValidationException
-from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
-from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
-    SQLAlchemyBehavioralAssignmentRepository,
-)
+from src.infrastructure.database.models.scoring_model import CandidateJobScoreSnapshotModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
+from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
+    SQLAlchemyBehavioralAssignmentRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
-from src.application.services.candidate_ranking_service import (
-    CandidateRankingService,
-    NoActiveScoreVersionError,
-    RankingJobNotFoundError,
-    CandidateNotInActivePipelineError,
+from src.interface.api.dependencies import (
+    AdminOnly,
+    CurrentUser,
+    InternalUser,
+    RecruiterOrAdmin,
+    get_db,
 )
-from src.interface.api.dependencies import AdminOnly, CurrentUser, InternalUser, RecruiterOrAdmin, get_db
+from src.interface.api.rate_limiting import rate_limit_ai_draft_generate, rate_limit_ai_draft_ocr
+from src.interface.api.schemas.analysis_schemas import ForceRecomputeResponse
+from src.interface.api.schemas.behavioral_assignment_schemas import (
+    BehavioralAssignmentDetailResponse,
+    RecruiterBehavioralAssessmentStatusResponse,
+)
 from src.interface.api.schemas.job_schemas import (
     AddCandidateToJobRequest,
+    AiDraftFieldsResponse,
+    AiDraftGenerateRequest,
+    AiDraftGenerateResponse,
+    AiDraftSourceResponse,
+    AiDraftUsageResponse,
     ArchiveJobRequest,
     BulkImportJobsRequest,
     BulkImportJobsResponse,
@@ -87,26 +118,31 @@ from src.interface.api.schemas.job_schemas import (
     JobStatusSummaryResponse,
     MatchingFeedbackRequest,
     MatchingFeedbackResponse,
+    OcrExtractResponse,
+    OcrSourceInfo,
     UpdateJobRequest,
 )
-from src.interface.api.schemas.behavioral_assignment_schemas import (
-    RecruiterBehavioralAssessmentStatusResponse,
-    BehavioralAssignmentDetailResponse,
-)
-from src.interface.api.schemas.analysis_schemas import ForceRecomputeResponse
 from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest as PipelineAddCandidateToJobRequest,
+)
+from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobResponse as PipelineAddCandidateToJobResponse,
+)
+from src.interface.api.schemas.pipeline_schemas import (
     JobMatchCandidateResponse,
     PipelineAnalysisDecisionResponse,
 )
-from src.interface.api.schemas.ranking_schemas import CandidateRankingEntry, JobRankingResponse, ScoringComputeResponse, SingleCandidateScoringResponse
+from src.interface.api.schemas.ranking_schemas import (
+    CandidateRankingEntry,
+    JobRankingResponse,
+    ScoringComputeResponse,
+    SingleCandidateScoringResponse,
+)
 from src.interface.api.schemas.skill_schemas import (
     AddJobSkillRequest,
     JobRequiredSkillResponse,
     UpdateJobSkillRequest,
 )
-from src.infrastructure.database.models.scoring_model import CandidateJobScoreSnapshotModel
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -360,6 +396,190 @@ async def bulk_update_jobs(
     except Exception:
         await db.rollback()
         raise
+
+
+@router.post(
+    "/ai-draft/ocr",
+    response_model=OcrExtractResponse,
+    status_code=status.HTTP_200_OK,
+    summary="OCR — extração de texto de imagem de vaga (Fase IA Vaga 2)",
+)
+async def extract_job_image_ocr(
+    current_user: RecruiterOrAdmin,
+    file: UploadFile = File(...),
+    _rl: None = Depends(rate_limit_ai_draft_ocr),
+) -> OcrExtractResponse:
+    """Recebe uma imagem (PNG/JPEG/WebP), valida, executa OCR local e devolve o texto.
+
+    Não chama IA. Não persiste arquivo. Não cria nem altera vagas.
+    Requer autenticação RecruiterOrAdmin.
+    """
+    content = await file.read(MAX_OCR_IMAGE_BYTES + 1)
+    service = JobOcrService()
+    try:
+        result = service.extract_from_image(
+            filename=file.filename or "upload",
+            content_type=file.content_type,
+            content=content,
+        )
+    except OcrImageTooLargeError as exc:
+        logger.warning(
+            "job_ai_ocr.failed",
+            reason="file_too_large",
+            user_id=str(current_user.id),
+            size_bytes=len(content),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except OcrValidationError as exc:
+        logger.warning(
+            "job_ai_ocr.failed",
+            reason="validation_error",
+            user_id=str(current_user.id),
+            mime_type=file.content_type,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except OcrProcessingError as exc:
+        logger.error(
+            "job_ai_ocr.processing_error",
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao processar imagem com OCR",
+        ) from exc
+
+    logger.info(
+        "job_ai_ocr.completed",
+        user_id=str(current_user.id),
+        mime_type=result.mime_type,
+        size_bytes=result.size_bytes,
+        character_count=result.character_count,
+    )
+    return OcrExtractResponse(
+        extracted_text=result.extracted_text,
+        text_preview=result.text_preview,
+        character_count=result.character_count,
+        confidence=result.confidence,
+        source=OcrSourceInfo(
+            filename=result.filename,
+            mime_type=result.mime_type,
+            size_bytes=result.size_bytes,
+        ),
+    )
+
+
+@router.post(
+    "/ai-draft/generate",
+    response_model=AiDraftGenerateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Geração de rascunho de vaga com IA (Fase IA Vaga 3)",
+)
+async def generate_job_ai_draft(
+    body: AiDraftGenerateRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit_ai_draft_generate),
+) -> AiDraftGenerateResponse:
+    """Recebe texto (digitado + OCR), chama a IA e devolve rascunho estruturado.
+
+    A IA jamais recebe imagem. O rascunho é para revisão humana — não cria nem publica vagas.
+    Requer autenticação RecruiterOrAdmin.
+    """
+    service = JobAiDraftService()
+    try:
+        result = await service.generate(
+            text_input=body.text_input,
+            ocr_text=body.ocr_text,
+            session=db,
+        )
+    except AiDraftValidationError as exc:
+        logger.warning(
+            "job_ai_draft.failed",
+            reason="validation_error",
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except AiDraftParseError as exc:
+        logger.error(
+            "job_ai_draft.failed",
+            reason="parse_error",
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Resposta do provedor de IA inválida. Tente novamente.",
+        ) from exc
+    except AiDraftAIError as exc:
+        logger.error(
+            "job_ai_draft.failed",
+            reason="ai_error",
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Provedor de IA indisponível. Tente novamente em instantes.",
+        ) from exc
+
+    logger.info(
+        "job_ai_draft.generated",
+        user_id=str(current_user.id),
+        provider=result.usage.provider,
+        model=result.usage.model,
+        input_tokens=result.usage.input_tokens,
+        output_tokens=result.usage.output_tokens,
+        needs_review_count=len(result.needs_review),
+        text_used=result.source.text_used,
+        ocr_used=result.source.ocr_used,
+    )
+
+    await db.commit()
+
+    return AiDraftGenerateResponse(
+        draft=AiDraftFieldsResponse(
+            title=result.draft.title,
+            area=result.draft.area,
+            seniority=result.draft.seniority,
+            work_model=result.draft.work_model,
+            unit=result.draft.unit,
+            salary_min=result.draft.salary_min,
+            salary_max=result.draft.salary_max,
+            description=result.draft.description,
+            responsibilities=result.draft.responsibilities,
+            requirements=result.draft.requirements,
+            mandatory_skills=result.draft.mandatory_skills,
+            nice_to_have_skills=result.draft.nice_to_have_skills,
+            benefits=result.draft.benefits,
+            working_hours=result.draft.working_hours,
+            screening_questions=result.draft.screening_questions,
+            pipeline_steps=result.draft.pipeline_steps,
+            matching_criteria=result.draft.matching_criteria,
+            requires_manager_review=result.draft.requires_manager_review,
+            requires_behavioral_assessment=result.draft.requires_behavioral_assessment,
+        ),
+        needs_review=result.needs_review,
+        source=AiDraftSourceResponse(
+            text_used=result.source.text_used,
+            ocr_used=result.source.ocr_used,
+            input_character_count=result.source.input_character_count,
+        ),
+        usage=AiDraftUsageResponse(
+            provider=result.usage.provider,
+            model=result.usage.model,
+            input_tokens=result.usage.input_tokens,
+            output_tokens=result.usage.output_tokens,
+            total_tokens=result.usage.total_tokens,
+            estimated_cost=result.usage.estimated_cost,
+        ),
+    )
 
 
 @router.get("", response_model=JobListResponse)
@@ -712,8 +932,8 @@ async def trigger_behavioral_assessment_evaluation(
     IA analysis is assistive only, never affects decisions or scoring.
     """
     from src.application.services.behavioral_ai_evaluation_service import (
-        BehavioralAIOperationalError,
         BehavioralAIEvaluationService,
+        BehavioralAIOperationalError,
         behavioral_ai_safe_detail,
     )
     from src.interface.workers.behavioral_ai_dispatcher import enqueue_behavioral_ai_evaluation

@@ -126,6 +126,13 @@ class Settings(BaseSettings):
     RATE_LIMIT_ANALYSIS_REQUEST: str = "5/minute"
     RATE_LIMIT_ANALYSIS_RETRY: str = "3/minute"
     RATE_LIMIT_ADMIN_AI_CREDENTIALS: str = "20/minute"
+    RATE_LIMIT_AI_DRAFT_OCR: str = "20/minute"
+    RATE_LIMIT_AI_DRAFT_GENERATE: str = "10/day"
+
+    # AI draft (Fase IA Vaga 5) — cost-control limits
+    JOB_AI_DRAFT_DAILY_LIMIT: int = 10
+    JOB_AI_DRAFT_MAX_INPUT_CHARS: int = 12_000
+    JOB_AI_DRAFT_MAX_FILE_MB: int = 5
 
     # AI daily analysis limits — baseline values that admin overrides modify.
     AI_ANALYSIS_DAILY_LIMIT_PER_USER: int = 50
