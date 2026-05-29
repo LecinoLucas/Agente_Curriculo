@@ -221,7 +221,7 @@ describe("Candidate portal flow", () => {
     );
 
     // Verify portal loads and displays candidate information (name contains Maria)
-    expect(await screen.findByText(/Maria/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Maria/i)).length).toBeGreaterThan(0);
     // Verify no internal scores are shown to public candidates
     expect(screen.queryByText(/score de ia/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/internal_notes/i)).not.toBeInTheDocument();

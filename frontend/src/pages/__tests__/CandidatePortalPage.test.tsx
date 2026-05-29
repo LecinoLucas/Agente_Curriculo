@@ -269,7 +269,7 @@ describe("CandidatePortalPage.nextSteps", () => {
     ],
   };
 
-  it("no estado inicial não mostra Entrevista nem Resultado", async () => {
+  it("no estado inicial mostra jornada fixa com entrevista futura", async () => {
     (candidatePortalService.getOverview as any).mockResolvedValue({
       candidate: { full_name: "John Doe", city: "SP", state: "SP" },
       public_timeline: {
@@ -289,10 +289,8 @@ describe("CandidatePortalPage.nextSteps", () => {
 
     expect(screen.getByText("Inscrição recebida")).toBeInTheDocument();
     expect(screen.getAllByText("Currículo em análise").length).toBeGreaterThan(0);
-    expect(screen.getByText("Próxima etapa")).toBeInTheDocument();
-    expect(screen.getByText("Avisaremos por aqui quando houver novidades.")).toBeInTheDocument();
-
-    expect(screen.queryByText("Entrevista")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Avaliação").length).toBeGreaterThan(0);
+    expect(screen.getByText("Entrevista")).toBeInTheDocument();
     expect(screen.queryByText("Resultado")).not.toBeInTheDocument();
   });
 
@@ -869,18 +867,15 @@ describe("CandidatePortalPage.premiumLightThemeAndEmptyStates", () => {
     renderPortal();
 
     expect(await screen.findByText("Sua jornada de candidatura")).toBeInTheDocument();
-    expect(screen.queryByText("Resumo da situação")).not.toBeInTheDocument();
-    expect(screen.getByText("Próxima atualização")).toBeInTheDocument();
-    expect(screen.getByTitle("Dicas de Candidatura")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Dicas de Candidatura"));
-    expect(screen.getByText("Dicas Úteis")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Fechar"));
+    expect(screen.getByText("Próxima ação")).toBeInTheDocument();
+    expect(screen.getByText("Resumo da candidatura")).toBeInTheDocument();
+    expect(screen.getByTitle("Avaliação Comportamental")).toBeInTheDocument();
 
-    // Navega para Situação
-    const situacaoBtn = screen.getByTitle("Situação");
-    fireEvent.click(situacaoBtn);
-    expect(screen.getByText("Resumo da situação")).toBeInTheDocument();
-    expect(screen.getByText("Situação da candidatura")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Documentos"));
+    expect(await screen.findByText("Pré-admissão ainda não iniciada")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("Perfil"));
+    expect(await screen.findByText("Dados de contato")).toBeInTheDocument();
   });
 
   it("botão de correio no header exibe badge se houver mensagens não lidas e navega ao clicar", async () => {
@@ -936,39 +931,22 @@ describe("CandidatePortalPage.premiumLightThemeAndEmptyStates", () => {
     setItemSpy.mockRestore();
   });
 
-  it("valida o novo layout premium do Dashboard no portal do candidato", async () => {
+  it("valida o layout simples do portal do candidato com abas fixas", async () => {
     mockBaseOverview();
     renderPortal();
 
-    // 1. Dashboard renderiza os novos cards
     expect(await screen.findByText("Sua jornada de candidatura")).toBeInTheDocument();
-    expect(screen.getByText("Próxima atualização")).toBeInTheDocument();
-    expect(screen.getByText("Resumo rápido")).toBeInTheDocument();
-    expect(screen.getByText("Você está no caminho certo.")).toBeInTheDocument();
+    expect(screen.getByText("Próxima ação")).toBeInTheDocument();
+    expect(screen.getByText("Resumo da candidatura")).toBeInTheDocument();
 
-    // 2. Dashboard não renderiza o card completo Resumo da situação nem as mensagens
-    expect(screen.queryByText("Resumo da situação")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Andamento")).toBeInTheDocument();
+    expect(screen.getByTitle("Avaliação Comportamental")).toBeInTheDocument();
+    expect(screen.getByTitle("Documentos")).toBeInTheDocument();
+    expect(screen.getByTitle("Mensagens")).toBeInTheDocument();
+    expect(screen.getByTitle("Perfil")).toBeInTheDocument();
+
     expect(screen.queryByText("Fique por dentro das comunicações enviadas pelo time de recrutamento.")).not.toBeInTheDocument();
 
-    // 3. Clique em "Ver situação completa" abre a aba de situação
-    const verSituacaoCompletaBtn = screen.getByTestId("status-hero-view-details");
-    fireEvent.click(verSituacaoCompletaBtn);
-    expect(await screen.findByText("Resumo da situação")).toBeInTheDocument();
-    expect(screen.getByText("Situação da candidatura")).toBeInTheDocument();
-
-    // Reset para voltar ao início
-    fireEvent.click(screen.getByTitle("Dashboard"));
-    expect(screen.queryByText("Resumo da situação")).not.toBeInTheDocument();
-
-    // 4. Clique em "Abrir situação" abre a aba de situação
-    const abrirSituacaoBtn = screen.getByTestId("quick-summary-open-status");
-    fireEvent.click(abrirSituacaoBtn);
-    expect(await screen.findByText("Resumo da situação")).toBeInTheDocument();
-
-    // Reset para voltar ao início
-    fireEvent.click(screen.getByTitle("Dashboard"));
-
-    // 5. Clique no botão de envelope no header abre a aba de Mensagens
     const headerMailBtn = screen.getByTestId("header-mail-button");
     fireEvent.click(headerMailBtn);
     expect(await screen.findByText("Fique por dentro das comunicações enviadas pelo time de recrutamento.")).toBeInTheDocument();
@@ -1384,5 +1362,111 @@ describe("CandidatePortalPage.preAdmission", () => {
     expect(text).not.toMatch(/payload/i);
     expect(text).not.toMatch(/score/i);
     expect(text).not.toMatch(/export[_ ]package/i);
+  });
+});
+
+describe("CandidatePortalPage.assessmentTab", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockBaseOverview();
+  });
+
+  it("aba Avaliação sempre visível na sidebar mesmo sem assignment", async () => {
+    renderPortal();
+    expect(await screen.findByTitle("Avaliação Comportamental")).toBeInTheDocument();
+  });
+
+  it("aba Avaliação visível quando vaga não exige avaliação", async () => {
+    renderPortal();
+    const tabBtn = await screen.findByTitle("Avaliação Comportamental");
+    expect(tabBtn).toBeInTheDocument();
+  });
+
+  it("estado not_required mostra mensagem correta", async () => {
+    // requires_behavioral_assessment ausente → false → not_required
+    renderPortal();
+    fireEvent.click(await screen.findByTitle("Avaliação Comportamental"));
+    expect(await screen.findByText(/esta vaga não possui avaliação obrigatória/i)).toBeInTheDocument();
+  });
+
+  it("estado pending_release mostra mensagem correta", async () => {
+    (candidatePortalService.getOverview as any).mockResolvedValue({
+      candidate: { id: "cand-1", full_name: "Test", email: "t@t.com", phone: null, city: null, state: null, application_source: null, application_source_label: "" },
+      active_application: { pipeline_id: "p-1", job_id: "j-1", job_title: "Dev", pipeline_stage: "screening", status_public: "Em triagem", submitted_at: "2026-05-01T10:00:00Z", current_analysis_id: null, analysis_status: null, resume_version_id: null, resume_filename: null, is_talent_pool: false },
+      application_history: [],
+      latest_resume: null,
+      public_interview: null,
+      talent_pool: false,
+      status_public: "Em triagem",
+      application_status: "active",
+      current_process_status_label: "Em triagem",
+      is_process_closed: false,
+      closed_reason_public_label: null,
+      can_request_contact: true,
+      can_apply_to_other_jobs: true,
+      public_timeline: null,
+      pre_admission: null,
+      requires_behavioral_assessment: true,
+    });
+
+    renderPortal();
+    fireEvent.click(await screen.findByTitle("Avaliação Comportamental"));
+    expect(await screen.findByText(/a avaliação ainda não foi liberada/i)).toBeInTheDocument();
+  });
+
+  it("estado available mostra botão Responder avaliação na aba", async () => {
+    (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([
+      { id: "a-1", candidate_id: "cand-1", job_id: "job-1", job_title: "Analista", template_id: "t-1", template_name: "Perfil", status: "pending", assigned_at: "2026-05-01T00:00:00Z", started_at: null, submitted_at: null, expires_at: null, answered_count: 0, question_count: 2 },
+    ]);
+
+    renderPortal();
+    fireEvent.click(await screen.findByTitle("Avaliação Comportamental"));
+
+    const buttons = await screen.findAllByRole("button", { name: /responder avaliação/i });
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("estado submitted não mostra botão Responder avaliação na aba", async () => {
+    (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([
+      { id: "a-1", candidate_id: "cand-1", job_id: "job-1", job_title: "Analista", template_id: "t-1", template_name: "Perfil", status: "submitted", assigned_at: "2026-05-01T00:00:00Z", started_at: "2026-05-01T01:00:00Z", submitted_at: "2026-05-01T02:00:00Z", expires_at: null, answered_count: 2, question_count: 2, ai_evaluation_status: null },
+    ]);
+
+    renderPortal();
+    fireEvent.click(await screen.findByTitle("Avaliação Comportamental"));
+
+    expect(await screen.findByText(/recebemos suas respostas/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /responder avaliação/i })).not.toBeInTheDocument();
+  });
+
+  it("estado completed mostra mensagem de conclusão", async () => {
+    (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([
+      { id: "a-1", candidate_id: "cand-1", job_id: "job-1", job_title: "Analista", template_id: "t-1", template_name: "Perfil", status: "submitted", assigned_at: "2026-05-01T00:00:00Z", started_at: "2026-05-01T01:00:00Z", submitted_at: "2026-05-01T02:00:00Z", expires_at: null, answered_count: 2, question_count: 2, ai_evaluation_status: "completed" },
+    ]);
+
+    renderPortal();
+    fireEvent.click(await screen.findByTitle("Avaliação Comportamental"));
+
+    expect(await screen.findByText(/sua avaliação foi concluída/i)).toBeInTheDocument();
+  });
+
+  it("estado error mostra mensagem amigável quando listBehavioralAssessments falha", async () => {
+    (candidatePortalService.listBehavioralAssessments as any).mockRejectedValue(new Error("network"));
+
+    renderPortal();
+    fireEvent.click(await screen.findByTitle("Avaliação Comportamental"));
+
+    expect(await screen.findByText(/não foi possível carregar sua avaliação/i)).toBeInTheDocument();
+  });
+
+  it("timeline sidebar sempre exibe item Avaliação em qualquer estado", async () => {
+    for (const assessments of [[], [{ id: "a-1", candidate_id: "cand-1", job_id: "job-1", job_title: "Analista", template_id: "t-1", template_name: "Perfil", status: "submitted", assigned_at: "2026-05-01T00:00:00Z", started_at: null, submitted_at: "2026-05-02T00:00:00Z", expires_at: null, answered_count: 1, question_count: 1, ai_evaluation_status: "completed" }]]) {
+      vi.clearAllMocks();
+      mockBaseOverview();
+      (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue(assessments);
+
+      const { unmount } = renderPortal();
+      expect(await screen.findByTitle("Avaliação Comportamental")).toBeInTheDocument();
+      unmount();
+    }
   });
 });

@@ -23,6 +23,7 @@ from src.core.pipeline_stages import (
 from src.core.settings import settings
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
+from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
@@ -137,6 +138,16 @@ class CandidatePortalService:
                 interview=public_interview,
             )
 
+        job_requires_behavioral_assessment = False
+        if active_pipeline_row is not None:
+            _job_flag = await self._db.scalar(
+                sa.select(JobModel.requires_behavioral_assessment).where(
+                    JobModel.id == active_pipeline_row["job_id"]
+                )
+            )
+            if _job_flag is not None:
+                job_requires_behavioral_assessment = bool(_job_flag)
+
         history = await self._build_history_applications(
             candidate_id=candidate_id,
             pipeline_rows=pipeline_rows,
@@ -204,6 +215,7 @@ class CandidatePortalService:
             can_apply_to_other_jobs=application_status not in {"admitted", "dismissed"},
             public_timeline=public_timeline,
             pre_admission=pre_admission_summary,
+            requires_behavioral_assessment=job_requires_behavioral_assessment,
         )
 
     async def update_profile(

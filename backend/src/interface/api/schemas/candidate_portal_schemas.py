@@ -130,6 +130,7 @@ class CandidatePortalOverviewResponse(BaseModel):
     can_apply_to_other_jobs: bool = True
     public_timeline: CandidatePortalTimelineResponse | None = None
     pre_admission: "CandidatePortalPreAdmissionSummary | None" = None
+    requires_behavioral_assessment: bool = False
 
 
 class CandidatePortalApplicationResponse(BaseModel):

@@ -164,6 +164,7 @@ export interface CandidatePortalOverview {
   can_apply_to_other_jobs: boolean;
   public_timeline: CandidatePortalTimeline | null;
   pre_admission: CandidatePortalPreAdmissionSummary | null;
+  requires_behavioral_assessment?: boolean;
 }
 
 export interface CandidatePortalPreAdmissionUploadedDocument {
