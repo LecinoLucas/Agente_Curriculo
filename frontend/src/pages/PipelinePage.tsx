@@ -1,4 +1,4 @@
-import { PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Users, Clock, Calendar, CheckCircle2, Plus, BarChart3, Home, MapPin, Sparkles, Inbox, Activity, Filter, ToggleRight, ToggleLeft } from "lucide-react";
+import { PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Users, Clock, Calendar, CheckCircle2, Plus, BarChart3, Home, MapPin, Sparkles, Inbox, Activity, Filter, ToggleRight, ToggleLeft, AlertTriangle, X, ChevronDown, Briefcase } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -119,6 +119,7 @@ export function PipelinePage() {
 
   const [showNewCandidate, setShowNewCandidate] = useState(false);
   const [showSourceCandidates, setShowSourceCandidates] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [showRanking, setShowRanking] = useState(resolveInitialShowRanking);
   const [sortOrder, setSortOrder] = useState<"score_desc" | "score_asc" | "name_az">("score_desc");
   const [ranking, setRanking] = useState<JobRanking | null>(null);
@@ -487,13 +488,6 @@ export function PipelinePage() {
     };
   }, [board, mainCols.length, showRanking, updateKanbanScrollMetrics]);
 
-  // Dynamic KPI calculation
-  const totalActive = useMemo(() => {
-    return mainCols
-      .filter((column) => column.macroId !== "finalizado")
-      .reduce((n, c) => n + c.candidates.length, 0);
-  }, [mainCols]);
-
   const totalCandidatos = useMemo(() => {
     if (!board) return 0;
     return board.columns.reduce((sum, col) => sum + col.candidates.length, 0);
@@ -519,17 +513,6 @@ export function PipelinePage() {
       .filter((c) => c.stage === "hired" || c.stage === "pre_admission" || c.stage === "protheus" || c.stage === "admitted")
       .reduce((sum, col) => sum + col.candidates.length, 0);
   }, [board]);
-
-  const selectedJobMeta = useMemo(() => {
-    if (!selectedJob) return [];
-    return [
-      formatJobStatus(selectedJob.status),
-      selectedJob.seniority_level ? formatSeniority(selectedJob.seniority_level) : null,
-      selectedJob.work_model ? formatWorkModel(selectedJob.work_model) : null,
-      selectedJob.location,
-      `${totalCandidatos} candidato${totalCandidatos === 1 ? "" : "s"}`,
-    ].filter(Boolean);
-  }, [selectedJob, totalCandidatos]);
 
   const isBoardRefreshing = boardLoading && board !== null;
   const showInitialBoardLoading = boardLoading && board === null;
@@ -817,125 +800,96 @@ export function PipelinePage() {
     [activeJobId, rejectionCandidate, syncAfterStageMutation],
   );
 
+  const activeFiltersCount = (urlBoardFilters.entered_from ? 1 : 0) +
+                             (urlBoardFilters.entered_to ? 1 : 0) +
+                             (urlBoardFilters.updated_to ? 1 : 0);
+  const hasActiveFilters = activeFiltersCount > 0;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4 pb-8 text-slate-800 dark:text-slate-100">
+    <div className="pipeline-page flex h-full w-full min-w-0 flex-col gap-2 px-1 pt-1 sm:px-2 sm:pt-2 lg:px-3 pb-2 text-slate-800 dark:text-slate-100 bg-[#F8FAFC] dark:bg-[#09090b]">
       
-      {/* ── SaaS Breadcrumb and Header Control Area ── */}
-      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 dark:border-slate-800">
-        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
-              Pipeline
-            </h1>
-            <p className="mt-1 text-[13px] font-medium text-slate-500 dark:text-slate-400">
-              Acompanhe o progresso dos candidatos em todas as etapas.
-            </p>
-          </div>
+      {/* ── Top Navigation ── */}
+      <nav aria-label="breadcrumb" className="hidden sm:flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 pl-1 mt-1">
+        <span>Recrutamento</span>
+        <span className="text-slate-300 dark:text-slate-600">/</span>
+        <span className="font-bold text-slate-800 dark:text-slate-100">Pipeline</span>
+      </nav>
 
-          {/* Action Controls */}
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-            {pipelineJobsError ? (
-              <span className="text-xs text-rose-500 font-bold">{pipelineJobsError}</span>
-            ) : (
+      {/* ── Compact Header ── */}
+      <div className="pipeline-header bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2 sm:px-3 sm:py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between transition-all shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+          {pipelineJobsError ? (
+            <span className="text-xs text-rose-500 font-bold">{pipelineJobsError}</span>
+          ) : (
+            <div className="w-full">
               <JobCombobox
                 jobs={pipelineJobs}
                 loading={pipelineJobsLoading}
                 value={activeJobId ?? null}
                 onChange={handleSelectJob}
               />
-            )}
-
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <button
-                type="button"
-                onClick={handleOpenSourceCandidates}
-                disabled={!canUse}
-                className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-5 text-[13px] font-bold transition ${
-                  canUse
-                    ? "border-[#C1121F]/20 bg-[#C1121F] text-white shadow-sm hover:opacity-90 dark:border-[#C1121F]/30"
-                    : "cursor-not-allowed border-border/40 bg-surface-muted text-text-muted dark:border-slate-800 dark:bg-slate-900"
-                }`}
-              >
-                <Plus className="h-4 w-4" />
-                Vincular candidato
-              </button>
-              {activeJobId && (
-                <button
-                  type="button"
-                  onClick={() => setShowRanking((current) => !current)}
-                  className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-5 text-[13px] font-bold transition ${
-                    showRanking
-                      ? "border-slate-200 bg-white text-slate-600 shadow-sm"
-                      : "border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700"
-                  }`}
-                  aria-expanded={showRanking}
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  Ver Ranking IA
-                </button>
-              )}
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Job Tags Section */}
-        {activeJobId && !pipelineJobsLoading && selectedJob && (
-          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mt-2">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                Status: <span className="font-bold text-slate-700 dark:text-slate-200">{formatJobStatus(selectedJob.status)}</span>
-              </div>
-              {selectedJob.seniority_level && (
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-slate-400" />
-                  Sênioridade: <span className="font-bold text-slate-700 dark:text-slate-200">{formatSeniority(selectedJob.seniority_level)}</span>
-                </div>
-              )}
-              {selectedJob.work_model && (
-                <div className="flex items-center gap-1.5">
-                  <Home className="h-3.5 w-3.5 text-slate-400" />
-                  Modalidade: <span className="font-bold text-slate-700 dark:text-slate-200">{formatWorkModel(selectedJob.work_model)}</span>
-                </div>
-              )}
-              {selectedJob.location && (
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                  Local: <span className="font-bold text-slate-700 dark:text-slate-200">{selectedJob.location}</span>
-                </div>
-              )}
-            </div>
-            <div>
-              Total de candidatos: <span className="font-bold text-slate-700 dark:text-slate-200">{totalCandidatos}</span>
-            </div>
-          </div>
-        )}
-      </div>
+        {/* Action Controls */}
+        <div className="flex flex-wrap sm:flex-nowrap w-full gap-3 sm:w-auto sm:items-center">
+          <button
+            type="button"
+            onClick={handleOpenSourceCandidates}
+            disabled={!canUse}
+            className={`pipeline-action-button pipeline-action-button--primary inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-emerald-200 px-5 text-sm font-bold transition-all ${
+              canUse
+                ? "bg-white text-emerald-600 hover:bg-emerald-50 dark:border-emerald-900/50 dark:bg-slate-900 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                : "cursor-not-allowed border-border/40 bg-surface-muted text-text-muted dark:border-slate-800 dark:bg-slate-900"
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+            Vincular candidato
+          </button>
+          
+          {activeJobId && (
+            <button
+              type="button"
+              onClick={() => setShowRanking((current) => !current)}
+              className={`pipeline-action-button inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold transition-all ${
+                showRanking
+                  ? "border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+              aria-expanded={showRanking}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Ver Ranking IA
+            </button>
+          )}
 
-      {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
-      {activeJobId && board && !boardError && (
-        <div className="flex flex-wrap items-center gap-6 py-2 px-1 text-sm text-slate-600 dark:text-slate-300">
-          <div className="flex items-center gap-2">
-            <Inbox className="h-4 w-4 text-slate-400" />
-            <span className="font-medium">Total:</span>
-            <span className="font-black text-slate-800 dark:text-slate-100">{totalCandidatos}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4 text-slate-400" />
-            <span className="font-medium">Em andamento:</span>
-            <span className="font-black text-slate-800 dark:text-slate-100">{emAndamento}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-slate-400" />
-            <span className="font-medium">Entrevistas:</span>
-            <span className="font-black text-slate-800 dark:text-slate-100">{entrevistas}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-slate-400" />
-            <span className="font-medium">Contratações:</span>
-            <span className="font-black text-slate-800 dark:text-slate-100">{contratacoes}</span>
-          </div>
+          {activeJobId && (
+            <button
+              type="button"
+              onClick={() => void handleManualRefresh()}
+              disabled={boardLoading}
+              aria-label="Atualizar board"
+              className="pipeline-action-button inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <RefreshCw className={`h-4 w-4 ${boardLoading ? "animate-spin" : ""}`} />
+              Atualizar
+            </button>
+          )}
+        </div>
+      </div>
+      
+      {/* ── KPIs (Métricas) ── */}
+      {activeJobId && !pipelineJobsLoading && selectedJob && board && !boardError && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 px-1 -mt-1">
+          <span><strong className="text-slate-700 dark:text-slate-300">{totalCandidatos}</strong> candidato{totalCandidatos === 1 ? "" : "s"}</span>
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <span><strong className="text-slate-700 dark:text-slate-300">{emAndamento}</strong> em andamento</span>
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <span><strong className="text-slate-700 dark:text-slate-300">{entrevistas}</strong> entrevista{entrevistas === 1 ? "" : "s"}</span>
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <span><strong className="text-slate-700 dark:text-slate-300">{contratacoes}</strong> contrataç{contratacoes === 1 ? "ão" : "ões"}</span>
         </div>
       )}
 
@@ -963,98 +917,146 @@ export function PipelinePage() {
             <div className="min-w-0">
               
 
-                {/* Filters and Refresh State */}
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between py-2 border-b border-border/40 dark:border-slate-800 mb-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <label className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Período</label>
-                      <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-9 shadow-sm">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        <input
-                          type="date"
-                          value={urlBoardFilters.entered_from ?? ""}
-                          onChange={(event) => handleBoardDateFilterChange("entered_from", event.target.value)}
-                          className="bg-transparent text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none w-[110px]"
-                          aria-label="Entrada no processo de"
+                {/* Filters Toolbar */}
+                <div className="pipeline-toolbar mb-2 mt-1 flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    
+                    {/* Left: Search & Toggles */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Search Bar */}
+                      <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-900 w-full sm:w-64 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
+                        <Search className="h-4 w-4 text-slate-400 shrink-0" />
+                        <input 
+                          type="text" 
+                          placeholder="Buscar candidato..." 
+                          className="flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
                         />
-                        <span className="text-slate-300">-</span>
-                        <input
-                          type="date"
-                          value={urlBoardFilters.entered_to ?? ""}
-                          onChange={(event) => handleBoardDateFilterChange("entered_to", event.target.value)}
-                          className="bg-transparent text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none w-[110px]"
-                          aria-label="Entrada no processo até"
-                        />
+                        <div className="flex items-center justify-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 dark:bg-slate-800">
+                          ⌘ K
+                        </div>
                       </div>
+
+                      {/* Top Match IA */}
+                      <button
+                        onClick={() => setSortOrder(sortOrder === "score_desc" ? "name_az" : "score_desc")}
+                        className={`flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-bold shadow-sm transition-all ${
+                          sortOrder === "score_desc"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-teal-400/25 dark:bg-teal-400/10 dark:text-teal-200"
+                            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
+                        }`}
+                      >
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-full ${sortOrder === "score_desc" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40" : "bg-slate-100 text-slate-400 dark:bg-slate-800"}`}>
+                          <CheckCircle2 className="h-3 w-3" />
+                        </span>
+                        Top Match IA
+                      </button>
+
+                      {/* Pendências */}
+                      <button className="flex h-10 items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 text-sm font-bold text-orange-700 shadow-sm transition-all hover:bg-orange-100 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-400 dark:hover:bg-orange-900/40">
+                        <AlertTriangle className="h-4 w-4" />
+                        Pendências
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-200/60 text-[10px] font-black text-orange-800 dark:bg-orange-900 dark:text-orange-300">
+                          1
+                        </span>
+                      </button>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <label className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Última atividade</label>
-                      <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-9 shadow-sm">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        <select className="bg-transparent text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none pr-2">
-                          <option>Todos</option>
-                        </select>
-                      </div>
-                    </div>
+                    {/* Right: Filtros Button */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isBoardRefreshing && (
+                        <span className="inline-flex items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-bold text-slate-500 animate-pulse dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+                          <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                        </span>
+                      )}
 
-                    <div className="flex items-center gap-2">
-                      <label className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Ordenar por</label>
-                      <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-9 shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => setShowFilters((prev) => !prev)}
+                        className={`flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-bold shadow-sm transition-all ${
+                          showFilters || hasActiveFilters
+                            ? "border-indigo-200 bg-indigo-50/50 text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-400"
+                            : "border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 dark:border-slate-800 dark:bg-slate-900 dark:text-indigo-400 dark:hover:bg-indigo-950/20"
+                        }`}
+                      >
+                        <Filter className="h-4 w-4" />
+                        Filtros
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
+                          showFilters || hasActiveFilters 
+                            ? "bg-indigo-100/80 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300"
+                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                        }`}>
+                          {activeFiltersCount > 0 ? activeFiltersCount : "1"}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showFilters ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {hasActiveFilters && (
+                        <button
+                          type="button"
+                          onClick={handleClearBoardFilters}
+                          className="flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-slate-400 shadow-sm transition-colors hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-rose-900/50 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
+                          title="Limpar filtros"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded Filters Area */}
+                  {showFilters && (
+                    <div className="pipeline-filter-panel mt-2 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-900/50 animate-in slide-in-from-top-2 fade-in duration-200">
+                      {/* Period */}
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Período</span>
+                        <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900">
+                          <input
+                            type="date"
+                            value={urlBoardFilters.entered_from ?? ""}
+                            onChange={(event) => handleBoardDateFilterChange("entered_from", event.target.value)}
+                            className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-slate-200"
+                            aria-label="Entrada no processo de"
+                          />
+                          <span className="text-slate-300 dark:text-slate-600">-</span>
+                          <input
+                            type="date"
+                            value={urlBoardFilters.entered_to ?? ""}
+                            onChange={(event) => handleBoardDateFilterChange("entered_to", event.target.value)}
+                            className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-slate-200"
+                            aria-label="Entrada no processo até"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Last activity */}
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Última atividade</span>
+                        <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900">
+                          <input
+                            type="date"
+                            value={urlBoardFilters.updated_to ?? ""}
+                            onChange={(event) => handleBoardDateFilterChange("updated_to", event.target.value)}
+                            className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-slate-200"
+                            title="Última atividade até"
+                            aria-label="Última atividade até"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Order By */}
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Ordenar por</span>
                         <select 
                           value={sortOrder}
                           onChange={(e) => setSortOrder(e.target.value as any)}
-                          className="bg-transparent text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none pr-2"
+                          className="rounded-lg bg-white py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 shadow-sm border border-slate-200 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                         >
                           <option value="score_desc">Mais recente</option>
-                          <option value="name_az">Ordem A-Z</option>
+                          <option value="name_az">A-Z</option>
                         </select>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      onClick={() => setSortOrder(sortOrder === "score_desc" ? "name_az" : "score_desc")}
-                      className={`flex items-center gap-2 rounded-full px-3 h-9 text-[11px] font-bold transition-all border shadow-sm ${
-                        sortOrder === "score_desc" 
-                          ? "bg-rose-50 text-[#C1121F] border-rose-200" 
-                          : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      <ToggleRight className={`h-4 w-4 ${sortOrder === "score_desc" ? "text-[#C1121F]" : "text-slate-400"}`} />
-                      Top Match IA
-                    </button>
-
-                    {activeJobId && (
-                      <button
-                        type="button"
-                        onClick={() => void handleManualRefresh()}
-                        disabled={boardLoading}
-                        aria-label="Atualizar board"
-                        className="flex items-center gap-1.5 h-9 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-bold text-slate-600 dark:text-slate-300 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
-                      >
-                        <RefreshCw className={`h-3.5 w-3.5 ${boardLoading ? "animate-spin" : ""}`} />
-                        Atualizar
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={handleClearBoardFilters}
-                      className="flex items-center gap-1.5 h-9 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-bold text-slate-600 dark:text-slate-300 shadow-sm hover:bg-slate-50 transition-colors"
-                    >
-                      <Filter className="h-3.5 w-3.5 text-slate-400" />
-                      Limpar filtros
-                    </button>
-                    
-                    {isBoardRefreshing && (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 animate-pulse">
-                        <RefreshCw className="h-3 w-3 animate-spin" />
-                        Sincronizando
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
 
               {selectedJob && !activeJobAcceptsCandidates && !isDraft && (
@@ -1085,25 +1087,19 @@ export function PipelinePage() {
               {board && !boardError && (
                 <>
                 {kanbanHasHorizontalOverflow ? (
-                  <div className="mb-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/60">
-                    <div className="mb-1 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                      <span>Rolagem das etapas</span>
-                      <span>Arraste a barra para navegar pelas colunas</span>
-                    </div>
-                    <div
-                      ref={topKanbanScrollRef}
-                      className="h-4 overflow-x-auto overflow-y-hidden"
-                      onScroll={syncTopKanbanScroll}
-                      data-testid="kanban-top-scroll"
-                    >
-                      <div style={{ width: kanbanScrollWidth, height: 1 }} />
-                    </div>
+                  <div
+                    ref={topKanbanScrollRef}
+                    className="mb-1 h-2 overflow-x-auto overflow-y-hidden rounded-full bg-slate-100 opacity-60 transition-opacity hover:opacity-100 dark:bg-slate-800"
+                    onScroll={syncTopKanbanScroll}
+                    data-testid="kanban-top-scroll"
+                  >
+                    <div style={{ width: kanbanScrollWidth, height: 1 }} />
                   </div>
                 ) : null}
 
                 <div
                   ref={kanbanScrollRef}
-                  className="-mx-1 w-[calc(100%+0.5rem)] min-w-0 overflow-x-auto overflow-y-hidden px-1 pb-6 pt-1"
+                  className="pipeline-kanban-scroll -mx-1 w-[calc(100%+0.5rem)] min-w-0 overflow-x-auto overflow-y-hidden px-1 pb-6 pt-1"
                   onScroll={syncMainKanbanScroll}
                   data-testid="kanban-scroll-container"
                 >
@@ -1135,7 +1131,7 @@ export function PipelinePage() {
               {/* Empty state: Board empty */}
               {!showInitialBoardLoading && board && !boardError && totalCandidatos === 0 && (
                 <div className="flex flex-col items-center justify-center gap-4 py-16">
-                  <div className="max-w-md rounded-2xl border border-slate-150 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-10 text-center">
+                  <div className="pipeline-empty-board max-w-md rounded-2xl border border-slate-150 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-10 text-center">
                     <span className="text-5xl mb-4 block">🧭</span>
                     <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
                       Nenhum talento nesta vaga
@@ -1332,7 +1328,7 @@ function RankingPanel({
   return (
     <aside
       id="pipeline-ranking-panel"
-      className="sticky top-6 flex h-[720px] max-h-[85vh] flex-col rounded-2xl border border-border/40 dark:border-slate-800 bg-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
+      className="pipeline-ranking-panel sticky top-6 flex h-[720px] max-h-[85vh] flex-col rounded-2xl border border-border/40 dark:border-slate-800 bg-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
     >
       <div className="flex items-start justify-between gap-3 border-b border-border/40 dark:border-slate-800 pb-4">
         <div className="min-w-0">

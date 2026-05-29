@@ -23,9 +23,9 @@ describe("KanbanColumn", () => {
       />
     );
 
-    // O card top match tem a classe border border-[#C1121F]/20
+    // O card top match tem a classe border ring-emerald-200
     const topMatchCards = screen.getAllByTestId(/kanban-card-/).filter(
-      (card) => card.className.includes("border-[#C1121F]/20")
+      (card) => card.className.includes("ring-emerald-200")
     );
     expect(topMatchCards.length).toBe(1);
   });
@@ -40,7 +40,7 @@ describe("KanbanColumn", () => {
     );
 
     const topMatchCards = screen.getAllByTestId(/kanban-card-/).filter(
-      (card) => card.className.includes("border-[#C1121F]/20")
+      (card) => card.className.includes("ring-emerald-200")
     );
     expect(topMatchCards.length).toBe(0);
   });
@@ -64,7 +64,7 @@ describe("KanbanColumn", () => {
     );
 
     const topMatchCards = screen.getAllByTestId(/kanban-card-/).filter(
-      (card) => card.className.includes("border-[#C1121F]/20")
+      (card) => card.className.includes("ring-emerald-200")
     );
     expect(topMatchCards.length).toBe(0);
   });

@@ -94,46 +94,58 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
   }
 
   return (
-    <div ref={containerRef} className="relative w-full min-w-0 sm:w-[300px] md:w-[340px]">
-      {/* Trigger */}
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label="Buscar vaga"
-        disabled={loading && jobs.length === 0}
-        onClick={() => setOpen((o) => !o)}
-        className="flex h-11 w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-left shadow-sm outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-[hsl(var(--primary))]/35 focus:ring-2 focus:ring-[hsl(var(--primary))]/10 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800"
-      >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
-          <Search className="h-3.5 w-3.5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center justify-between gap-2">
-            <span className="min-w-0">
-              <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
-                Vaga da pipeline
-              </span>
-              <span className="block truncate text-sm font-bold tracking-tight text-slate-700 dark:text-slate-100">
-                {loading && jobs.length === 0 ? "Carregando vagas…" : (selectedJob?.title ?? "Selecionar vaga")}
-              </span>
-            </span>
-            {selectedJob && (
-              <span
-                className={`hidden shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold md:inline-flex ${STATUS_BADGE[selectedTone]}`}
-              >
-                {formatJobStatus(selectedJob.status)}
-              </span>
-            )}
+    <div ref={containerRef} className="relative flex flex-col gap-1 w-full">
+      {/* Header Layout (trigger) */}
+      <div className="flex items-center gap-4">
+        {/* Briefcase Icon Area */}
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+          <Briefcase className="h-6 w-6" />
+        </div>
+
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+            Vaga da pipeline
           </span>
-        </span>
-        {loading && jobs.length > 0 && (
-          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-500" />
-        )}
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
-        />
-      </button>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
+              {loading && jobs.length === 0 ? "Carregando vagas…" : (selectedJob?.title ?? "Selecionar vaga")}
+            </span>
+            
+            {/* The Badge acts as the dropdown trigger visually or we make the title block clickable */}
+            <button
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              onClick={() => setOpen((o) => !o)}
+              className={`flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                selectedJob ? STATUS_BADGE[selectedTone] : "bg-slate-100 text-slate-600 border-slate-200"
+              }`}
+            >
+              {selectedJob ? formatJobStatus(selectedJob.status) : "Selecione"}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+            </button>
+            
+            {loading && jobs.length > 0 && (
+              <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-500" />
+            )}
+          </div>
+          
+          {selectedJob && (
+            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
+              {selectedJob.seniority_level && (
+                <><span className="text-slate-500">{selectedJob.seniority_level}</span><span>·</span></>
+              )}
+              {selectedJob.work_model && (
+                <><span className="text-slate-500">{formatWorkModel(selectedJob.work_model)}</span><span>·</span></>
+              )}
+              {selectedJob.location && (
+                <span className="text-slate-500">{selectedJob.location}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Dropdown */}
       {open && (

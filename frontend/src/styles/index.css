@@ -462,17 +462,17 @@
     --input:               35 22% 82%;
 
     /* Fundo principal da navbar. */
-    --nav-bg:              356 54% 16%;
+    --nav-bg:              356 42% 22%;
     /* Texto principal da navbar. */
-    --nav-text:            36 35% 94%;
+    --nav-text:            36 35% 96%;
     /* Texto secundário da navbar. */
-    --nav-muted:           34 18% 74%;
+    --nav-muted:           24 22% 78%;
     /* Fundo do item ativo na navbar. */
-    --nav-active-bg:       356 72% 28%;
+    --nav-active-bg:       356 48% 30%;
     /* Texto do item ativo na navbar. */
     --nav-active-text:     0 0% 100%;
     /* Borda inferior/lateral da navbar. */
-    --nav-border:          356 45% 22%;
+    --nav-border:          356 32% 28%;
 
     /* Cor de destaque da sidebar. */
     --sidebar-accent:      356 76% 42%;
@@ -2091,6 +2091,220 @@
 }
 
 /* ==========================================================================
+   Pipeline dark polish
+   --------------------------------------------------------------------------
+   Visual-only layer for the existing Pipeline structure. It keeps the same
+   controls and data flow while giving the board a darker operational skin.
+   ========================================================================== */
+
+.pipeline-kanban-column {
+  --pipeline-stage-accent: 45 212 191;
+}
+
+.pipeline-kanban-column--entrada,
+.pipeline-kanban-column--entry {
+  --pipeline-stage-accent: 45 212 191;
+}
+
+.pipeline-kanban-column--analise,
+.pipeline-kanban-column--screening {
+  --pipeline-stage-accent: 245 158 11;
+}
+
+.pipeline-kanban-column--entrevista,
+.pipeline-kanban-column--hr_interview,
+.pipeline-kanban-column--technical_interview {
+  --pipeline-stage-accent: 56 189 248;
+}
+
+.pipeline-kanban-column--avaliacao,
+.pipeline-kanban-column--final {
+  --pipeline-stage-accent: 251 113 133;
+}
+
+.pipeline-kanban-column--decisao,
+.pipeline-kanban-column--offer {
+  --pipeline-stage-accent: 167 139 250;
+}
+
+.pipeline-kanban-column--admissao,
+.pipeline-kanban-column--hired,
+.pipeline-kanban-column--pre_admission,
+.pipeline-kanban-column--protheus {
+  --pipeline-stage-accent: 52 211 153;
+}
+
+.pipeline-kanban-column--finalizado,
+.pipeline-kanban-column--admitted,
+.pipeline-kanban-column--rejected {
+  --pipeline-stage-accent: 148 163 184;
+}
+
+:root[data-theme="dark"] .pipeline-page {
+  min-height: calc(100vh - 8rem);
+  border: 1px solid hsl(217 28% 19% / 0.72);
+  border-radius: 1.125rem;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(45, 212, 191, 0.12), transparent 26rem),
+    radial-gradient(circle at 86% 4%, rgba(167, 139, 250, 0.10), transparent 28rem),
+    linear-gradient(180deg, hsl(222 34% 9% / 0.96), hsl(224 39% 7% / 0.98));
+  box-shadow:
+    0 26px 62px -48px rgba(0, 0, 0, 0.88),
+    inset 0 1px 0 hsl(0 0% 100% / 0.04);
+}
+
+:root[data-theme="dark"] .pipeline-header-card,
+:root[data-theme="dark"] .pipeline-toolbar,
+:root[data-theme="dark"] .pipeline-filter-panel,
+:root[data-theme="dark"] .pipeline-ranking-panel,
+:root[data-theme="dark"] .pipeline-empty-board {
+  border: 1px solid hsl(216 24% 24% / 0.78) !important;
+  background:
+    linear-gradient(180deg, hsl(218 30% 14% / 0.92), hsl(222 33% 11% / 0.88));
+  box-shadow:
+    0 18px 48px -40px rgba(0, 0, 0, 0.86),
+    inset 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+
+:root[data-theme="dark"] .pipeline-header-card {
+  border-radius: 1rem;
+  padding: 0.85rem;
+}
+
+:root[data-theme="dark"] .pipeline-toolbar,
+:root[data-theme="dark"] .pipeline-filter-panel {
+  border-radius: 0.875rem;
+  padding: 0.7rem;
+}
+
+:root[data-theme="dark"] .pipeline-filter-panel {
+  background:
+    linear-gradient(180deg, hsl(220 28% 13% / 0.94), hsl(222 31% 10% / 0.88));
+}
+
+:root[data-theme="dark"] .pipeline-header-card button[aria-label="Buscar vaga"],
+:root[data-theme="dark"] .pipeline-action-button,
+:root[data-theme="dark"] .pipeline-filter-panel input,
+:root[data-theme="dark"] .pipeline-filter-panel select {
+  border-color: hsl(214 24% 28% / 0.86) !important;
+  background-color: hsl(220 30% 12% / 0.88) !important;
+  color: hsl(210 32% 88%) !important;
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04), 0 10px 24px -22px rgba(0, 0, 0, 0.9) !important;
+}
+
+:root[data-theme="dark"] .pipeline-action-button:not(:disabled):hover {
+  border-color: hsl(176 58% 44% / 0.42) !important;
+  background-color: hsl(219 31% 15% / 0.96) !important;
+  color: hsl(180 48% 86%) !important;
+}
+
+:root[data-theme="dark"] .pipeline-action-button--primary:not(:disabled) {
+  border-color: hsl(164 66% 44% / 0.34) !important;
+  background:
+    linear-gradient(180deg, hsl(166 54% 18% / 0.92), hsl(171 48% 13% / 0.92)) !important;
+  color: hsl(162 62% 84%) !important;
+}
+
+:root[data-theme="dark"] .pipeline-kanban-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(215 22% 30%) transparent;
+}
+
+:root[data-theme="dark"] .pipeline-kanban-scroll::-webkit-scrollbar {
+  height: 0.65rem;
+}
+
+:root[data-theme="dark"] .pipeline-kanban-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:root[data-theme="dark"] .pipeline-kanban-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: hsl(215 22% 30%);
+  background-clip: padding-box;
+}
+
+:root[data-theme="dark"] .pipeline-kanban-column__header {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid hsl(216 24% 24% / 0.72);
+  border-radius: 0.875rem;
+  padding: 0.6rem 0.65rem;
+  background:
+    linear-gradient(180deg, hsl(220 30% 14% / 0.92), hsl(223 34% 10% / 0.88)),
+    linear-gradient(90deg, rgb(var(--pipeline-stage-accent) / 0.12), transparent 55%);
+  box-shadow:
+    0 14px 34px -32px rgba(0, 0, 0, 0.82),
+    inset 0 1px 0 hsl(0 0% 100% / 0.04);
+}
+
+:root[data-theme="dark"] .pipeline-kanban-column__header::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: rgb(var(--pipeline-stage-accent));
+  box-shadow: 0 0 16px rgb(var(--pipeline-stage-accent) / 0.28);
+}
+
+:root[data-theme="dark"] .pipeline-kanban-column__header svg {
+  color: rgb(var(--pipeline-stage-accent)) !important;
+}
+
+:root[data-theme="dark"] .pipeline-kanban-column__body {
+  border-color: rgb(var(--pipeline-stage-accent) / 0.18) !important;
+  background:
+    linear-gradient(180deg, rgb(var(--pipeline-stage-accent) / 0.055), transparent 11rem),
+    hsl(222 34% 9% / 0.72) !important;
+  box-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.035),
+    0 18px 42px -40px rgba(0, 0, 0, 0.82);
+}
+
+:root[data-theme="dark"] .pipeline-kanban-column__empty {
+  border: 1px dashed rgb(var(--pipeline-stage-accent) / 0.18);
+  border-radius: 0.75rem;
+  padding: 0.9rem 0.5rem;
+  background: rgb(var(--pipeline-stage-accent) / 0.035);
+  opacity: 1;
+}
+
+:root[data-theme="dark"] .pipeline-candidate-card {
+  border-color: rgb(var(--pipeline-stage-accent) / 0.16) !important;
+  background:
+    linear-gradient(180deg, hsl(219 31% 15% / 0.96), hsl(222 34% 12% / 0.94)) !important;
+  box-shadow:
+    0 16px 34px -30px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 hsl(0 0% 100% / 0.045) !important;
+}
+
+:root[data-theme="dark"] .pipeline-candidate-card:hover {
+  border-color: rgb(var(--pipeline-stage-accent) / 0.36) !important;
+  box-shadow:
+    0 22px 42px -32px rgba(0, 0, 0, 0.92),
+    0 0 0 1px rgb(var(--pipeline-stage-accent) / 0.08),
+    inset 0 1px 0 hsl(0 0% 100% / 0.055) !important;
+}
+
+:root[data-theme="dark"] .pipeline-candidate-card__avatar {
+  border-color: rgb(var(--pipeline-stage-accent) / 0.24) !important;
+  background: rgb(var(--pipeline-stage-accent) / 0.12) !important;
+  color: rgb(var(--pipeline-stage-accent)) !important;
+}
+
+:root[data-theme="dark"] .pipeline-candidate-card__score {
+  border-color: hsl(164 64% 48% / 0.28) !important;
+  background: hsl(164 54% 18% / 0.72) !important;
+  color: hsl(162 74% 74%) !important;
+}
+
+:root[data-theme="dark"] .pipeline-ranking-panel {
+  background:
+    linear-gradient(180deg, hsl(219 30% 14% / 0.96), hsl(224 34% 10% / 0.96)) !important;
+}
+
+/* ==========================================================================
    LoginPage Redesign Utilities (Brazilian Modernist / Editorial)
    ========================================================================== */
 
@@ -2103,4 +2317,3 @@
 /* Override WebKit default autofill color to match the theme background */
 
 /* Botão primário da tela de login. */
-

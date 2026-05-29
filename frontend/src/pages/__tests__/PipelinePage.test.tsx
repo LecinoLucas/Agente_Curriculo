@@ -237,7 +237,7 @@ describe("PipelinePage", () => {
     });
   });
 
-  it("1. Renderiza o título 'Pipeline'", async () => {
+  it("1. Renderiza o título 'Pipeline' no breadcrumb", async () => {
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -247,11 +247,11 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Pipeline", level: 1 })).toBeInTheDocument();
+      expect(screen.getByText("Pipeline")).toBeInTheDocument();
     });
   });
 
-  it("2. Renderiza o breadcrumb 'Recrutamento > Pipeline'", async () => {
+  it("2. Renderiza o breadcrumb 'Recrutamento / Pipeline'", async () => {
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -262,11 +262,11 @@ describe("PipelinePage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Recrutamento")).toBeInTheDocument();
-      expect(screen.getByText("Pipeline", { selector: "span" })).toBeInTheDocument();
+      expect(screen.getByText("Pipeline")).toBeInTheDocument();
     });
   });
 
-  it("3. Remove busca/filtros da barra e mantém atalho de lupa + vincular", async () => {
+  it("3. Renderiza busca/filtros da barra e mantém atalho de lupa + vincular", async () => {
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -276,8 +276,7 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByPlaceholderText(/buscar candidato/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/^Filtros$/i)).not.toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/buscar candidato/i)).toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: /Vincular candidato/i }).length).toBeGreaterThan(0);
     });
   });
@@ -292,6 +291,12 @@ describe("PipelinePage", () => {
         </Routes>
       </MemoryRouter>
     );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^Filtros/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Filtros/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Período")).toBeInTheDocument();
@@ -318,6 +323,10 @@ describe("PipelinePage", () => {
         </Routes>
       </MemoryRouter>
     );
+
+    // Open filters
+    const filtrosBtn = await screen.findByRole("button", { name: /^Filtros/i });
+    fireEvent.click(filtrosBtn);
 
     await waitFor(() => {
       expect(mockSetBoardFilters).toHaveBeenCalledWith({ entered_from: "2026-05-01" });
@@ -370,6 +379,10 @@ describe("PipelinePage", () => {
       </MemoryRouter>
     );
 
+    // Open filters to find the inputs
+    const filtrosBtn = await screen.findByRole("button", { name: /^Filtros/i });
+    fireEvent.click(filtrosBtn);
+
     await waitFor(() => {
       expect(screen.getByDisplayValue("2026-05-01")).toBeInTheDocument();
     });
@@ -381,7 +394,7 @@ describe("PipelinePage", () => {
     });
   });
 
-  it("4. Renderiza os cards de KPI (total, em andamento, entrevistas, contratados)", async () => {
+  it("4. Renderiza os cards de KPI na string combinada (total, em andamento, entrevistas, contratados)", async () => {
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -391,14 +404,13 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Total de Candidatos")).toBeInTheDocument();
-      expect(screen.getByText("Em andamento")).toBeInTheDocument();
-      expect(screen.getAllByText("Entrevistas").length).toBeGreaterThan(0);
-      expect(screen.getByText("Contratações")).toBeInTheDocument();
+      const hasText = (text: string) => (content: string, element: Element | null) => element?.textContent === text;
+      // Check calculated dynamic KPI values based on mockBoard (total: 2, emAndamento: 2, entrevistas: 1, contratados: 0)
+      expect(screen.getByText(hasText("2 candidatos"))).toBeInTheDocument();
+      expect(screen.getByText(hasText("2 em andamento"))).toBeInTheDocument();
+      expect(screen.getByText(hasText("1 entrevista"))).toBeInTheDocument();
+      expect(screen.getByText(hasText("0 contratações"))).toBeInTheDocument();
     });
-
-    // Check calculated dynamic KPI values based on mockBoard (total: 2, emAndamento: 2, entrevistas: 1, contratados: 0)
-    expect(screen.getAllByText("2")[0]).toBeInTheDocument(); // total
   });
 
   it("5. Renderiza a lista horizontal de macrocolunas do Kanban", async () => {
@@ -435,8 +447,10 @@ describe("PipelinePage", () => {
       expect(screen.getByText("Aline Santos")).toBeInTheDocument();
       expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
     });
-    expect(screen.getByTitle("Status real: Entrada")).toBeInTheDocument();
-    expect(screen.getByText("Entrevista RH")).toBeInTheDocument();
+    const alineCard = screen.getByTestId("kanban-card-c-1");
+    expect(alineCard).toBeInTheDocument();
+    const brunoCard = screen.getByTestId("kanban-card-c-2");
+    expect(brunoCard).toBeInTheDocument();
   });
 
   it("6.1. Agrupa Protheus em Admissão com substatus real e sem detalhes técnicos", async () => {
@@ -489,15 +503,15 @@ describe("PipelinePage", () => {
 
     const admissionColumn = await screen.findByTestId("kanban-column-admissao");
     expect(admissionColumn).toContainElement(screen.getByText("Paula Protheus"));
-    expect(admissionColumn).toContainElement(screen.getByText("Protheus"));
-    expect(admissionColumn).toContainElement(screen.getByText("Protheus pendente"));
+    const protheusCard = screen.getByTestId("kanban-card-c-protheus");
+    expect(protheusCard).toHaveTextContent(/Integração ERP/i);
     expect(screen.queryByTestId("kanban-column-protheus")).not.toBeInTheDocument();
     expect(screen.queryByText(/payload/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/tentativas/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/checklist/i)).not.toBeInTheDocument();
   });
 
-  it("7. Coluna vazia exibe a mensagem 'Vazio'", async () => {
+  it("7. Coluna vazia exibe a mensagem contextualizada", async () => {
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -507,8 +521,7 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      // screening column is empty and should display "Arraste candidatos para esta etapa"
-      const emptyStates = screen.getAllByText("Arraste candidatos para esta etapa");
+      const emptyStates = screen.getAllByText(/Nenhum candidato/i);
       expect(emptyStates.length).toBeGreaterThan(0);
     });
   });

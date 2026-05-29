@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type DragEvent } from "react";
 import type { JobCandidate } from "../../types/domain";
 import { formatSeniority } from "../../utils/jobFormatters";
-import { Calendar, Mail, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
+import { Calendar, Mail, AlertTriangle, CheckCircle2, Clock, GripVertical } from "lucide-react";
 import {
   derivePipelineCardBadges,
   type PipelineCardBadgeTone,
@@ -83,6 +83,44 @@ const BADGE_TONE_CLASS: Record<PipelineCardBadgeTone, string> = {
   neutral: "bg-surface-muted text-text-muted border border-[hsl(var(--border))/20]",
 };
 
+function buildProfessionalContext(candidate: JobCandidate, aiProcessingState: ReturnType<typeof getAiProcessingState>): string | null {
+  const { current_title, current_company, total_experience_years, seniority_level } = candidate;
+
+  if (current_title && current_company) return `${current_title} na ${current_company}`;
+  if (current_title) return current_title;
+  if (current_company) return `Experiência em ${current_company}`;
+
+  if (seniority_level || (total_experience_years !== undefined && total_experience_years !== null)) {
+    const seniority = seniority_level ? formatSeniority(seniority_level) : null;
+    const experience = typeof total_experience_years === "number"
+      ? `${total_experience_years} ano${total_experience_years === 1 ? "" : "s"}`
+      : null;
+    return [seniority, experience].filter(Boolean).join(" • ");
+  }
+
+  return null;
+}
+
+function buildNextAction(candidate: JobCandidate, rawCandidate: any, stageSummary: string | null, aiStatus: ReturnType<typeof getAiProcessingState>): string | null {
+  if (rawCandidate.candidate_status === "blocked" || rawCandidate.candidate_status === "error") {
+    return "Resolver pendência";
+  }
+
+  const reqAction = rawCandidate.required_action;
+  if (reqAction === "open_pre_admission") return "Abrir pré-admissão";
+  if (reqAction === "register_decision") return "Registrar decisão";
+  if (reqAction === "run_analysis") return "Executar avaliação IA";
+
+  if (stageSummary) {
+    if (stageSummary.toLowerCase().includes("protheus")) return "Integração ERP";
+    return stageSummary;
+  }
+
+  if (aiStatus) return aiStatus.label;
+
+  return null;
+}
+
 export const KanbanCard = memo(function KanbanCard({
   candidate,
   isSaving,
@@ -99,30 +137,46 @@ export const KanbanCard = memo(function KanbanCard({
   const initials = getInitials(name);
   const avatarClass = getAvatarStyles(name);
 
-  const skills = (candidate.top_skills ?? []).slice(0, 2); // Show max 2 top skills for space
   const jobFitScore = candidate.job_fit_score;
-  const seniority = candidate.seniority_level ? formatSeniority(candidate.seniority_level) : null;
-  const experience =
-    typeof candidate.total_experience_years === "number"
-      ? `${candidate.total_experience_years} ano${candidate.total_experience_years === 1 ? "" : "s"}`
-      : null;
-  const meta = [seniority, experience].filter(Boolean);
 
   // Cast candidate to any to check for optionally populated values (source/origem/updated_at) without breaking types
   const rawCandidate = candidate as any;
   const source = rawCandidate.application_source_label || rawCandidate.application_source || rawCandidate.source || null;
-  const dateLabel = rawCandidate.updated_at
-    ? new Date(rawCandidate.updated_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })
-    : null;
+
+  let timeInStageLabel = "";
+  if (rawCandidate.updated_at) {
+    const updatedAt = new Date(rawCandidate.updated_at);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - updatedAt.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      timeInStageLabel = "hoje";
+    } else if (diffDays === 1) {
+      timeInStageLabel = "há 1 dia";
+    } else {
+      timeInStageLabel = `há ${diffDays} dias`;
+    }
+  }
 
   // Derive indicators based on actual candidate data
-  const hasScheduledInterview = candidate.stage === "hr_interview" || candidate.stage === "technical_interview";
-  const assessmentCompleted = candidate.ai_status === "completed";
-  const hasWarning = rawCandidate.candidate_status === "blocked" || rawCandidate.candidate_status === "error";
-  const operationalBadges = derivePipelineCardBadges(candidate);
   const aiProcessingState = getAiProcessingState(candidate);
   const stageSubstatus = candidate.stage ? PIPELINE_STAGE_SUBSTATUS_LABEL[candidate.stage] : null;
+  const currentStageText = stageSubstatus || "Entrada";
+  const timeLabel = timeInStageLabel ? `· parado ${timeInStageLabel}` : "";
   const stageSummary = candidate.stage ? PIPELINE_STAGE_OPERATIONAL_SUMMARY[candidate.stage] : null;
+
+  const professionalContext = buildProfessionalContext(candidate, aiProcessingState);
+  const nextAction = buildNextAction(candidate, rawCandidate, stageSummary, aiProcessingState);
+
+  const rawBadges = derivePipelineCardBadges(candidate);
+  // Limit badges: 1 main badge (e.g. Danger/Warning) and maybe 1 other, or just 1 action-based
+  const operationalBadges = rawBadges
+    .sort((a, b) => {
+      const toneWeight = { danger: 0, warning: 1, progress: 2, success: 3, neutral: 4 };
+      return toneWeight[a.tone] - toneWeight[b.tone];
+    })
+    .slice(0, 1); // just show the most critical one to reduce noise
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
     if (!draggable) {
@@ -141,11 +195,11 @@ export const KanbanCard = memo(function KanbanCard({
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       className={[
-        "group relative w-full select-none rounded-xl bg-white dark:bg-slate-900 p-3.5 pb-4 shadow-[0_1px_4px_-1px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md overflow-hidden",
-        isTopMatch ? "border border-[#C1121F]/20" : "border border-slate-100 dark:border-slate-800",
-        isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
-        draggable ? "active:cursor-grabbing" : "",
-        isDragging ? "opacity-55 ring-2 ring-[#C1121F]/15" : "",
+        "pipeline-candidate-card group relative w-full select-none rounded-xl bg-white dark:bg-slate-900 p-2.5 shadow-sm transition-all duration-200 overflow-hidden",
+        "border hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md",
+        isTopMatch ? "border-slate-200 border-l-4 border-l-emerald-400 ring-1 ring-emerald-200 bg-emerald-50/10 dark:border-slate-800 dark:border-l-emerald-500 dark:ring-emerald-500/20" : "border-slate-200 dark:border-slate-800",
+        isSaving ? "cursor-wait opacity-50" : draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+        isDragging ? "opacity-40 ring-2 ring-slate-400 dark:ring-slate-500 scale-95 rotate-1" : "opacity-100",
         "kanban-card-enter",
       ]
         .filter(Boolean)
@@ -154,62 +208,76 @@ export const KanbanCard = memo(function KanbanCard({
       data-testid={`kanban-card-${candidate.candidate_id}`}
       data-dragging={isDragging ? "true" : "false"}
     >
-      {/* Top Row: Name and Adesão Badge */}
-      <div className="flex items-start justify-between gap-2">
-        <span className="truncate text-[13px] font-bold tracking-tight text-slate-800 dark:text-slate-100 transition-colors group-hover:text-[#C1121F]">
-          {name}
-        </span>
-        
+      {/* Top Row: Score and Time */}
+      <div className="flex items-center justify-between gap-2 mb-1.5">
         {jobFitScore !== null && jobFitScore !== undefined ? (
-          <span className="shrink-0 rounded-md bg-emerald-100 dark:bg-emerald-900/40 px-2.5 py-1 text-xs font-black tracking-tight text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 shadow-sm">
-            {Math.round(jobFitScore)}%
+          <span className="pipeline-candidate-card__score shrink-0 rounded bg-emerald-50 dark:bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-extrabold tracking-tight text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/60 flex items-center gap-1">
+            <CheckCircle2 className="h-2.5 w-2.5" />
+            {Math.round(jobFitScore)}% aderência
           </span>
         ) : aiProcessingState ? (
           <span className="shrink-0 rounded bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200 dark:border-slate-700">
-            Pendente
+            IA {aiProcessingState.tone === "pending" ? "na fila" : "analisando"}
           </span>
-        ) : null}
-      </div>
+        ) : <div />}
 
-      {/* Middle Row: Time and Tag */}
-      <div className="mt-2.5 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500">
-          <Clock className="h-3 w-3" />
-          <span className="text-[10px] font-medium">
-            {stageSubstatus ? stageSubstatus : (dateLabel ? `Vinculado há ${dateLabel}` : "Recentemente")}
-          </span>
-        </div>
-        
-        {source && (
-          <span className="shrink-0 rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-            {source === "public_application" ? "Pública" : source}
-          </span>
+        {timeInStageLabel && (
+          <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500">
+            <Clock className="h-3 w-3 shrink-0" />
+            <span className="text-[10px] font-medium capitalize">{timeInStageLabel}</span>
+          </div>
         )}
       </div>
 
+      {/* Middle Row: Avatar, Name & Professional Context */}
+      <div className="flex items-start gap-2.5">
+        {draggable && (
+          <div className="absolute -left-1 top-1/2 -translate-y-1/2 flex h-5 w-3 shrink-0 cursor-grab items-center justify-center opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40">
+            <GripVertical className="h-3.5 w-3.5 text-slate-400" />
+          </div>
+        )}
+        <span className={`pipeline-candidate-card__avatar flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-[11px] font-extrabold ${avatarClass}`}>
+          {initials}
+        </span>
+        <div className="flex flex-col min-w-0">
+          <span className="truncate text-sm font-bold tracking-tight text-slate-800 dark:text-slate-100 transition-colors group-hover:text-slate-600 dark:group-hover:text-slate-200">
+            {name}
+          </span>
+          {professionalContext && (
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate block font-medium mt-0.5">
+              {professionalContext}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Next Action / Status */}
+      {nextAction && (
+        <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 dark:border-slate-800/60 pt-2">
+          <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 truncate block bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+            {nextAction}
+          </span>
+          {source && (
+            <span className="shrink-0 text-[9px] font-bold tracking-wider uppercase text-slate-400 dark:text-slate-500">
+              {source === "public_application" ? "Pública" : source}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Operational badges row */}
       {operationalBadges.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="mt-1.5 flex flex-wrap gap-1">
           {operationalBadges.map((badge) => (
             <span
               key={badge.label}
-              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${BADGE_TONE_CLASS[badge.tone]}`}
+              className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${BADGE_TONE_CLASS[badge.tone]}`}
             >
               {badge.label}
             </span>
           ))}
         </div>
       ) : null}
-
-      {/* Bottom Color Bar Indicator */}
-      <div
-        className="absolute bottom-0 left-0 h-1 w-full"
-        style={{
-          background: isTopMatch 
-            ? "linear-gradient(90deg, #C1121F 0%, #E85D04 100%)" 
-            : "linear-gradient(90deg, #10B981 0%, #34D399 100%)"
-        }}
-      />
     </div>
   );
 });
