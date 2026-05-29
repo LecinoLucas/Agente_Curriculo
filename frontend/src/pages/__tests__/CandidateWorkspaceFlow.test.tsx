@@ -1337,7 +1337,7 @@ describe("Candidate workspace flow", () => {
     expect(await within(drawer).findByText("Acesso restrito ao RH.")).toBeInTheDocument();
   });
 
-  it("recruiter não vê CTA de iniciar pré-admissão e recebe mensagem de restrição", async () => {
+  it("recruiter vê a próxima ação atual sem CTA de iniciar pré-admissão", async () => {
     mockedUserRole = "recruiter";
     vi.mocked(candidatesService.getOverview).mockResolvedValue({
       ...overview,
@@ -1359,9 +1359,9 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Pré-admissão restrita ao RH.")).toBeInTheDocument();
-    expect(screen.queryByTestId("candidate-profile-primary-action")).not.toBeInTheDocument();
-    expect(preAdmissionService.getPreAdmission).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Registrar decisão");
+    expect(screen.queryByText("Iniciar pré-admissão")).not.toBeInTheDocument();
+    await waitFor(() => expect(preAdmissionService.getPreAdmission).toHaveBeenCalledWith("job-1", "candidate-1"));
   });
 
   it("abas progressivas: candidato sem vaga ativa não mostra entrevistas, avaliações ou pré-admissão", async () => {

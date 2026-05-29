@@ -24,7 +24,7 @@ describe("KanbanCard", () => {
       expect(screen.getByText("97%")).toBeInTheDocument();
     });
 
-    it("renderiza 'Pendente' no lugar do score quando ai_status é pending e não há score", () => {
+    it("renderiza estado de IA na fila quando ai_status é pending e não há score", () => {
       render(
         <KanbanCard
           candidate={candidate({ job_fit_score: null, ai_status: "pending" })}
@@ -32,7 +32,8 @@ describe("KanbanCard", () => {
           enterDelay={0}
         />,
       );
-      expect(screen.getByText("Pendente")).toBeInTheDocument();
+      expect(screen.getAllByText("IA na fila").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("IA pendente")).toBeInTheDocument();
     });
   });
 
@@ -67,7 +68,7 @@ describe("KanbanCard", () => {
           enterDelay={0}
         />,
       );
-      expect(screen.getByText("Aguardando extração")).toBeInTheDocument();
+      expect(screen.getAllByText("Aguardando extração").length).toBeGreaterThanOrEqual(1);
     });
   });
 
