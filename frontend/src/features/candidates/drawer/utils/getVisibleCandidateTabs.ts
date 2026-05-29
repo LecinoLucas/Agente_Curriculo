@@ -130,8 +130,13 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
     visible.add("communications");
   }
 
-  // Assessment appears only when relevant
-  if (hasBehavioralAssessment && (pipelineStage === "screening" || pipelineStage === "hr_interview" || pipelineStage === "technical_interview")) {
+  // Assessment always appears in stages where it's operationally relevant
+  if (
+    pipelineStage === "screening" ||
+    pipelineStage === "hr_interview" ||
+    pipelineStage === "technical_interview" ||
+    pipelineStage === "final"
+  ) {
     visible.add("assessment");
   }
 

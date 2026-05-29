@@ -87,7 +87,7 @@ export function CandidateLoginAccessCard() {
   };
 
   return (
-    <Card className="relative overflow-hidden rounded-[1.5rem] border border-border bg-card shadow-xl shadow-primary/5 border-t-2 border-t-primary">
+    <Card className="relative overflow-hidden rounded-[1.5rem] border border-border bg-card shadow-xl shadow-primary/5">
       <CardHeader className="space-y-1 pt-6 pb-4 text-center">
         <CardTitle className="text-xl font-bold tracking-tight text-foreground">Entrar no Portal</CardTitle>
         <CardDescription className="text-xs font-semibold text-muted-foreground">

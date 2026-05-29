@@ -50,8 +50,20 @@ describe("getVisibleCandidateTabs", () => {
     expect(result).toContain("interview");
   });
 
-  it("should show assessment tab in screening stage when behavioral assessment exists", () => {
-    const input = { ...defaultInput, pipelineStage: "screening", hasBehavioralAssessment: true };
+  it("should show assessment tab in screening stage regardless of behavioral assessment flag", () => {
+    const input = { ...defaultInput, pipelineStage: "screening" };
+    const result = getVisibleCandidateTabs(input);
+    expect(result).toContain("assessment");
+  });
+
+  it("should show assessment tab in screening stage even when hasBehavioralAssessment is false", () => {
+    const input = { ...defaultInput, pipelineStage: "screening", hasBehavioralAssessment: false };
+    const result = getVisibleCandidateTabs(input);
+    expect(result).toContain("assessment");
+  });
+
+  it("should show assessment tab in final stage", () => {
+    const input = { ...defaultInput, pipelineStage: "final" };
     const result = getVisibleCandidateTabs(input);
     expect(result).toContain("assessment");
   });
