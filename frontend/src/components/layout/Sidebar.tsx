@@ -208,45 +208,54 @@ export function Sidebar({
           })}
         </nav>
 
-        {/* Footer actions inside sidebar (for mobile primarily, but can show in expanded desktop) */}
-        <div className={cn(
-          "shrink-0 border-t border-[hsl(var(--nav-border))]/50 p-3",
-          "lg:hidden group-hover/sidebar:lg:block",
-          mobileMenuOpen ? "block" : ""
-        )}>
-           <div className="flex flex-col gap-3">
-             <div className="flex items-center justify-between px-1">
-               <VisualThemeSwitcher />
-             </div>
-             <div className="flex items-center gap-2 justify-between px-1">
-               <div className="flex gap-2">
-                 <button
-                   type="button"
-                   onClick={onToggleTheme}
-                   className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
-                 >
-                   {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                 </button>
-                 <button
-                   type="button"
-                   onClick={() => {
-                     if (mobileMenuOpen) onToggleMobileMenu();
-                     navigate("/perfil");
-                   }}
-                   className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
-                 >
-                   <UserRound className="h-4 w-4" />
-                 </button>
-               </div>
-               <button
-                 type="button"
-                 onClick={onLogout}
-                 className="flex h-9 w-9 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--danger))] hover:text-white"
-               >
-                 <LogOut className="h-4 w-4" />
-               </button>
-             </div>
-           </div>
+        {/* Footer — logout always visible; utilities shown when expanded */}
+        <div className="shrink-0 border-t border-[hsl(var(--nav-border))]/40 p-2 flex flex-col gap-1">
+          {/* Expanded-only: theme switcher + profile */}
+          <div className={cn(
+            "flex items-center justify-between px-1 pb-1",
+            "lg:hidden group-hover/sidebar:lg:flex",
+            mobileMenuOpen ? "flex" : ""
+          )}>
+            <VisualThemeSwitcher />
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onToggleTheme}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-white/10 hover:text-[hsl(var(--nav-text))]"
+                title={theme === "light" ? "Modo escuro" : "Modo claro"}
+              >
+                {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (mobileMenuOpen) onToggleMobileMenu();
+                  navigate("/perfil");
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-white/10 hover:text-[hsl(var(--nav-text))]"
+                title="Meu perfil"
+              >
+                <UserRound className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Always visible: logout (icon only when collapsed, icon+label when expanded) */}
+          <button
+            type="button"
+            onClick={onLogout}
+            className="group/logout flex items-center rounded-lg px-3 py-2 text-[hsl(var(--nav-muted))] transition hover:bg-red-900/30 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]"
+            title="Sair"
+          >
+            <LogOut className="h-[1.125rem] w-[1.125rem] shrink-0" />
+            <span className={cn(
+              "ml-3 truncate text-[13px] font-medium transition-opacity duration-300",
+              "lg:opacity-0 group-hover/sidebar:lg:opacity-100",
+              mobileMenuOpen ? "opacity-100" : ""
+            )}>
+              Sair
+            </span>
+          </button>
         </div>
       </aside>
     </>

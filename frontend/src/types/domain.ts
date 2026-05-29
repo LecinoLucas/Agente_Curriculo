@@ -559,6 +559,8 @@ export type JobCandidate = {
   recommendation?: string | null;
   seniority_level?: string | null;
   total_experience_years?: number | null;
+  current_title?: string | null;
+  current_company?: string | null;
   top_skills?: string[];
   entered_at?: string | null;
   updated_at?: string;

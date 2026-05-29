@@ -26,6 +26,7 @@ import { JobFormDealBreakersStep } from "../features/jobs/sections/JobFormDealBr
 import { BehavioralTemplateSelector } from "../features/jobs/components/BehavioralTemplateSelector";
 import { JobAssessmentPolicyStep } from "../features/jobs/components/JobAssessmentPolicyStep";
 import { JobFormReviewStep } from "../features/jobs/sections/JobFormReviewStep";
+import { JobAiDraftPanel } from "../features/jobs/components/JobAiDraftPanel";
 import {
   buildCreateJobPayload,
   buildUpdateJobPayload,
@@ -105,6 +106,7 @@ export function JobFormPage() {
   const {
     form,
     setForm,
+    updateForm,
     dealBreakerDraft,
     setDealBreakerDraft,
     addBehavioralRequirement,
@@ -114,6 +116,7 @@ export function JobFormPage() {
 
   const [activeMacroStep, setActiveMacroStep] = useState<MacroStepId>("context");
   const [showQualityDrawer, setShowQualityDrawer] = useState(false);
+  const [aiMode, setAiMode] = useState<"manual" | "ai">("manual");
   const [currentJob, setCurrentJob] = useState<Job | null>(null);
   const [pageLoading, setPageLoading] = useState(isEditing);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -667,6 +670,44 @@ export function JobFormPage() {
         <MessageList tone="danger" title="Problemas no formulário" items={formErrors} />
       )}
 
+      {/* ── Modo de criação ── */}
+      <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+        <button
+          type="button"
+          onClick={() => setAiMode("manual")}
+          className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            aiMode === "manual"
+              ? "bg-[hsl(var(--primary))] text-white shadow-sm"
+              : "text-text-muted hover:text-text"
+          }`}
+        >
+          Cadastro manual
+        </button>
+        <button
+          type="button"
+          onClick={() => setAiMode("ai")}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            aiMode === "ai"
+              ? "bg-[hsl(var(--primary))] text-white shadow-sm"
+              : "text-text-muted hover:text-text"
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          Criar com IA
+        </button>
+      </div>
+
+      {/* ── AI Draft Panel ── */}
+      {aiMode === "ai" && (
+        <JobAiDraftPanel
+          formHasData={Boolean(form.title || form.description)}
+          onApply={(updates) => {
+            updateForm(updates);
+            setAiMode("manual");
+          }}
+        />
+      )}
+
       {/* ── Macro-step stepper ── */}
       <nav
         aria-label="Etapas do formulário"
@@ -717,8 +758,8 @@ export function JobFormPage() {
             disabled={currentMacroIndex === 0}
             onClick={() => setActiveMacroStep(MACRO_STEPS[currentMacroIndex - 1].id)}
           >
-            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-            Etapa anterior
+            <ArrowLeft className="sm:mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Etapa anterior</span>
           </Button>
 
           <div className="flex items-center gap-2">
@@ -730,11 +771,11 @@ export function JobFormPage() {
               disabled={savingDraft || publishing}
             >
               {savingDraft ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="sm:mr-1.5 h-4 w-4 animate-spin" />
               ) : (
-                <Save className="mr-1.5 h-3.5 w-3.5" />
+                <Save className="sm:mr-1.5 h-4 w-4" />
               )}
-              Salvar rascunho
+              <span className="hidden sm:inline">Salvar rascunho</span>
             </Button>
 
             {!isReviewStep && (
@@ -745,8 +786,8 @@ export function JobFormPage() {
                 onClick={() => setShowQualityDrawer(true)}
                 aria-label="Ver qualidade da vaga"
               >
-                <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
-                Ver qualidade
+                <BarChart2 className="sm:mr-1.5 h-4 w-4" />
+                <span className="hidden sm:inline">Ver qualidade</span>
               </Button>
             )}
 
@@ -758,11 +799,11 @@ export function JobFormPage() {
                 disabled={publishing || savingDraft}
               >
                 {publishing ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="sm:mr-1.5 h-4 w-4 animate-spin" />
                 ) : (
-                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  <Sparkles className="sm:mr-1.5 h-4 w-4" />
                 )}
-                Publicar
+                <span className="hidden sm:inline">Publicar</span>
               </Button>
             ) : (
               <Button
@@ -771,8 +812,8 @@ export function JobFormPage() {
                 disabled={currentMacroIndex === MACRO_STEPS.length - 1}
                 onClick={() => setActiveMacroStep(MACRO_STEPS[currentMacroIndex + 1].id)}
               >
-                Próxima etapa
-                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Próxima etapa</span>
+                <ArrowRight className="sm:ml-1.5 h-4 w-4" />
               </Button>
             )}
           </div>

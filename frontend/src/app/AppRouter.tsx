@@ -114,6 +114,10 @@ const AnalisesIaComportamentalPage = lazy(() =>
   }))
 );
 
+const CandidaturasPage = lazy(() =>
+  import("../pages/CandidaturasPage").then((m) => ({ default: m.CandidaturasPage }))
+);
+
 const DashboardPage = lazy(() =>
   import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
 );
@@ -253,6 +257,11 @@ export function AppRouter() {
         <Route
           path="pipeline/:jobId"
           element={protectedPage(<PipelinePage />, STAFF_ROLES)}
+        />
+
+        <Route
+          path="candidaturas"
+          element={protectedPage(<CandidaturasPage />, STAFF_ROLES)}
         />
 
         <Route

@@ -63,6 +63,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     items: [
       { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
       { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
+      { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
       { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
       { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
     ],
@@ -138,6 +139,7 @@ const ICON_MAP: Record<string, any> = {
   "/dashboard": LayoutDashboard,
   "/pipeline": Kanban,
   "/vagas": Briefcase,
+  "/candidaturas": FileSpreadsheet,
   "/candidatos": Users,
   "/agenda": Calendar,
   "/importar": Upload,
