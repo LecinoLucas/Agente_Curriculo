@@ -13,62 +13,44 @@ type KanbanColumnData = PipelineColumn & {
 };
 
 const DEFAULT_THEME = {
-  border: "border-rose-100/60 dark:border-slate-800",
-  bg: "bg-[#FFFDFD] dark:bg-slate-900/40",
-  accent: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+  border: "border-slate-100 dark:border-slate-800",
+  bg: "bg-slate-50/30 dark:bg-slate-900/40",
+  accent: "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
   desc: "Etapa do processo",
   icon: Plus,
-  iconBg: "bg-rose-50 text-rose-600 dark:bg-slate-800 dark:text-slate-400"
+  iconBg: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
 };
 
 const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, any>> = {
   entrada: {
-    border: "border-rose-100/60 dark:border-slate-800",
-    bg: "bg-[#FFFDFD] dark:bg-slate-900/40",
-    accent: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    ...DEFAULT_THEME,
     desc: "Inscrições e currículos recebidos",
     icon: Inbox,
-    iconBg: "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
   },
   analise: {
-    border: "border-rose-100/60 dark:border-slate-800",
-    bg: "bg-[#FFFDFD] dark:bg-slate-900/40",
-    accent: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    ...DEFAULT_THEME,
     desc: "Revisão inicial de perfil",
     icon: Search,
-    iconBg: "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
   },
   avaliacao: {
-    border: "border-rose-100/60 dark:border-slate-800",
-    bg: "bg-[#FFFDFD] dark:bg-slate-900/40",
-    accent: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    ...DEFAULT_THEME,
     desc: "Consolidação da decisão",
     icon: ClipboardList,
-    iconBg: "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
   },
   entrevista: {
-    border: "border-rose-100/60 dark:border-slate-800",
-    bg: "bg-[#FFFDFD] dark:bg-slate-900/40",
-    accent: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    ...DEFAULT_THEME,
     desc: "Entrevistas RH, técnica e scorecard",
     icon: Users,
-    iconBg: "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
   },
   decisao: {
-    border: "border-emerald-100/60 dark:border-emerald-900/30",
-    bg: "bg-emerald-50/30 dark:bg-emerald-900/10",
-    accent: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50",
+    ...DEFAULT_THEME,
     desc: "Oferta, decisão e negociação",
     icon: Handshake,
-    iconBg: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
   },
   finalizado: {
-    border: "border-emerald-100/60 dark:border-emerald-900/30",
-    bg: "bg-emerald-50/30 dark:bg-emerald-900/10",
-    accent: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50",
+    ...DEFAULT_THEME,
     desc: "Admitidos e encerrados",
     icon: CheckCircle,
-    iconBg: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
   },
 };
 

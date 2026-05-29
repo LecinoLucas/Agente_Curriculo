@@ -915,73 +915,26 @@ export function PipelinePage() {
 
       {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
       {activeJobId && board && !boardError && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 py-2">
-          <div className="relative overflow-hidden rounded-xl border border-slate-100 bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-[#C1121F] dark:bg-rose-950/30 dark:text-rose-400">
-              <Inbox className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold text-slate-500">
-                Candidatos
-              </p>
-              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none mt-1">
-                {totalCandidatos}
-              </p>
-              <p className="text-[10px] text-slate-400 font-medium mt-1">
-                Total no processo
-              </p>
-            </div>
+        <div className="flex flex-wrap items-center gap-6 py-2 px-1 text-sm text-slate-600 dark:text-slate-300">
+          <div className="flex items-center gap-2">
+            <Inbox className="h-4 w-4 text-slate-400" />
+            <span className="font-medium">Total:</span>
+            <span className="font-black text-slate-800 dark:text-slate-100">{totalCandidatos}</span>
           </div>
-
-          <div className="relative overflow-hidden rounded-xl border border-slate-100 bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
-              <RefreshCw className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold text-slate-500">
-                Em andamento
-              </p>
-              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none mt-1">
-                {emAndamento}
-              </p>
-              <p className="text-[10px] text-slate-400 font-medium mt-1">
-                Em etapas ativas
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-slate-400" />
+            <span className="font-medium">Em andamento:</span>
+            <span className="font-black text-slate-800 dark:text-slate-100">{emAndamento}</span>
           </div>
-
-          <div className="relative overflow-hidden rounded-xl border border-slate-100 bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500 dark:bg-amber-950/30 dark:text-amber-400">
-              <Activity className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold text-slate-500">
-                Entrevistas
-              </p>
-              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none mt-1">
-                {entrevistas}
-              </p>
-              <p className="text-[10px] text-slate-400 font-medium mt-1">
-                Agendadas
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-slate-400" />
+            <span className="font-medium">Entrevistas:</span>
+            <span className="font-black text-slate-800 dark:text-slate-100">{entrevistas}</span>
           </div>
-
-          <div className="relative overflow-hidden rounded-xl border border-slate-100 bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
-              <CheckCircle2 className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold text-slate-500">
-                Contratações
-              </p>
-              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none mt-1">
-                {contratacoes}
-              </p>
-              <p className="text-[10px] text-slate-400 font-medium mt-1">
-                Efetivadas
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-slate-400" />
+            <span className="font-medium">Contratações:</span>
+            <span className="font-black text-slate-800 dark:text-slate-100">{contratacoes}</span>
           </div>
         </div>
       )}

@@ -98,6 +98,10 @@ const BehavioralTemplateEditorPage = lazy(() =>
   }))
 );
 
+const DemoRhPage = lazy(() =>
+  import("../pages/DemoRhPage").then((m) => ({ default: m.DemoRhPage }))
+);
+
 const AnalisesIaPage = lazy(() =>
   import("../pages/AnalisesIaPage").then((m) => ({
     default: m.AnalisesIaPage,
@@ -389,6 +393,11 @@ export function AppRouter() {
         <Route
           path="admin/behavioral-templates/:templateId/edit"
           element={protectedPage(<BehavioralTemplateEditorPage />, ["admin", "recruiter"])}
+        />
+
+        <Route
+          path="demo-rh"
+          element={protectedPage(<DemoRhPage />, ADMIN_ROLES)}
         />
       </Route>
 
