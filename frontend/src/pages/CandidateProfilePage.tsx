@@ -25,7 +25,7 @@ import {
   X,
 } from "lucide-react";
 
-import { Tabs, type Tab } from "../components/common/Tabs";
+import { Tabs } from "../components/common/Tabs";
 import { LinkCandidateJobModal } from "../features/candidates/components/LinkCandidateJobModal";
 import { CandidateCommunicationsPanel } from "../features/candidates/drawer/components/CandidateCommunicationsPanel";
 import { CandidateHiringDecisionPanel } from "../features/candidates/drawer/components/CandidateHiringDecisionPanel";
@@ -42,9 +42,33 @@ import { ScoreTab as CandidateScoreDetailsTab } from "../features/candidates/dra
 import { useCandidateOverview } from "../features/candidates/hooks/useCandidateOverview";
 import {
   getVisibleCandidateProfileTabs,
-  isCandidateProfileTabKey,
   type CandidateProfileTabKey,
 } from "../features/candidates/profile/utils/getVisibleCandidateProfileTabs";
+import {
+  PROFILE_TABS,
+  type CandidateProfileFocus,
+  resolveSearchTab,
+  resolveInitialTab,
+  resolveInitialFocus,
+} from "../features/candidates/profile/profileTabs";
+import {
+  STAGE_OPTIONS,
+  BEHAVIORAL_STATUS_LABEL,
+  INTERVIEW_TYPE_LABEL,
+  SIMPLE_STATUS_LABEL,
+  DECISION_OUTCOME_LABEL,
+  behavioralStatusTone,
+  behavioralKindLabel,
+} from "../features/candidates/profile/profileStatusLabels";
+import {
+  toDatetimeLocal,
+  fromDatetimeLocal,
+  formatDateTime,
+  getScoreStrengths,
+  getScoreAttentionPoints,
+  getBehavioralAIStatusLabel,
+  getBehavioralAIStatusTone,
+} from "../features/candidates/profile/profileFormatters";
 import {
   ANALYSIS_STATUS_LABEL,
   STAGE_LABEL,
@@ -111,39 +135,6 @@ import type {
   ResumeVersion,
 } from "../types/domain";
 import type { InterviewFormat, InterviewSchedule, InterviewType } from "../types/agenda";
-
-const PROFILE_TABS: Tab[] = [
-  { key: "overview", label: "Visão geral" },
-  { key: "workflow", label: "Ações" },
-  { key: "pre_admission", label: "Pré-admissão" },
-  { key: "score", label: "Score e análise" },
-  { key: "documents", label: "Currículo e documentos" },
-  { key: "interviews", label: "Entrevistas" },
-  { key: "assessments", label: "Avaliações" },
-  { key: "communications", label: "Comunicação" },
-  { key: "notes", label: "Observações" },
-  { key: "history", label: "Histórico" },
-];
-
-function resolveSearchTab(search: string): CandidateProfileTabKey | null {
-  const tab = new URLSearchParams(search).get("tab");
-  return isCandidateProfileTabKey(tab) ? tab : null;
-}
-
-function resolveInitialTab(search: string): CandidateProfileTabKey {
-  return resolveSearchTab(search) ?? "overview";
-}
-
-type CandidateProfileFocus = "behavioral_ai" | "scorecard" | "hiring_decision" | "manager_review";
-
-function resolveInitialFocus(search: string): CandidateProfileFocus | null {
-  const focus = new URLSearchParams(search).get("focus");
-  if (focus === "behavioral_ai") return focus;
-  if (focus === "scorecard") return focus;
-  if (focus === "hiring_decision") return focus;
-  if (focus === "manager_review") return focus;
-  return null;
-}
 
 export function CandidateProfilePage() {
   const { candidateId } = useParams<{ candidateId: string }>();
@@ -1349,20 +1340,6 @@ function OverviewTab({
   );
 }
 
-const STAGE_OPTIONS: Array<{ value: PipelineStage; label: string }> = [
-  { value: "entry", label: "Entrada" },
-  { value: "screening", label: "Triagem" },
-  { value: "hr_interview", label: "Entrevista RH" },
-  { value: "technical_interview", label: "Entrevista técnica" },
-  { value: "final", label: "Decisão" },
-  { value: "offer", label: "Oferta" },
-  { value: "hired", label: "Contratado / iniciar admissão" },
-  { value: "pre_admission", label: "Pré-admissão" },
-  { value: "protheus", label: "Integração ERP" },
-  { value: "admitted", label: "Admitido" },
-  { value: "rejected", label: "Encerrado" },
-];
-
 function WorkflowTab({
   overview,
   activeEntry,
@@ -1687,29 +1664,6 @@ function WorkflowTab({
       </SectionCard>
     </div>
   );
-}
-
-function getScoreStrengths(scoreExplanation: ScoreExplanationResponse | null): string[] {
-  if (!scoreExplanation) return [];
-  const direct = [
-    ...(scoreExplanation.highlights ?? []),
-    ...(scoreExplanation.strengths ?? []),
-    ...(scoreExplanation.high_score_reasons ?? []),
-  ];
-  const factors = scoreExplanation.score_factors?.positive?.map((item) => item.factor_label) ?? [];
-  return Array.from(new Set([...direct, ...factors].filter(Boolean))).slice(0, 4);
-}
-
-function getScoreAttentionPoints(scoreExplanation: ScoreExplanationResponse | null): string[] {
-  if (!scoreExplanation) return [];
-  const direct = [
-    ...(scoreExplanation.risks ?? []),
-    ...(scoreExplanation.low_score_reasons ?? []),
-    ...(scoreExplanation.overestimation_risks ?? []),
-    ...(scoreExplanation.gaps ?? []),
-  ];
-  const factors = scoreExplanation.score_factors?.negative?.map((item) => item.factor_label) ?? [];
-  return Array.from(new Set([...direct, ...factors].filter(Boolean))).slice(0, 4);
 }
 
 function ProfileScoreTab({
@@ -2333,23 +2287,6 @@ function ProfileDocumentsTab({
       )}
     </div>
   );
-}
-
-function toDatetimeLocal(value: string): string {
-  const date = new Date(value);
-  const offsetMs = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-}
-
-function fromDatetimeLocal(value: string): string {
-  return new Date(value).toISOString();
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
 
 function ProfileInterviewsTab({
@@ -3044,28 +2981,6 @@ function ProfileInterviewsTab({
   );
 }
 
-const BEHAVIORAL_STATUS_LABEL: Record<BehavioralAssignmentDetailResponse["status"], string> = {
-  pending: "Pendente",
-  in_progress: "Em andamento",
-  submitted: "Concluído",
-  expired: "Expirado",
-  cancelled: "Cancelado",
-};
-
-function behavioralStatusTone(status: BehavioralAssignmentDetailResponse["status"]) {
-  if (status === "submitted") return "success";
-  if (status === "expired" || status === "cancelled") return "danger";
-  if (status === "in_progress") return "info";
-  return "neutral";
-}
-
-function behavioralKindLabel(assessment: BehavioralAssignmentDetailResponse, required: boolean) {
-  const templateName = assessment.template_name.toLowerCase();
-  if (templateName.includes("pesquisa")) return "Pesquisa comportamental";
-  if (templateName.includes("teste")) return "Teste comportamental";
-  return required ? "Teste comportamental" : "Pesquisa comportamental";
-}
-
 function renderBehavioralAnswer(answer: BehavioralAssignmentAnswer | null) {
   if (!answer) return <span className="text-text-muted">Não respondida</span>;
   if (answer.answer_text) return <p className="whitespace-pre-wrap">{answer.answer_text}</p>;
@@ -3076,32 +2991,6 @@ function renderBehavioralAnswer(answer: BehavioralAssignmentAnswer | null) {
     return <span>{answer.selected_options_json.join(", ")}</span>;
   }
   return <span className="text-text-muted">Não respondida</span>;
-}
-
-function getBehavioralAIStatusLabel(
-  assignmentStatus: BehavioralAssignmentDetailResponse["status"],
-  evaluation: BehavioralAIEvaluationResponse | null,
-) {
-  if (assignmentStatus !== "submitted") return "Aguardando teste";
-  if (!evaluation) return "Pendente";
-  if (evaluation.status === "pending") return "Na fila";
-  if (evaluation.status === "processing") return "Processando";
-  if (evaluation.status === "retry_scheduled") return "Retry agendado";
-  if (evaluation.status === "completed") return "Concluída";
-  if (evaluation.status === "failed") return "Falhou";
-  return evaluation.status;
-}
-
-function getBehavioralAIStatusTone(
-  assignmentStatus: BehavioralAssignmentDetailResponse["status"],
-  evaluation: BehavioralAIEvaluationResponse | null,
-): "success" | "neutral" | "info" | "primary" | "danger" {
-  if (assignmentStatus !== "submitted") return "neutral";
-  if (!evaluation) return "info";
-  if (evaluation.status === "completed") return "success";
-  if (evaluation.status === "failed") return "danger";
-  if (evaluation.status === "pending" || evaluation.status === "processing" || evaluation.status === "retry_scheduled") return "info";
-  return "neutral";
 }
 
 function ProfileBehavioralAssessmentsTab({
@@ -3606,39 +3495,6 @@ function HistoryTab({
     </div>
   );
 }
-
-const INTERVIEW_TYPE_LABEL: Record<string, string> = {
-  hr: "Entrevista RH",
-  technical: "Entrevista técnica",
-  manager: "Entrevista gestor",
-  final: "Entrevista final",
-  other: "Entrevista",
-};
-
-const SIMPLE_STATUS_LABEL: Record<string, string> = {
-  scheduled: "agendada",
-  rescheduled: "reagendada",
-  awaiting_feedback: "aguardando feedback",
-  completed: "concluída",
-  cancelled: "cancelada",
-  no_show: "não compareceu",
-  draft: "rascunho",
-  submitted: "enviado",
-  pending: "pendente",
-  in_progress: "em andamento",
-  expired: "expirado",
-  failed: "falhou",
-  processing: "processando",
-};
-
-const DECISION_OUTCOME_LABEL: Record<string, string> = {
-  advance: "avançar",
-  hold: "manter em análise",
-  reject: "rejeitar",
-  hire: "contratar",
-  request_another_interview: "solicitar nova entrevista",
-  keep_under_review: "manter em observação",
-};
 
 function ProcessHistoryCard({
   process,

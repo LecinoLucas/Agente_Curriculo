@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom";
 
-import { JobImageMockFillPanel, MOCK_JOB_FILL_UPDATES } from "../JobImageMockFillPanel";
+import { JobImageMockFillPanel } from "../JobImageMockFillPanel";
+import { MOCK_JOB_FILL_UPDATES } from "../../data/demoJobImageFill";
 import { toast } from "../../../../shared/utils/toast";
 
 vi.mock("../../../../shared/utils/toast", () => ({
