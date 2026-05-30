@@ -85,7 +85,7 @@ describe("CandidateSearchModal process history action", () => {
     );
 
     await screen.findByText("Ana Souza");
-    expect(candidatesService.listSummaries).toHaveBeenCalledWith(1, 40, {
+    expect(candidatesService.listSummaries).toHaveBeenCalledWith(1, 10, {
       search: undefined,
       link_status_filter: "without_active_job",
     });
@@ -244,6 +244,172 @@ describe("CandidateSearchModal process history action", () => {
     });
   });
 
+  it("ao abrir, carrega lista inicial sem o usuário precisar digitar", async () => {
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Engenheiro Backend"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    // Initial fetch fires with no search term and shows the candidate immediately.
+    await screen.findByText("Ana Souza");
+    expect(candidatesService.listSummaries).toHaveBeenCalledWith(1, 10, {
+      search: undefined,
+      link_status_filter: "without_active_job",
+    });
+  });
+
+  it("não exibe 'Nenhum candidato disponível' enquanto a busca inicial está carregando", async () => {
+    // Hold the initial request pending so we can assert no premature empty state.
+    let resolveList: (value: unknown) => void = () => undefined;
+    vi.mocked(candidatesService.listSummaries).mockReturnValueOnce(
+      new Promise((resolve) => { resolveList = resolve; }) as ReturnType<
+        typeof candidatesService.listSummaries
+      >,
+    );
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Engenheiro Backend"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    // While loading, no empty-state copy must appear.
+    expect(screen.queryByText(/nenhum candidato disponível/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nenhum candidato encontrado/i)).not.toBeInTheDocument();
+
+    // Now resolve as empty — expect the polite empty state, never "Carregando…".
+    await act(async () => {
+      resolveList({ data: [], total: 0, page: 1, page_size: 40, total_pages: 1 });
+    });
+
+    await screen.findByText(/nenhum candidato disponível/i);
+    expect(screen.queryByText(/carregando/i)).not.toBeInTheDocument();
+  });
+
+  it("digitando busca, empty state mostra 'Nenhum candidato encontrado para esta busca.'", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.listSummaries)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "candidate-1",
+            full_name: "Ana Souza",
+            email: "ana@example.com",
+            phone: null,
+            cpf: null,
+            application_source: null,
+            tags: [],
+            created_at: "2026-05-20T10:00:00Z",
+            resume_count: 1,
+            linked_job_count: 0,
+            latest_job_id: null,
+            latest_job_title: null,
+            latest_job_stage: null,
+            latest_relationship_status: null,
+            active_job_id: null,
+            active_job_title: null,
+            active_job_stage: null,
+            active_job_job_fit_score: null,
+            ai_status: null,
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 40,
+        total_pages: 1,
+      })
+      .mockResolvedValue({ data: [], total: 0, page: 1, page_size: 40, total_pages: 1 });
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Engenheiro Backend"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Ana Souza");
+    const input = screen.getByPlaceholderText(/buscar candidato por nome ou e-mail/i);
+    await user.type(input, "Zezinho");
+
+    await screen.findByText(/nenhum candidato encontrado para esta busca/i);
+  });
+
+  it("não exibe simultaneamente 'Carregando…' e 'Nenhum candidato disponível'", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValueOnce({
+      data: [],
+      total: 0,
+      page: 1,
+      page_size: 40,
+      total_pages: 1,
+    });
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Engenheiro Backend"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText(/nenhum candidato disponível/i);
+    // Não deve renderizar "Carregando..." junto.
+    expect(screen.queryByText(/carregando/i)).not.toBeInTheDocument();
+  });
+
+  it("'Criar candidato manualmente' continua disponível mesmo com lista vazia", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValueOnce({
+      data: [],
+      total: 0,
+      page: 1,
+      page_size: 40,
+      total_pages: 1,
+    });
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Engenheiro Backend"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText(/nenhum candidato disponível/i);
+    expect(
+      screen.getByRole("button", { name: /Criar candidato manualmente/i }),
+    ).toBeInTheDocument();
+  });
+
   it("faz fallback para reconsiderar quando add-to-job retorna conflito de vínculo histórico", async () => {
     const user = userEvent.setup();
     const onAdded = vi.fn();
@@ -319,5 +485,348 @@ describe("CandidateSearchModal process history action", () => {
       });
     });
     expect(onAdded).toHaveBeenCalled();
+  });
+});
+
+// ── Fase 11: Listagem inicial curta + busca remota ────────────────────────────
+
+describe("CandidateSearchModal — listagem inicial e busca", () => {
+  function makeSummary(overrides: { id: string; full_name: string; email?: string | null }) {
+    return {
+      id: overrides.id,
+      full_name: overrides.full_name,
+      email: overrides.email ?? null,
+      phone: null,
+      cpf: null,
+      application_source: null,
+      tags: [],
+      created_at: "2026-05-20T10:00:00Z",
+      resume_count: 0,
+      linked_job_count: 0,
+      latest_job_id: null,
+      latest_job_title: null,
+      latest_job_stage: null,
+      latest_relationship_status: null,
+      active_job_id: null,
+      active_job_title: null,
+      active_job_stage: null,
+      active_job_job_fit_score: null,
+      ai_status: null,
+    };
+  }
+
+  function makePage(data: ReturnType<typeof makeSummary>[]) {
+    return { data, total: data.length, page: 1, page_size: 10, total_pages: 1 };
+  }
+
+  beforeEach(() => {
+    // resetAllMocks wipes implementations AND the queued `mockResolvedValueOnce`
+    // values, which `clearAllMocks` would leave in place across tests.
+    vi.resetAllMocks();
+  });
+
+  it("abre a modal chamando listSummaries com pageSize=10 e search undefined", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValueOnce(
+      makePage([makeSummary({ id: "c-1", full_name: "Alice Alves" })]),
+    );
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Alice Alves");
+    expect(candidatesService.listSummaries).toHaveBeenCalledWith(1, 10, {
+      search: undefined,
+      link_status_filter: "without_active_job",
+    });
+  });
+
+  it("renderiza candidatos iniciais sem o usuário digitar busca", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValueOnce(
+      makePage([
+        makeSummary({ id: "c-1", full_name: "Alice Alves" }),
+        makeSummary({ id: "c-2", full_name: "Bruno Borba" }),
+      ]),
+    );
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Alice Alves");
+    expect(screen.getByText("Bruno Borba")).toBeInTheDocument();
+  });
+
+  it("exibe orientação 'Mostrando … candidatos … Use a busca …' quando não há termo", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValueOnce(
+      makePage([makeSummary({ id: "c-1", full_name: "Alice Alves" })]),
+    );
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    const hint = await screen.findByTestId("initial-list-hint");
+    expect(hint.textContent).toMatch(/mostrando .*1 candidato disponível/i);
+    expect(hint.textContent).toMatch(/use a busca/i);
+  });
+
+  it("orientação some quando há termo de busca", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.listSummaries)
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-1", full_name: "Alice Alves" })]),
+      )
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-99", full_name: "Zelda Zen" })]),
+      );
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("initial-list-hint");
+
+    await user.type(
+      screen.getByPlaceholderText(/buscar candidato por nome ou e-mail/i),
+      "Zelda",
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("initial-list-hint")).not.toBeInTheDocument();
+    });
+  });
+
+  it("digitar busca dispara listSummaries com search preenchido e pageSize maior", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.listSummaries)
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-1", full_name: "Alice Alves" })]),
+      )
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-99", full_name: "Zelda Zen" })]),
+      );
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Alice Alves");
+
+    await user.type(
+      screen.getByPlaceholderText(/buscar candidato por nome ou e-mail/i),
+      "Zelda",
+    );
+
+    await waitFor(() => {
+      expect(candidatesService.listSummaries).toHaveBeenCalledWith(1, 40, {
+        search: "Zelda",
+        link_status_filter: "without_active_job",
+      });
+    });
+    expect(await screen.findByText("Zelda Zen")).toBeInTheDocument();
+  });
+
+  it("busca não filtra apenas a slice inicial: encontra candidato fora dos primeiros 10", async () => {
+    // Initial fetch retorna 10 candidatos genéricos; a busca por "Zelda" retorna
+    // candidato que NÃO estava na lista inicial — provando que a busca foi remota.
+    const initialBatch = Array.from({ length: 10 }, (_, i) =>
+      makeSummary({ id: `c-${i}`, full_name: `Candidato Inicial ${i}` }),
+    );
+    vi.mocked(candidatesService.listSummaries)
+      .mockResolvedValueOnce(makePage(initialBatch))
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-zelda", full_name: "Zelda Fora Da Slice" })]),
+      );
+
+    const user = userEvent.setup();
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Candidato Inicial 0");
+    // "Zelda" não está na lista inicial.
+    expect(screen.queryByText(/Zelda Fora Da Slice/)).not.toBeInTheDocument();
+
+    await user.type(
+      screen.getByPlaceholderText(/buscar candidato por nome ou e-mail/i),
+      "Zelda",
+    );
+
+    expect(await screen.findByText("Zelda Fora Da Slice")).toBeInTheDocument();
+  });
+
+  it("limpar busca restaura listagem inicial (chama service de novo sem search)", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.listSummaries)
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-1", full_name: "Alice Alves" })]),
+      )
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-99", full_name: "Zelda Zen" })]),
+      )
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-1", full_name: "Alice Alves" })]),
+      );
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Alice Alves");
+
+    const input = screen.getByPlaceholderText(/buscar candidato por nome ou e-mail/i);
+    await user.type(input, "Zelda");
+    await screen.findByText("Zelda Zen");
+
+    await user.clear(input);
+
+    await waitFor(() => {
+      const calls = vi.mocked(candidatesService.listSummaries).mock.calls;
+      const last = calls[calls.length - 1];
+      expect(last[0]).toBe(1);
+      expect(last[1]).toBe(10);
+      expect(last[2]).toMatchObject({
+        search: undefined,
+        link_status_filter: "without_active_job",
+      });
+    });
+  });
+
+  it("busca sem resultado mostra 'Nenhum candidato encontrado para esta busca.'", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.listSummaries)
+      .mockResolvedValueOnce(
+        makePage([makeSummary({ id: "c-1", full_name: "Alice Alves" })]),
+      )
+      .mockResolvedValueOnce(makePage([]));
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Alice Alves");
+    await user.type(
+      screen.getByPlaceholderText(/buscar candidato por nome ou e-mail/i),
+      "InexistenteXYZ",
+    );
+
+    await screen.findByText(/nenhum candidato encontrado para esta busca/i);
+  });
+
+  it("sem termo e sem candidatos disponíveis mostra 'Nenhum candidato disponível.'", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValueOnce(makePage([]));
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText(/nenhum candidato disponível/i);
+  });
+
+  it("IA Recomenda e 'Criar candidato manualmente' continuam visíveis na listagem inicial", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValueOnce(
+      makePage([makeSummary({ id: "c-1", full_name: "Alice Alves" })]),
+    );
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-1"
+        activeJobTitle="Vaga"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Alice Alves");
+    expect(screen.getByRole("heading", { name: /IA Recomenda/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Criar candidato manualmente/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -57,6 +57,7 @@ _EXPECTED_FIELDS = {
     "active_job_stage",
     "active_job_job_fit_score",
     "ai_status",
+    "next_interview",
 }
 
 

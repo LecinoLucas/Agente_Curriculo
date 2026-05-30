@@ -17,11 +17,12 @@ describe("KanbanCard", () => {
   }
 
   describe("badge de score", () => {
-    it("renderiza '97%' quando job_fit_score é 97", () => {
+    it("renderiza score em destaque quando job_fit_score é 97", () => {
       render(
         <KanbanCard candidate={candidate({ job_fit_score: 97 })} isSaving={false} enterDelay={0} />,
       );
       expect(screen.getByText("97%")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-card-score")).toHaveTextContent("aderência");
     });
 
     it("renderiza estado de IA na fila quando ai_status é pending e não há score", () => {
@@ -34,6 +35,20 @@ describe("KanbanCard", () => {
       );
       expect(screen.getAllByText("IA na fila").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("IA pendente")).toBeInTheDocument();
+    });
+
+    it("quando não há score, não inventa porcentagem", () => {
+      render(
+        <KanbanCard
+          candidate={candidate({ job_fit_score: null, ai_status: "completed" })}
+          isSaving={false}
+          enterDelay={0}
+        />,
+      );
+
+      expect(screen.queryByTestId("kanban-card-score")).not.toBeInTheDocument();
+      expect(screen.getByTestId("kanban-card-score-empty")).toHaveTextContent(/sem score/i);
+      expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
     });
   });
 
@@ -132,6 +147,112 @@ describe("KanbanCard", () => {
       expect(screen.queryByText("IA pendente")).not.toBeInTheDocument();
       expect(screen.queryByText("Iniciar admissão")).not.toBeInTheDocument();
       expect(screen.queryByText("Análise em andamento")).not.toBeInTheDocument();
+    });
+
+    it("não renderiza affordance de menu sem ação no rodapé do card", () => {
+      render(
+        <KanbanCard
+          candidate={candidate({ ai_status: "completed", job_fit_score: 88, stage: "entry" })}
+          isSaving={false}
+          enterDelay={0}
+        />,
+      );
+
+      expect(screen.queryByText("...")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("densidade e leitura rápida", () => {
+    it("mostra no máximo 2 skills e agrega o restante com +N", () => {
+      render(
+        <KanbanCard
+          candidate={candidate({
+            job_fit_score: 88,
+            top_skills: ["React", "TypeScript", "SQL", "Node.js"],
+          })}
+          isSaving={false}
+          enterDelay={0}
+        />,
+      );
+
+      expect(screen.getByTestId("kanban-card-skills")).toHaveTextContent("React · TypeScript +2");
+      expect(screen.queryByText("SQL")).not.toBeInTheDocument();
+      expect(screen.queryByText("Node.js")).not.toBeInTheDocument();
+    });
+
+    it("sem skills não cria linha vazia de skills", () => {
+      render(
+        <KanbanCard
+          candidate={candidate({ job_fit_score: 88, top_skills: [] })}
+          isSaving={false}
+          enterDelay={0}
+        />,
+      );
+
+      expect(screen.queryByTestId("kanban-card-skills")).not.toBeInTheDocument();
+    });
+
+    it("mostra o tempo na etapa quando entered_at existe", () => {
+      const enteredAt = new Date();
+      enteredAt.setDate(enteredAt.getDate() - 3);
+
+      render(
+        <KanbanCard
+          candidate={candidate({ job_fit_score: 88, entered_at: enteredAt.toISOString() })}
+          isSaving={false}
+          enterDelay={0}
+        />,
+      );
+
+      expect(screen.getByTestId("kanban-card-progress")).toHaveTextContent("Há 3 dias na etapa");
+    });
+
+    it("formata entrevista agendada como próxima ação real", () => {
+      const interview = new Date();
+      interview.setDate(interview.getDate() + 2);
+      interview.setHours(14, 30, 0, 0);
+      const expectedDate = interview.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+      });
+      const expectedTime = interview.toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      render(
+        <KanbanCard
+          candidate={candidate({
+            job_fit_score: 88,
+            interview_scheduled_start: interview.toISOString(),
+          })}
+          isSaving={false}
+          enterDelay={0}
+        />,
+      );
+
+      expect(screen.getByTestId("kanban-card-next-action")).toHaveTextContent(
+        `${expectedDate}, ${expectedTime}`,
+      );
+    });
+
+    it("mantém apenas uma pendência principal visível", () => {
+      render(
+        <KanbanCard
+          candidate={candidate({
+            job_fit_score: null,
+            ai_status: null,
+            requires_behavioral_assessment: true,
+            behavioral_assessment_status: "not_started",
+            requires_interview: true,
+            interview_status: "pending",
+          })}
+          isSaving={false}
+          enterDelay={0}
+        />,
+      );
+
+      expect(screen.getAllByTestId("kanban-card-primary-badge")).toHaveLength(1);
     });
   });
 });

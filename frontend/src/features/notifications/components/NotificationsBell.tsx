@@ -25,9 +25,12 @@ export function NotificationsBell({ buttonClassName = "" }: NotificationsBellPro
   return (
     <div ref={containerRef} className="relative z-50">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
         type="button"
-        className={`relative flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300 ${
+        className={`relative flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300 outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] ${
           isOpen
             ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
             : "border-border/80 bg-surface-muted/40 text-text-muted hover:bg-surface-muted/80 hover:text-text"
@@ -47,7 +50,10 @@ export function NotificationsBell({ buttonClassName = "" }: NotificationsBellPro
 
       {/* Floating Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96">
+        <div 
+          className="absolute right-0 mt-2 w-80 sm:w-96"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <NotificationsPanel onClose={() => setIsOpen(false)} />
         </div>
       )}

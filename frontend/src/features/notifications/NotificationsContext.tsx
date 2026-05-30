@@ -19,79 +19,8 @@ export interface NotificationsContextType {
 
 export const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: "notif-1",
-    title: "Banco de dados com latência elevada",
-    description: "Conexões com o banco PostgreSQL registraram picos de 450ms. Recomenda-se checar queries lentas.",
-    type: "warning",
-    category: "health",
-    timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    read: false,
-    actionUrl: "/admin",
-    actionLabel: "Ver Diagnósticos",
-  },
-  {
-    id: "notif-2",
-    title: "Fila de processamento de IA engargalada",
-    description: "Há 12 candidatos aguardando processamento da análise de currículo por IA na fila principal.",
-    type: "error",
-    category: "queue",
-    timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-    read: false,
-    actionUrl: "/admin",
-    actionLabel: "Ver Health",
-  },
-  {
-    id: "notif-3",
-    title: "Limite de tokens Gemini atingido (85%)",
-    description: "Consumo diário de tokens da API Gemini se aproxima do teto seguro. IA operando em modo econômico.",
-    type: "warning",
-    category: "ai",
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    read: false,
-    actionUrl: "/admin/bi",
-    actionLabel: "Ver BI de IA",
-  },
-  {
-    id: "notif-4",
-    title: "Falha na sincronização do Google Calendar",
-    description: "O token do integrador do Google Calendar expirou. Entrevistas agendadas podem não ser sincronizadas.",
-    type: "error",
-    category: "calendar",
-    timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-    read: false,
-    actionUrl: "/agenda",
-    actionLabel: "Reconectar Agenda",
-  },
-  {
-    id: "notif-5",
-    title: "Mensagem pendente de candidato",
-    description: "Lucas Lecino enviou uma mensagem solicitando feedback sobre a etapa técnica da vaga Frontend Engineer.",
-    type: "info",
-    category: "candidate",
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    read: true,
-    actionUrl: "/pipeline",
-    actionLabel: "Responder Candidato",
-  },
-];
-
 const DISMISSED_KEY = "ats-notifications-dismissed-ids";
 const INTERNAL_NOTIFICATION_ROLES = new Set(["admin", "recruiter", "manager", "hr"]);
-
-function mergeMockNotifications(currentReadStates: Record<string, boolean>, dismissedIds: string[]): Notification[] {
-  return MOCK_NOTIFICATIONS.filter((n) => !dismissedIds.includes(n.id)).map(
-    (n): Notification => ({
-      ...n,
-      read: currentReadStates[n.id] ?? n.read,
-    })
-  );
-}
-
-function isTransientNotificationError(error: unknown): boolean {
-  return error instanceof HttpError && [0, 504].includes(error.status);
-}
 
 function isPublicNotificationRoute(pathname: string, isAuthenticated: boolean): boolean {
   if (pathname === "/login" || pathname === "/candidato" || pathname === "/candidato/cadastro") {
@@ -145,10 +74,6 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const isDev =
-      import.meta.env?.DEV ||
-      process.env.NODE_ENV === "development";
-
     const currentReadStates = notificationStorage.loadReadStates();
 
     try {
@@ -162,11 +87,6 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           timestamp: n.timestamp ?? new Date().toISOString(),
         }));
 
-      if (merged.length === 0 && isDev) {
-        setNotifications(mergeMockNotifications(currentReadStates, dismissedIds));
-        return;
-      }
-
       setNotifications(merged);
     } catch (error) {
       if (error instanceof HttpError && error.status === 401) {
@@ -175,15 +95,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (isDev && isTransientNotificationError(error)) {
-        setNotifications(mergeMockNotifications(currentReadStates, dismissedIds));
-        return;
-      }
-
       console.error("[NotificationsContext] Failed to fetch notifications", error);
-      if (!isDev) {
-        setNotifications([]);
-      }
+      setNotifications([]);
     }
   }, [dismissedIds, shouldFetchNotifications]);
 

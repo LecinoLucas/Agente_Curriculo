@@ -14,6 +14,12 @@ export function toForm(job: Job): JobFormValues {
     experience_context: job.experience_context ?? "",
     behavioral_requirements: [...(job.behavioral_requirements ?? [])],
     newBehavioralRequirement: "",
+    // AI draft dedicated fields — old jobs may not have them
+    mandatory_skills: [...(job.mandatory_skills ?? [])],
+    nice_to_have_skills: [...(job.nice_to_have_skills ?? [])],
+    screening_questions: [...(job.screening_questions ?? [])],
+    benefits: [...(job.benefits ?? [])],
+    working_hours: job.working_hours ?? "",
     behavioral_template_id: job.behavioral_template_id ?? null,
     status: job.status,
     job_area: job.job_area ?? "",

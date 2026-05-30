@@ -1,24 +1,33 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  AlertCircle,
   ArrowLeft,
+  Briefcase,
   Calendar,
   CheckCircle2,
+  Clock,
   Copy,
   ExternalLink,
+  FileSearch,
   Kanban,
   Loader2,
+  Mail,
+  MoreHorizontal,
   Phone,
+  Plus,
   RefreshCw,
   Search,
   ThumbsDown,
   User,
   X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 
 import { useAuth } from "../features/auth/useAuth";
 import { STAGE_LABEL } from "../features/candidates/utils/profile";
 import { deriveScoreSemantics } from "../features/candidates/utils/scoreSemantics";
+import { AddCandidateModal } from "../features/candidates/components/AddCandidateModal";
 import { candidatesService } from "../services/candidatesService";
 import { pipelineService } from "../services/pipelineService";
 import { toast } from "../shared/utils/toast";
@@ -65,8 +74,117 @@ function formatInterviewDateTime(isoStart: string): { date: string; time: string
 }
 
 async function copyToClipboard(text: string): Promise<void> {
-  if (navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
+  if (!navigator.clipboard) {
+    throw new Error("Clipboard API not available");
+  }
+  await navigator.clipboard.writeText(text);
+}
+
+type NextActionLabel =
+  | "Analisar currículo"
+  | "Marcar entrevista"
+  | "Copiar WhatsApp"
+  | "Registrar decisão"
+  | "Acompanhar pré-admissão"
+  | "Sem ação pendente";
+
+type NextAction = {
+  label: NextActionLabel;
+  description: string;
+  tone: "primary" | "success" | "warning" | "danger" | "muted";
+};
+
+type ScheduledInterview = {
+  scheduled_start: string;
+  scheduled_end: string;
+};
+
+function getScheduledInterviewLabel(scheduledInterview: ScheduledInterview | null): string {
+  if (!scheduledInterview) return "Não marcada";
+  const { date, time } = formatInterviewDateTime(scheduledInterview.scheduled_start);
+  return `${date} às ${time}`;
+}
+
+function deriveNextAction(
+  candidate: CandidateListSummary,
+  scheduledInterview: ScheduledInterview | null,
+): NextAction {
+  const stage = candidate.active_job_stage;
+
+  if (stage === "rejected" || stage === "admitted") {
+    return {
+      label: "Sem ação pendente",
+      description: "Processo encerrado para esta candidatura.",
+      tone: "muted",
+    };
+  }
+
+  if (stage === "hired" || stage === "pre_admission" || stage === "protheus") {
+    return {
+      label: "Acompanhar pré-admissão",
+      description: "Candidato já avançou para a rotina de admissão.",
+      tone: "success",
+    };
+  }
+
+  if (stage === "final" || stage === "offer") {
+    return {
+      label: "Registrar decisão",
+      description: "Há uma decisão do RH pendente no fluxo.",
+      tone: "warning",
+    };
+  }
+
+  if (scheduledInterview) {
+    return candidate.phone
+      ? {
+          label: "Copiar WhatsApp",
+          description: "Entrevista marcada. Envie ou confirme a mensagem com o candidato.",
+          tone: "success",
+        }
+      : {
+          label: "Registrar decisão",
+          description: "Entrevista marcada, mas o candidato não tem telefone cadastrado.",
+          tone: "warning",
+        };
+  }
+
+  if (stage === "hr_interview" || stage === "technical_interview") {
+    return {
+      label: "Marcar entrevista",
+      description: "Etapa de entrevista sem horário registrado nesta lista.",
+      tone: "primary",
+    };
+  }
+
+  if (!candidate.active_job_id || candidate.active_job_job_fit_score == null || candidate.ai_status !== "completed") {
+    return {
+      label: "Analisar currículo",
+      description: "Revise os dados disponíveis antes de avançar.",
+      tone: "primary",
+    };
+  }
+
+  return {
+    label: "Marcar entrevista",
+    description: "Score disponível e candidatura ativa para triagem.",
+    tone: "primary",
+  };
+}
+
+function toneClasses(tone: NextAction["tone"]): string {
+  switch (tone) {
+    case "success":
+      return "border-[hsl(var(--success)/0.2)] bg-[hsl(var(--success)/0.05)] text-success";
+    case "warning":
+      return "border-[hsl(var(--warning)/0.2)] bg-[hsl(var(--warning)/0.05)] text-warning";
+    case "danger":
+      return "border-[hsl(var(--danger)/0.2)] bg-[hsl(var(--danger)/0.05)] text-danger";
+    case "primary":
+      return "border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.05)] text-[hsl(var(--primary))]";
+    case "muted":
+    default:
+      return "border-border bg-surface-muted text-text-muted";
   }
 }
 
@@ -81,7 +199,10 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
 
   if (s.primaryScore === null) {
     return (
-      <span className="text-xs text-text-muted" data-testid="score-awaiting">
+      <span
+        className="inline-flex w-fit items-center rounded-full border border-border bg-surface-muted px-2.5 py-1 text-xs font-semibold text-text-muted"
+        data-testid="score-awaiting"
+      >
         Aguardando IA
       </span>
     );
@@ -96,15 +217,18 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
 
   const colorClass =
     s.statusTone === "high"
-      ? "text-success"
+      ? "border-[hsl(var(--success)/0.2)] bg-[hsl(var(--success)/0.05)] text-success"
       : s.statusTone === "mid"
-        ? "text-warning"
-        : "text-danger";
+        ? "border-[hsl(var(--warning)/0.2)] bg-[hsl(var(--warning)/0.05)] text-warning"
+        : "border-[hsl(var(--danger)/0.2)] bg-[hsl(var(--danger)/0.05)] text-danger";
 
   return (
-    <div className="flex flex-col gap-0.5" data-testid="score-chip">
-      <span className={`text-sm font-bold tabular-nums ${colorClass}`}>{s.primaryDisplay}</span>
-      <span className={`text-[10px] font-semibold uppercase tracking-wide ${colorClass} opacity-80`}>
+    <div
+      className={`inline-flex min-w-[7rem] flex-col rounded-xl border px-2 py-1 ${colorClass}`}
+      data-testid="score-chip"
+    >
+      <span className="text-sm font-semibold tabular-nums">{s.primaryDisplay}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wide opacity-85">
         {label}
       </span>
     </div>
@@ -117,15 +241,26 @@ function StageBadge({ stage }: { stage: string | null }) {
   const label = stage ? (STAGE_LABEL[stage as PipelineStage] ?? stage) : "—";
   const cls =
     stage === "rejected"
-      ? "bg-[hsl(var(--danger)/0.1)] text-danger border-[hsl(var(--danger)/0.3)]"
+      ? "bg-[hsl(var(--danger)/0.05)] text-danger border-[hsl(var(--danger)/0.2)]"
       : stage === "admitted" || stage === "hired"
-        ? "bg-[hsl(var(--success)/0.1)] text-success border-[hsl(var(--success)/0.3)]"
+        ? "bg-[hsl(var(--success)/0.05)] text-success border-[hsl(var(--success)/0.2)]"
         : stage === "pre_admission" || stage === "protheus"
-          ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.3)]"
-          : "bg-surface-muted text-text-muted border-border";
+          ? "bg-[hsl(var(--primary)/0.05)] text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.2)]"
+        : "bg-surface-muted text-text-muted border-border";
   return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${cls}`}>
+    <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cls}`}>
       {label}
+    </span>
+  );
+}
+
+function NextActionBadge({ action }: { action: NextAction }) {
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneClasses(action.tone)}`}
+      data-testid="next-action"
+    >
+      {action.label}
     </span>
   );
 }
@@ -145,12 +280,142 @@ function Avatar({ name }: { name: string }) {
   );
 }
 
+function MoreActionsMenu({
+  candidate,
+  isReadOnly,
+  canCopyWhatsApp,
+  onOpenProfile,
+  onCopyWhatsApp,
+  onOpenPipeline,
+  onReject,
+}: {
+  candidate: CandidateListSummary;
+  isReadOnly: boolean;
+  canCopyWhatsApp: boolean;
+  onOpenProfile: () => void;
+  onCopyWhatsApp: () => void;
+  onOpenPipeline: () => void;
+  onReject: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [style, setStyle] = useState<CSSProperties>({});
+
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setStyle({
+        position: "fixed",
+        top: rect.bottom + 6,
+        right: window.innerWidth - rect.right,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  const run = (action: () => void) => {
+    setOpen(false);
+    action();
+  };
+
+  return (
+    <div className="inline-flex">
+      <button
+        ref={buttonRef}
+        type="button"
+        title="Mais ações"
+        aria-label={`Mais ações de ${candidate.full_name}`}
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+        data-testid={`action-more-${candidate.id}`}
+      >
+        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        Mais
+      </button>
+
+      {open
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                aria-label="Fechar menu"
+                className="fixed inset-0 z-[9998] cursor-default"
+                onClick={() => setOpen(false)}
+              />
+              <div
+                className="z-[9999] w-56 overflow-hidden rounded-xl border border-border bg-surface text-sm text-text shadow-xl"
+                style={style}
+                data-testid={`actions-menu-${candidate.id}`}
+              >
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-muted"
+                  onClick={() => run(onOpenProfile)}
+                  data-testid={`action-profile-${candidate.id}`}
+                >
+                  <User className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                  Abrir perfil completo
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-45"
+                  disabled={!canCopyWhatsApp}
+                  onClick={() => run(onCopyWhatsApp)}
+                  data-testid={`action-whatsapp-${candidate.id}`}
+                >
+                  <Copy className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                  Copiar WhatsApp
+                </button>
+                {candidate.active_job_id && (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-muted"
+                    onClick={() => run(onOpenPipeline)}
+                    data-testid={`action-pipeline-${candidate.id}`}
+                  >
+                    <ExternalLink className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                    Abrir Pipeline
+                  </button>
+                )}
+                {!isReadOnly && (
+                  <div className="border-t border-border">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-danger transition-colors hover:bg-danger-soft/60"
+                      onClick={() => run(onReject)}
+                      data-testid={`action-reject-${candidate.id}`}
+                    >
+                      <ThumbsDown className="h-4 w-4" aria-hidden="true" />
+                      Reprovar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
 // ── Schedule Interview Modal ───────────────────────────────────────────────────
 
 interface ScheduleInterviewModalProps {
   candidate: CandidateListSummary;
   onClose: () => void;
-  onSuccess: (candidateId: string, scheduledStart: string, scheduledEnd: string) => void;
+  onSuccess: (candidateId: string, scheduledStart: string, scheduledEnd: string, interviewType: "hr" | "technical") => void;
 }
 
 function ScheduleInterviewModal({ candidate, onClose, onSuccess }: ScheduleInterviewModalProps) {
@@ -167,6 +432,11 @@ function ScheduleInterviewModal({ candidate, onClose, onSuccess }: ScheduleInter
 
   const firstFieldRef = useRef<HTMLInputElement>(null);
   useEffect(() => { firstFieldRef.current?.focus(); }, []);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -205,7 +475,7 @@ function ScheduleInterviewModal({ candidate, onClose, onSuccess }: ScheduleInter
           create_google_meet: false,
         },
       );
-      onSuccess(candidate.id, scheduledStart, scheduledEnd);
+      onSuccess(candidate.id, scheduledStart, scheduledEnd, interviewType);
     } catch {
       toast.error("Não foi possível agendar a entrevista. Tente novamente.");
     } finally {
@@ -217,7 +487,7 @@ function ScheduleInterviewModal({ candidate, onClose, onSuccess }: ScheduleInter
 
   return (
     <div
-      className="fixed inset-0 z-60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       data-testid="schedule-interview-modal"
     >
       <button
@@ -413,6 +683,11 @@ function RejectCandidateModal({ candidate, onClose, onSuccess }: RejectModalProp
   const [saving, setSaving] = useState(false);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { reasonRef.current?.focus(); }, []);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   async function handleConfirm() {
     if (!reason.trim() || !candidate.active_job_id) return;
@@ -432,7 +707,7 @@ function RejectCandidateModal({ candidate, onClose, onSuccess }: RejectModalProp
 
   return (
     <div
-      className="fixed inset-0 z-60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       data-testid="reject-modal"
     >
       <button
@@ -521,10 +796,18 @@ function CandidaturaDrawer({
   onOpenPipeline,
   onCopyWhatsApp,
 }: DrawerProps) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const name = candidate.full_name;
   const job = candidate.active_job_title ?? "Vaga não informada";
   const stage = candidate.active_job_stage;
   const phone = candidate.phone;
+  const nextAction = deriveNextAction(candidate, scheduledInterview);
+  const interviewLabel = getScheduledInterviewLabel(scheduledInterview);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="candidatura-drawer">
@@ -534,10 +817,20 @@ function CandidaturaDrawer({
         className="absolute inset-0 bg-black/30 cursor-default"
         onClick={onClose}
       />
-      <div className="relative flex h-full w-full max-w-sm flex-col overflow-y-auto border-l border-border bg-surface shadow-2xl">
+      <div className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border bg-surface shadow-2xl">
         {/* header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold text-text">Candidatura</span>
+        <div className="flex items-start justify-between border-b border-border px-5 py-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <Avatar name={name} />
+            <div className="min-w-0">
+              <p className="truncate text-base font-semibold text-text">{name}</p>
+              <p className="truncate text-sm text-text-muted">{job}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <StageBadge stage={stage} />
+                <ScoreChip candidate={candidate} />
+              </div>
+            </div>
+          </div>
           <button
             type="button"
             aria-label="Fechar"
@@ -549,71 +842,62 @@ function CandidaturaDrawer({
         </div>
 
         {/* body */}
-        <div className="flex flex-1 flex-col gap-4 p-4">
-          {/* identity */}
-          <div className="flex items-center gap-3">
-            <Avatar name={name} />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-text">{name}</p>
-              <p className="truncate text-xs text-text-muted">{candidate.email ?? "—"}</p>
-            </div>
-          </div>
+        <div className="flex flex-1 flex-col gap-4 p-5">
+          <section
+            className="rounded-xl border border-border bg-surface-muted/60 px-4 py-3"
+            data-testid="drawer-summary"
+          >
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Resumo</p>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-xs text-text-muted">Vaga</dt>
+                <dd className="mt-0.5 truncate font-medium text-text">{job}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-text-muted">Status</dt>
+                <dd className="mt-1"><StageBadge stage={stage} /></dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-text-muted">Entrevista</dt>
+                <dd className="mt-0.5 flex items-center gap-1.5 font-medium text-text">
+                  <Clock className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+                  {interviewLabel}
+                </dd>
+              </div>
+            </dl>
+          </section>
 
-          {/* job + stage */}
-          <div className="rounded-xl bg-surface-muted px-3 py-2.5 space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Vaga</p>
-            <p className="text-sm font-medium text-text">{job}</p>
-            <StageBadge stage={stage} />
-          </div>
+          <section
+            className={`rounded-xl border px-4 py-3 ${toneClasses(nextAction.tone)}`}
+            data-testid="drawer-next-action"
+          >
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-75">Próxima ação</p>
+            <p className="text-sm font-semibold">{nextAction.label}</p>
+            <p className="mt-1 text-xs opacity-85">{nextAction.description}</p>
+          </section>
 
-          {/* scheduled interview badge */}
-          {scheduledInterview && (
-            <div className="flex items-center gap-2 rounded-xl bg-[hsl(var(--success)/0.1)] border border-[hsl(var(--success)/0.3)] px-3 py-2">
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-success">Entrevista marcada</p>
-                <p className="text-[11px] text-success/80">
-                  {(() => {
-                    const { date, time } = formatInterviewDateTime(scheduledInterview.scheduled_start);
-                    return `${date} às ${time}`;
-                  })()}
-                </p>
+          <section className="rounded-xl border border-border bg-surface-muted/60 px-4 py-3">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Contato</p>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-2 text-text">
+                <Mail className="h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
+                <span className="min-w-0 truncate">{candidate.email ?? "E-mail não informado"}</span>
+              </div>
+              <div className="flex items-center gap-2 text-text">
+                <Phone className="h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
+                <span>{phone ?? "Telefone não informado"}</span>
               </div>
             </div>
-          )}
-
-          {/* score */}
-          <div className="rounded-xl bg-surface-muted px-3 py-2.5">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Score IA</p>
-            <ScoreChip candidate={candidate} />
-          </div>
-
-          {/* phone */}
-          {phone && (
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span>{phone}</span>
-            </div>
-          )}
+          </section>
         </div>
 
         {/* actions */}
         <div className="border-t border-border p-4 space-y-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={onOpenProfile}
-          >
-            <User className="h-3.5 w-3.5" aria-hidden="true" />
-            Abrir perfil completo
-          </Button>
-
+          <p className="px-1 text-xs font-semibold uppercase tracking-wide text-text-muted">Ações principais</p>
           {!isReadOnly && (
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               size="sm"
               className="w-full justify-start gap-2"
               onClick={onScheduleInterview}
@@ -642,6 +926,17 @@ function CandidaturaDrawer({
             variant="outline"
             size="sm"
             className="w-full justify-start gap-2"
+            onClick={onOpenProfile}
+          >
+            <User className="h-3.5 w-3.5" aria-hidden="true" />
+            Abrir perfil completo
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full justify-start gap-2"
             onClick={onOpenPipeline}
             data-testid="drawer-pipeline"
           >
@@ -650,29 +945,24 @@ function CandidaturaDrawer({
           </Button>
 
           {!isReadOnly && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full justify-start gap-2 text-danger hover:text-danger"
-              onClick={onReject}
-              data-testid="drawer-reject"
-            >
-              <ThumbsDown className="h-3.5 w-3.5" aria-hidden="true" />
-              Reprovar
-            </Button>
+            <div className="mt-3 border-t border-border pt-3" data-testid="drawer-danger-actions">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 text-danger hover:text-danger"
+                onClick={onReject}
+                data-testid="drawer-reject"
+              >
+                <ThumbsDown className="h-3.5 w-3.5" aria-hidden="true" />
+                Reprovar
+              </Button>
+            </div>
           )}
         </div>
       </div>
     </div>
   );
-}
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface ScheduledInterview {
-  scheduled_start: string;
-  scheduled_end: string;
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
@@ -696,6 +986,7 @@ export function CandidaturasPage() {
   const [interviewTarget, setInterviewTarget] = useState<CandidateListSummary | null>(null);
   const [rejectTarget, setRejectTarget] = useState<CandidateListSummary | null>(null);
   const [scheduledInterviews, setScheduledInterviews] = useState<Record<string, ScheduledInterview>>({});
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   const selectedCandidate = useMemo(
     () => candidates.find((c) => c.id === selectedId) ?? null,
@@ -723,6 +1014,18 @@ export function CandidaturasPage() {
       setCandidates(result.data);
       setTotalPages(result.total_pages);
       setTotal(result.total);
+
+      // Seed scheduledInterviews from backend next_interview (source of truth)
+      const fromBackend: Record<string, ScheduledInterview> = {};
+      for (const c of result.data) {
+        if (c.next_interview) {
+          fromBackend[c.id] = {
+            scheduled_start: c.next_interview.scheduled_start,
+            scheduled_end: c.next_interview.scheduled_end,
+          };
+        }
+      }
+      setScheduledInterviews(fromBackend);
     } catch {
       setError("Não foi possível carregar as candidaturas. Tente novamente.");
     } finally {
@@ -764,16 +1067,25 @@ export function CandidaturasPage() {
         })()
       : WHATSAPP_MSG_GENERIC(name, job);
 
-    void copyToClipboard(msg).then(() => {
-      toast.success("Mensagem copiada para o clipboard.");
-    });
+    void copyToClipboard(msg)
+      .then(() => { toast.success("Mensagem copiada para o clipboard."); })
+      .catch(() => { toast.error("Não foi possível copiar a mensagem."); });
   }
 
-  function handleInterviewSuccess(candidateId: string, scheduledStart: string, scheduledEnd: string) {
+  function handleInterviewSuccess(
+    candidateId: string,
+    scheduledStart: string,
+    scheduledEnd: string,
+    interviewType: "hr" | "technical",
+  ) {
     setScheduledInterviews((prev) => ({
       ...prev,
       [candidateId]: { scheduled_start: scheduledStart, scheduled_end: scheduledEnd },
     }));
+    const newStage = interviewType === "hr" ? "hr_interview" : "technical_interview";
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === candidateId ? { ...c, active_job_stage: newStage } : c)),
+    );
     setInterviewTarget(null);
     toast.success("Entrevista marcada com sucesso.");
   }
@@ -785,102 +1097,136 @@ export function CandidaturasPage() {
     toast.success("Candidato reprovado.");
   }
 
-  const anyModalOpen = Boolean(interviewTarget || rejectTarget);
+  const anyModalOpen = Boolean(interviewTarget || rejectTarget || addModalOpen);
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-5">
       {/* Page header */}
       <div>
-        <h1 className="text-xl font-bold text-text">Candidaturas</h1>
-        <p className="text-sm text-text-muted">Triagem simples dos candidatos recebidos pelo RH.</p>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-text">Candidaturas</h1>
+          {!loading && (
+            <span className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-text-muted" aria-live="polite">
+              {total} {total === 1 ? "candidatura" : "candidaturas"}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-text-muted">Triagem diária de candidatos vinculados a vagas ativas.</p>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-muted"
-            aria-hidden="true"
-          />
-          <input
-            type="search"
-            placeholder="Buscar por nome, e-mail ou telefone..."
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full rounded-lg border border-border bg-surface-muted py-2 pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
-            aria-label="Buscar candidaturas"
-            data-testid="search-input"
-          />
+      {/* Unified Control Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-surface p-1.5 shadow-sm">
+        {/* Left: Search & Filters */}
+        <div className="flex flex-col sm:flex-row items-center gap-1 w-full sm:w-auto flex-1">
+          <div className="relative w-full sm:max-w-xs">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              placeholder="Buscar por nome, e-mail ou telefone..."
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="h-9 w-full rounded-lg border-0 bg-transparent pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:bg-surface-muted/50 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30 transition-colors"
+              aria-label="Buscar candidaturas"
+              data-testid="search-input"
+            />
+          </div>
+
+          <div className="hidden h-5 w-px bg-border sm:block mx-1" aria-hidden="true"></div>
+
+          <select
+            value={jobFilter}
+            onChange={(e) => setJobFilter(e.target.value)}
+            className="h-9 w-full sm:w-64 rounded-lg border-0 bg-transparent px-3 text-sm text-text focus:bg-surface-muted/50 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30 transition-colors"
+            aria-label="Filtrar por vaga"
+            data-testid="job-filter"
+          >
+            <option value="">Todas as vagas</option>
+            {uniqueJobs.map((j) => (
+              <option key={j} value={j}>{j}</option>
+            ))}
+          </select>
         </div>
 
-        <select
-          value={jobFilter}
-          onChange={(e) => setJobFilter(e.target.value)}
-          className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
-          aria-label="Filtrar por vaga"
-          data-testid="job-filter"
-        >
-          <option value="">Todas as vagas</option>
-          {uniqueJobs.map((j) => (
-            <option key={j} value={j}>{j}</option>
-          ))}
-        </select>
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 sm:pr-1.5">
+          <button
+            type="button"
+            onClick={() => void load(page, search)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-transparent text-text-muted transition-colors hover:bg-surface-muted hover:text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+            aria-label="Atualizar"
+            title="Atualizar"
+            data-testid="refresh-button"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          </button>
 
-        <button
-          type="button"
-          onClick={() => void load(page, search)}
-          className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-text-muted hover:text-text transition-colors"
-          aria-label="Atualizar"
-          data-testid="refresh-button"
-        >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          Atualizar
-        </button>
+          <button
+            type="button"
+            onClick={() => navigate("/pipeline")}
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-text transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30 shadow-sm"
+            aria-label="Abrir Pipeline"
+            data-testid="pipeline-link"
+          >
+            <Kanban className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+            <span>Pipeline</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => navigate("/pipeline")}
-          className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-text-muted hover:text-text transition-colors"
-          aria-label="Abrir Pipeline"
-          data-testid="pipeline-link"
-        >
-          <Kanban className="h-3.5 w-3.5" aria-hidden="true" />
-          Pipeline
-        </button>
-
-        <span className="ml-auto text-xs text-text-muted" aria-live="polite">
-          {loading ? "" : `${total} candidatura${total !== 1 ? "s" : ""}`}
-        </span>
+          {!isReadOnly && (
+            <Button
+              type="button"
+              className="h-9 gap-1.5 whitespace-nowrap px-3 text-sm rounded-lg shadow-sm"
+              onClick={() => setAddModalOpen(true)}
+              data-testid="add-candidates-btn"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Adicionar</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Error */}
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-[hsl(var(--danger)/0.3)] bg-[hsl(var(--danger)/0.05)] px-4 py-3 text-sm text-danger"
+          className="flex items-start gap-2 rounded-xl border border-[hsl(var(--danger)/0.3)] bg-[hsl(var(--danger)/0.05)] px-4 py-3 text-sm text-danger"
+          data-testid="candidaturas-error"
         >
-          {error}
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-semibold">Erro ao carregar candidaturas</p>
+            <p className="text-xs opacity-90">{error}</p>
+          </div>
         </div>
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-border bg-surface">
-        <table className="w-full text-sm" data-testid="candidaturas-table">
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
+        <table className="w-full min-w-[1120px] text-sm" data-testid="candidaturas-table">
           <thead>
             <tr className="border-b border-border bg-surface-muted">
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="w-[24%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                 Candidato
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="w-[19%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                 Vaga
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                Etapa
+              <th className="w-[13%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                Status
               </th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="w-[13%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                 Score IA
               </th>
-              <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="w-[13%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                Entrevista
+              </th>
+              <th className="w-[13%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                Próxima ação
+              </th>
+              <th className="w-[10%] px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                 Ações
               </th>
             </tr>
@@ -888,30 +1234,44 @@ export function CandidaturasPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={5} className="py-16 text-center">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-text-muted" aria-hidden="true" />
-                  <p className="mt-2 text-xs text-text-muted" role="status">
-                    Carregando candidaturas...
-                  </p>
+                <td colSpan={7} className="py-16 text-center">
+                  <div className="mx-auto flex max-w-xs flex-col items-center gap-2" data-testid="candidaturas-loading">
+                    <Loader2 className="h-6 w-6 animate-spin text-text-muted" aria-hidden="true" />
+                    <p className="text-sm font-medium text-text" role="status">Carregando lista</p>
+                    <p className="text-xs text-text-muted">Buscando candidaturas com vaga ativa.</p>
+                  </div>
                 </td>
               </tr>
             )}
 
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-16 text-center">
-                  <p className="text-sm text-text-muted">
-                    {search || jobFilter
-                      ? "Nenhuma candidatura encontrada para os filtros selecionados."
-                      : "Nenhuma candidatura com vaga ativa no momento."}
-                  </p>
+                <td colSpan={7} className="py-16">
+                  <div
+                    className="mx-auto flex max-w-md flex-col items-center gap-2 px-6 text-center"
+                    data-testid={search || jobFilter ? "filtered-empty-state" : "empty-state"}
+                  >
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-muted text-text-muted">
+                      <FileSearch className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <p className="text-sm font-semibold text-text">
+                      {search || jobFilter ? "Nenhum resultado para os filtros" : "Nenhuma candidatura ativa"}
+                    </p>
+                    <p className="text-xs leading-relaxed text-text-muted">
+                      {search || jobFilter
+                        ? "Ajuste a busca ou limpe o filtro de vaga para ver outros candidatos."
+                        : "Quando houver candidatos vinculados a vagas ativas, eles aparecerão nesta lista."}
+                    </p>
+                  </div>
                 </td>
               </tr>
             )}
 
             {!loading &&
               filtered.map((c) => {
-                const hasInterview = Boolean(scheduledInterviews[c.id]);
+                const scheduledInterview = scheduledInterviews[c.id] ?? null;
+                const hasInterview = Boolean(scheduledInterview);
+                const nextAction = deriveNextAction(c, scheduledInterview);
                 return (
                   <tr
                     key={c.id}
@@ -920,106 +1280,102 @@ export function CandidaturasPage() {
                     data-testid={`row-${c.id}`}
                   >
                     {/* Candidate */}
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={c.full_name} />
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-text">{c.full_name}</p>
-                          <p className="truncate text-xs text-text-muted">{c.email ?? "—"}</p>
+                          <div className="mt-0.5 flex min-w-0 flex-col gap-0.5 text-xs text-text-muted">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              <span className="truncate">{c.email ?? "E-mail não informado"}</span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              {c.phone ?? "Telefone não informado"}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
 
                     {/* Job */}
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-text">{c.active_job_title ?? "—"}</span>
-                    </td>
-
-                    {/* Stage + interview badge */}
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        <StageBadge stage={c.active_job_stage} />
-                        {hasInterview && (
-                          <span
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-success"
-                            data-testid={`interview-badge-${c.id}`}
-                          >
-                            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                            Entrevista marcada
-                          </span>
-                        )}
+                    <td className="px-4 py-2.5">
+                      <div className="flex min-w-0 items-start gap-2">
+                        <Briefcase className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-text">{c.active_job_title ?? "Vaga não informada"}</p>
+                          <p className="text-xs text-text-muted">
+                            {c.application_source === "manual" ? "Entrada manual" : "Candidatura recebida"}
+                          </p>
+                        </div>
                       </div>
                     </td>
 
+                    {/* Status */}
+                    <td className="px-4 py-2.5">
+                      <StageBadge stage={c.active_job_stage} />
+                    </td>
+
                     {/* Score */}
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2.5">
                       <ScoreChip candidate={c} />
                     </td>
 
-                    {/* Actions */}
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          title="Abrir perfil"
-                          aria-label={`Abrir perfil de ${c.full_name}`}
-                          onClick={() => openProfile(c.id)}
-                          className="rounded-lg p-1.5 text-text-muted hover:bg-surface-muted hover:text-text transition-colors"
-                          data-testid={`action-profile-${c.id}`}
+                    {/* Interview */}
+                    <td className="px-4 py-2.5">
+                      {hasInterview ? (
+                        <span
+                          className="inline-flex flex-col rounded-xl border border-[hsl(var(--success)/0.2)] bg-[hsl(var(--success)/0.05)] px-2.5 py-1 text-success"
+                          data-testid={`interview-badge-${c.id}`}
                         >
-                          <User className="h-4 w-4" aria-hidden="true" />
-                        </button>
+                          <span className="flex items-center gap-1 text-[11px] font-semibold">
+                            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                            Entrevista marcada
+                          </span>
+                          <span className="text-[10px] font-medium opacity-85">
+                            {getScheduledInterviewLabel(scheduledInterview)}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-text-muted">
+                          <Clock className="h-3 w-3" aria-hidden="true" />
+                          Não marcada
+                        </span>
+                      )}
+                    </td>
 
+                    {/* Next action */}
+                    <td className="px-4 py-2.5">
+                      <NextActionBadge action={nextAction} />
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-2">
                         {!isReadOnly && (
                           <button
                             type="button"
                             title="Marcar entrevista"
                             aria-label={`Marcar entrevista com ${c.full_name}`}
                             onClick={() => setInterviewTarget(c)}
-                            className="rounded-lg p-1.5 text-text-muted hover:bg-surface-muted hover:text-text transition-colors"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.05)] px-2.5 text-xs font-medium text-[hsl(var(--primary))] transition-colors hover:bg-[hsl(var(--primary)/0.1)]"
                             data-testid={`action-interview-${c.id}`}
                           >
-                            <Calendar className="h-4 w-4" aria-hidden="true" />
+                            <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+                            Entrevista
                           </button>
                         )}
 
-                        <button
-                          type="button"
-                          title={c.phone ? "Copiar mensagem WhatsApp" : "Telefone não disponível"}
-                          aria-label={`Copiar WhatsApp de ${c.full_name}`}
-                          disabled={!c.phone}
-                          onClick={() => handleCopyWhatsApp(c)}
-                          className="rounded-lg p-1.5 text-text-muted hover:bg-surface-muted hover:text-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          data-testid={`action-whatsapp-${c.id}`}
-                        >
-                          <Copy className="h-4 w-4" aria-hidden="true" />
-                        </button>
-
-                        {c.active_job_id && (
-                          <button
-                            type="button"
-                            title="Abrir Pipeline"
-                            aria-label={`Abrir Pipeline de ${c.active_job_title}`}
-                            onClick={() => openPipeline(c)}
-                            className="rounded-lg p-1.5 text-text-muted hover:bg-surface-muted hover:text-text transition-colors"
-                            data-testid={`action-pipeline-${c.id}`}
-                          >
-                            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        )}
-
-                        {!isReadOnly && (
-                          <button
-                            type="button"
-                            title="Reprovar"
-                            aria-label={`Reprovar ${c.full_name}`}
-                            onClick={() => setRejectTarget(c)}
-                            className="rounded-lg p-1.5 text-danger/60 hover:bg-surface-muted hover:text-danger transition-colors"
-                            data-testid={`action-reject-${c.id}`}
-                          >
-                            <ThumbsDown className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        )}
+                        <MoreActionsMenu
+                          candidate={c}
+                          isReadOnly={isReadOnly}
+                          canCopyWhatsApp={Boolean(c.phone)}
+                          onOpenProfile={() => openProfile(c.id)}
+                          onCopyWhatsApp={() => handleCopyWhatsApp(c)}
+                          onOpenPipeline={() => openPipeline(c)}
+                          onReject={() => setRejectTarget(c)}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -1087,6 +1443,14 @@ export function CandidaturasPage() {
           candidate={rejectTarget}
           onClose={() => setRejectTarget(null)}
           onSuccess={handleRejectSuccess}
+        />
+      )}
+
+      {/* Add Candidate Modal */}
+      {addModalOpen && (
+        <AddCandidateModal
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => void load(page, search)}
         />
       )}
     </div>

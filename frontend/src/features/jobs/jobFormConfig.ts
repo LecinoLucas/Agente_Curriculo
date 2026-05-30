@@ -12,6 +12,12 @@ export type JobFormValues = {
   experience_context?: string;
   behavioral_requirements: string[];
   newBehavioralRequirement: string;
+  // AI draft dedicated fields
+  mandatory_skills: string[];
+  nice_to_have_skills: string[];
+  screening_questions: string[];
+  benefits: string[];
+  working_hours?: string;
   behavioral_template_id?: string | null;
   status: string;
   job_area?: string;
@@ -86,6 +92,11 @@ export const EMPTY_FORM: JobFormValues = {
   experience_context: "",
   behavioral_requirements: [],
   newBehavioralRequirement: "",
+  mandatory_skills: [],
+  nice_to_have_skills: [],
+  screening_questions: [],
+  benefits: [],
+  working_hours: "",
   behavioral_template_id: null,
   status: "draft",
   job_area: "",
@@ -169,6 +180,22 @@ export function trimToNull(value?: string): string | null {
   return normalized ? normalized : null;
 }
 
+/** Trim, drop empties, dedup case-insensitive — mirrors backend AI draft normalizer. */
+export function normalizeAiDraftStringList(items: string[] | undefined | null): string[] {
+  if (!items || items.length === 0) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of items) {
+    const cleaned = (raw ?? "").trim();
+    if (!cleaned) continue;
+    const key = cleaned.toLocaleLowerCase("pt-BR");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+  }
+  return out;
+}
+
 export function normalizeBehavioralRequirement(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
@@ -212,6 +239,18 @@ export function buildCreateJobPayload(form: JobFormValues): CreateJobRequestPayl
   if (behavioralRequirements.length > 0) payload.behavioral_requirements = behavioralRequirements;
   if (form.behavioral_template_id) payload.behavioral_template_id = form.behavioral_template_id;
 
+  // AI draft dedicated fields
+  const mandatorySkills = normalizeAiDraftStringList(form.mandatory_skills);
+  const niceToHaveSkills = normalizeAiDraftStringList(form.nice_to_have_skills);
+  const screeningQuestions = normalizeAiDraftStringList(form.screening_questions);
+  const benefits = normalizeAiDraftStringList(form.benefits);
+  const workingHours = trimToNull(form.working_hours);
+  if (mandatorySkills.length > 0) payload.mandatory_skills = mandatorySkills;
+  if (niceToHaveSkills.length > 0) payload.nice_to_have_skills = niceToHaveSkills;
+  if (screeningQuestions.length > 0) payload.screening_questions = screeningQuestions;
+  if (benefits.length > 0) payload.benefits = benefits;
+  if (workingHours) payload.working_hours = workingHours;
+
   payload.selection_flow_type = form.selection_flow_type;
   payload.requires_behavioral_assessment = form.requires_behavioral_assessment;
   payload.requires_behavioral_ai_evaluation = form.requires_behavioral_ai_evaluation;
@@ -242,6 +281,11 @@ export function buildUpdateJobPayload(form: JobFormValues): UpdateJobRequestPayl
     salary_min: form.salary_min !== undefined ? String(form.salary_min) : null,
     salary_max: form.salary_max !== undefined ? String(form.salary_max) : null,
     behavioral_template_id: form.behavioral_template_id || null,
+    mandatory_skills: normalizeAiDraftStringList(form.mandatory_skills),
+    nice_to_have_skills: normalizeAiDraftStringList(form.nice_to_have_skills),
+    screening_questions: normalizeAiDraftStringList(form.screening_questions),
+    benefits: normalizeAiDraftStringList(form.benefits),
+    working_hours: trimToNull(form.working_hours),
     selection_flow_type: form.selection_flow_type,
     requires_behavioral_assessment: form.requires_behavioral_assessment,
     requires_behavioral_ai_evaluation: form.requires_behavioral_ai_evaluation,

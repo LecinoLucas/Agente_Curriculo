@@ -1,4 +1,4 @@
-export type VisualTheme = "theme-1" | "theme-2";
+export type VisualTheme = "theme-1" | "theme-2" | "theme-3" | "theme-4";
 
 export const DEFAULT_PUBLIC_THEME: VisualTheme = "theme-1";
 export const DEFAULT_THEME: VisualTheme = "theme-1";
@@ -21,7 +21,7 @@ export function clearLegacyVisualTheme() {
 export function initializeVisualTheme() {
   if (typeof window !== "undefined") {
     const stored = window.localStorage.getItem(LEGACY_VISUAL_THEME_KEY) as VisualTheme | null;
-    if (stored === "theme-1" || stored === "theme-2") {
+    if (stored === "theme-1" || stored === "theme-2" || stored === "theme-3" || stored === "theme-4") {
       applyVisualTheme(stored);
       return stored;
     }

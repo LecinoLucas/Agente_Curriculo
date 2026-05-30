@@ -118,6 +118,10 @@ const CandidaturasPage = lazy(() =>
   import("../pages/CandidaturasPage").then((m) => ({ default: m.CandidaturasPage }))
 );
 
+const RhDashboardPage = lazy(() =>
+  import("../pages/RhDashboardPage").then((m) => ({ default: m.RhDashboardPage }))
+);
+
 const DashboardPage = lazy(() =>
   import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
 );
@@ -173,7 +177,9 @@ const ManagerReviewPage = lazy(() =>
 type UserRole = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr";
 
 const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
+const RH_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "hr"];
 const ADMIN_ROLES: UserRole[] = ["admin"];
+const DEMO_RH_ROLES: UserRole[] = ["admin", "recruiter"];
 const PRE_ADMISSION_ROLES: UserRole[] = ["admin", "hr"];
 const MANAGER_ROLES: UserRole[] = ["admin", "manager"];
 const ALL_AUTH_ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer", "manager", "hr"];
@@ -242,6 +248,11 @@ export function AppRouter() {
         <Route
           path="dashboard"
           element={protectedPage(<DashboardPage />, STAFF_ROLES)}
+        />
+
+        <Route
+          path="rh"
+          element={protectedPage(<RhDashboardPage />, RH_ROLES)}
         />
 
         <Route
@@ -406,7 +417,7 @@ export function AppRouter() {
 
         <Route
           path="demo-rh"
-          element={protectedPage(<DemoRhPage />, ADMIN_ROLES)}
+          element={protectedPage(<DemoRhPage />, DEMO_RH_ROLES)}
         />
       </Route>
 

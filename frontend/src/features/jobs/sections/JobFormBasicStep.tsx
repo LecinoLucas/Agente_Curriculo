@@ -35,6 +35,11 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
     setAreas((prev) => [...prev, newArea]);
     onFormChange({ job_area: newArea.name });
   };
+
+  const hasCurrentArea = form.job_area
+    ? areas.some((area) => area.name === form.job_area)
+    : true;
+
   return (
     <div className="space-y-6">
       <SectionCard
@@ -60,6 +65,9 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
                 disabled={loadingAreas}
               >
                 <option value="">Selecione</option>
+                {!hasCurrentArea && form.job_area ? (
+                  <option value={form.job_area}>{form.job_area}</option>
+                ) : null}
                 {areas.map((area) => (
                   <option key={area.id} value={area.name}>
                     {area.name}

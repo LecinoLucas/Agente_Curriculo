@@ -13,76 +13,76 @@ type KanbanColumnData = PipelineColumn & {
 };
 
 const DEFAULT_THEME = {
-  borderTop: "border-t-[3px] border-t-slate-300",
-  badge: "bg-slate-100 text-slate-700",
+  accentBar: "bg-slate-300/90",
+  headerGlow: "from-slate-100/90 via-transparent to-transparent",
+  badge: "border border-slate-200 bg-slate-100/90 text-slate-700",
   textEmpty: "text-slate-500",
   bgEmpty: "bg-slate-50 border-slate-200 text-slate-400",
-  addButton: "text-slate-500 hover:text-slate-600 hover:bg-slate-50",
   emptyIcon: ClipboardList,
   emptySub: "Aguardando candidatos.",
 };
 
 const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, any>> = {
   entrada: {
-    borderTop: "border-t-[3px] border-t-teal-500",
-    badge: "bg-teal-50 text-teal-700",
-    textEmpty: "text-teal-600",
-    bgEmpty: "bg-teal-50 border-teal-100 text-teal-500",
-    addButton: "text-teal-600 hover:text-teal-700 hover:bg-teal-50",
+    accentBar: "bg-emerald-400/80",
+    headerGlow: "from-emerald-100/80 via-emerald-50/20 to-transparent",
+    badge: "border border-emerald-200/80 bg-emerald-50 text-emerald-700",
+    textEmpty: "text-slate-500",
+    bgEmpty: "bg-emerald-50/80 border-emerald-100 text-emerald-500",
     emptyIcon: Plus,
     emptySub: "Aguardando novos perfis.",
   },
   analise: {
-    borderTop: "border-t-[3px] border-t-orange-400",
-    badge: "bg-orange-50 text-orange-700",
-    textEmpty: "text-orange-500",
-    bgEmpty: "bg-orange-50 border-orange-100 text-orange-400",
-    addButton: "text-orange-500 hover:text-orange-600 hover:bg-orange-50",
+    accentBar: "bg-amber-400/85",
+    headerGlow: "from-amber-100/90 via-amber-50/20 to-transparent",
+    badge: "border border-amber-200/80 bg-amber-50 text-amber-700",
+    textEmpty: "text-slate-500",
+    bgEmpty: "bg-amber-50/80 border-amber-100 text-amber-500",
     emptyIcon: Search,
     emptySub: "Os candidatos avançam após a triagem inicial.",
   },
   avaliacao: {
-    borderTop: "border-t-[3px] border-t-blue-500",
-    badge: "bg-blue-50 text-blue-700",
-    textEmpty: "text-blue-600",
-    bgEmpty: "bg-blue-50 border-blue-100 text-blue-500",
-    addButton: "text-blue-600 hover:text-blue-700 hover:bg-blue-50",
+    accentBar: "bg-rose-400/75",
+    headerGlow: "from-rose-100/80 via-rose-50/20 to-transparent",
+    badge: "border border-rose-200/80 bg-rose-50 text-rose-700",
+    textEmpty: "text-slate-500",
+    bgEmpty: "bg-rose-50/80 border-rose-100 text-rose-500",
     emptyIcon: ClipboardList,
     emptySub: "Avaliações em andamento.",
   },
   entrevista: {
-    borderTop: "border-t-[3px] border-t-cyan-500",
-    badge: "bg-cyan-50 text-cyan-700",
-    textEmpty: "text-cyan-600",
-    bgEmpty: "bg-cyan-50 border-cyan-100 text-cyan-500",
-    addButton: "text-cyan-600 hover:text-cyan-700 hover:bg-cyan-50",
+    accentBar: "bg-cyan-400/80",
+    headerGlow: "from-cyan-100/90 via-cyan-50/20 to-transparent",
+    badge: "border border-cyan-200/80 bg-cyan-50 text-cyan-700",
+    textEmpty: "text-slate-500",
+    bgEmpty: "bg-cyan-50/80 border-cyan-100 text-cyan-500",
     emptyIcon: CalendarDays,
     emptySub: "Agende entrevistas para avançar no processo.",
   },
   decisao: {
-    borderTop: "border-t-[3px] border-t-rose-400",
-    badge: "bg-rose-50 text-rose-700",
-    textEmpty: "text-rose-500",
-    bgEmpty: "bg-rose-50 border-rose-100 text-rose-400",
-    addButton: "text-rose-500 hover:text-rose-600 hover:bg-rose-50",
+    accentBar: "bg-violet-400/80",
+    headerGlow: "from-violet-100/90 via-violet-50/20 to-transparent",
+    badge: "border border-violet-200/80 bg-violet-50 text-violet-700",
+    textEmpty: "text-slate-500",
+    bgEmpty: "bg-violet-50/80 border-violet-100 text-violet-500",
     emptyIcon: Handshake,
     emptySub: "Avaliação final.",
   },
   finalizado: {
-    borderTop: "border-t-[3px] border-t-purple-500",
-    badge: "bg-purple-50 text-purple-700",
-    textEmpty: "text-purple-600",
-    bgEmpty: "bg-purple-50 border-purple-100 text-purple-500",
-    addButton: "text-purple-600 hover:text-purple-700 hover:bg-purple-50",
+    accentBar: "bg-slate-400/80",
+    headerGlow: "from-slate-100/90 via-slate-50/20 to-transparent",
+    badge: "border border-slate-200/80 bg-slate-100 text-slate-700",
+    textEmpty: "text-slate-500",
+    bgEmpty: "bg-slate-100 border-slate-200 text-slate-400",
     emptyIcon: CheckCircle,
-    emptySub: "Parabéns! Em breve alguém chegará até aqui.",
+    emptySub: "Processos concluídos.",
   },
   admissao: {
-    borderTop: "border-t-[3px] border-t-indigo-500",
-    badge: "bg-indigo-50 text-indigo-700",
-    textEmpty: "text-indigo-600",
-    bgEmpty: "bg-indigo-50 border-indigo-100 text-indigo-500",
-    addButton: "text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50",
+    accentBar: "bg-teal-400/75",
+    headerGlow: "from-teal-100/90 via-teal-50/20 to-transparent",
+    badge: "border border-teal-200/80 bg-teal-50 text-teal-700",
+    textEmpty: "text-slate-500",
+    bgEmpty: "bg-teal-50/80 border-teal-100 text-teal-500",
     emptyIcon: CheckCircle,
     emptySub: "Aguardando documentação.",
   },
@@ -94,7 +94,6 @@ interface KanbanColumnProps {
   onCardClick?: (candidateId: string) => void;
   disabled?: boolean;
   showTopMatchHighlight?: boolean;
-  onAddCandidate?: (stage: PipelineStage) => void;
   totalCount?: number;
   draggableCards?: boolean;
   draggingCandidateId?: string | null;
@@ -112,7 +111,6 @@ export const KanbanColumn = memo(function KanbanColumn({
   onCardClick,
   disabled = false,
   showTopMatchHighlight = false,
-  onAddCandidate,
   totalCount,
   draggableCards = false,
   draggingCandidateId = null,
@@ -153,11 +151,11 @@ export const KanbanColumn = memo(function KanbanColumn({
   return (
     <div
       className={[
-        "flex w-full min-w-[15rem] basis-[clamp(15rem,14vw,18rem)] grow flex-col transition-all duration-300 xl:min-w-[15.5rem] 2xl:min-w-[16.5rem]",
+        "flex w-full min-w-[13.5rem] basis-[clamp(13.5rem,18vw,16rem)] grow flex-col overflow-hidden rounded-[20px] transition-all duration-300",
         "pipeline-kanban-column",
         `pipeline-kanban-column--${columnVisualKey}`,
         "kanban-column-enter",
-        "bg-slate-100/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-2xl relative",
+        "relative border border-slate-200/80 bg-white/95 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-900/80",
         isDropTarget && !dropDisabled ? "ring-2 ring-emerald-400/50 scale-[1.01]" : "",
         disabledCls,
       ]
@@ -171,18 +169,27 @@ export const KanbanColumn = memo(function KanbanColumn({
       onDrop={handleDrop}
       data-drop-target={isDropTarget ? "true" : "false"}
     >
+      <div className={`h-1 w-full ${theme.accentBar}`} />
+
       {/* Column Header */}
-      <div className="pipeline-kanban-column__header flex items-center justify-between px-3 pt-3 pb-2">
-        <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate" title={column.label}>
-          {column.label}
-        </span>
+      <div className={`pipeline-kanban-column__header relative flex items-center justify-between border-b border-slate-100/90 bg-gradient-to-r px-3.5 pb-2.5 pt-3 ${theme.headerGlow}`}>
+        <div className="min-w-0">
+          <span className="block truncate text-[13px] font-black tracking-tight text-slate-800 dark:text-slate-100" title={column.label}>
+            {column.label}
+          </span>
+          {column.description ? (
+            <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-400 dark:text-slate-500">
+              {column.description}
+            </span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-1.5">
           {dropDisabled && column.dropDisabledReason ? (
             <TooltipProvider delayDuration={100}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button type="button" className="outline-none focus-visible:ring-2 focus-visible:ring-slate-400 rounded-full flex items-center justify-center">
-                    <Info className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0 dark:text-slate-500 dark:hover:text-slate-300" />
+                    <Info className="h-3.5 w-3.5 cursor-pointer shrink-0 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="center" className="max-w-[220px] text-center bg-white text-slate-700 border border-slate-200 shadow-md dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-xs font-medium z-[100] mt-1 p-2 rounded-lg">
@@ -192,7 +199,7 @@ export const KanbanColumn = memo(function KanbanColumn({
             </TooltipProvider>
           ) : null}
           <span
-            className={`flex h-5 items-center justify-center rounded px-2 text-[11px] font-extrabold ${theme.badge}`}
+            className={`flex h-6 min-w-[30px] items-center justify-center rounded-full px-2 text-[10px] font-extrabold shadow-sm ${theme.badge}`}
           >
             {isFiltered ? `${column.candidates.length}/${totalCount}` : column.candidates.length}
           </span>
@@ -200,9 +207,9 @@ export const KanbanColumn = memo(function KanbanColumn({
       </div>
 
       {/* Candidate Cards list / Drop Zone */}
-      <div className={`pipeline-kanban-column__body flex min-h-[80px] flex-1 flex-col gap-2 px-2 pb-2 overflow-y-auto transition-all duration-200 border ${
+      <div className={`pipeline-kanban-column__body flex min-h-[40px] flex-1 flex-col gap-2.5 bg-slate-50/65 px-2.5 pb-2.5 pt-2.5 overflow-y-auto transition-all duration-200 border ${
         isDropTarget && !dropDisabled
-          ? 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-600 dark:bg-emerald-900/30 border-dashed rounded-xl mx-2'
+          ? 'mx-2 rounded-xl border-dashed border-emerald-300 bg-emerald-50/70 dark:border-emerald-600 dark:bg-emerald-900/30'
           : 'border-transparent'
       } [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full`}>
         {column.candidates.map((c, cardIndex) => {
@@ -229,30 +236,19 @@ export const KanbanColumn = memo(function KanbanColumn({
         })}
 
         {column.candidates.length === 0 && (
-          <div className="pipeline-kanban-column__empty mt-4 mb-auto flex flex-col items-center justify-center px-2 text-center animate-in fade-in duration-200">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-full border ${theme.bgEmpty} mb-2`}>
-              {theme.emptyIcon && <theme.emptyIcon className="h-5 w-5" />}
+          <div className="pipeline-kanban-column__empty mt-5 mb-auto flex flex-col items-center justify-center px-2 pb-2 text-center animate-in fade-in duration-200">
+            <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-xl border shadow-sm ${theme.bgEmpty}`}>
+              {theme.emptyIcon && <theme.emptyIcon className="h-3.5 w-3.5" />}
             </div>
-            <h3 className={`text-[13px] font-bold ${theme.textEmpty}`}>
+            <h3 className={`text-[11px] font-bold ${theme.textEmpty}`}>
               Nenhum candidato
             </h3>
-            <p className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-500 max-w-[180px] leading-snug">
+            <p className="mt-1 max-w-[150px] text-[10px] font-medium leading-snug text-slate-400 dark:text-slate-500">
               {theme.emptySub}
             </p>
           </div>
         )}
 
-        {/* Inline "+ Adicionar candidato" button at the bottom for appropriate columns */}
-        {onAddCandidate && column.stage !== "hired" && column.stage !== "rejected" && (
-          <button
-            type="button"
-            onClick={() => onAddCandidate(targetStage)}
-            className={`mt-1 flex items-center justify-center gap-1.5 w-full py-2.5 text-xs font-bold rounded-lg transition-all ${theme.addButton}`}
-          >
-            <Plus className="h-4 w-4" />
-            Adicionar candidato
-          </button>
-        )}
       </div>
     </div>
   );

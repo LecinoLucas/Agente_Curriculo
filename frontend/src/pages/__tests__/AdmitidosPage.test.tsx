@@ -66,6 +66,7 @@ describe("AdmitidosPage", () => {
   });
 
   it("renderiza cards, tabela e ação de desligamento para admitido", async () => {
+    const user = userEvent.setup();
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Admitidos" })).toBeInTheDocument();
@@ -76,13 +77,21 @@ describe("AdmitidosPage", () => {
     expect(screen.getByText("Admitido")).toBeInTheDocument();
     expect(screen.getByText("Total admitidos")).toBeInTheDocument();
     expect(screen.getByText("Admitidos no mês")).toBeInTheDocument();
+
+    const menuButton = screen.getByRole("button", { name: /ações para Ana Admitida/i });
+    await user.click(menuButton);
     expect(screen.getByRole("button", { name: /marcar como desligado/i })).toBeInTheDocument();
   });
 
   it("renderiza links de ações e não mostra recontratação", async () => {
+    const user = userEvent.setup();
     renderPage();
 
     await screen.findByText("Ana Admitida");
+
+    const menuButton = screen.getByRole("button", { name: /ações para Ana Admitida/i });
+    await user.click(menuButton);
+
     expect(screen.getByRole("link", { name: "Ver candidato" })).toHaveAttribute(
       "href",
       "/candidatos/candidate-1",
@@ -138,6 +147,10 @@ describe("AdmitidosPage", () => {
     renderPage();
 
     await screen.findByText("Ana Admitida");
+
+    const menuButton = screen.getByRole("button", { name: /ações para Ana Admitida/i });
+    await user.click(menuButton);
+
     await user.click(screen.getByRole("button", { name: /marcar como desligado/i }));
 
     expect(await screen.findByRole("dialog", { name: /marcar como desligado/i })).toBeInTheDocument();
@@ -170,6 +183,10 @@ describe("AdmitidosPage", () => {
     renderPage();
 
     await screen.findByText("Ana Admitida");
+
+    const menuButton = screen.getByRole("button", { name: /ações para Ana Admitida/i });
+    await user.click(menuButton);
+
     await user.click(screen.getByRole("button", { name: /marcar como desligado/i }));
     await user.type(screen.getByLabelText("Motivo do desligamento"), "Desligamento solicitado pelo RH");
     await user.click(screen.getByRole("button", { name: /confirmar desligamento/i }));
@@ -180,6 +197,10 @@ describe("AdmitidosPage", () => {
       });
     });
     expect(await screen.findByText("Desligado")).toBeInTheDocument();
+    
+    // Check inside the menu after status is dismissed
+    const menuButtonAfter = screen.getByRole("button", { name: /ações para Ana Admitida/i });
+    await user.click(menuButtonAfter);
     expect(screen.queryByRole("button", { name: /marcar como desligado/i })).not.toBeInTheDocument();
   });
 

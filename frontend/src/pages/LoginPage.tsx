@@ -99,22 +99,22 @@ export function LoginPage() {
   return (
     <div className="min-h-screen w-full relative overflow-x-hidden font-sans text-foreground selection:bg-[#8a1c31]/10 selection:text-[#8a1c31] flex flex-col bg-[#FDFBF7]">
       
-      {/* Layered SVG Wave Background - Compact and subtle in the top-left corner */}
-      <div className="absolute top-0 left-0 w-[395px] h-[220px] z-0 overflow-hidden pointer-events-none">
-        <svg viewBox="0 0 395 220" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path 
-            d="M0 0 H395 C335 130, 205 205, 0 205 Z" 
-            fill="#8a1c31" 
-            opacity="0.08"
+      {/* Institutional wave corner */}
+      <div className="absolute left-0 top-0 z-0 hidden h-[92px] w-[170px] overflow-hidden pointer-events-none lg:block">
+        <svg viewBox="0 0 170 92" className="h-full w-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M0 0H170C158 21 150 34 132 43C110 54 88 48 67 62C45 77 24 84 0 88V0Z"
+            fill="#4A0E1A"
           />
-          <path 
-            d="M0 0 H380 C320 120, 195 190, 0 190 Z" 
-            fill="#751227" 
-            opacity="0.15"
+          <path
+            d="M0 0H148C135 22 126 34 108 43C86 54 65 51 45 65C29 76 14 80 0 83V0Z"
+            fill="#751227"
+            opacity="0.58"
           />
-          <path 
-            d="M0 0 H360 C300 110, 185 170, 0 170 Z" 
-            fill="#4A0E1A" 
+          <path
+            d="M0 0H122C111 20 101 31 84 38C66 46 49 46 31 57C18 65 8 69 0 70V0Z"
+            fill="#8a1c31"
+            opacity="0.34"
           />
         </svg>
       </div>
@@ -127,15 +127,15 @@ export function LoginPage() {
           
           {/* Header Logo - Nested elegantly inside the SVG wave */}
           <div className="relative pl-0 pt-2">
-            <div className="flex items-center gap-3.5 text-white drop-shadow-sm">
+            <div className="flex items-center gap-3.5 text-[#1a0509]">
               <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-xl bg-[#751227] text-xl font-bold shadow-md border border-white/10">
                 RA
               </div>
               <div className="flex flex-col text-left">
                 <span className="font-sans text-[22px] font-bold leading-none tracking-tight">
-                  Maraj<span className="relative inline-block after:content-['´'] after:absolute after:-top-[5px] after:left-[2px] after:text-[12px] after:font-bold after:text-white after:select-none after:pointer-events-none">o</span> RH
+                  Maraj<span className="relative inline-block after:content-['´'] after:absolute after:-top-[5px] after:left-[2px] after:text-[12px] after:font-bold after:text-[#1a0509] after:select-none after:pointer-events-none">o</span> RH
                 </span>
-                <span className="text-[10px] text-white/80 uppercase tracking-[0.18em] mt-1.5 font-bold">
+                <span className="text-[10px] text-[#751227]/70 uppercase tracking-[0.18em] mt-1.5 font-bold">
                   ATS & RECRUTAMENTO IA
                 </span>
               </div>

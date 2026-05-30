@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 import { CandidaturasPage } from "../CandidaturasPage";
 import { candidatesService } from "../../services/candidatesService";
 import { pipelineService } from "../../services/pipelineService";
+import { candidaturasService } from "../../services/candidaturasService";
 
 // ── Hoisted mock factories ─────────────────────────────────────────────────────
 
@@ -60,6 +61,18 @@ vi.mock("../../services/pipelineService", async () => {
   };
 });
 
+vi.mock("../../services/candidaturasService", () => ({
+  candidaturasService: {
+    createManual: vi.fn(),
+    importCSV: vi.fn(),
+    buildCSVTemplate: vi.fn(() => "nome,email,telefone,vaga,observacao\n"),
+  },
+}));
+
+vi.mock("../../services/jobsService", () => ({
+  listJobs: vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, page_size: 50, total_pages: 1 }),
+}));
+
 const listSummariesMock = vi.mocked(candidatesService.listSummaries);
 const schedulePipelineInterviewMock = vi.mocked(pipelineService.schedulePipelineInterview);
 const moveCandidateStageMock = vi.mocked(pipelineService.moveCandidateStage);
@@ -77,6 +90,12 @@ function makeCandidate(
     active_job_stage: string | null;
     active_job_job_fit_score: number | null;
     ai_status: string | null;
+    next_interview: {
+      scheduled_start: string;
+      scheduled_end: string;
+      interview_type: string;
+      interview_format: string;
+    } | null;
   }> = {},
 ) {
   return {
@@ -101,6 +120,7 @@ function makeCandidate(
     active_job_stage: "screening",
     active_job_job_fit_score: 85,
     ai_status: "completed",
+    next_interview: null,
     ...overrides,
   };
 }
@@ -145,6 +165,12 @@ function renderPage() {
       <CandidaturasPage />
     </MemoryRouter>,
   );
+}
+
+async function openMoreActions(candidateId = "cand-1") {
+  await waitFor(() => expect(screen.getByTestId(`action-more-${candidateId}`)).toBeInTheDocument());
+  fireEvent.click(screen.getByTestId(`action-more-${candidateId}`));
+  await waitFor(() => expect(screen.getByTestId(`actions-menu-${candidateId}`)).toBeInTheDocument());
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -245,7 +271,7 @@ describe("CandidaturasPage — core", () => {
   it("botão Abrir perfil navega para /candidatos/:id", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-profile-cand-1")).toBeInTheDocument());
+    await openMoreActions();
 
     fireEvent.click(screen.getByTestId("action-profile-cand-1"));
     expect(mockNavigate).toHaveBeenCalledWith("/candidatos/cand-1");
@@ -282,6 +308,100 @@ describe("CandidaturasPage — core", () => {
 
     expect(screen.queryByTestId("drawer-schedule")).not.toBeInTheDocument();
     expect(screen.queryByTestId("drawer-reject")).not.toBeInTheDocument();
+  });
+});
+
+// ── Phase 7 — Polimento visual e usabilidade ────────────────────────────────
+
+describe("CandidaturasPage — Phase 7 UX", () => {
+  it("mostra próxima ação derivada dos dados da candidatura", async () => {
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidate({ active_job_stage: "screening", active_job_job_fit_score: 85 })]),
+    );
+
+    renderPage();
+
+    const row = await screen.findByTestId("row-cand-1");
+    expect(within(row).getByText("Marcar entrevista")).toBeInTheDocument();
+    expect(within(row).getByText("Não marcada")).toBeInTheDocument();
+  });
+
+  it("ações destrutivas ficam separadas no drawer", async () => {
+    renderPage();
+
+    const row = await screen.findByTestId("row-cand-1");
+    fireEvent.click(row);
+
+    expect(screen.getByTestId("drawer-danger-actions")).toContainElement(screen.getByTestId("drawer-reject"));
+  });
+
+  it("mostra empty state quando não há candidatos", async () => {
+    listSummariesMock.mockResolvedValue(makePaginatedResponse([]));
+
+    renderPage();
+
+    expect(await screen.findByTestId("empty-state")).toHaveTextContent(/nenhuma candidatura ativa/i);
+  });
+
+  it("mostra estado sem resultado quando a busca não retorna candidatos", async () => {
+    listSummariesMock
+      .mockResolvedValueOnce(makePaginatedResponse([makeCandidate()]))
+      .mockResolvedValueOnce(makePaginatedResponse([]));
+
+    renderPage();
+
+    await screen.findByTestId("row-cand-1");
+    fireEvent.change(screen.getByTestId("search-input"), { target: { value: "sem resultado" } });
+
+    expect(await screen.findByTestId("filtered-empty-state")).toHaveTextContent(/nenhum resultado/i);
+  });
+
+  it("drawer mostra resumo e próxima ação", async () => {
+    renderPage();
+
+    const row = await screen.findByTestId("row-cand-1");
+    fireEvent.click(row);
+
+    expect(screen.getByTestId("drawer-summary")).toHaveTextContent(/frentista/i);
+    expect(screen.getByTestId("drawer-next-action")).toHaveTextContent(/marcar entrevista/i);
+  });
+
+  it("viewer continua sem ações de escrita no menu e no drawer", async () => {
+    mockUseAuth.mockReturnValue({ user: { id: "viewer-1", role: "viewer" as const } });
+
+    renderPage();
+
+    await openMoreActions();
+    expect(screen.queryByTestId("action-reject-cand-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("action-interview-cand-1")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Fechar menu"));
+    fireEvent.click(screen.getByTestId("row-cand-1"));
+
+    expect(screen.queryByTestId("drawer-schedule")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("drawer-reject")).not.toBeInTheDocument();
+  });
+
+  it("importação concluída sem candidato válido mostra aviso claro", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 0,
+      linked: 0,
+      duplicates: 1,
+      errors: [{ row: 2, message: "Nome em branco" }],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\n,semnome@test.com"], "sem-validos.csv", { type: "text/csv" });
+    await user.upload(screen.getByTestId("import-file-input"), file);
+    await user.click(screen.getByTestId("import-submit"));
+
+    expect(await screen.findByTestId("import-no-valid-candidates")).toHaveTextContent(/nenhum candidato válido/i);
   });
 });
 
@@ -361,6 +481,43 @@ describe("CandidaturasPage — Marcar entrevista", () => {
       expect(screen.queryByTestId("schedule-interview-modal")).not.toBeInTheDocument(),
     );
   });
+
+  it("ESC fecha o modal de entrevista", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("action-interview-cand-1"));
+
+    expect(screen.getByTestId("schedule-interview-modal")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("schedule-interview-modal")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("após entrevista RH, etapa da linha muda para Entrevista RH", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+
+    // Candidate starts at 'screening'
+    const row = screen.getByTestId("row-cand-1");
+    expect(row.textContent).toMatch(/triagem/i);
+
+    await user.click(screen.getByTestId("action-interview-cand-1"));
+    // interview_type is "hr" by default
+    await user.click(screen.getByTestId("interview-submit"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("schedule-interview-modal")).not.toBeInTheDocument(),
+    );
+
+    // Stage badge should now show hr_interview label
+    expect(screen.getByTestId("row-cand-1").textContent).toMatch(/entrevista rh/i);
+  });
 });
 
 // ── Copiar WhatsApp ───────────────────────────────────────────────────────────
@@ -380,7 +537,7 @@ describe("CandidaturasPage — Copiar WhatsApp", () => {
   it("antes de entrevista gera mensagem genérica", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-whatsapp-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-whatsapp-cand-1"));
 
     await waitFor(() => expect(writeTextMock).toHaveBeenCalled());
@@ -389,6 +546,19 @@ describe("CandidaturasPage — Copiar WhatsApp", () => {
     expect(msg).toContain("Frentista");
     expect(msg).toContain("Rede de Postos Marajó");
     expect(msg).not.toMatch(/marcada para/i);
+  });
+
+  it("quando clipboard falha mostra toast de erro", async () => {
+    writeTextMock.mockRejectedValue(new Error("denied"));
+
+    renderPage();
+
+    await openMoreActions();
+    fireEvent.click(screen.getByTestId("action-whatsapp-cand-1"));
+
+    const { toast } = await import("../../shared/utils/toast");
+    await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalled());
+    expect(vi.mocked(toast.success)).not.toHaveBeenCalledWith("Mensagem copiada para o clipboard.");
   });
 
   it("depois de entrevista marcada inclui data e hora", async () => {
@@ -409,6 +579,7 @@ describe("CandidaturasPage — Copiar WhatsApp", () => {
     );
 
     // now copy WhatsApp — should use interview message
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-whatsapp-cand-1"));
 
     await waitFor(() => expect(writeTextMock).toHaveBeenCalled());
@@ -424,7 +595,7 @@ describe("CandidaturasPage — Reprovar", () => {
   it("botão Reprovar na tabela abre modal de confirmação", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-reject-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-reject-cand-1"));
 
     expect(screen.getByTestId("reject-modal")).toBeInTheDocument();
@@ -434,7 +605,7 @@ describe("CandidaturasPage — Reprovar", () => {
   it("motivo vem preenchido com padrão", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-reject-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-reject-cand-1"));
 
     const textarea = screen.getByTestId("reject-reason") as HTMLTextAreaElement;
@@ -444,7 +615,7 @@ describe("CandidaturasPage — Reprovar", () => {
   it("botão Confirmar chama pipelineService.moveCandidateStage com rejected", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-reject-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-reject-cand-1"));
 
     fireEvent.click(screen.getByTestId("reject-confirm"));
@@ -462,6 +633,7 @@ describe("CandidaturasPage — Reprovar", () => {
 
     await waitFor(() => expect(screen.getByText("Ana Silva")).toBeInTheDocument());
 
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-reject-cand-1"));
     fireEvent.click(screen.getByTestId("reject-confirm"));
 
@@ -473,9 +645,24 @@ describe("CandidaturasPage — Reprovar", () => {
   it("modal fecha após reprovação", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-reject-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-reject-cand-1"));
     fireEvent.click(screen.getByTestId("reject-confirm"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("reject-modal")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("ESC fecha o modal de reprovação", async () => {
+    renderPage();
+
+    await openMoreActions();
+    fireEvent.click(screen.getByTestId("action-reject-cand-1"));
+
+    expect(screen.getByTestId("reject-modal")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() =>
       expect(screen.queryByTestId("reject-modal")).not.toBeInTheDocument(),
@@ -501,7 +688,7 @@ describe("CandidaturasPage — Abrir Pipeline", () => {
   it("navega para /pipeline/:jobId?candidateId=:id", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-pipeline-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-pipeline-cand-1"));
 
     expect(mockNavigate).toHaveBeenCalledWith("/pipeline/job-1?candidateId=cand-1");
@@ -516,5 +703,697 @@ describe("CandidaturasPage — Abrir Pipeline", () => {
     fireEvent.click(screen.getByTestId("drawer-pipeline"));
 
     expect(mockNavigate).toHaveBeenCalledWith("/pipeline/job-1?candidateId=cand-1");
+  });
+
+  it("ESC fecha o drawer lateral", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("row-cand-1")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("row-cand-1"));
+
+    expect(screen.getByTestId("candidatura-drawer")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("candidatura-drawer")).not.toBeInTheDocument(),
+    );
+  });
+});
+
+// ── Adicionar candidatos ──────────────────────────────────────────────────────
+
+describe("CandidaturasPage — Adicionar candidatos", () => {
+  it("admin vê botão 'Adicionar candidatos'", async () => {
+    renderPage();
+
+    await waitFor(() => expect(listSummariesMock).toHaveBeenCalled());
+    expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument();
+  });
+
+  it("hr vê botão 'Adicionar candidatos'", async () => {
+    mockUseAuth.mockReturnValue({ user: { id: "user-hr", role: "hr" as const } });
+    renderPage();
+
+    await waitFor(() => expect(listSummariesMock).toHaveBeenCalled());
+    expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument();
+  });
+
+  it("recruiter vê botão 'Adicionar candidatos'", async () => {
+    mockUseAuth.mockReturnValue({ user: { id: "user-rec", role: "recruiter" as const } });
+    renderPage();
+
+    await waitFor(() => expect(listSummariesMock).toHaveBeenCalled());
+    expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument();
+  });
+
+  it("viewer não vê botão 'Adicionar candidatos'", async () => {
+    mockUseAuth.mockReturnValue({ user: { id: "viewer-1", role: "viewer" as const } });
+    renderPage();
+
+    await waitFor(() => expect(listSummariesMock).toHaveBeenCalled());
+    expect(screen.queryByTestId("add-candidates-btn")).not.toBeInTheDocument();
+  });
+
+  it("botão abre modal com abas Manual e Importar planilha", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("add-candidates-btn"));
+
+    expect(screen.getByTestId("add-candidate-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("tab-manual")).toBeInTheDocument();
+    expect(screen.getByTestId("tab-import")).toBeInTheDocument();
+  });
+
+  it("ESC fecha o modal de adicionar candidatos", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("add-candidates-btn"));
+    expect(screen.getByTestId("add-candidate-modal")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("add-candidate-modal")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("aba Manual valida nome obrigatório", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+
+    await user.click(screen.getByTestId("manual-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("manual-error")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("manual-error").textContent).toMatch(/nome/i);
+  });
+
+  it("aba Manual valida que precisa de email ou telefone", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+
+    await user.type(screen.getByTestId("manual-name"), "João Teste");
+    await user.click(screen.getByTestId("manual-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("manual-error")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("manual-error").textContent).toMatch(/e-mail ou telefone/i);
+  });
+
+  it("salvar candidato manual chama candidaturasService.createManual", async () => {
+    const createManualMock = vi.mocked(candidaturasService.createManual);
+    createManualMock.mockResolvedValue({
+      candidate_id: "new-cand-1",
+      full_name: "Novo Candidato",
+      email: "novo@test.com",
+      phone: null,
+      job_id: null,
+      job_linked: false,
+      duplicate_warning: null,
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+
+    await user.type(screen.getByTestId("manual-name"), "Novo Candidato");
+    await user.type(screen.getByTestId("manual-email"), "novo@test.com");
+    await user.click(screen.getByTestId("manual-submit"));
+
+    await waitFor(() => expect(createManualMock).toHaveBeenCalled());
+    expect(createManualMock).toHaveBeenCalledWith(
+      expect.objectContaining({ full_name: "Novo Candidato", email: "novo@test.com" }),
+    );
+  });
+
+  it("sucesso no manual recarrega lista e fecha modal", async () => {
+    const createManualMock = vi.mocked(candidaturasService.createManual);
+    createManualMock.mockResolvedValue({
+      candidate_id: "new-cand-2",
+      full_name: "Reload Test",
+      email: "reload@test.com",
+      phone: null,
+      job_id: null,
+      job_linked: false,
+      duplicate_warning: null,
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+
+    await user.type(screen.getByTestId("manual-name"), "Reload Test");
+    await user.type(screen.getByTestId("manual-email"), "reload@test.com");
+    await user.click(screen.getByTestId("manual-submit"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("add-candidate-modal")).not.toBeInTheDocument(),
+    );
+    // listSummaries deve ser chamado novamente (reload)
+    expect(listSummariesMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("duplicata exibe aviso no modal manual", async () => {
+    const createManualMock = vi.mocked(candidaturasService.createManual);
+    createManualMock.mockResolvedValue({
+      candidate_id: "dup-cand-1",
+      full_name: "Duplicado",
+      email: "dup@test.com",
+      phone: null,
+      job_id: null,
+      job_linked: false,
+      duplicate_warning: "Candidato com este e-mail já existe.",
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+
+    await user.type(screen.getByTestId("manual-name"), "Duplicado");
+    await user.type(screen.getByTestId("manual-email"), "dup@test.com");
+    await user.click(screen.getByTestId("manual-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/já existe/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("aba Importar exibe área de upload e botão de modelo", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("add-candidates-btn"));
+    fireEvent.click(screen.getByTestId("tab-import"));
+
+    expect(screen.getByTestId("file-drop-zone")).toBeInTheDocument();
+    expect(screen.getByTestId("download-template")).toBeInTheDocument();
+    expect(screen.getByTestId("import-submit")).toBeInTheDocument();
+  });
+
+  it("botão Importar fica desabilitado sem arquivo selecionado", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("add-candidates-btn"));
+    fireEvent.click(screen.getByTestId("tab-import"));
+
+    const btn = screen.getByTestId("import-submit") as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
+  it("importar CSV com sucesso exibe resumo de criados/vinculados/duplicados", async () => {
+    const importMock = vi.mocked(candidaturasService.importCSV);
+    importMock.mockResolvedValue({
+      created: 5,
+      linked: 3,
+      duplicates: 2,
+      errors: [],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\nTeste,t@t.com"], "test.csv", { type: "text/csv" });
+    const input = screen.getByTestId("import-file-input");
+    await user.upload(input, file);
+
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(importMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText(/importação concluída/i)).toBeInTheDocument());
+    expect(screen.getByTestId("stat-criados").textContent).toMatch(/5 criado/i);
+    expect(screen.getByTestId("stat-vinculados").textContent).toMatch(/3 vinculado/i);
+    expect(screen.getByTestId("stat-duplicados").textContent).toMatch(/2 duplicado/i);
+  });
+
+  it("erros de importação aparecem no modal", async () => {
+    const importMock = vi.mocked(candidaturasService.importCSV);
+    importMock.mockResolvedValue({
+      created: 1,
+      linked: 0,
+      duplicates: 0,
+      errors: [{ row: 3, message: "E-mail inválido" }],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\nTeste,t@t.com\nErro,x"], "test.csv", { type: "text/csv" });
+    const input = screen.getByTestId("import-file-input");
+    await user.upload(input, file);
+
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("import-errors")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/linha 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/e-mail inválido/i)).toBeInTheDocument();
+  });
+});
+
+// ── Phase 6 — Polimento da importação ────────────────────────────────────────
+
+describe("CandidaturasPage — Phase 6 polimento importação", () => {
+  beforeEach(() => {
+    if (!globalThis.URL.createObjectURL) {
+      Object.defineProperty(globalThis.URL, "createObjectURL", {
+        value: vi.fn(() => "blob:test-url"),
+        writable: true,
+        configurable: true,
+      });
+    }
+    if (!globalThis.URL.revokeObjectURL) {
+      Object.defineProperty(globalThis.URL, "revokeObjectURL", {
+        value: vi.fn(),
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
+  it("botão Baixar modelo CSV chama buildCSVTemplate", async () => {
+    const buildMock = vi.mocked(candidaturasService.buildCSVTemplate);
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("add-candidates-btn"));
+    fireEvent.click(screen.getByTestId("tab-import"));
+
+    fireEvent.click(screen.getByTestId("download-template"));
+
+    expect(buildMock).toHaveBeenCalled();
+  });
+
+  it("aba importar exibe exemplo visual com colunas", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("add-candidates-btn"));
+    fireEvent.click(screen.getByTestId("tab-import"));
+
+    expect(screen.getByTestId("csv-example")).toBeInTheDocument();
+    expect(screen.getByText(/Ana Souza/i)).toBeInTheDocument();
+    expect(screen.getByText(/Operador de Caixa/i)).toBeInTheDocument();
+  });
+
+  it("selecionar CSV válido mostra preview das primeiras linhas", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const csv = "nome,email,telefone\nAna Silva,ana@t.com,(11)99999\nBob Lima,bob@t.com,(22)88888";
+    const file = new File([csv], "candidatos.csv", { type: "text/csv" });
+    const input = screen.getByTestId("import-file-input");
+    await user.upload(input, file);
+
+    await waitFor(() => expect(screen.getByTestId("csv-preview")).toBeInTheDocument());
+    expect(screen.getByTestId("csv-row-count").textContent).toMatch(/2 linha/i);
+  });
+
+  it("CSV sem colunas esperadas mostra aviso de colunas", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["coluna1,coluna2\nValor1,Valor2"], "errado.csv", { type: "text/csv" });
+    const input = screen.getByTestId("import-file-input");
+    await user.upload(input, file);
+
+    await waitFor(() => expect(screen.getByTestId("column-warning")).toBeInTheDocument());
+    expect(screen.getByTestId("column-warning").textContent).toMatch(/colunas obrigatórias/i);
+  });
+
+  it("CSV sem coluna nome mostra aviso de colunas obrigatórias", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["email,telefone\nana@t.com,(11)99999"], "semNome.csv", { type: "text/csv" });
+    await user.upload(screen.getByTestId("import-file-input"), file);
+
+    await waitFor(() => expect(screen.getByTestId("column-warning")).toBeInTheDocument());
+  });
+
+  it("aviso de duplicados aparece no resultado quando duplicates > 0", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 2,
+      linked: 0,
+      duplicates: 3,
+      errors: [],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\nTeste,t@t.com"], "test.csv", { type: "text/csv" });
+    await user.upload(screen.getByTestId("import-file-input"), file);
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("duplicate-warning")).toBeInTheDocument());
+    expect(screen.getByTestId("duplicate-warning").textContent).toMatch(/não foram recriados/i);
+  });
+
+  it("sem duplicados não aparece aviso de duplicados", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 2,
+      linked: 0,
+      duplicates: 0,
+      errors: [],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\nTeste,t@t.com"], "test.csv", { type: "text/csv" });
+    await user.upload(screen.getByTestId("import-file-input"), file);
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("import-result")).toBeInTheDocument());
+    expect(screen.queryByTestId("duplicate-warning")).not.toBeInTheDocument();
+  });
+
+  it("resultado mostra stats individuais com data-testid", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 7,
+      linked: 5,
+      duplicates: 1,
+      errors: [{ row: 2, message: "Nome em branco" }],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\nTeste,t@t.com"], "test.csv", { type: "text/csv" });
+    await user.upload(screen.getByTestId("import-file-input"), file);
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("import-result")).toBeInTheDocument());
+    expect(screen.getByTestId("stat-criados").textContent).toMatch(/7 criado/i);
+    expect(screen.getByTestId("stat-vinculados").textContent).toMatch(/5 vinculado/i);
+    expect(screen.getByTestId("stat-duplicados").textContent).toMatch(/1 duplicado/i);
+    expect(screen.getByTestId("stat-erros").textContent).toMatch(/1 erro/i);
+    expect(screen.getByText(/nome em branco/i)).toBeInTheDocument();
+  });
+
+  it("botão Importar outro arquivo reseta estado e volta ao formulário", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 1,
+      linked: 0,
+      duplicates: 0,
+      errors: [],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\nTeste,t@t.com"], "test.csv", { type: "text/csv" });
+    await user.upload(screen.getByTestId("import-file-input"), file);
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("import-result")).toBeInTheDocument());
+
+    await user.click(screen.getByTestId("import-another-btn"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("import-result")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("file-drop-zone")).toBeInTheDocument();
+  });
+
+  it("botão Fechar no resultado fecha o modal", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 1,
+      linked: 0,
+      duplicates: 0,
+      errors: [],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\nTeste,t@t.com"], "test.csv", { type: "text/csv" });
+    await user.upload(screen.getByTestId("import-file-input"), file);
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("import-close-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("import-close-btn"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("add-candidate-modal")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("após importação com created > 0, lista recarrega", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 3,
+      linked: 0,
+      duplicates: 0,
+      errors: [],
+      preview: [],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    const callsBefore = listSummariesMock.mock.calls.length;
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+
+    const file = new File(["nome,email\nTeste,t@t.com"], "test.csv", { type: "text/csv" });
+    await user.upload(screen.getByTestId("import-file-input"), file);
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("import-result")).toBeInTheDocument());
+    expect(listSummariesMock.mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+
+  it("botão Confirmar importação fica desabilitado sem arquivo", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("add-candidates-btn"));
+    fireEvent.click(screen.getByTestId("tab-import"));
+
+    const btn = screen.getByTestId("import-submit") as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toMatch(/confirmar importação/i);
+  });
+});
+
+// ── Phase 8 — Próxima entrevista real ─────────────────────────────────────────
+
+describe("CandidaturasPage — next_interview do backend", () => {
+  const NEXT_INTERVIEW_START = "2026-06-20T10:00:00.000Z";
+  const NEXT_INTERVIEW_END = "2026-06-20T11:00:00.000Z";
+
+  function makeCandidateWithInterview() {
+    return makeCandidate({
+      next_interview: {
+        scheduled_start: NEXT_INTERVIEW_START,
+        scheduled_end: NEXT_INTERVIEW_END,
+        interview_type: "hr",
+        interview_format: "online",
+      },
+    });
+  }
+
+  it("mostra badge de entrevista marcada quando next_interview existe no backend", async () => {
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidateWithInterview()]),
+    );
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("interview-badge-cand-1")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("interview-badge-cand-1").textContent).toMatch(/entrevista marcada/i);
+  });
+
+  it("mostra data e hora da entrevista do backend na tabela", async () => {
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidateWithInterview()]),
+    );
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("interview-badge-cand-1")).toBeInTheDocument(),
+    );
+    // Must show a formatted date/time (not just the label)
+    const badge = screen.getByTestId("interview-badge-cand-1");
+    // "20/06/2026" or similar formatted date should appear
+    expect(badge.textContent).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+  });
+
+  it("mostra 'Não marcada' quando next_interview é null", async () => {
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidate({ next_interview: null })]),
+    );
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("row-cand-1")).toBeInTheDocument());
+
+    expect(screen.queryByTestId("interview-badge-cand-1")).not.toBeInTheDocument();
+    expect(screen.getByText(/não marcada/i)).toBeInTheDocument();
+  });
+
+  it("drawer mostra entrevista real do backend", async () => {
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidateWithInterview()]),
+    );
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("row-cand-1")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("row-cand-1"));
+
+    expect(screen.getByTestId("candidatura-drawer")).toBeInTheDocument();
+    // Drawer shows interview date in the summary section
+    const drawer = screen.getByTestId("candidatura-drawer");
+    expect(drawer.textContent).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+  });
+
+  it("WhatsApp inclui data e hora quando next_interview existe", async () => {
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: writeTextMock },
+      configurable: true,
+      writable: true,
+    });
+
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidateWithInterview()]),
+    );
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId(`action-more-cand-1`)).toBeInTheDocument());
+    await openMoreActions("cand-1");
+
+    fireEvent.click(screen.getByTestId("action-whatsapp-cand-1"));
+
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalled());
+    const msg = writeTextMock.mock.calls[0][0] as string;
+    expect(msg).toMatch(/marcada para/i);
+    expect(msg).toContain("Frentista");
+  });
+
+  it("WhatsApp gera mensagem genérica quando next_interview é null", async () => {
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: writeTextMock },
+      configurable: true,
+      writable: true,
+    });
+
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidate({ next_interview: null })]),
+    );
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId(`action-more-cand-1`)).toBeInTheDocument());
+    await openMoreActions("cand-1");
+
+    fireEvent.click(screen.getByTestId("action-whatsapp-cand-1"));
+
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalled());
+    const msg = writeTextMock.mock.calls[0][0] as string;
+    expect(msg).not.toMatch(/marcada para/i);
+    expect(msg).toMatch(/rede de postos marajó/i);
+  });
+
+  it("entrevista marcada nesta sessão sobrescreve next_interview null do backend", async () => {
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidate({ next_interview: null })]),
+    );
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("action-interview-cand-1"));
+
+    expect(screen.getByTestId("schedule-interview-modal")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("interview-date"), { target: { value: "2026-06-25" } });
+    fireEvent.change(screen.getByTestId("interview-time"), { target: { value: "14:00" } });
+
+    fireEvent.click(screen.getByTestId("interview-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("interview-badge-cand-1")).toBeInTheDocument(),
+    );
+  });
+
+  it("viewer não vê botão de entrevista mas vê badge quando next_interview existe", async () => {
+    mockUseAuth.mockReturnValue({ user: { id: "viewer-1", role: "viewer" as const } });
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([makeCandidateWithInterview()]),
+    );
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("interview-badge-cand-1")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("action-interview-cand-1")).not.toBeInTheDocument();
   });
 });

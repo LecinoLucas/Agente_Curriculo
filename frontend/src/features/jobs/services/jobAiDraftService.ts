@@ -63,6 +63,11 @@ export type JobAiDraftGenerateResponse = {
   usage: JobAiDraftUsage;
 };
 
+export type AiSkillSuggestions = {
+  mandatory: string[];
+  optional: string[];
+};
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 export async function extractJobTextFromImage(file: File): Promise<JobOcrExtractResponse> {

@@ -24,6 +24,12 @@ import {
 } from "@/features/demo-rh/demoScenarioOrchestrator";
 import { DemoScenario } from "@/features/demo-rh/types";
 import { toast } from "@/shared/utils/toast";
+import {
+  JobImageMockFillPanel,
+  DEMO_MOCK_SKILLS,
+  MOCK_JOB_FILL_UPDATES,
+} from "../features/jobs/components/JobImageMockFillPanel";
+import type { JobFormValues } from "../features/jobs/jobFormConfig";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -325,6 +331,8 @@ export function DemoRhPage() {
   const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null);
   const [decisionCandidateId, setDecisionCandidateId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("Escolha uma vaga para iniciar uma demo local e sem persistência.");
+  const [imageJobApplied, setImageJobApplied] = useState(false);
+  const [imageJobData, setImageJobData] = useState<Partial<JobFormValues> | null>(null);
 
   const selectedJob = useMemo(
     () => DEMO_JOBS.find((job) => job.id === selectedJobId) ?? null,
@@ -397,6 +405,11 @@ export function DemoRhPage() {
     setDecisionCandidateId(null);
     setFeedback("Análise simulada concluída. Ranking ordenado por aderência.");
     demoToast("Candidatos analisados com IA simulada.");
+  }
+
+  function handleImageDemoApply(data: Partial<JobFormValues>) {
+    setImageJobData(data);
+    setImageJobApplied(true);
   }
 
   function handleCandidateAction(action: CandidateAction, candidate: DemoCandidateView) {
@@ -670,6 +683,70 @@ export function DemoRhPage() {
           <span className="sr-only" data-testid="scenario-local-state">{scenario?.selectedJobId ?? "sem-cenario"}</span>
         </>
       )}
+
+      <section data-testid="image-draft-section" className="space-y-4">
+        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 sm:p-6">
+          <h2 className="text-xl font-semibold text-[hsl(var(--text))]">
+            Criar vaga por imagem ou descrição
+          </h2>
+          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            Simule como um cartaz ou texto vira uma vaga estruturada.
+          </p>
+        </div>
+
+        {imageJobApplied && imageJobData ? (
+          <div
+            data-testid="demo-job-filled-summary"
+            className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950/30"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <h3 className="text-lg font-semibold text-emerald-900 dark:text-emerald-200">
+                Vaga demo preenchida
+              </h3>
+            </div>
+            <dl className="mt-4 grid gap-2 sm:grid-cols-2 text-sm">
+              <div>
+                <dt className="font-semibold text-emerald-800 dark:text-emerald-300">Cargo</dt>
+                <dd className="text-emerald-700 dark:text-emerald-400">{imageJobData.title ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-emerald-800 dark:text-emerald-300">Área</dt>
+                <dd className="text-emerald-700 dark:text-emerald-400">{imageJobData.job_area ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-emerald-800 dark:text-emerald-300">Local</dt>
+                <dd className="text-emerald-700 dark:text-emerald-400">{imageJobData.location ?? "—"}</dd>
+              </div>
+            </dl>
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                Skills sugeridas
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {DEMO_MOCK_SKILLS.map((skill) => (
+                  <span
+                    key={skill}
+                    className="rounded-full border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900 dark:text-emerald-300"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-white px-4 py-3 dark:border-emerald-800 dark:bg-emerald-900/40">
+              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                Próximo passo
+              </p>
+              <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-400">
+                Ver candidatos demo
+              </p>
+            </div>
+          </div>
+        ) : (
+          <JobImageMockFillPanel mode="demo" onDemoApply={handleImageDemoApply} />
+        )}
+      </section>
     </div>
   );
 }

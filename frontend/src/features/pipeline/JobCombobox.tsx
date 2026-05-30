@@ -94,74 +94,62 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
   }
 
   return (
-    <div ref={containerRef} className="relative flex flex-col gap-1 w-full">
+    <div ref={containerRef} className="relative w-full">
       {/* Header Layout (trigger) */}
-      <div className="flex items-center gap-4">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Alterar vaga da pipeline"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-4 text-left focus:outline-none"
+      >
         {/* Briefcase Icon Area */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
-          <Briefcase className="h-6 w-6" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-[#8a1c31] text-white dark:bg-rose-900/50 dark:text-rose-200">
+          <Briefcase className="h-5 w-5" />
         </div>
 
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
             Vaga da pipeline
           </span>
           
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
+            <span className="truncate text-[15px] font-bold tracking-tight text-slate-800 dark:text-slate-100">
               {loading && jobs.length === 0 ? "Carregando vagas…" : (selectedJob?.title ?? "Selecionar vaga")}
             </span>
             
-            {/* The Badge acts as the dropdown trigger visually or we make the title block clickable */}
-            <button
-              type="button"
-              aria-haspopup="listbox"
-              aria-expanded={open}
-              onClick={() => setOpen((o) => !o)}
-              className={`flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                selectedJob ? STATUS_BADGE[selectedTone] : "bg-slate-100 text-slate-600 border-slate-200"
+            <span
+              className={`flex items-center gap-1 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                selectedJob ? STATUS_BADGE[selectedTone] : "bg-slate-100 text-slate-600 border border-slate-200"
               }`}
             >
               {selectedJob ? formatJobStatus(selectedJob.status) : "Selecione"}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
-            </button>
+              <ChevronDown className={`h-3 w-3 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+            </span>
             
             {loading && jobs.length > 0 && (
               <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-500" />
             )}
           </div>
-          
-          {selectedJob && (
-            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-              {selectedJob.seniority_level && (
-                <><span className="text-slate-500">{selectedJob.seniority_level}</span><span>·</span></>
-              )}
-              {selectedJob.work_model && (
-                <><span className="text-slate-500">{formatWorkModel(selectedJob.work_model)}</span><span>·</span></>
-              )}
-              {selectedJob.location && (
-                <span className="text-slate-500">{selectedJob.location}</span>
-              )}
-            </div>
-          )}
         </div>
-      </div>
+      </button>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-full min-w-[280px] rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg overflow-hidden">
+        <div className="absolute left-0 top-full z-[100] mt-2 w-full min-w-[320px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Search row */}
-          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 px-3 py-2">
-            <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 px-4 py-3">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Buscar vaga…"
+              placeholder="Buscar vaga por título ou status…"
               aria-label="Buscar vaga"
-              className="flex-1 bg-transparent text-xs font-medium text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none"
+              className="flex-1 bg-transparent text-sm font-medium text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none"
             />
             {query && (
               <button
@@ -170,17 +158,17 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                 aria-label="Limpar busca"
               >
-                <X className="h-3 w-3" />
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
 
           {/* List */}
-          <ul ref={listRef} role="listbox" aria-label="Vagas" className="max-h-72 overflow-y-auto py-1">
+          <ul ref={listRef} role="listbox" aria-label="Vagas" className="max-h-[400px] overflow-y-auto py-1 scrollbar-thin">
             {loading && jobs.length === 0 ? (
-              <li className="px-3 py-6 text-center text-xs text-slate-400">Carregando vagas…</li>
+              <li className="px-4 py-8 text-center text-sm text-slate-400">Carregando vagas…</li>
             ) : filtered.length === 0 ? (
-              <li className="px-3 py-6 text-center text-xs text-slate-400">Nenhuma vaga encontrada</li>
+              <li className="px-4 py-8 text-center text-sm text-slate-400">Nenhuma vaga encontrada</li>
             ) : (
               filtered.map((job, idx) => {
                 const tone = jobStatusTone(job.status);
@@ -193,13 +181,13 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
                     aria-selected={isSelected}
                     onMouseEnter={() => setHighlighted(idx)}
                     onClick={() => select(job.id)}
-                    className={`flex cursor-pointer flex-col gap-0.5 px-3 py-2 transition-colors ${
+                    className={`flex cursor-pointer flex-col gap-1 px-4 py-3 transition-colors ${
                       isHighlighted ? "bg-slate-50 dark:bg-slate-800/60" : ""
-                    } ${isSelected ? "bg-[hsl(var(--primary))]/5" : ""}`}
+                    } ${isSelected ? "bg-[hsl(var(--primary))]/5 border-l-4 border-[hsl(var(--primary))]" : "border-l-4 border-transparent"}`}
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-3">
                       <span
-                        className={`truncate text-xs font-bold ${
+                        className={`truncate text-sm font-bold ${
                           isSelected
                             ? "text-[hsl(var(--primary))]"
                             : "text-slate-700 dark:text-slate-200"
@@ -208,23 +196,23 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
                         {job.title}
                       </span>
                       <span
-                        className={`shrink-0 rounded-full border px-1.5 py-px text-[10px] font-semibold ${STATUS_BADGE[tone]}`}
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${STATUS_BADGE[tone]}`}
                       >
                         {formatJobStatus(job.status)}
                       </span>
                     </div>
                     {(job.location ?? job.work_model) && (
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
                         {job.location && (
                           <>
-                            <MapPin className="h-2.5 w-2.5 shrink-0" />
+                            <MapPin className="h-3 w-3 shrink-0" />
                             <span className="truncate">{job.location}</span>
                           </>
                         )}
-                        {job.location && job.work_model && <span>·</span>}
+                        {job.location && job.work_model && <span className="text-slate-300">·</span>}
                         {job.work_model && (
                           <>
-                            <Briefcase className="h-2.5 w-2.5 shrink-0" />
+                            <Briefcase className="h-3 w-3 shrink-0" />
                             <span>{formatWorkModel(job.work_model)}</span>
                           </>
                         )}

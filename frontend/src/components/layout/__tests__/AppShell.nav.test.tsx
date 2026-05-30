@@ -109,8 +109,10 @@ describe("AppShell — Sidebar Nav", () => {
     it("renderiza a navegação para recruiter sem áreas de gestor/admin totais", () => {
       renderShell("recruiter");
 
-      expectTopNavLabels(["Dashboard", "Recrutamento", "Avaliações", "Administração"]);
-      expectTopNavMissing(["Admissão", "Gestores", "Outros"]);
+      expectTopNavLabels(["Dashboard", "Recrutamento", "Avaliações", "Administração", "Outros"]);
+      expectTopNavMissing(["Admissão", "Gestores"]);
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Outros" }));
+      expect(screen.getByRole("link", { name: /Demo RH/ })).toBeInTheDocument();
     });
 
     it("renderiza menu Admitidos para RH", () => {
@@ -141,7 +143,7 @@ describe("AppShell — Sidebar Nav", () => {
       expect(topNavItem("Outros")).toBeInTheDocument();
     });
 
-    it.each(["recruiter", "hr", "manager", "viewer"] as const)(
+    it.each(["hr", "manager", "viewer"] as const)(
       "não exibe Outros para %s",
       (role) => {
         renderShell(role);

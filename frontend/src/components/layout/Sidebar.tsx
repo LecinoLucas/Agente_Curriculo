@@ -32,6 +32,7 @@ export function Sidebar({
 }: SidebarProps) {
   const navigate = useNavigate();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [isHovered, setIsHovered] = useState(false);
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) => ({
@@ -40,7 +41,13 @@ export function Sidebar({
     }));
   };
 
+  // Sync expanded groups based on active items, but only if hovered or explicitly toggled
   useEffect(() => {
+    if (!isHovered && !mobileMenuOpen) {
+      setExpandedGroups({});
+      return;
+    }
+
     const newExpanded: Record<string, boolean> = {};
     groups.forEach((group) => {
       if (group.isDropdown && group.items.some((item) => isItemActive(item.to))) {
@@ -48,7 +55,7 @@ export function Sidebar({
       }
     });
     setExpandedGroups((prev) => ({ ...prev, ...newExpanded }));
-  }, [groups, isItemActive]);
+  }, [groups, isItemActive, isHovered, mobileMenuOpen]);
 
   return (
     <>
@@ -66,9 +73,12 @@ export function Sidebar({
 
       {/* ── Sidebar Container ── */}
       <aside
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={cn(
           "group/sidebar fixed inset-y-0 left-0 z-50 flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]/50",
-          mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[4.5rem] hover:lg:w-56"
+          mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[4.5rem]",
+          isHovered && "lg:w-56"
         )}
       >
         {/* Header / Logo */}
@@ -78,7 +88,8 @@ export function Sidebar({
               RA
             </div>
             <div className={cn("flex flex-col min-w-0 transition-opacity duration-300", 
-              "lg:opacity-0 group-hover/sidebar:lg:opacity-100",
+              "lg:opacity-0",
+              (isHovered || mobileMenuOpen) && "lg:opacity-100",
               mobileMenuOpen ? "opacity-100" : ""
             )}>
               <span className="truncate font-heading text-[13px] font-extrabold leading-tight tracking-tight text-[hsl(var(--nav-text))]">
@@ -125,7 +136,8 @@ export function Sidebar({
                   </div>
                   <span className={cn(
                     "ml-3 truncate transition-opacity duration-300",
-                    "lg:opacity-0 group-hover/sidebar:lg:opacity-100",
+                    "lg:opacity-0",
+                    (isHovered || mobileMenuOpen) && "lg:opacity-100",
                     mobileMenuOpen ? "opacity-100" : ""
                   )}>
                     {item.label}
@@ -156,7 +168,8 @@ export function Sidebar({
                     </div>
                     <span className={cn(
                       "ml-3 truncate transition-opacity duration-300",
-                      "lg:opacity-0 group-hover/sidebar:lg:opacity-100",
+                      "lg:opacity-0",
+                      (isHovered || mobileMenuOpen) && "lg:opacity-100",
                       mobileMenuOpen ? "opacity-100" : ""
                     )}>
                       {group.label}
@@ -166,7 +179,8 @@ export function Sidebar({
                     className={cn(
                       "h-4 w-4 shrink-0 transition-transform duration-300 opacity-60",
                       isOpen && "rotate-180",
-                      "lg:hidden group-hover/sidebar:lg:block",
+                      "lg:hidden",
+                      (isHovered || mobileMenuOpen) && "lg:block",
                       mobileMenuOpen ? "block" : ""
                     )}
                   />
@@ -193,7 +207,8 @@ export function Sidebar({
                           active
                             ? "bg-[hsl(var(--nav-active-bg))]/50 text-[hsl(var(--nav-active-text))] font-semibold"
                             : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-                          "lg:hidden group-hover/sidebar:lg:flex",
+                          "lg:hidden",
+                          (isHovered || mobileMenuOpen) && "lg:flex",
                           mobileMenuOpen ? "flex" : ""
                         )}
                         title={item.label}
@@ -213,7 +228,8 @@ export function Sidebar({
           {/* Expanded-only: theme switcher + profile */}
           <div className={cn(
             "flex items-center justify-between px-1 pb-1",
-            "lg:hidden group-hover/sidebar:lg:flex",
+            "lg:hidden",
+            (isHovered || mobileMenuOpen) && "lg:flex",
             mobileMenuOpen ? "flex" : ""
           )}>
             <VisualThemeSwitcher />
@@ -250,7 +266,8 @@ export function Sidebar({
             <LogOut className="h-[1.125rem] w-[1.125rem] shrink-0" />
             <span className={cn(
               "ml-3 truncate text-[13px] font-medium transition-opacity duration-300",
-              "lg:opacity-0 group-hover/sidebar:lg:opacity-100",
+              "lg:opacity-0",
+              (isHovered || mobileMenuOpen) && "lg:opacity-100",
               mobileMenuOpen ? "opacity-100" : ""
             )}>
               Sair

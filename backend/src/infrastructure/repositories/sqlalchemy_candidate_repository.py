@@ -525,6 +525,45 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             .cte("ai_statuses")
         )
 
+        # ── CTE 8: next scheduled interview for the candidate's active job ──────
+        _next_interview_ranked = (
+            sa.select(
+                InterviewScheduleModel.candidate_id,
+                InterviewScheduleModel.scheduled_start.label("ni_start"),
+                InterviewScheduleModel.scheduled_end.label("ni_end"),
+                InterviewScheduleModel.interview_type.label("ni_type"),
+                InterviewScheduleModel.interview_format.label("ni_format"),
+                sa.func.row_number()
+                .over(
+                    partition_by=InterviewScheduleModel.candidate_id,
+                    order_by=InterviewScheduleModel.scheduled_start.asc(),
+                )
+                .label("rn"),
+            )
+            .join(
+                active_pipeline_cte,
+                sa.and_(
+                    InterviewScheduleModel.candidate_id == active_pipeline_cte.c.candidate_id,
+                    InterviewScheduleModel.job_id == active_pipeline_cte.c.active_job_id,
+                ),
+            )
+            .where(
+                InterviewScheduleModel.status.in_(["scheduled", "rescheduled"]),
+            )
+            .subquery("next_interview_ranked")
+        )
+        next_interview_cte = (
+            sa.select(
+                _next_interview_ranked.c.candidate_id,
+                _next_interview_ranked.c.ni_start,
+                _next_interview_ranked.c.ni_end,
+                _next_interview_ranked.c.ni_type,
+                _next_interview_ranked.c.ni_format,
+            )
+            .where(_next_interview_ranked.c.rn == 1)
+            .cte("next_interviews")
+        )
+
         # ── Final query: LEFT JOIN all enrichment CTEs to the page ────────────
         _t1 = time.perf_counter()
         result = await self._session.execute(
@@ -550,6 +589,10 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 active_pipeline_cte.c.active_job_stage,
                 score_cte.c.final_score.label("active_job_job_fit_score"),
                 ai_status_cte.c.ai_status,
+                next_interview_cte.c.ni_start,
+                next_interview_cte.c.ni_end,
+                next_interview_cte.c.ni_type,
+                next_interview_cte.c.ni_format,
             )
             .select_from(page_cte)
             .outerjoin(resume_counts_cte, resume_counts_cte.c.candidate_id == page_cte.c.id)
@@ -558,6 +601,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             .outerjoin(active_pipeline_cte, active_pipeline_cte.c.candidate_id == page_cte.c.id)
             .outerjoin(score_cte, score_cte.c.candidate_id == page_cte.c.id)
             .outerjoin(ai_status_cte, ai_status_cte.c.candidate_id == page_cte.c.id)
+            .outerjoin(next_interview_cte, next_interview_cte.c.candidate_id == page_cte.c.id)
             .order_by(page_cte.c.created_at.desc())
         )
         rows = [dict(row) for row in result.mappings().all()]

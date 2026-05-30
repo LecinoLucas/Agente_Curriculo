@@ -13,12 +13,22 @@ const THEMES: Array<{
   {
     value: "theme-1",
     label: "Tema 1",
-    description: "Vermelho Marajó",
+    description: "Vermelho com Cinza Escuro",
   },
   {
     value: "theme-2",
     label: "Tema 2",
     description: "Botânico Floral",
+  },
+  {
+    value: "theme-3",
+    label: "Tema 3",
+    description: "Branco Gelo (Minimal)",
+  },
+  {
+    value: "theme-4",
+    label: "Tema 4",
+    description: "Lilás com Cinza Escuro",
   },
 ];
 

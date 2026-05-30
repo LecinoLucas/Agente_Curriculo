@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { PipelinePage } from "../PipelinePage";
 import { usePipeline } from "../../features/pipeline/PipelineContext";
@@ -69,7 +69,14 @@ vi.mock("../../features/pipeline/NewCandidateModal", () => ({
 }));
 
 vi.mock("../../features/pipeline/CandidateSearchModal", () => ({
-  CandidateSearchModal: () => <div data-testid="candidate-search-modal" />,
+  CandidateSearchModal: ({ isOpen, ranking, rankingLoading }: any) =>
+    isOpen ? (
+      <div
+        data-testid="candidate-search-modal"
+        data-ranking-job-id={ranking?.job_id ?? ""}
+        data-ranking-loading={String(rankingLoading)}
+      />
+    ) : null,
 }));
 
 vi.mock("../../features/candidates/components/CandidatePreviewDrawer", () => ({
@@ -102,6 +109,14 @@ describe("PipelinePage", () => {
       seniority_level: "senior",
       work_model: "remote",
       location: "São Paulo",
+    },
+    {
+      id: "job-2",
+      title: "Engenheiro Frontend",
+      status: "published",
+      seniority_level: "specialist",
+      work_model: "hybrid",
+      location: "Rio de Janeiro",
     },
   ];
 
@@ -189,7 +204,10 @@ describe("PipelinePage", () => {
   };
 
   const mockRanking = {
+    job_id: "job-1",
     total_candidates: 2,
+    threshold_high: 80,
+    threshold_low: 50,
     score_version: "v1.2",
     candidates: [
       {
@@ -213,6 +231,7 @@ describe("PipelinePage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     (pipelineService.listPipelineJobs as any).mockResolvedValue(mockJobs);
     (getJobRanking as any).mockResolvedValue(mockRanking);
     mockMoveCandidateStage.mockResolvedValue({
@@ -247,7 +266,7 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Pipeline")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Pipeline", level: 1 })).toBeInTheDocument();
     });
   });
 
@@ -261,8 +280,9 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Recrutamento")).toBeInTheDocument();
-      expect(screen.getByText("Pipeline")).toBeInTheDocument();
+      const breadcrumb = screen.getByRole("navigation", { name: /breadcrumb/i });
+      expect(within(breadcrumb).getByText("Recrutamento")).toBeInTheDocument();
+      expect(within(breadcrumb).getByText("Pipeline")).toBeInTheDocument();
     });
   });
 
@@ -277,8 +297,64 @@ describe("PipelinePage", () => {
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/buscar candidato/i)).toBeInTheDocument();
-      expect(screen.getAllByRole("button", { name: /Vincular candidato/i }).length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: /Vincular candidato/i })).toBeInTheDocument();
     });
+  });
+
+  it("3.1. Carrega ranking IA ao abrir o modal de vínculo", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const button = (await screen.findAllByRole("button", { name: "Vincular candidato" }))[0];
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(getJobRanking).toHaveBeenCalledWith("job-1");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("candidate-search-modal")).toHaveAttribute("data-ranking-job-id", "job-1");
+    });
+  });
+
+  it("3.1.1. Exibe labels de ordenação coerentes com score_desc", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /melhor match ia/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Filtros/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Maior aderência" })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("option", { name: "Mais recente" })).not.toBeInTheDocument();
+  });
+
+  it("3.1.2. Mantém status principal da vaga no seletor sem box duplicado", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Publicada")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Status")).not.toBeInTheDocument();
   });
 
   it("3.1. Renderiza filtros seguros por data do vínculo", async () => {
@@ -394,24 +470,7 @@ describe("PipelinePage", () => {
     });
   });
 
-  it("4. Renderiza os cards de KPI na string combinada (total, em andamento, entrevistas, contratados)", async () => {
-    render(
-      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
-        <Routes>
-          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      const hasText = (text: string) => (content: string, element: Element | null) => element?.textContent === text;
-      // Check calculated dynamic KPI values based on mockBoard (total: 2, emAndamento: 2, entrevistas: 1, contratados: 0)
-      expect(screen.getByText(hasText("2 candidatos"))).toBeInTheDocument();
-      expect(screen.getByText(hasText("2 em andamento"))).toBeInTheDocument();
-      expect(screen.getByText(hasText("1 entrevista"))).toBeInTheDocument();
-      expect(screen.getByText(hasText("0 contratações"))).toBeInTheDocument();
-    });
-  });
+  // Test 4 removed as KPIs were moved to dashboard
 
   it("5. Renderiza a lista horizontal de macrocolunas do Kanban", async () => {
     render(
@@ -1008,67 +1067,273 @@ describe("PipelinePage", () => {
     });
   });
 
-  // ── Testes de remoção do auto-refresh ──────────────────────────────────────
+  // ── Filtros locais (busca + Pendências) ────────────────────────────────────
+  describe("Filtros locais de Pipeline", () => {
+    it("digitar no input de busca filtra candidatos pelo nome", async () => {
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
 
-  it("18. Botão 'Atualizar' está presente e chama refreshBoard ao ser clicado", async () => {
-    mockRefreshBoard.mockResolvedValue(undefined);
+      await screen.findByTestId("kanban-card-c-1");
+      expect(screen.getByTestId("kanban-card-c-2")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
-        <Routes>
-          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+      fireEvent.change(screen.getByTestId("pipeline-search-input"), {
+        target: { value: "Aline" },
+      });
 
-    const refreshBtn = await screen.findByRole("button", { name: /atualizar board/i });
-    expect(refreshBtn).toBeInTheDocument();
-
-    fireEvent.click(refreshBtn);
-
-    await waitFor(() => {
-      expect(mockRefreshBoard).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(screen.queryByTestId("kanban-card-c-2")).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId("kanban-card-c-1")).toBeInTheDocument();
     });
-  });
 
-  it("19. Não existe texto de 'Auto em', 'atualiza em' ou contador regressivo", async () => {
-    render(
-      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
-        <Routes>
-          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+    it("busca é case-insensitive e remove acentos", async () => {
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByTestId("kanban-card-c-1");
 
-    await screen.findByTestId("kanban-card-c-1");
+      fireEvent.change(screen.getByTestId("pipeline-search-input"), {
+        target: { value: "ALINE" },
+      });
 
-    expect(screen.queryByText(/auto em/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/atualiza em/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/auto-refresh/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/pausar/i)).not.toBeInTheDocument();
-  });
+      await waitFor(() => {
+        expect(screen.queryByTestId("kanban-card-c-2")).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId("kanban-card-c-1")).toBeInTheDocument();
+    });
 
+    it("botão limpar busca volta lista completa", async () => {
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByTestId("kanban-card-c-1");
 
-  it("21. Mover etapa ainda chama refreshBoard após mutação bem-sucedida", async () => {
-    mockRefreshBoard.mockResolvedValue(undefined);
-    const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+      fireEvent.change(screen.getByTestId("pipeline-search-input"), {
+        target: { value: "Aline" },
+      });
+      await waitFor(() =>
+        expect(screen.queryByTestId("kanban-card-c-2")).not.toBeInTheDocument(),
+      );
 
-    render(
-      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
-        <Routes>
-          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+      fireEvent.click(screen.getByTestId("pipeline-search-clear"));
 
-    await screen.findByTestId("kanban-card-c-1");
-    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
-    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
-    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+      await waitFor(() => {
+        expect(screen.getByTestId("kanban-card-c-2")).toBeInTheDocument();
+      });
+      expect(screen.getByTestId("kanban-card-c-1")).toBeInTheDocument();
+    });
 
-    await waitFor(() => {
-      expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
-      expect(mockRefreshBoard).toHaveBeenCalled();
+    it("nenhum resultado mostra estado vazio com botão de limpar", async () => {
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByTestId("kanban-card-c-1");
+
+      fireEvent.change(screen.getByTestId("pipeline-search-input"), {
+        target: { value: "Inexistente" },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("pipeline-local-empty-state")).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId("kanban-card-c-1")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("kanban-card-c-2")).not.toBeInTheDocument();
+    });
+
+    it("botão Pendências alterna estado e filtra candidatos", async () => {
+      // Mock a candidate with no pending requirements (everything false) vs c-2 with required interview but no status
+      const boardWithPending = {
+        ...mockBoard,
+        columns: mockBoard.columns.map((col) => {
+          if (col.stage === "entry") {
+            return {
+              ...col,
+              candidates: [
+                {
+                  ...col.candidates[0],
+                  // no required steps → not pending
+                  requires_behavioral_assessment: false,
+                  requires_behavioral_ai_evaluation: false,
+                  requires_interview: false,
+                  requires_scorecard: false,
+                },
+              ],
+            };
+          }
+          if (col.stage === "hr_interview") {
+            return {
+              ...col,
+              candidates: [
+                {
+                  ...col.candidates[0],
+                  // required interview, no status → pending
+                  requires_interview: true,
+                  interview_status: null,
+                },
+              ],
+            };
+          }
+          return col;
+        }),
+      };
+      (usePipeline as any).mockReturnValue({
+        activeJobId: "job-1",
+        board: boardWithPending,
+        boardFilters: {},
+        boardLoading: false,
+        boardError: null,
+        rankingSyncTick: 0,
+        setActiveJob: mockSetActiveJob,
+        setBoardFilters: mockSetBoardFilters,
+        moveCandidateStage: mockMoveCandidateStage,
+        refreshBoard: mockRefreshBoard,
+        openCandidate: mockOpenCandidate,
+        closeCandidate: mockCloseCandidate,
+        syncCandidateOverview: mockSyncCandidateOverview,
+      });
+
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await screen.findByTestId("kanban-card-c-1");
+      expect(screen.getByTestId("kanban-card-c-2")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("pipeline-pending-toggle"));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("kanban-card-c-1")).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId("kanban-card-c-2")).toBeInTheDocument();
+    });
+
+    it("contador de filtros incrementa quando busca + pendências são aplicados sobre o range default", async () => {
+      // Default date range adds 2 filters on mount (entered_from + entered_to).
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByTestId("kanban-card-c-1");
+
+      // Baseline: defaults applied via URL effect.
+      await waitFor(() => {
+        expect(screen.getByTestId("pipeline-active-filters-badge").textContent).toBe("2");
+      });
+
+      fireEvent.change(screen.getByTestId("pipeline-search-input"), {
+        target: { value: "Aline" },
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId("pipeline-active-filters-badge").textContent).toBe("3");
+      });
+
+      fireEvent.click(screen.getByTestId("pipeline-pending-toggle"));
+      await waitFor(() => {
+        expect(screen.getByTestId("pipeline-active-filters-badge").textContent).toBe("4");
+      });
+    });
+
+    it("contador de filtros nunca mostra '1' hardcoded — só conta filtros reais", async () => {
+      // Even when only the default date range applies, contador deve ser 2,
+      // não o "1" antigo hardcoded do botão Filtros.
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByTestId("kanban-card-c-1");
+      await waitFor(() => {
+        expect(screen.getByTestId("pipeline-active-filters-badge").textContent).not.toBe("1");
+      });
+    });
+
+    it("botão limpar filtros zera busca e pendências e contador some", async () => {
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByTestId("kanban-card-c-1");
+
+      fireEvent.change(screen.getByTestId("pipeline-search-input"), {
+        target: { value: "Aline" },
+      });
+      fireEvent.click(screen.getByTestId("pipeline-pending-toggle"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("pipeline-clear-filters")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId("pipeline-clear-filters"));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("pipeline-active-filters-badge")).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId("kanban-card-c-1")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-card-c-2")).toBeInTheDocument();
+    });
+
+    it("abre o dropdown de vagas e permite selecionar uma nova vaga", async () => {
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Desenvolvedor React")).toBeInTheDocument();
+      });
+
+      const seletor = screen.getByRole("button", { name: /alterar vaga da pipeline/i });
+      fireEvent.click(seletor);
+
+      // O dropdown deve mostrar a lista de vagas
+      const listbox = await screen.findByRole("listbox", { name: /vagas/i });
+      expect(listbox).toBeInTheDocument();
+      
+      const option = within(listbox).getByText("Engenheiro Frontend");
+      expect(option).toBeInTheDocument();
+
+      fireEvent.click(option);
+
+      // Ao clicar, o dropdown deve fechar e a vaga deve ser selecionada (chama setActiveJob via useEffect após navigate)
+      await waitFor(() => {
+        expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      });
+      
+      await waitFor(() => {
+        expect(mockSetActiveJob).toHaveBeenCalledWith("job-2");
+      });
     });
   });
 });

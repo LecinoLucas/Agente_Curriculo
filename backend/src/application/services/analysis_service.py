@@ -1605,6 +1605,27 @@ class AnalysisService:
         )
         return await self._repository.save_job_profile_analysis(record)
 
+    async def recompute_match_from_existing_profiles(
+        self,
+        analysis_id: UUID,
+        job_id: UUID,
+        job_profile_analysis: "JobProfileAnalysisModel",
+    ) -> "AnalysisMatchResponse":
+        """Recompute candidate-job match using persisted profiles. Never calls LLM or AI provider."""
+        analysis = await self._repository.find_completed(analysis_id)
+        if analysis is None:
+            raise AnalysisNotCompletedError
+        result = await self._repository.find_result(analysis_id)
+        if result is None:
+            raise AnalysisResultNotFoundError
+        details = AnalysisResultDetails(analysis=analysis, result=result)
+        return await self._match_details_to_job(
+            details,
+            job_id,
+            _preloaded_job_profile=job_profile_analysis,
+            force_recompute=True,
+        )
+
     async def _match_details_to_job(
         self,
         details: AnalysisResultDetails,
@@ -1612,6 +1633,7 @@ class AnalysisService:
         score_model_version: ScoreModelVersionModel | None = None,
         *,
         force_recompute: bool = False,
+        _preloaded_job_profile: "JobProfileAnalysisModel | None" = None,
     ) -> AnalysisMatchResponse:
         analysis_id = details.analysis.id
         result = details.result
@@ -1624,10 +1646,13 @@ class AnalysisService:
                 analysis=details.analysis,
                 result=result,
             )
-            job_profile_analysis = await self._ensure_job_profile_analysis(
-                job,
-                force_refresh=force_recompute,
-            )
+            if _preloaded_job_profile is not None:
+                job_profile_analysis = _preloaded_job_profile
+            else:
+                job_profile_analysis = await self._ensure_job_profile_analysis(
+                    job,
+                    force_refresh=force_recompute,
+                )
         except Exception:
             logger.exception(
                 "profile_analysis.ensure_failed",

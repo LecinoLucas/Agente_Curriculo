@@ -158,10 +158,10 @@ describe("NotificationsContext", () => {
     expect(screen.getByTestId("total-count")).toHaveTextContent("0");
   });
 
-  it("usa fallback mock sem console.error quando notificações falham por conexão no dev", async () => {
+  it("limpa notificações quando a busca falha", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(notificationService.getNotifications).mockRejectedValue(
-      new HttpError(0, "Sem conexão com o servidor. Verifique sua internet."),
+      new HttpError(500, "Erro interno"),
     );
 
     renderProvider({ role: "admin", route: "/dashboard" });
@@ -170,9 +170,12 @@ describe("NotificationsContext", () => {
       expect(notificationService.getNotifications).toHaveBeenCalledTimes(1);
     });
     await waitFor(() => {
-      expect(screen.getByTestId("total-count")).toHaveTextContent("5");
+      expect(screen.getByTestId("total-count")).toHaveTextContent("0");
     });
-    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      "[NotificationsContext] Failed to fetch notifications",
+      expect.any(HttpError),
+    );
 
     consoleError.mockRestore();
   });

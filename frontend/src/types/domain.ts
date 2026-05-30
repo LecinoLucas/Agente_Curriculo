@@ -26,6 +26,13 @@ export type Candidate = {
   data_quality_marked_at?: string | null;
 };
 
+export type NextInterviewSummary = {
+  scheduled_start: string;
+  scheduled_end: string;
+  interview_type: string;
+  interview_format: string;
+};
+
 export type CandidateListSummary = {
   id: string;
   full_name: string;
@@ -48,6 +55,7 @@ export type CandidateListSummary = {
   active_job_stage: string | null;
   active_job_job_fit_score: number | null;
   ai_status: string | null;
+  next_interview: NextInterviewSummary | null;
 };
 
 export type CommunicationStatus =
@@ -431,6 +439,11 @@ export type Job = {
   responsibilities: string | null;
   experience_context: string | null;
   behavioral_requirements: string[];
+  mandatory_skills: string[];
+  nice_to_have_skills: string[];
+  screening_questions: string[];
+  benefits: string[];
+  working_hours: string | null;
   priority: "low" | "normal" | "high" | "urgent";
   quality_score: number | null;
   quality_status: "weak" | "acceptable" | "good" | null;

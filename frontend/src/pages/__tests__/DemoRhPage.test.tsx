@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DemoRhPage } from "../DemoRhPage";
 
@@ -138,5 +138,107 @@ describe("DemoRhPage", () => {
 
     expect(screen.getByTestId("candidate-list")).toHaveTextContent("Paulo Madeira");
     expect(screen.queryByText(/backlog|orquestrador|remessa/i)).not.toBeInTheDocument();
+  });
+
+  describe("Painel Criar vaga por imagem ou descrição", () => {
+    it("renderiza título 'Criar vaga por imagem ou descrição'", () => {
+      renderPage();
+      expect(screen.getByText("Criar vaga por imagem ou descrição")).toBeInTheDocument();
+    });
+
+    it("renderiza subtítulo do painel de criação por imagem", () => {
+      renderPage();
+      expect(
+        screen.getByText("Simule como um cartaz ou texto vira uma vaga estruturada."),
+      ).toBeInTheDocument();
+    });
+
+    it("renderiza o painel JobImageMockFillPanel", () => {
+      renderPage();
+      expect(screen.getByTestId("job-image-mock-fill-panel")).toBeInTheDocument();
+    });
+
+    describe("fluxo por imagem", () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it("gera 'Assistente Fiscal' via imagem", async () => {
+        renderPage();
+        fireEvent.click(screen.getByRole("button", { name: /Usar exemplo de imagem/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Gerar preenchimento simulado/i }));
+        await act(async () => {
+          vi.advanceTimersByTime(500);
+        });
+        const filledData = screen.getByRole("region", { name: /Dados preenchidos da vaga/i });
+        expect(within(filledData).getByText("Assistente Fiscal")).toBeInTheDocument();
+      });
+
+      it("'Usar este preenchimento' mostra 'Vaga demo preenchida'", async () => {
+        renderPage();
+        fireEvent.click(screen.getByRole("button", { name: /Usar exemplo de imagem/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Gerar preenchimento simulado/i }));
+        await act(async () => {
+          vi.advanceTimersByTime(500);
+        });
+        fireEvent.click(screen.getByRole("button", { name: /Usar este preenchimento/i }));
+        expect(screen.getByTestId("demo-job-filled-summary")).toBeInTheDocument();
+        expect(screen.getByText("Vaga demo preenchida")).toBeInTheDocument();
+      });
+
+      it("'Vaga demo preenchida' mostra Cargo, Área, Local e skills", async () => {
+        renderPage();
+        fireEvent.click(screen.getByRole("button", { name: /Usar exemplo de imagem/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Gerar preenchimento simulado/i }));
+        await act(async () => {
+          vi.advanceTimersByTime(500);
+        });
+        fireEvent.click(screen.getByRole("button", { name: /Usar este preenchimento/i }));
+
+        const summary = screen.getByTestId("demo-job-filled-summary");
+        expect(within(summary).getByText("Assistente Fiscal")).toBeInTheDocument();
+        expect(within(summary).getByText("Central de Notas")).toBeInTheDocument();
+        expect(within(summary).getByText("Jardim Goiás — Goiânia/GO")).toBeInTheDocument();
+        expect(within(summary).getByText("Excel")).toBeInTheDocument();
+      });
+
+      it("'Vaga demo preenchida' mostra 'Próximo passo: Ver candidatos demo'", async () => {
+        renderPage();
+        fireEvent.click(screen.getByRole("button", { name: /Usar exemplo de imagem/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Gerar preenchimento simulado/i }));
+        await act(async () => {
+          vi.advanceTimersByTime(500);
+        });
+        fireEvent.click(screen.getByRole("button", { name: /Usar este preenchimento/i }));
+        const summary = screen.getByTestId("demo-job-filled-summary");
+        expect(within(summary).getByText("Ver candidatos demo")).toBeInTheDocument();
+      });
+    });
+
+    describe("fluxo por descrição", () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it("gera 'Assistente Fiscal' via descrição", async () => {
+        renderPage();
+        fireEvent.click(screen.getByRole("button", { name: /^Descrição$/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Usar descrição exemplo/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Gerar preenchimento simulado/i }));
+        await act(async () => {
+          vi.advanceTimersByTime(500);
+        });
+        const filledData = screen.getByRole("region", { name: /Dados preenchidos da vaga/i });
+        expect(within(filledData).getByText("Assistente Fiscal")).toBeInTheDocument();
+      });
+    });
   });
 });

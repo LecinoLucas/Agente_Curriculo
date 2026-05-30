@@ -234,6 +234,13 @@ class CandidateProcessHistoryResponse(BaseModel):
     processes: list[CandidateProcessHistoryItemResponse] = Field(default_factory=list)
 
 
+class CandidateNextInterviewSummary(BaseModel):
+    scheduled_start: datetime
+    scheduled_end: datetime
+    interview_type: str
+    interview_format: str
+
+
 class CandidateListSummaryResponse(BaseModel):
     id: UUID
     full_name: str
@@ -256,6 +263,7 @@ class CandidateListSummaryResponse(BaseModel):
     active_job_stage: str | None = None
     active_job_job_fit_score: float | None = None
     ai_status: str | None = None
+    next_interview: CandidateNextInterviewSummary | None = None
 
 
 class CreateCandidateRequest(BaseModel):

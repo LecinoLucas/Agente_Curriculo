@@ -87,6 +87,12 @@ celery_app.conf.update(
             "default_retry_delay": 10,
         },
 
+        # RECOMPUTE (no LLM — uses persisted profiles)
+        "src.interface.workers.matching_tasks.recompute_job_matches_task": {
+            "max_retries": 3,
+            "default_retry_delay": 10,
+        },
+
         # DOCUMENT AI (OCR)
         "src.interface.workers.document_ai_tasks.process_document_ai_job": {
             "max_retries": 0,

@@ -43,7 +43,10 @@ export function CandidateSearchModal({
 
   const [search, setSearch] = useState("");
   const [summaries, setSummaries] = useState<CandidateListSummary[]>([]);
-  const [summariesLoading, setSummariesLoading] = useState(false);
+  // Start as `true` whenever the modal opens so the very first render shows the
+  // loading state (skeletons) instead of flashing "Nenhum candidato disponível"
+  // before the initial fetch effect runs.
+  const [summariesLoading, setSummariesLoading] = useState(isOpen);
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -60,12 +63,19 @@ export function CandidateSearchModal({
   const fetchVersionRef = useRef(0);
   const pendingAddIdsRef = useRef<Set<string>>(new Set());
 
+  // Initial list size. Backend supports paging/search; we keep the first page
+  // intentionally short so the modal opens fast. The search input queries the
+  // service with the term, not just the loaded slice — see effect below.
+  const INITIAL_PAGE_SIZE = 10;
+  const SEARCH_PAGE_SIZE = 40;
+
   // FIX #2 + #3: Wrap fetchSummaries in useCallback and handle race conditions with AbortController
   const fetchSummaries = useCallback(async (q: string) => {
     const version = ++fetchVersionRef.current;
     setSummariesLoading(true);
+    const pageSize = q ? SEARCH_PAGE_SIZE : INITIAL_PAGE_SIZE;
     try {
-      const { data } = await candidatesService.listSummaries(1, 40, {
+      const { data } = await candidatesService.listSummaries(1, pageSize, {
         search: q || undefined,
         link_status_filter: "without_active_job",
       });
@@ -98,7 +108,7 @@ export function CandidateSearchModal({
     return () => clearTimeout(timer);
   }, [isOpen, search, fetchSummaries]);
 
-  // Reset state on close
+  // Reset state on close / re-prime loading on open
   useEffect(() => {
     if (!isOpen) {
       setSearch("");
@@ -110,6 +120,11 @@ export function CandidateSearchModal({
       pendingAddIdsRef.current.clear();
       // Reset fetch version so stale requests from previous session are ignored
       fetchVersionRef.current = 0;
+      setSummariesLoading(false);
+    } else {
+      // Re-opening: prime loading state synchronously so the first paint
+      // shows skeletons, never an empty state, while the fetch effect runs.
+      setSummariesLoading(true);
     }
   }, [isOpen]);
 
@@ -277,8 +292,6 @@ export function CandidateSearchModal({
 
   if (!isOpen) return null;
 
-  const hasContent = rankedAvailable.length > 0 || otherCandidates.length > 0;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       {previousProcessPrompt ? (
@@ -381,6 +394,14 @@ export function CandidateSearchModal({
                 className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-surface text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/50"
               />
             </div>
+            {!search && !summariesLoading && otherCandidates.length > 0 && (
+              <p
+                className="mt-2 text-[11px] text-text-muted"
+                data-testid="initial-list-hint"
+              >
+                Mostrando {otherCandidates.length} candidato{otherCandidates.length === 1 ? "" : "s"} disponíve{otherCandidates.length === 1 ? "l" : "is"}. Use a busca para encontrar candidatos fora desta lista inicial.
+              </p>
+            )}
           </div>
 
           {/* Content sections */}
@@ -487,19 +508,13 @@ export function CandidateSearchModal({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-text-muted">
-                  {search ? "Nenhum candidato encontrado" : "Carregando..."}
+                <p className="text-xs text-text-muted" data-testid="other-candidates-empty">
+                  {search
+                    ? "Nenhum candidato encontrado para esta busca."
+                    : "Nenhum candidato disponível."}
                 </p>
               )}
             </section>
-
-            {!hasContent && !rankingLoading && !summariesLoading && (
-              <div className="text-center py-6">
-                <p className="text-sm text-text-muted">
-                  Nenhum candidato disponível
-                </p>
-              </div>
-            )}
           </div>
         </div>
 

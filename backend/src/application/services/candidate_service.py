@@ -33,6 +33,7 @@ from src.interface.api.schemas.candidate_schemas import (
     CandidateLatestMovementResponse,
     CandidateLatestNoteResponse,
     CandidateListSummaryResponse,
+    CandidateNextInterviewSummary,
     CandidateOverviewResponse,
     CandidatePipelineEntryResponse,
     CandidatePreviewPendencyResponse,
@@ -298,6 +299,16 @@ class CandidateService:
                     else None
                 ),
                 ai_status=row["ai_status"],
+                next_interview=(
+                    CandidateNextInterviewSummary(
+                        scheduled_start=row["ni_start"],
+                        scheduled_end=row["ni_end"],
+                        interview_type=row["ni_type"],
+                        interview_format=row["ni_format"],
+                    )
+                    if row.get("ni_start") is not None
+                    else None
+                ),
             )
             for row in rows
         ]

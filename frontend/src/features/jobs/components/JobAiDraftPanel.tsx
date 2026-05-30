@@ -16,13 +16,14 @@ import { MOCK_AI_PROMPT_EXAMPLE } from "../utils/mockJobAiDraft";
 import {
   extractJobTextFromImage,
   generateJobAiDraft,
+  type AiSkillSuggestions,
   type JobAiDraftFields,
   type JobAiDraftUsage,
 } from "../services/jobAiDraftService";
 
 interface JobAiDraftPanelProps {
   formHasData: boolean;
-  onApply: (updates: Partial<JobFormValues>) => void;
+  onApply: (updates: Partial<JobFormValues>, skillSuggestions: AiSkillSuggestions) => void;
 }
 
 type AiStatus = "idle" | "extracting_image" | "generating_draft" | "ready" | "error";
@@ -44,8 +45,21 @@ function formatWorkModel(wm: string | null): string {
   return wm ?? "";
 }
 
-function draftToFormUpdates(draft: JobAiDraftFields): Partial<JobFormValues> {
-  return {
+function normalizeStringList(items: string[]): string[] {
+  const seen = new Set<string>();
+  return items
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .filter((s) => {
+      const key = s.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+export function draftToFormUpdates(draft: JobAiDraftFields): Partial<JobFormValues> {
+  const updates: Partial<JobFormValues> = {
     title: draft.title ?? undefined,
     description: draft.description ?? undefined,
     responsibilities:
@@ -59,6 +73,31 @@ function draftToFormUpdates(draft: JobAiDraftFields): Partial<JobFormValues> {
     requires_manager_review: draft.requires_manager_review,
     requires_behavioral_assessment: draft.requires_behavioral_assessment,
   };
+
+  // seniority_level — apply when draft provides it
+  if (draft.seniority) {
+    updates.seniority_level = draft.seniority;
+  }
+
+  // Dedicated fields — each IA-generated list goes to its own form field.
+  // behavioral_requirements is reserved for actual comportamental requirements only.
+  const mandatorySkills = normalizeStringList(draft.mandatory_skills);
+  if (mandatorySkills.length > 0) updates.mandatory_skills = mandatorySkills;
+
+  const niceToHave = normalizeStringList(draft.nice_to_have_skills);
+  if (niceToHave.length > 0) updates.nice_to_have_skills = niceToHave;
+
+  const screening = normalizeStringList(draft.screening_questions);
+  if (screening.length > 0) updates.screening_questions = screening;
+
+  const benefits = normalizeStringList(draft.benefits);
+  if (benefits.length > 0) updates.benefits = benefits;
+
+  if (draft.working_hours && draft.working_hours.trim()) {
+    updates.working_hours = draft.working_hours.trim();
+  }
+
+  return updates;
 }
 
 export function JobAiDraftPanel({ formHasData, onApply }: JobAiDraftPanelProps) {
@@ -172,7 +211,10 @@ export function JobAiDraftPanel({ formHasData, onApply }: JobAiDraftPanelProps) 
 
   function confirmApply() {
     if (!draft) return;
-    onApply(draftToFormUpdates(draft));
+    onApply(draftToFormUpdates(draft), {
+      mandatory: (draft.mandatory_skills ?? []).filter((s) => s.trim()),
+      optional: (draft.nice_to_have_skills ?? []).filter((s) => s.trim()),
+    });
   }
 
   const ocrPreview = ocrText
@@ -416,7 +458,12 @@ export function JobAiDraftPanel({ formHasData, onApply }: JobAiDraftPanelProps) 
             </div>
           )}
 
-          {/* Suggested info — fields without a direct form field */}
+          {/* Informações sugeridas:
+              Após a Fase 9, todos esses campos têm destino dedicado no formulário
+              (mandatory_skills, nice_to_have_skills, screening_questions, benefits, working_hours).
+              Esta seção continua exibindo o preview antes do "Aplicar ao formulário"
+              para que o RH revise visualmente antes de aplicar.
+          */}
           {(draft.nice_to_have_skills.length > 0 ||
             draft.working_hours ||
             draft.benefits.length > 0 ||

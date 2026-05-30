@@ -9,7 +9,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,8 @@ import { BehavioralTemplateSelector } from "../features/jobs/components/Behavior
 import { JobAssessmentPolicyStep } from "../features/jobs/components/JobAssessmentPolicyStep";
 import { JobFormReviewStep } from "../features/jobs/sections/JobFormReviewStep";
 import { JobAiDraftPanel } from "../features/jobs/components/JobAiDraftPanel";
+import { AiSkillSuggestionsBlock, type ApplicableSkill } from "../features/jobs/components/AiSkillSuggestionsBlock";
+import type { AiSkillSuggestions } from "../features/jobs/services/jobAiDraftService";
 import {
   buildCreateJobPayload,
   buildUpdateJobPayload,
@@ -101,6 +103,7 @@ export function JobFormPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const pageRootRef = useRef<HTMLDivElement | null>(null);
 
   const isEditing = Boolean(jobId);
   const {
@@ -117,6 +120,7 @@ export function JobFormPage() {
   const [activeMacroStep, setActiveMacroStep] = useState<MacroStepId>("context");
   const [showQualityDrawer, setShowQualityDrawer] = useState(false);
   const [aiMode, setAiMode] = useState<"manual" | "ai">("manual");
+  const [aiSkillSuggestions, setAiSkillSuggestions] = useState<AiSkillSuggestions | null>(null);
   const [currentJob, setCurrentJob] = useState<Job | null>(null);
   const [pageLoading, setPageLoading] = useState(isEditing);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -152,6 +156,7 @@ export function JobFormPage() {
     savingSkillId,
     allSkills,
     setAllSkills,
+    combinedSkills,
     mandatorySkills,
     optionalSkills,
     eliminatorySkills,
@@ -336,6 +341,13 @@ export function JobFormPage() {
     setActiveMacroStep(id);
   }
 
+  async function handleApplySkillSuggestions(selected: ApplicableSkill[]) {
+    for (const item of selected) {
+      await handleAddSkill(item.skill, item.priority);
+    }
+    setAiSkillSuggestions(null);
+  }
+
   // ─── Content rendering ─────────────────────────────────────────────────────
 
   function renderMacroContent() {
@@ -365,6 +377,15 @@ export function JobFormPage() {
       case "skills":
         return (
           <div className="space-y-6">
+            {aiSkillSuggestions && (
+              <AiSkillSuggestionsBlock
+                mandatory={aiSkillSuggestions.mandatory}
+                optional={aiSkillSuggestions.optional}
+                linkedSkills={combinedSkills}
+                onApply={(selected) => void handleApplySkillSuggestions(selected)}
+                onDismiss={() => setAiSkillSuggestions(null)}
+              />
+            )}
             <JobFormMandatorySkillsStep
               mandatorySkills={mandatorySkills}
               availableSkills={availableSkills}
@@ -639,8 +660,13 @@ export function JobFormPage() {
 
   // ─── Page render ───────────────────────────────────────────────────────────
 
+  const formShellMaxWidth = "max-w-4xl";
+
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 sm:px-6 py-6 pb-28">
+    <div
+      ref={pageRootRef}
+      className={`mx-auto flex w-full ${formShellMaxWidth} flex-col gap-4 px-4 sm:px-6 py-6 pb-28`}
+    >
       {/* ── Header ── */}
       <div className="sticky top-[20px] z-20 rounded-3xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur">
         <div className="flex items-center gap-3">
@@ -701,8 +727,14 @@ export function JobFormPage() {
       {aiMode === "ai" && (
         <JobAiDraftPanel
           formHasData={Boolean(form.title || form.description)}
-          onApply={(updates) => {
+          onApply={(updates, skillSuggestions) => {
             updateForm(updates);
+            const hasSuggestions =
+              skillSuggestions.mandatory.length > 0 || skillSuggestions.optional.length > 0;
+            if (hasSuggestions) {
+              setAiSkillSuggestions(skillSuggestions);
+              setActiveMacroStep("skills");
+            }
             setAiMode("manual");
           }}
         />
@@ -750,7 +782,7 @@ export function JobFormPage() {
 
       {/* ── Bottom action bar ── */}
       <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur sm:px-6">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-2">
+        <div className={`mx-auto flex ${formShellMaxWidth} items-center justify-between gap-2`}>
           <Button
             type="button"
             variant="outline"

@@ -27,6 +27,11 @@ export type CreateJobRequestPayload = {
   responsibilities?: string;
   experience_context?: string;
   behavioral_requirements?: string[];
+  mandatory_skills?: string[];
+  nice_to_have_skills?: string[];
+  screening_questions?: string[];
+  benefits?: string[];
+  working_hours?: string;
   behavioral_template_id?: string;
   priority?: "low" | "normal" | "high" | "urgent";
   selection_flow_type?: "simple" | "standard" | "technical" | "leadership";
@@ -54,6 +59,11 @@ export type UpdateJobRequestPayload = {
   responsibilities?: string | null;
   experience_context?: string | null;
   behavioral_requirements?: string[];
+  mandatory_skills?: string[];
+  nice_to_have_skills?: string[];
+  screening_questions?: string[];
+  benefits?: string[];
+  working_hours?: string | null;
   behavioral_template_id?: string | null;
   priority?: "low" | "normal" | "high" | "urgent" | null;
   selection_flow_type?: "simple" | "standard" | "technical" | "leadership" | null;

@@ -10,12 +10,19 @@ import {
   extractJobTextFromImage,
   generateJobAiDraft,
 } from "../../features/jobs/services/jobAiDraftService";
+import { skillsService, type SkillCatalog } from "@/services/skillsService";
 
 // ─── Service mocks ────────────────────────────────────────────────────────────
 
 vi.mock("../../features/jobs/services/jobAiDraftService", () => ({
   extractJobTextFromImage: vi.fn(),
   generateJobAiDraft: vi.fn(),
+}));
+
+vi.mock("@/services/skillsService", () => ({
+  skillsService: {
+    listSkills: vi.fn(),
+  },
 }));
 
 const MOCK_MANDATORY_SKILLS = [
@@ -58,6 +65,46 @@ const MOCK_GENERATE_RESPONSE = {
   },
 };
 
+function skill(name: string, id = name.toLowerCase().replace(/\s+/g, "-")): SkillCatalog {
+  return {
+    id,
+    name,
+    normalized_name: name.toLowerCase(),
+    category: "Atendimento",
+    catalog_type: "technical",
+    description: null,
+    is_active: true,
+    updated_at: "2026-01-01T00:00:00Z",
+    archived_at: null,
+    archived_by: null,
+    archive_reason: null,
+    archive_reason_note: null,
+    created_at: "2026-01-01T00:00:00Z",
+    aliases: [],
+  };
+}
+
+const MOCK_SKILL_CATALOG = [
+  skill("Atendimento ao cliente", "skill-atendimento"),
+  skill("Operação de caixa", "skill-caixa"),
+  skill("Responsabilidade com dinheiro", "skill-dinheiro"),
+  skill("Experiência anterior com caixa", "skill-exp-caixa"),
+];
+
+function mockSkillLookup(foundSkills: SkillCatalog[] = MOCK_SKILL_CATALOG) {
+  vi.mocked(skillsService.listSkills).mockImplementation(async ({ search }) => {
+    const term = String(search ?? "").trim().toLowerCase();
+    const data = foundSkills.filter((item) => item.name.toLowerCase() === term || item.normalized_name.toLowerCase() === term);
+    return {
+      data,
+      total: data.length,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+    };
+  });
+}
+
 // ─── Other mocks ──────────────────────────────────────────────────────────────
 
 vi.mock("react-router-dom", async () => {
@@ -69,11 +116,16 @@ vi.mock("../../features/auth/useAuth", () => ({
   useAuth: () => ({ user: { role: "admin", id: "u1", full_name: "Admin", email: "a@a.com" } }),
 }));
 
+const { mockUpdateForm, mockFormState } = vi.hoisted(() => ({
+  mockUpdateForm: vi.fn(),
+  mockFormState: { form: undefined as unknown },
+}));
+
 vi.mock("../../features/jobs/hooks/useJobFormState", () => ({
   useJobFormState: () => ({
-    form: EMPTY_FORM,
+    form: mockFormState.form ?? EMPTY_FORM,
     setForm: vi.fn(),
-    updateForm: vi.fn(),
+    updateForm: mockUpdateForm,
     dealBreakerDraft: {},
     setDealBreakerDraft: vi.fn(),
     updateDealBreakerDraft: vi.fn(),
@@ -81,6 +133,10 @@ vi.mock("../../features/jobs/hooks/useJobFormState", () => ({
     addDealBreaker: vi.fn(),
     resetFormState: vi.fn(),
   }),
+}));
+
+const { mockHandleAddSkill } = vi.hoisted(() => ({
+  mockHandleAddSkill: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../features/jobs/hooks/useJobSkills", () => ({
@@ -100,11 +156,12 @@ vi.mock("../../features/jobs/hooks/useJobSkills", () => ({
     savingSkillId: null,
     allSkills: [],
     setAllSkills: vi.fn(),
+    combinedSkills: [],
     mandatorySkills: [],
     optionalSkills: [],
     eliminatorySkills: [],
     availableSkills: [],
-    handleAddSkill: vi.fn(),
+    handleAddSkill: mockHandleAddSkill,
     handleUpdateSkill: vi.fn(),
     handleRemoveSkill: vi.fn(),
     syncPendingSkills: vi.fn().mockResolvedValue(undefined),
@@ -183,15 +240,24 @@ function renderForm() {
   );
 }
 
+async function waitForAiSkillSuggestionResolution() {
+  if (!screen.queryByTestId("ai-skill-suggestions")) return;
+  await waitFor(() =>
+    expect(screen.queryByText("Validando catálogo")).not.toBeInTheDocument(),
+  );
+}
+
 describe("JobFormPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFormState.form = EMPTY_FORM;
     vi.mocked(generateJobAiDraft).mockResolvedValue(MOCK_GENERATE_RESPONSE);
     vi.mocked(extractJobTextFromImage).mockResolvedValue({
       extracted_text: "Texto extraído por OCR da imagem da vaga.",
       character_count: 42,
       source: "ocr",
     });
+    mockSkillLookup();
   });
 
   // ── Existing: Step order (must not break) ────────────────────────────────
@@ -316,7 +382,7 @@ describe("JobFormPage", () => {
       expect(MACRO_STEPS[MACRO_STEPS.length - 1].id).toBe("review");
     });
 
-    it("all 8 original STEPS are covered by MACRO_STEPS", () => {
+    it("all STEPS are covered by MACRO_STEPS", () => {
       const covered = MACRO_STEPS.flatMap((ms) => ms.steps);
       for (const step of STEPS) {
         expect(covered).toContain(step.id);
@@ -348,6 +414,14 @@ describe("JobFormPage", () => {
       expect(within(nav).getByText("Competências")).toBeInTheDocument();
       expect(within(nav).getByText("Avaliação")).toBeInTheDocument();
       expect(within(nav).getByText("Revisão e publicação")).toBeInTheDocument();
+      expect(within(nav).queryByText("Outros")).not.toBeInTheDocument();
+    });
+
+    it("não exibe 'Criar vaga a partir de imagem ou descrição' no formulário real", () => {
+      renderForm();
+      expect(
+        screen.queryByText("Criar vaga a partir de imagem ou descrição"),
+      ).not.toBeInTheDocument();
     });
 
     it("campos da macro-etapa Contexto estão presentes", () => {
@@ -573,6 +647,7 @@ describe("JobFormPage", () => {
 
         expect(screen.getByTestId("ai-draft-panel")).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+        await waitForAiSkillSuggestionResolution();
 
         expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
       });
@@ -590,6 +665,78 @@ describe("JobFormPage", () => {
 
         expect(screen.getByTestId("needs-review-salary_range")).toBeInTheDocument();
         expect(screen.getByTestId("needs-review-unit")).toBeInTheDocument();
+      });
+
+      it("13. aplicar ao formulário passa working_hours dedicado ao updateForm", async () => {
+        // MOCK_GENERATE_RESPONSE.draft.working_hours = "6x1"
+        await openAndGenerate();
+        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+        await waitForAiSkillSuggestionResolution();
+
+        expect(mockUpdateForm).toHaveBeenCalledWith(
+          expect.objectContaining({ working_hours: "6x1" }),
+        );
+      });
+
+      it("14. aplicar ao formulário passa mandatory_skills ao campo dedicado mandatory_skills", async () => {
+        await openAndGenerate();
+        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+        await waitForAiSkillSuggestionResolution();
+
+        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
+        const ms = call.mandatory_skills as string[];
+        expect(Array.isArray(ms)).toBe(true);
+        for (const skill of MOCK_MANDATORY_SKILLS) {
+          expect(ms).toContain(skill);
+        }
+      });
+
+      it("15. aplicar ao formulário passa screening_questions ao campo dedicado screening_questions", async () => {
+        await openAndGenerate();
+        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+        await waitForAiSkillSuggestionResolution();
+
+        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
+        const sq = call.screening_questions as string[];
+        expect(sq).toContain("Tem disponibilidade para turno integral?");
+      });
+
+      it("16. seniority null no draft não inclui seniority_level no updateForm", async () => {
+        // MOCK_GENERATE_RESPONSE.draft.seniority = null
+        await openAndGenerate();
+        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+        await waitForAiSkillSuggestionResolution();
+
+        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
+        expect(call.seniority_level).toBeUndefined();
+      });
+
+      it("17. aplicar ao formulário NÃO inclui mandatory_skills em behavioral_requirements (campo dedicado)", async () => {
+        await openAndGenerate();
+        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+        await waitForAiSkillSuggestionResolution();
+
+        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
+        expect(call.behavioral_requirements).toBeUndefined();
+      });
+
+      it("18. aplicar ao formulário passa nice_to_have_skills ao campo dedicado", async () => {
+        await openAndGenerate();
+        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+        await waitForAiSkillSuggestionResolution();
+
+        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
+        const nh = call.nice_to_have_skills as string[];
+        expect(nh).toContain("Experiência anterior com caixa");
+      });
+
+      it("19. aplicar ao formulário NÃO sobrescreve experience_context com working_hours", async () => {
+        await openAndGenerate();
+        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+        await waitForAiSkillSuggestionResolution();
+
+        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
+        expect(call.experience_context).toBeUndefined();
       });
     });
   });
@@ -745,6 +892,7 @@ describe("JobFormPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
       await screen.findByTestId("ai-draft-result");
       fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+      await waitForAiSkillSuggestionResolution();
 
       // Painel fechado, volta ao modo manual — salvar rascunho ainda disponível
       expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
@@ -766,6 +914,7 @@ describe("JobFormPage", () => {
 
       // Applying closes the panel (onApply triggers setAiMode("manual") in page)
       fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+      await waitForAiSkillSuggestionResolution();
       await act(async () => {});
       expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
     });
@@ -803,6 +952,104 @@ describe("JobFormPage", () => {
 
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent(/não foi possível gerar o rascunho/i);
+    });
+  });
+
+  // ── Fase IA Vaga 8 — Skills sugeridas ────────────────────────────────────────
+
+  describe("Fase IA Vaga 8 — Skills sugeridas na aba Skills", () => {
+    async function applyDraft() {
+      renderForm();
+      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
+      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
+        target: { value: "Operador de Caixa" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
+      await screen.findByTestId("ai-draft-result");
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+      await waitForAiSkillSuggestionResolution();
+    }
+
+    async function waitForSkillResolution() {
+      await waitFor(() =>
+        expect(screen.queryByText("Validando catálogo")).not.toBeInTheDocument(),
+      );
+    }
+
+    it("após aplicar rascunho com skills, navega automaticamente para aba Skills", async () => {
+      await applyDraft();
+      // Skills step is now active — mandatory-skills step mock is rendered
+      expect(screen.getByTestId("step-mandatory-skills")).toBeInTheDocument();
+    });
+
+    it("bloco 'Skills sugeridas pela IA' aparece na aba Skills após aplicar", async () => {
+      await applyDraft();
+      expect(screen.getByTestId("ai-skill-suggestions")).toBeInTheDocument();
+    });
+
+    it("bloco mostra skills obrigatórias da IA", async () => {
+      await applyDraft();
+      const block = screen.getByTestId("ai-skill-suggestions");
+      for (const skill of MOCK_MANDATORY_SKILLS) {
+        expect(block.textContent).toContain(skill);
+      }
+    });
+
+    it("bloco mostra skills diferenciais da IA", async () => {
+      await applyDraft();
+      const block = screen.getByTestId("ai-skill-suggestions");
+      expect(block.textContent).toContain("Experiência anterior com caixa");
+    });
+
+    it("botão 'Ignorar sugestões' remove o bloco da aba Skills", async () => {
+      await applyDraft();
+      expect(screen.getByTestId("ai-skill-suggestions")).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("ai-suggestions-dismiss"));
+      expect(screen.queryByTestId("ai-skill-suggestions")).not.toBeInTheDocument();
+    });
+
+    it("botão 'Aplicar skills selecionadas' chama handleAddSkill para cada skill marcada", async () => {
+      await applyDraft();
+      await waitForSkillResolution();
+      fireEvent.click(screen.getByTestId("ai-suggestions-apply"));
+      await waitFor(() => expect(mockHandleAddSkill).toHaveBeenCalled());
+      // Called for mandatory + optional skills (all checked by default)
+      expect(mockHandleAddSkill.mock.calls.length).toBe(
+        MOCK_MANDATORY_SKILLS.length + 1, // +1 for nice_to_have
+      );
+      expect(mockHandleAddSkill).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "skill-atendimento", name: "Atendimento ao cliente" }),
+        "priority",
+      );
+      expect(mockHandleAddSkill).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "skill-exp-caixa", name: "Experiência anterior com caixa" }),
+        "complementary",
+      );
+    });
+
+    it("após aplicar skills, bloco de sugestões é removido", async () => {
+      await applyDraft();
+      await waitForSkillResolution();
+      fireEvent.click(screen.getByTestId("ai-suggestions-apply"));
+      await waitFor(() =>
+        expect(screen.queryByTestId("ai-skill-suggestions")).not.toBeInTheDocument(),
+      );
+    });
+
+    it("painel IA não aparece mais após aplicar rascunho", async () => {
+      await applyDraft();
+      expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
+    });
+
+    it("salvar rascunho continua disponível após aplicar skills", async () => {
+      await applyDraft();
+      expect(screen.getByRole("button", { name: /Salvar rascunho/i })).not.toBeDisabled();
+    });
+
+    it("campos básicos (step-basic, step-requirements) não aparecem enquanto skills estão ativas", async () => {
+      await applyDraft();
+      expect(screen.queryByTestId("step-basic")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("step-requirements")).not.toBeInTheDocument();
     });
   });
 });

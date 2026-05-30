@@ -20,7 +20,8 @@ import {
   BrainCircuit,
   FlaskConical,
   PanelTop,
-  UserRound
+  UserRound,
+  ClipboardList
 } from "lucide-react";
 
 import { useAuth } from "../../features/auth/useAuth";
@@ -46,6 +47,15 @@ export type NavGroup = {
 };
 
 const NAVIGATION_CONFIG: NavGroup[] = [
+  {
+    label: "Central RH",
+    caption: "Pendências do dia",
+    roles: ["admin", "recruiter", "viewer", "hr"],
+    isDropdown: false,
+    items: [
+      { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: ["admin", "recruiter", "viewer", "hr"] }
+    ],
+  },
   {
     label: "Visão geral",
     caption: "Dashboard",
@@ -126,16 +136,17 @@ const NAVIGATION_CONFIG: NavGroup[] = [
   {
     label: "Outros",
     caption: "Ferramentas extras",
-    roles: ["admin"],
+    roles: ["admin", "recruiter"],
     isDropdown: true,
     items: [
       { to: "/candidato/portal", label: "Portal do Candidato (Preview)", caption: "Visualização do candidato", roles: ["admin"] },
-      { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: ["admin"] },
+      { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: ["admin", "recruiter"] },
     ],
   },
 ];
 
 const ICON_MAP: Record<string, any> = {
+  "/rh": ClipboardList,
   "/dashboard": LayoutDashboard,
   "/pipeline": Kanban,
   "/vagas": Briefcase,
@@ -159,6 +170,7 @@ const ICON_MAP: Record<string, any> = {
   "/admin/ai-provider-credentials": KeyRound,
   "/candidato/portal": User,
   "/demo-rh": FlaskConical,
+  "Central RH": ClipboardList,
   "Visão geral": LayoutDashboard,
   "Recrutamento": Briefcase,
   "Avaliações": GraduationCap,
@@ -291,14 +303,14 @@ export function AppShell() {
           onNavigate={(path) => navigate(path)}
         />
 
-        <main className="flex-1 flex flex-col p-4 sm:p-6 lg:p-8">
-          <div className="w-full max-w-[1600px] mx-auto flex-1 flex flex-col">
+        <main className="flex-1 flex flex-col p-4 sm:p-6">
+          <div className="w-full flex-1 flex flex-col">
             <Outlet />
           </div>
         </main>
 
         <footer className="w-full border-t border-border bg-surface py-4 text-center text-sm text-[hsl(var(--nav-muted))]">
-          <div className="mx-auto max-w-[1600px] px-4 sm:px-6">
+          <div className="w-full px-4 sm:px-6">
             @LecinoLucas Developer 2026 Rede Marajo RH IA
           </div>
         </footer>

@@ -89,6 +89,9 @@ ManagerOnly = Annotated[User, Depends(require_roles(UserRole.MANAGER))]
 # Multi-role combinations
 RecruiterOrAdmin = Annotated[User, Depends(require_roles(UserRole.RECRUITER, UserRole.ADMIN))]
 HrOrAdmin = Annotated[User, Depends(require_roles(UserRole.HR, UserRole.ADMIN))]
+HrRecruiterOrAdmin = Annotated[
+    User, Depends(require_roles(UserRole.HR, UserRole.RECRUITER, UserRole.ADMIN))
+]
 ManagerOrAdmin = Annotated[User, Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN))]
 ManagerRecruiterOrAdmin = Annotated[
     User, Depends(require_roles(UserRole.MANAGER, UserRole.RECRUITER, UserRole.ADMIN))

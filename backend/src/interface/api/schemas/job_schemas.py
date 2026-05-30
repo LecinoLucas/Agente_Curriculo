@@ -130,6 +130,11 @@ class JobResponse(ORMAPISchemaModel):
     responsibilities: str | None = None
     experience_context: str | None = None
     behavioral_requirements: list[str] = Field(default_factory=list)
+    mandatory_skills: list[str] = Field(default_factory=list)
+    nice_to_have_skills: list[str] = Field(default_factory=list)
+    screening_questions: list[str] = Field(default_factory=list)
+    benefits: list[str] = Field(default_factory=list)
+    working_hours: str | None = None
     priority: JOB_PRIORITY
     quality_score: int | None = None
     quality_status: Literal["weak", "acceptable", "good"] | None = None
@@ -153,6 +158,19 @@ class JobResponse(ORMAPISchemaModel):
     @classmethod
     def normalize_job_area(cls, value):
         return normalize_job_area_value(value)
+
+    @field_validator(
+        "mandatory_skills",
+        "nice_to_have_skills",
+        "screening_questions",
+        "benefits",
+        mode="before",
+    )
+    @classmethod
+    def coerce_jsonb_list_response(cls, value):
+        # JSONB columns may return None for legacy rows created before this field existed.
+        # Normalize to empty list for response consumers.
+        return value if value is not None else []
 
 
 class JobStatusSummaryResponse(BaseModel):
@@ -193,6 +211,11 @@ class CreateJobRequest(APISchemaModel):
     responsibilities: str | None = None
     experience_context: str | None = None
     behavioral_requirements: list[str] = Field(default_factory=list)
+    mandatory_skills: list[str] = Field(default_factory=list)
+    nice_to_have_skills: list[str] = Field(default_factory=list)
+    screening_questions: list[str] = Field(default_factory=list)
+    benefits: list[str] = Field(default_factory=list)
+    working_hours: str | None = Field(default=None, max_length=200)
     priority: JOB_PRIORITY = "normal"
     skill_requirements: dict[str, list[str]] | None = None
     behavioral_template_id: UUID | None = None
@@ -236,6 +259,34 @@ class CreateJobRequest(APISchemaModel):
 
         return normalized
 
+    @field_validator(
+        "mandatory_skills",
+        "nice_to_have_skills",
+        "screening_questions",
+        "benefits",
+    )
+    @classmethod
+    def normalize_ai_draft_string_lists(cls, values: list[str]) -> list[str]:
+        """Trim, drop empties, dedup case-fold for AI draft string lists."""
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in values or []:
+            cleaned = str(value).strip()
+            key = cleaned.casefold()
+            if not cleaned or key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
+
+    @field_validator("working_hours", mode="before")
+    @classmethod
+    def normalize_working_hours_create(cls, value):
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned if cleaned else None
+
 
 class UpdateJobRequest(APISchemaModel):
     title: str | None = Field(default=None, min_length=3, max_length=255)
@@ -255,6 +306,11 @@ class UpdateJobRequest(APISchemaModel):
     responsibilities: str | None = None
     experience_context: str | None = None
     behavioral_requirements: list[str] | None = None
+    mandatory_skills: list[str] | None = None
+    nice_to_have_skills: list[str] | None = None
+    screening_questions: list[str] | None = None
+    benefits: list[str] | None = None
+    working_hours: str | None = Field(default=None, max_length=200)
     priority: JOB_PRIORITY | None = None
     skill_requirements: dict[str, list[str]] | None = None
     behavioral_template_id: UUID | None = None
@@ -269,6 +325,35 @@ class UpdateJobRequest(APISchemaModel):
     @classmethod
     def normalize_job_area_update(cls, value):
         return normalize_job_area_value(value)
+
+    @field_validator(
+        "mandatory_skills",
+        "nice_to_have_skills",
+        "screening_questions",
+        "benefits",
+    )
+    @classmethod
+    def normalize_optional_ai_draft_lists(cls, values: list[str] | None) -> list[str] | None:
+        if values is None:
+            return None
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            cleaned = str(value).strip()
+            key = cleaned.casefold()
+            if not cleaned or key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
+
+    @field_validator("working_hours", mode="before")
+    @classmethod
+    def normalize_working_hours_update(cls, value):
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned if cleaned else None
 
     @field_validator("behavioral_requirements")
     @classmethod

@@ -1,4 +1,4 @@
-import { PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Users, Clock, Calendar, CheckCircle2, Plus, BarChart3, Home, MapPin, Sparkles, Inbox, Activity, Filter, ToggleRight, ToggleLeft, AlertTriangle, X, ChevronDown, Briefcase } from "lucide-react";
+import { PanelRightClose, PanelRightOpen, RefreshCw, Search, Users, Clock, Calendar, CheckCircle2, Plus, BarChart3, Home, MapPin, Sparkles, Inbox, Activity, Filter, ToggleRight, ToggleLeft, AlertTriangle, X, ChevronDown, Briefcase } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -122,6 +122,11 @@ export function PipelinePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showRanking, setShowRanking] = useState(resolveInitialShowRanking);
   const [sortOrder, setSortOrder] = useState<"score_desc" | "score_asc" | "name_az">("score_desc");
+  // Local UI-only filters applied on top of the server-side board.
+  // Backend pipeline endpoint does not support text search or "pending" filter,
+  // so we filter the already-fetched board on the client without re-fetching.
+  const [searchTerm, setSearchTerm] = useState("");
+  const [onlyPending, setOnlyPending] = useState(false);
   const [ranking, setRanking] = useState<JobRanking | null>(null);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [rankingError, setRankingError] = useState<string | null>(null);
@@ -469,14 +474,66 @@ export function PipelinePage() {
     [pipelineJobs, activeJobId],
   );
 
+  // Local client-side filter predicate applied on top of the server board.
+  // - Search by candidate name (case-insensitive, accent-insensitive)
+  // - "Pendências" toggle: keeps cards with at least one expected step pending.
+  const candidateMatchesLocalFilters = useCallback(
+    (c: JobCandidate): boolean => {
+      const term = searchTerm.trim();
+      if (term) {
+        const normalize = (s: string) =>
+          s
+            .normalize("NFD")
+            .replace(/[̀-ͯ]/g, "")
+            .toLowerCase();
+        const name = normalize(c.candidate_name ?? "");
+        if (!name.includes(normalize(term))) return false;
+      }
+      if (onlyPending) {
+        const isBehavioralPending =
+          Boolean(c.requires_behavioral_assessment) &&
+          c.behavioral_assessment_status !== "submitted" &&
+          c.behavioral_assessment_status !== "evaluated";
+        const isBehavioralAiPending =
+          Boolean(c.requires_behavioral_ai_evaluation) &&
+          c.behavioral_ai_evaluation_status !== "completed" &&
+          c.behavioral_ai_evaluation_status !== "submitted";
+        const isInterviewPending =
+          Boolean(c.requires_interview) &&
+          c.interview_status !== "completed" &&
+          c.interview_status !== "submitted";
+        const isScorecardPending =
+          Boolean(c.requires_scorecard) &&
+          c.interview_scorecard_status !== "submitted" &&
+          c.interview_scorecard_status !== "completed";
+        const hasAnyPending =
+          isBehavioralPending ||
+          isBehavioralAiPending ||
+          isInterviewPending ||
+          isScorecardPending;
+        if (!hasAnyPending) return false;
+      }
+      return true;
+    },
+    [searchTerm, onlyPending],
+  );
+
+  const filteredBoardColumns = useMemo(() => {
+    if (!board) return [];
+    return board.columns.map((col) => ({
+      ...col,
+      candidates: col.candidates.filter(candidateMatchesLocalFilters),
+    }));
+  }, [board, candidateMatchesLocalFilters]);
+
   // Macro grouping is visual only. Each card keeps its real candidate.stage from the API.
   const mainCols = useMemo(
     () =>
-      groupCandidatesByMacroColumn(board?.columns ?? []).map((col) => ({
+      groupCandidatesByMacroColumn(filteredBoardColumns).map((col) => ({
         ...col,
         candidates: sortCandidatesByScore(col.candidates, sortOrder),
       })),
-    [board, sortOrder],
+    [filteredBoardColumns, sortOrder],
   );
 
   useEffect(() => {
@@ -537,7 +594,24 @@ export function PipelinePage() {
 
   const handleOpenSourceCandidates = () => {
     if (!canUse || !activeJobId) return;
-    void loadRanking(activeJobId);
+    if (ranking?.job_id !== activeJobId) {
+      setRanking(null);
+    }
+    setRankingLoading(true);
+    setRankingError(null);
+    void loadRanking(activeJobId)
+      .then((result) => setRanking(result))
+      .catch((err: unknown) => {
+        setRanking(null);
+        setRankingError(
+          formatContextError(
+            err,
+            "Não foi possível carregar o ranking desta vaga.",
+            "Tente atualizar novamente.",
+          ),
+        );
+      })
+      .finally(() => setRankingLoading(false));
     setShowSourceCandidates(true);
   };
 
@@ -800,89 +874,152 @@ export function PipelinePage() {
     [activeJobId, rejectionCandidate, syncAfterStageMutation],
   );
 
-  const activeFiltersCount = (urlBoardFilters.entered_from ? 1 : 0) +
-                             (urlBoardFilters.entered_to ? 1 : 0) +
-                             (urlBoardFilters.updated_to ? 1 : 0);
+  const activeFiltersCount =
+    (urlBoardFilters.entered_from ? 1 : 0) +
+    (urlBoardFilters.entered_to ? 1 : 0) +
+    (urlBoardFilters.updated_from ? 1 : 0) +
+    (urlBoardFilters.updated_to ? 1 : 0) +
+    (searchTerm.trim() ? 1 : 0) +
+    (onlyPending ? 1 : 0);
   const hasActiveFilters = activeFiltersCount > 0;
+  const hasLocalFilters = Boolean(searchTerm.trim()) || onlyPending;
+
+  // Total visible (after local filters). If the board has cards but local
+  // filters removed them all, we show a clear empty-state message.
+  const visibleCandidateCount = useMemo(
+    () => filteredBoardColumns.reduce((sum, col) => sum + col.candidates.length, 0),
+    [filteredBoardColumns],
+  );
+  const showLocalEmptyState =
+    Boolean(board) && hasLocalFilters && visibleCandidateCount === 0 && totalCandidatos > 0;
+
+  const clearAllFilters = useCallback(() => {
+    setSearchTerm("");
+    setOnlyPending(false);
+    handleClearBoardFilters();
+  }, [handleClearBoardFilters]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="pipeline-page flex h-full w-full min-w-0 flex-col gap-2 px-1 pt-1 sm:px-2 sm:pt-2 lg:px-3 pb-2 text-slate-800 dark:text-slate-100 bg-[#F8FAFC] dark:bg-[#09090b]">
+    <div className="pipeline-page flex h-full w-full min-w-0 flex-col gap-3 px-1 pb-1 pt-1 text-slate-800 bg-[#F4F7FB] dark:bg-[#09090b] dark:text-slate-100 sm:px-2 sm:pt-2 lg:px-3">
       
-      {/* ── Top Navigation ── */}
-      <nav aria-label="breadcrumb" className="hidden sm:flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 pl-1 mt-1">
-        <span>Recrutamento</span>
-        <span className="text-slate-300 dark:text-slate-600">/</span>
-        <span className="font-bold text-slate-800 dark:text-slate-100">Pipeline</span>
-      </nav>
+      {/* ── Header Area ── */}
+      <div className="mb-2 mt-0 flex flex-col gap-3">
+        {/* Top Row: Breadcrumb */}
+        <nav aria-label="breadcrumb" className="sr-only">
+          <span>Recrutamento</span>
+          <span className="text-slate-300 dark:text-slate-600">›</span>
+          <span className="font-bold text-slate-800 dark:text-slate-100">Pipeline</span>
+        </nav>
 
-      {/* ── Compact Header ── */}
-      <div className="pipeline-header bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2 sm:px-3 sm:py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between transition-all shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-          {pipelineJobsError ? (
-            <span className="text-xs text-rose-500 font-bold">{pipelineJobsError}</span>
-          ) : (
-            <div className="w-full">
-              <JobCombobox
-                jobs={pipelineJobs}
-                loading={pipelineJobsLoading}
-                value={activeJobId ?? null}
-                onChange={handleSelectJob}
-              />
+        {/* Second Row: Title, Combobox, Actions */}
+        <div className="relative z-30 flex flex-col gap-3 pr-14 xl:flex-row xl:items-start xl:justify-between">
+          <div className="relative z-10 min-w-0 flex-1 rounded-[22px] border border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_18px_42px_-32px_rgba(15,23,42,0.38)] backdrop-blur">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <h1 className="shrink-0 text-3xl font-black tracking-tight text-[#0f172a] dark:text-white">Pipeline</h1>
+
+              {pipelineJobsError ? (
+                <span className="text-xs font-bold text-rose-500">{pipelineJobsError}</span>
+              ) : (
+                <div className="relative z-20 min-w-[350px] max-w-full flex-1 rounded-[18px] border border-slate-200/80 bg-slate-50/85 px-3 py-2 shadow-inner shadow-white/80 dark:border-slate-800 dark:bg-slate-900">
+                  <JobCombobox
+                    jobs={pipelineJobs}
+                    loading={pipelineJobsLoading}
+                    value={activeJobId ?? null}
+                    onChange={handleSelectJob}
+                  />
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Action Controls */}
-        <div className="flex flex-wrap sm:flex-nowrap w-full gap-3 sm:w-auto sm:items-center">
-          <button
-            type="button"
-            onClick={handleOpenSourceCandidates}
-            disabled={!canUse}
-            className={`pipeline-action-button pipeline-action-button--primary inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-emerald-200 px-5 text-sm font-bold transition-all ${
-              canUse
-                ? "bg-white text-emerald-600 hover:bg-emerald-50 dark:border-emerald-900/50 dark:bg-slate-900 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
-                : "cursor-not-allowed border-border/40 bg-surface-muted text-text-muted dark:border-slate-800 dark:bg-slate-900"
-            }`}
-          >
-            <Plus className="h-4 w-4" />
-            Vincular candidato
-          </button>
-          
-          {activeJobId && (
+            {selectedJob && (selectedJob.seniority_level || selectedJob.work_model || selectedJob.location) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {selectedJob.seniority_level && (
+                  <div className="flex h-[42px] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 shadow-sm shadow-slate-200/30">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-400">
+                      <Briefcase className="h-3 w-3" />
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Senioridade</span>
+                      <span className="mt-0.5 text-[10.5px] font-bold text-slate-700">{selectedJob.seniority_level}</span>
+                    </div>
+                  </div>
+                )}
+
+                {selectedJob.work_model && (
+                  <div className="flex h-[42px] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 shadow-sm shadow-slate-200/30">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-400">
+                      <Home className="h-3 w-3" />
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Modalidade</span>
+                      <span className="mt-0.5 text-[10.5px] font-bold text-slate-700">{formatWorkModel(selectedJob.work_model)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {selectedJob.location && (
+                  <div className="flex h-[42px] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 shadow-sm shadow-slate-200/30">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-400">
+                      <MapPin className="h-3 w-3" />
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Localização</span>
+                      <span className="mt-0.5 text-[10.5px] font-bold text-slate-700">{selectedJob.location}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Action Controls */}
+          <div className="flex flex-wrap gap-2 rounded-[18px] border border-slate-200/80 bg-white/95 p-2 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.42)] backdrop-blur sm:flex-nowrap sm:items-center">
             <button
               type="button"
-              onClick={() => setShowRanking((current) => !current)}
-              className={`pipeline-action-button inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold transition-all ${
-                showRanking
-                  ? "border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              onClick={handleOpenSourceCandidates}
+              disabled={!canUse}
+              className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-bold transition-all ${
+                canUse
+                  ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e]"
+                  : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
               }`}
-              aria-expanded={showRanking}
             >
-              <BarChart3 className="h-4 w-4" />
-              Ver Ranking IA
+              <Plus className="h-3.5 w-3.5" />
+              Vincular candidato
             </button>
-          )}
+            
+            {activeJobId && (
+              <button
+                type="button"
+                onClick={() => setShowRanking((current) => !current)}
+                className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 ${showRanking ? "bg-slate-50 text-slate-800" : ""}`}
+              >
+                <BarChart3 className="h-3.5 w-3.5 text-slate-400" />
+                Ver Ranking IA
+              </button>
+            )}
 
-          {activeJobId && (
-            <button
-              type="button"
-              onClick={() => void handleManualRefresh()}
-              disabled={boardLoading}
-              aria-label="Atualizar board"
-              className="pipeline-action-button inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <RefreshCw className={`h-4 w-4 ${boardLoading ? "animate-spin" : ""}`} />
-              Atualizar
-            </button>
-          )}
+            {activeJobId && (
+              <button
+                type="button"
+                aria-label="Atualizar board"
+                onClick={() => void handleManualRefresh()}
+                disabled={boardLoading}
+                className="pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 text-slate-400 ${boardLoading ? "animate-spin" : ""}`} />
+                Atualizar
+              </button>
+            )}
+          </div>
         </div>
       </div>
       
       {/* ── KPIs (Métricas) ── */}
+      {/* 
       {activeJobId && !pipelineJobsLoading && selectedJob && board && !boardError && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 px-1 -mt-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 px-1 -mt-1 hidden">
           <span><strong className="text-slate-700 dark:text-slate-300">{totalCandidatos}</strong> candidato{totalCandidatos === 1 ? "" : "s"}</span>
           <span className="text-slate-300 dark:text-slate-600">·</span>
           <span><strong className="text-slate-700 dark:text-slate-300">{emAndamento}</strong> em andamento</span>
@@ -892,6 +1029,7 @@ export function PipelinePage() {
           <span><strong className="text-slate-700 dark:text-slate-300">{contratacoes}</strong> contrataç{contratacoes === 1 ? "ão" : "ões"}</span>
         </div>
       )}
+      */}
 
       {/* ── Empty: no jobs at all ── */}
       {!pipelineJobsLoading && pipelineJobs.length === 0 && !pipelineJobsError && (
@@ -918,28 +1056,40 @@ export function PipelinePage() {
               
 
                 {/* Filters Toolbar */}
-                <div className="pipeline-toolbar mb-2 mt-1 flex flex-col gap-2">
+                <div className="pipeline-toolbar mb-3 mt-0 flex flex-col gap-2 rounded-[20px] border border-slate-200/80 bg-white/95 px-3 py-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.38)] backdrop-blur">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     
                     {/* Left: Search & Toggles */}
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2.5">
                       {/* Search Bar */}
-                      <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-900 w-full sm:w-64 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
-                        <Search className="h-4 w-4 text-slate-400 shrink-0" />
-                        <input 
-                          type="text" 
-                          placeholder="Buscar candidato..." 
-                          className="flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
+                      <div className="flex w-full items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-2 shadow-sm transition-all focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900 sm:w-64">
+                        <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Buscar candidato..."
+                          value={searchTerm}
+                          onChange={(event) => setSearchTerm(event.target.value)}
+                          aria-label="Buscar candidato"
+                          data-testid="pipeline-search-input"
+                          className="flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
                         />
-                        <div className="flex items-center justify-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 dark:bg-slate-800">
-                          ⌘ K
-                        </div>
+                        {searchTerm && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchTerm("")}
+                            aria-label="Limpar busca"
+                            className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                            data-testid="pipeline-search-clear"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
 
-                      {/* Top Match IA */}
+                      {/* Melhor match IA */}
                       <button
                         onClick={() => setSortOrder(sortOrder === "score_desc" ? "name_az" : "score_desc")}
-                        className={`flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-bold shadow-sm transition-all ${
+                        className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
                           sortOrder === "score_desc"
                             ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-teal-400/25 dark:bg-teal-400/10 dark:text-teal-200"
                             : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
@@ -948,16 +1098,23 @@ export function PipelinePage() {
                         <span className={`flex h-5 w-5 items-center justify-center rounded-full ${sortOrder === "score_desc" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40" : "bg-slate-100 text-slate-400 dark:bg-slate-800"}`}>
                           <CheckCircle2 className="h-3 w-3" />
                         </span>
-                        Top Match IA
+                        Melhor match IA
                       </button>
 
                       {/* Pendências */}
-                      <button className="flex h-10 items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 text-sm font-bold text-orange-700 shadow-sm transition-all hover:bg-orange-100 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-400 dark:hover:bg-orange-900/40">
+                      <button
+                        type="button"
+                        onClick={() => setOnlyPending((prev) => !prev)}
+                        aria-pressed={onlyPending}
+                        data-testid="pipeline-pending-toggle"
+                        className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
+                          onlyPending
+                            ? "border-orange-300 bg-orange-100 text-orange-800 dark:border-orange-800 dark:bg-orange-900/50 dark:text-orange-300"
+                            : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-400 dark:hover:bg-orange-900/40"
+                        }`}
+                      >
                         <AlertTriangle className="h-4 w-4" />
                         Pendências
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-200/60 text-[10px] font-black text-orange-800 dark:bg-orange-900 dark:text-orange-300">
-                          1
-                        </span>
                       </button>
                     </div>
 
@@ -972,7 +1129,7 @@ export function PipelinePage() {
                       <button
                         type="button"
                         onClick={() => setShowFilters((prev) => !prev)}
-                        className={`flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-bold shadow-sm transition-all ${
+                        className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
                           showFilters || hasActiveFilters
                             ? "border-indigo-200 bg-indigo-50/50 text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-400"
                             : "border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 dark:border-slate-800 dark:bg-slate-900 dark:text-indigo-400 dark:hover:bg-indigo-950/20"
@@ -980,21 +1137,27 @@ export function PipelinePage() {
                       >
                         <Filter className="h-4 w-4" />
                         Filtros
-                        <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
-                          showFilters || hasActiveFilters 
-                            ? "bg-indigo-100/80 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300"
-                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                        }`}>
-                          {activeFiltersCount > 0 ? activeFiltersCount : "1"}
-                        </span>
+                        {activeFiltersCount > 0 && (
+                          <span
+                            data-testid="pipeline-active-filters-badge"
+                            className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
+                              showFilters || hasActiveFilters
+                                ? "bg-indigo-100/80 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300"
+                                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                            }`}
+                          >
+                            {activeFiltersCount}
+                          </span>
+                        )}
                         <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showFilters ? "rotate-180" : ""}`} />
                       </button>
 
                       {hasActiveFilters && (
                         <button
                           type="button"
-                          onClick={handleClearBoardFilters}
-                          className="flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-slate-400 shadow-sm transition-colors hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-rose-900/50 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
+                          onClick={clearAllFilters}
+                          data-testid="pipeline-clear-filters"
+                          className="flex h-10 items-center justify-center rounded-[14px] border border-slate-200 bg-white px-3 text-slate-400 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-rose-900/50 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
                           title="Limpar filtros"
                         >
                           <X className="h-4 w-4" />
@@ -1005,7 +1168,7 @@ export function PipelinePage() {
 
                   {/* Expanded Filters Area */}
                   {showFilters && (
-                    <div className="pipeline-filter-panel mt-2 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-900/50 animate-in slide-in-from-top-2 fade-in duration-200">
+                    <div className="pipeline-filter-panel mt-1 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[18px] border border-slate-200 bg-slate-50/65 p-3 shadow-inner shadow-white/70 dark:border-slate-800 dark:bg-slate-900/50 animate-in slide-in-from-top-2 fade-in duration-200">
                       {/* Period */}
                       <div className="flex items-center gap-2.5">
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Período</span>
@@ -1051,7 +1214,7 @@ export function PipelinePage() {
                           onChange={(e) => setSortOrder(e.target.value as any)}
                           className="rounded-lg bg-white py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 shadow-sm border border-slate-200 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                         >
-                          <option value="score_desc">Mais recente</option>
+                          <option value="score_desc">Maior aderência</option>
                           <option value="name_az">A-Z</option>
                         </select>
                       </div>
@@ -1083,13 +1246,30 @@ export function PipelinePage() {
               {/* Initial Loading skeletons */}
               {showInitialBoardLoading && <SkeletonRows rows={5} />}
 
+              {/* Empty state when local filters hide everything */}
+              {showLocalEmptyState && (
+                <div
+                  className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300"
+                  data-testid="pipeline-local-empty-state"
+                >
+                  <span className="font-bold">Nenhum candidato corresponde aos filtros aplicados.</span>
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="text-xs font-bold underline hover:no-underline"
+                  >
+                    Limpar filtros
+                  </button>
+                </div>
+              )}
+
               {/* Kanban columns scroll */}
               {board && !boardError && (
                 <>
                 {kanbanHasHorizontalOverflow ? (
                   <div
                     ref={topKanbanScrollRef}
-                    className="mb-1 h-2 overflow-x-auto overflow-y-hidden rounded-full bg-slate-100 opacity-60 transition-opacity hover:opacity-100 dark:bg-slate-800"
+                    className="mb-1 h-2 overflow-x-auto overflow-y-hidden rounded-full bg-white/80 opacity-70 shadow-inner shadow-slate-200/70 transition-opacity hover:opacity-100 dark:bg-slate-800"
                     onScroll={syncTopKanbanScroll}
                     data-testid="kanban-top-scroll"
                   >
@@ -1099,11 +1279,11 @@ export function PipelinePage() {
 
                 <div
                   ref={kanbanScrollRef}
-                  className="pipeline-kanban-scroll -mx-1 w-[calc(100%+0.5rem)] min-w-0 overflow-x-auto overflow-y-hidden px-1 pb-6 pt-1"
+                  className="pipeline-kanban-scroll -mx-1 w-[calc(100%+0.5rem)] min-w-0 overflow-x-auto overflow-y-hidden px-1 pb-4 pt-1"
                   onScroll={syncMainKanbanScroll}
                   data-testid="kanban-scroll-container"
                 >
-                  <div className="flex w-full min-w-0 items-stretch gap-3 min-h-[620px] h-[calc(100vh-280px)] max-h-[calc(100vh-220px)] xl:gap-3">
+                  <div className="flex w-full min-w-0 items-stretch gap-2 min-h-[620px] h-[calc(100vh-230px)] max-h-[calc(100vh-180px)] xl:gap-2">
                     {mainCols.map((col, idx) => (
                       <KanbanColumn
                         key={col.macroId}
@@ -1112,7 +1292,6 @@ export function PipelinePage() {
                         onCardClick={handleOpenCandidate}
                         disabled={!canUse}
                         showTopMatchHighlight={sortOrder === "score_desc"}
-                        onAddCandidate={activeJobAcceptsCandidates ? () => handleOpenSourceCandidates() : undefined}
                         draggableCards={canUse && !isStageMoveSaving}
                         draggingCandidateId={draggingCandidate?.candidateId ?? null}
                         isDropTarget={col.dropTargetStage !== null && dropTargetStage === (col.dropTargetStage ?? col.stage)}
@@ -1130,28 +1309,16 @@ export function PipelinePage() {
 
               {/* Empty state: Board empty */}
               {!showInitialBoardLoading && board && !boardError && totalCandidatos === 0 && (
-                <div className="flex flex-col items-center justify-center gap-4 py-16">
-                  <div className="pipeline-empty-board max-w-md rounded-2xl border border-slate-150 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-10 text-center">
-                    <span className="text-5xl mb-4 block">🧭</span>
+                <div className="flex flex-col items-center justify-center gap-4 py-12">
+                  <div className="pipeline-empty-board max-w-sm rounded-[22px] border border-slate-200/80 bg-white/95 p-8 text-center shadow-[0_18px_42px_-34px_rgba(15,23,42,0.38)] dark:border-slate-800 dark:bg-slate-900/50">
+                    <span className="mb-3 block text-3xl">🧭</span>
                     <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
                       Nenhum talento nesta vaga
                     </h3>
-                    <p className="mt-2 text-xs font-medium text-slate-400 leading-relaxed">
-                      A vaga está pronta para receber perfis! Comece adicionando candidatos para iniciar a triagem e análise com inteligência artificial.
+                    <p className="mt-2 text-xs font-medium leading-relaxed text-slate-400">
+                      Aguardando perfis para iniciar a triagem desta vaga.
                     </p>
-                    <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
-                      <button
-                        onClick={handleOpenSourceCandidates}
-                        disabled={!canUse}
-                        className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-6 py-3 text-xs font-bold transition-all ${
-                          canUse
-                            ? "bg-[#C1121F] text-white hover:bg-[#A10F19] shadow-sm"
-                            : "cursor-not-allowed border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 text-slate-400 dark:text-slate-500"
-                        }`}
-                      >
-                        <UserPlus className="h-4 w-4" />
-                        Vincular candidatos
-                      </button>
+                    <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
                       <button
                         onClick={() => canUse && setShowNewCandidate(true)}
                         disabled={!canUse}

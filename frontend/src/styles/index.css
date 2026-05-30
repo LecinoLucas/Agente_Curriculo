@@ -168,7 +168,7 @@
     /* Anel de foco. */
     --ring:                263 85% 58%;
     /* Raio padrão. */
-    --radius:              0.75rem;
+    --radius:              1rem;
 
     /* -----------------------------------------------------------------------
        Navbar — Midnight deep purple
@@ -379,7 +379,7 @@
        Direção:
        - Forte, corporativo e firme.
        - Vermelho Marajó fechado para ação e foco.
-       - Base off-white/palha discreta com texto grafite quente.
+       - Base cinza neutro discreta com texto grafite.
        - Navbar vinho profundo para presença institucional.
        ----------------------------------------------------------------------- */
 
@@ -393,41 +393,25 @@
     --brand-glow:          356 82% 56%;
 
     /* Fundo principal da aplicação. */
-    --bg:                  38 36% 94%;
-    /* Superfície principal de cards, painéis e caixas. */
-    --surface:             40 38% 98%;
-    /* Superfície secundária para áreas discretas, hovers e blocos internos. */
-    --surface-muted:       36 25% 90%;
-    /* Borda padrão do tema. */
-    --border:              35 22% 82%;
-    /* Borda mais forte para destaque visual. */
-    --border-strong:       32 18% 72%;
+    --bg:                  220 4% 98%;
+    --surface:             0 0% 100%;
+    --surface-muted:       220 4% 94%;
+    --border:              220 4% 88%;
+    --border-strong:       220 4% 75%;
 
-    /* Token shadcn/Radix para fundo geral. */
-    --background:          38 36% 94%;
-    /* Token shadcn/Radix para texto principal. */
-    --foreground:          22 28% 12%;
-    /* Token shadcn/Radix para fundo de cards. */
-    --card:                40 38% 98%;
-    /* Token shadcn/Radix para texto dentro de cards. */
-    --card-foreground:     22 28% 12%;
-    /* Token shadcn/Radix para fundo de popovers/dropdowns. */
-    --popover:             40 38% 98%;
-    /* Token shadcn/Radix para texto em popovers/dropdowns. */
-    --popover-foreground:  22 28% 12%;
-    /* Token shadcn/Radix para áreas secundárias. */
-    --secondary:           36 25% 90%;
-    /* Texto usado sobre áreas secundárias. */
-    --secondary-foreground:22 28% 12%;
-    /* Token shadcn/Radix para fundos discretos. */
-    --muted:               36 25% 90%;
-    /* Texto secundário em componentes shadcn/Radix. */
-    --muted-foreground:    24 14% 42%;
+    --background:          220 4% 98%;
+    --foreground:          220 8% 15%;
+    --card:                0 0% 100%;
+    --card-foreground:     220 8% 15%;
+    --popover:             0 0% 100%;
+    --popover-foreground:  220 8% 15%;
+    --secondary:           220 4% 94%;
+    --secondary-foreground:220 8% 15%;
+    --muted:               220 4% 94%;
+    --muted-foreground:    220 8% 45%;
 
-    /* Cor principal de texto. */
-    --text:                22 28% 12%;
-    /* Cor de texto secundário ou menos importante. */
-    --text-muted:          24 14% 42%;
+    --text:                220 8% 15%;
+    --text-muted:          220 8% 45%;
 
     /* Cor principal de ação: botões, foco e CTA. */
     --primary:             356 76% 42%;
@@ -459,36 +443,23 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borda/fundo base de inputs. */
-    --input:               35 22% 82%;
+    --input:               356 10% 85%;
 
-    /* Fundo principal da navbar. */
-    --nav-bg:              356 42% 22%;
-    /* Texto principal da navbar. */
-    --nav-text:            36 35% 96%;
-    /* Texto secundário da navbar. */
-    --nav-muted:           24 22% 78%;
-    /* Fundo do item ativo na navbar. */
-    --nav-active-bg:       356 48% 30%;
-    /* Texto do item ativo na navbar. */
+    --nav-bg:              356 10% 20%;
+    --nav-text:            356 10% 98%;
+    --nav-muted:           356 10% 70%;
+    --nav-active-bg:       356 76% 42%;
     --nav-active-text:     0 0% 100%;
-    /* Borda inferior/lateral da navbar. */
-    --nav-border:          356 32% 28%;
+    --nav-border:          356 10% 15%;
 
-    /* Cor de destaque da sidebar. */
     --sidebar-accent:      356 76% 42%;
-    /* Início do gradiente principal/hero. */
     --hero-start:          356 76% 42%;
-    /* Fim do gradiente principal/hero. */
-    --hero-end:            356 64% 24%;
+    --hero-end:            356 10% 20%;
 
-    /* Primeiro brilho radial do fundo da página. */
-    --page-glow-start:     356 80% 94%;
-    /* Segundo brilho radial do fundo da página. */
-    --page-glow-end:       28 54% 92%;
-    /* Início do gradiente base da página. */
-    --page-gradient-start: 38 36% 94%;
-    /* Fim do gradiente base da página. */
-    --page-gradient-end:   36 25% 90%;
+    --page-glow-start:     356 10% 98%;
+    --page-glow-end:       356 10% 94%;
+    --page-gradient-start: 356 10% 98%;
+    --page-gradient-end:   356 10% 94%;
   }
 
   :root[data-visual-theme="theme-2"] {
@@ -511,42 +482,25 @@
     /* Tom luminoso da marca, usado em brilhos e gradientes. */
     --brand-glow:          207 76% 58%;
 
-    /* Fundo principal da aplicação. */
-    --bg:                  210 24% 96%;
-    /* Superfície principal de cards, painéis e caixas. */
-    --surface:             210 22% 99%;
-    /* Superfície secundária para áreas discretas, hovers e blocos internos. */
-    --surface-muted:       214 18% 91%;
-    /* Borda padrão do tema. */
-    --border:              214 18% 82%;
-    /* Borda mais forte para destaque visual. */
-    --border-strong:       215 16% 70%;
+    --bg:                  207 10% 98%;
+    --surface:             0 0% 100%;
+    --surface-muted:       207 10% 94%;
+    --border:              207 10% 88%;
+    --border-strong:       207 10% 75%;
 
-    /* Token shadcn/Radix para fundo geral. */
-    --background:          210 24% 96%;
-    /* Token shadcn/Radix para texto principal. */
-    --foreground:          218 28% 13%;
-    /* Token shadcn/Radix para fundo de cards. */
-    --card:                210 22% 99%;
-    /* Token shadcn/Radix para texto dentro de cards. */
-    --card-foreground:     218 28% 13%;
-    /* Token shadcn/Radix para fundo de popovers/dropdowns. */
-    --popover:             210 22% 99%;
-    /* Token shadcn/Radix para texto em popovers/dropdowns. */
-    --popover-foreground:  218 28% 13%;
-    /* Token shadcn/Radix para áreas secundárias. */
-    --secondary:           214 18% 91%;
-    /* Texto usado sobre áreas secundárias. */
-    --secondary-foreground:218 28% 13%;
-    /* Token shadcn/Radix para fundos discretos. */
-    --muted:               214 18% 91%;
-    /* Texto secundário em componentes shadcn/Radix. */
-    --muted-foreground:    215 14% 42%;
+    --background:          207 10% 98%;
+    --foreground:          207 10% 15%;
+    --card:                0 0% 100%;
+    --card-foreground:     207 10% 15%;
+    --popover:             0 0% 100%;
+    --popover-foreground:  207 10% 15%;
+    --secondary:           207 10% 94%;
+    --secondary-foreground:207 10% 15%;
+    --muted:               207 10% 94%;
+    --muted-foreground:    207 10% 45%;
 
-    /* Cor principal de texto. */
-    --text:                218 28% 13%;
-    /* Cor de texto secundário ou menos importante. */
-    --text-muted:          215 14% 42%;
+    --text:                207 10% 15%;
+    --text-muted:          207 10% 45%;
 
     /* Cor principal de ação: botões, foco e CTA. */
     --primary:             207 76% 38%;
@@ -578,36 +532,158 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borda/fundo base de inputs. */
-    --input:               214 18% 82%;
+    --input:               207 10% 85%;
 
-    /* Fundo principal da navbar. */
-    --nav-bg:              215 42% 18%;
-    /* Texto principal da navbar. */
-    --nav-text:            210 35% 96%;
-    /* Texto secundário da navbar. */
-    --nav-muted:           213 18% 74%;
-    /* Fundo do item ativo na navbar. */
-    --nav-active-bg:       207 72% 34%;
-    /* Texto do item ativo na navbar. */
+    --nav-bg:              207 10% 20%;
+    --nav-text:            207 10% 98%;
+    --nav-muted:           207 10% 70%;
+    --nav-active-bg:       207 76% 38%;
     --nav-active-text:     0 0% 100%;
-    /* Borda inferior/lateral da navbar. */
-    --nav-border:          215 34% 25%;
+    --nav-border:          207 10% 15%;
 
-    /* Cor de destaque da sidebar. */
     --sidebar-accent:      207 76% 38%;
-    /* Início do gradiente principal/hero. */
     --hero-start:          207 76% 38%;
-    /* Fim do gradiente principal/hero. */
-    --hero-end:            212 64% 22%;
+    --hero-end:            207 10% 20%;
 
-    /* Primeiro brilho radial do fundo da página. */
-    --page-glow-start:     207 72% 94%;
-    /* Segundo brilho radial do fundo da página. */
-    --page-glow-end:       214 36% 90%;
-    /* Início do gradiente base da página. */
-    --page-gradient-start: 210 24% 96%;
-    /* Fim do gradiente base da página. */
-    --page-gradient-end:   214 18% 91%;
+    --page-glow-start:     207 10% 98%;
+    --page-glow-end:       207 10% 94%;
+    --page-gradient-start: 207 10% 98%;
+    --page-gradient-end:   207 10% 94%;
+  }
+
+  :root[data-visual-theme="theme-3"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 3 — Branco Gelo (Minimal)
+       -----------------------------------------------------------------------
+       Direção:
+       - Extremamente minimalista e claro.
+       - Base branco gelo puro.
+       - Brand focado em tons pretos/grafite.
+       ----------------------------------------------------------------------- */
+
+    --brand:               0 0% 10%;
+    --brand-dark:          0 0% 0%;
+    --brand-soft:          0 0% 90%;
+    --brand-glow:          0 0% 20%;
+
+    --bg:                  0 0% 98%;
+    --surface:             0 0% 100%;
+    --surface-muted:       0 0% 95%;
+    --border:              0 0% 88%;
+    --border-strong:       0 0% 75%;
+
+    --background:          0 0% 98%;
+    --foreground:          0 0% 15%;
+    --card:                0 0% 100%;
+    --card-foreground:     0 0% 15%;
+    --popover:             0 0% 100%;
+    --popover-foreground:  0 0% 15%;
+    --secondary:           0 0% 95%;
+    --secondary-foreground:0 0% 15%;
+    --muted:               0 0% 95%;
+    --muted-foreground:    0 0% 45%;
+
+    --text:                0 0% 15%;
+    --text-muted:          0 0% 45%;
+
+    --primary:             0 0% 10%;
+    --primary-hover:       0 0% 0%;
+    --primary-soft:        0 0% 95%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                0 0% 10%;
+
+    --accent:              210 10% 95%;
+    --accent-foreground:   0 0% 10%;
+    --accent-soft:         210 10% 95%;
+    --accent-contrast:     0 0% 10%;
+
+    --danger:              344 62% 45%;
+    --danger-soft:         344 50% 95%;
+    --destructive:         344 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --input:               0 0% 85%;
+
+    --nav-bg:              0 0% 20%;
+    --nav-text:            0 0% 98%;
+    --nav-muted:           0 0% 70%;
+    --nav-active-bg:       0 0% 10%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          0 0% 15%;
+
+    --sidebar-accent:      0 0% 10%;
+    --hero-start:          0 0% 15%;
+    --hero-end:            0 0% 20%;
+
+    --page-glow-start:     0 0% 98%;
+    --page-glow-end:       0 0% 94%;
+    --page-gradient-start: 0 0% 98%;
+    --page-gradient-end:   0 0% 94%;
+  }
+
+  :root[data-visual-theme="theme-4"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 4 — Lilás com Cinza Escuro
+       ----------------------------------------------------------------------- */
+
+    --brand:               270 60% 60%;
+    --brand-dark:          270 60% 40%;
+    --brand-soft:          270 60% 95%;
+    --brand-glow:          270 60% 70%;
+
+    --bg:                  270 10% 98%;
+    --surface:             0 0% 100%;
+    --surface-muted:       270 10% 94%;
+    --border:              270 10% 88%;
+    --border-strong:       270 10% 75%;
+
+    --background:          270 10% 98%;
+    --foreground:          270 10% 15%;
+    --card:                0 0% 100%;
+    --card-foreground:     270 10% 15%;
+    --popover:             0 0% 100%;
+    --popover-foreground:  270 10% 15%;
+    --secondary:           270 10% 94%;
+    --secondary-foreground:270 10% 15%;
+    --muted:               270 10% 94%;
+    --muted-foreground:    270 10% 45%;
+
+    --text:                270 10% 15%;
+    --text-muted:          270 10% 45%;
+
+    --primary:             270 60% 60%;
+    --primary-hover:       270 60% 50%;
+    --primary-soft:        270 60% 95%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                270 60% 60%;
+
+    --accent:              270 60% 95%;
+    --accent-foreground:   270 60% 40%;
+    --accent-soft:         270 60% 95%;
+    --accent-contrast:     210 10% 20%;
+
+    --danger:              344 62% 45%;
+    --danger-soft:         344 50% 95%;
+    --destructive:         344 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --input:               270 10% 85%;
+
+    --nav-bg:              270 10% 20%;
+    --nav-text:            270 10% 98%;
+    --nav-muted:           270 10% 70%;
+    --nav-active-bg:       270 60% 60%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          270 10% 15%;
+
+    --sidebar-accent:      270 60% 60%;
+    --hero-start:          270 60% 60%;
+    --hero-end:            270 10% 20%;
+
+    --page-glow-start:     270 10% 98%;
+    --page-glow-end:       270 10% 94%;
+    --page-gradient-start: 270 10% 98%;
+    --page-gradient-end:   270 10% 94%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-1"] {
@@ -615,8 +691,8 @@
        Visual Theme 1 Dark — Marajó Institucional
        -----------------------------------------------------------------------
        Direção:
-       - Carbono/vinho institucional.
-       - Fundos escuros quentes, sem preto puro.
+       - Carbono/vinho institucional com base cinza escuro.
+       - Fundos escuros frios/neutros para evitar tons amarronzados.
        - Vermelho Marajó luminoso para ação e foco.
        ----------------------------------------------------------------------- */
 
@@ -625,36 +701,25 @@
     /* Versão mais escura da marca, usada em bordas, hover e profundidade. */
     --brand-dark:          356 66% 40%;
     /* Versão suave da marca, usada em fundos leves e badges. */
-    --brand-soft:          356 26% 20%;
+    --brand-soft:          220 12% 20%;
     /* Tom luminoso da marca, usado em brilhos e gradientes. */
     --brand-glow:          356 84% 64%;
 
     /* Fundo principal da aplicação. */
-    --bg:                  350 18% 9%;
-    /* Superfície principal de cards, painéis e caixas. */
-    --surface:             350 16% 14%;
-    /* Superfície secundária para áreas discretas, hovers e blocos internos. */
-    --surface-muted:       350 14% 18%;
-    /* Borda padrão do tema. */
-    --border:              350 12% 26%;
-    /* Borda mais forte para destaque visual. */
-    --border-strong:       356 48% 42%;
+    --bg:                  220 12% 10%;
+    --surface:             220 12% 14%;
+    --surface-muted:       220 12% 18%;
+    --border:              220 12% 22%;
+    --border-strong:       220 12% 32%;
 
-    /* Token shadcn/Radix para fundo geral. */
-    --background:          350 18% 9%;
-    /* Token shadcn/Radix para fundo de cards. */
-    --card:                350 16% 14%;
-    /* Token shadcn/Radix para fundo de popovers/dropdowns. */
-    --popover:             350 16% 14%;
-    /* Token shadcn/Radix para áreas secundárias. */
-    --secondary:           350 14% 18%;
-    /* Token shadcn/Radix para fundos discretos. */
-    --muted:               350 14% 18%;
+    --background:          220 12% 10%;
+    --card:                220 12% 14%;
+    --popover:             220 12% 14%;
+    --secondary:           220 12% 18%;
+    --muted:               220 12% 18%;
 
-    /* Cor principal de texto. */
-    --text:                34 28% 92%;
-    /* Cor de texto secundário ou menos importante. */
-    --text-muted:          28 16% 72%;
+    --text:                220 5% 92%;
+    --text-muted:          220 5% 72%;
 
     /* Cor principal de ação: botões, foco e CTA. */
     --primary:             356 82% 60%;
@@ -668,20 +733,20 @@
     --ring:                356 82% 60%;
 
     /* Token shadcn/Radix para texto principal. */
-    --foreground:          34 28% 92%;
+    --foreground:          220 5% 92%;
     /* Token shadcn/Radix para texto dentro de cards. */
-    --card-foreground:     34 28% 92%;
+    --card-foreground:     220 5% 92%;
     /* Token shadcn/Radix para texto em popovers/dropdowns. */
-    --popover-foreground:  34 28% 92%;
+    --popover-foreground:  220 5% 92%;
 
     /* Token shadcn/Radix para área de destaque. */
-    --accent:              356 28% 20%;
+    --accent:              220 15% 20%;
     /* Texto usado sobre o accent. */
-    --accent-foreground:   34 28% 92%;
+    --accent-foreground:   220 5% 92%;
     /* Fundo de destaque suave. */
-    --accent-soft:         356 28% 20%;
+    --accent-soft:         220 15% 20%;
     /* Texto usado sobre áreas de destaque suave. */
-    --accent-contrast:     34 28% 92%;
+    --accent-contrast:     220 5% 92%;
 
     /* Cor semântica para erro/risco, separada do vermelho da marca. */
     --danger:              344 72% 58%;
@@ -693,36 +758,23 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borda/fundo base de inputs. */
-    --input:               350 12% 26%;
+    --input:               220 12% 22%;
 
-    /* Fundo principal da navbar. */
-    --nav-bg:              350 30% 10%;
-    /* Texto principal da navbar. */
-    --nav-text:            34 28% 94%;
-    /* Texto secundário da navbar. */
-    --nav-muted:           28 16% 74%;
-    /* Fundo do item ativo na navbar. */
-    --nav-active-bg:       356 62% 28%;
-    /* Texto do item ativo na navbar. */
+    --nav-bg:              220 15% 8%;
+    --nav-text:            220 10% 90%;
+    --nav-muted:           220 10% 60%;
+    --nav-active-bg:       356 82% 60%;
     --nav-active-text:     0 0% 100%;
-    /* Borda inferior/lateral da navbar. */
-    --nav-border:          350 20% 18%;
+    --nav-border:          220 15% 15%;
 
-    /* Cor de destaque da sidebar. */
     --sidebar-accent:      356 82% 60%;
-    /* Início do gradiente principal/hero. */
     --hero-start:          356 82% 60%;
-    /* Fim do gradiente principal/hero. */
-    --hero-end:            350 30% 10%;
+    --hero-end:            220 15% 8%;
 
-    /* Primeiro brilho radial do fundo da página. */
     --page-glow-start:     356 70% 32%;
-    /* Segundo brilho radial do fundo da página. */
-    --page-glow-end:       24 34% 24%;
-    /* Início do gradiente base da página. */
-    --page-gradient-start: 350 18% 9%;
-    /* Fim do gradiente base da página. */
-    --page-gradient-end:   350 24% 7%;
+    --page-glow-end:       220 20% 12%;
+    --page-gradient-start: 220 12% 10%;
+    --page-gradient-end:   220 15% 8%;
   }
 
   /* --------------------------------------------------------------------------
@@ -825,23 +877,23 @@
     --brand-dark:          350 60% 60%;
     --brand-soft:          350 30% 20%;
     --brand-glow:          350 50% 70%;
-    --bg:                  350 20% 12%;
-    --surface:             350 15% 15%;
-    --surface-muted:       350 15% 20%;
-    --border:              350 15% 25%;
-    --border-strong:       350 20% 35%;
-    --background:          350 20% 12%;
-    --foreground:          35 20% 95%;
-    --card:                350 15% 15%;
-    --card-foreground:     35 20% 95%;
-    --popover:             350 15% 15%;
-    --popover-foreground:  35 20% 95%;
-    --secondary:           350 15% 20%;
-    --secondary-foreground:35 20% 95%;
-    --muted:               350 15% 20%;
-    --muted-foreground:    350 15% 65%;
-    --text:                35 20% 95%;
-    --text-muted:          350 15% 65%;
+    --bg:                  207 10% 12%;
+    --surface:             207 10% 16%;
+    --surface-muted:       207 10% 20%;
+    --border:              207 10% 25%;
+    --border-strong:       207 10% 35%;
+    --background:          207 10% 12%;
+    --foreground:          207 10% 95%;
+    --card:                207 10% 16%;
+    --card-foreground:     207 10% 95%;
+    --popover:             207 10% 16%;
+    --popover-foreground:  207 10% 95%;
+    --secondary:           207 10% 20%;
+    --secondary-foreground:207 10% 95%;
+    --muted:               207 10% 20%;
+    --muted-foreground:    207 10% 65%;
+    --text:                207 10% 95%;
+    --text-muted:          207 10% 65%;
     --primary:             350 50% 65%;
     --primary-hover:       350 60% 75%;
     --primary-soft:        350 30% 20%;
@@ -855,20 +907,132 @@
     --danger-soft:         344 50% 20%;
     --destructive:         344 62% 45%;
     --destructive-foreground: 0 0% 100%;
-    --input:               350 15% 25%;
-    --nav-bg:              350 20% 10%;
-    --nav-text:            35 20% 90%;
-    --nav-muted:           350 15% 60%;
-    --nav-active-bg:       350 30% 20%;
-    --nav-active-text:     350 50% 80%;
-    --nav-border:          350 20% 16%;
-    --sidebar-accent:      350 50% 65%;
-    --hero-start:          350 50% 65%;
-    --hero-end:            350 40% 40%;
-    --page-glow-start:     350 40% 20%;
-    --page-glow-end:       350 30% 15%;
-    --page-gradient-start: 350 20% 12%;
-    --page-gradient-end:   350 15% 10%;
+    --input:               207 10% 25%;
+    --nav-bg:              207 10% 10%;
+    --nav-text:            207 10% 90%;
+    --nav-muted:           207 10% 60%;
+    --nav-active-bg:       207 50% 65%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          207 10% 16%;
+    --sidebar-accent:      207 50% 65%;
+    --hero-start:          207 50% 65%;
+    --hero-end:            207 10% 10%;
+    --page-glow-start:     207 40% 20%;
+    --page-glow-end:       207 30% 15%;
+    --page-gradient-start: 207 10% 12%;
+    --page-gradient-end:   207 10% 10%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-3"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 3 Dark — Preto (Light/Minimal)
+       -----------------------------------------------------------------------
+       Direção:
+       - Fundo puramente preto/escuro.
+       - Contraste alto e minimalista.
+       ----------------------------------------------------------------------- */
+    --brand:               0 0% 100%;
+    --brand-dark:          0 0% 80%;
+    --brand-soft:          0 0% 15%;
+    --brand-glow:          0 0% 90%;
+    --bg:                  0 0% 12%;
+    --surface:             0 0% 16%;
+    --surface-muted:       0 0% 20%;
+    --border:              0 0% 25%;
+    --border-strong:       0 0% 35%;
+    --background:          0 0% 12%;
+    --foreground:          0 0% 98%;
+    --card:                0 0% 16%;
+    --card-foreground:     0 0% 98%;
+    --popover:             0 0% 16%;
+    --popover-foreground:  0 0% 98%;
+    --secondary:           0 0% 20%;
+    --secondary-foreground:0 0% 98%;
+    --muted:               0 0% 20%;
+    --muted-foreground:    0 0% 60%;
+    --text:                0 0% 98%;
+    --text-muted:          0 0% 60%;
+    --primary:             0 0% 100%;
+    --primary-hover:       0 0% 90%;
+    --primary-soft:        0 0% 15%;
+    --primary-foreground:  0 0% 0%;
+    --ring:                0 0% 100%;
+    --accent:              0 0% 10%;
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         0 0% 10%;
+    --accent-contrast:     0 0% 98%;
+    --danger:              344 62% 45%;
+    --danger-soft:         344 50% 15%;
+    --destructive:         344 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --input:               0 0% 25%;
+    --nav-bg:              0 0% 10%;
+    --nav-text:            0 0% 90%;
+    --nav-muted:           0 0% 60%;
+    --nav-active-bg:       0 0% 30%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          0 0% 15%;
+    --sidebar-accent:      0 0% 100%;
+    --hero-start:          0 0% 30%;
+    --hero-end:            0 0% 10%;
+    --page-glow-start:     0 0% 20%;
+    --page-glow-end:       0 0% 15%;
+    --page-gradient-start: 0 0% 12%;
+    --page-gradient-end:   0 0% 10%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-4"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 4 Dark — Lilás com Cinza Escuro
+       ----------------------------------------------------------------------- */
+    --brand:               270 60% 65%;
+    --brand-dark:          270 60% 45%;
+    --brand-soft:          270 60% 20%;
+    --brand-glow:          270 60% 75%;
+    --bg:                  270 10% 12%;
+    --surface:             270 10% 16%;
+    --surface-muted:       270 10% 20%;
+    --border:              270 10% 25%;
+    --border-strong:       270 10% 35%;
+    --background:          270 10% 12%;
+    --foreground:          270 10% 90%;
+    --card:                270 10% 16%;
+    --card-foreground:     270 10% 90%;
+    --popover:             270 10% 16%;
+    --popover-foreground:  270 10% 90%;
+    --secondary:           270 10% 20%;
+    --secondary-foreground:270 10% 90%;
+    --muted:               270 10% 20%;
+    --muted-foreground:    270 10% 60%;
+    --text:                270 10% 90%;
+    --text-muted:          270 10% 60%;
+    --primary:             270 60% 65%;
+    --primary-hover:       270 60% 55%;
+    --primary-soft:        270 60% 20%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                270 60% 65%;
+    --accent:              270 60% 20%;
+    --accent-foreground:   210 10% 90%;
+    --accent-soft:         270 60% 20%;
+    --accent-contrast:     210 10% 90%;
+    --danger:              344 62% 45%;
+    --danger-soft:         344 50% 20%;
+    --destructive:         344 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --input:               270 10% 25%;
+    --nav-bg:              270 10% 10%;
+    --nav-text:            270 10% 90%;
+    --nav-muted:           270 10% 60%;
+    --nav-active-bg:       270 60% 65%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          270 10% 15%;
+    --sidebar-accent:      270 60% 65%;
+    --hero-start:          270 60% 65%;
+    --hero-end:            270 10% 10%;
+    --page-glow-start:     270 60% 20%;
+    --page-glow-end:       270 10% 12%;
+    --page-gradient-start: 270 10% 12%;
+    --page-gradient-end:   270 10% 10%;
   }
 
   /* ==========================================================================
@@ -949,6 +1113,21 @@
       linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
     background-size: 600px, auto, auto, auto;
     background-blend-mode: soft-light, normal, normal, normal;
+    color: hsl(var(--text));
+  }
+
+  :root[data-visual-theme="theme-3"] body {
+    background:
+      radial-gradient(circle at top left, hsl(var(--page-glow-start)), transparent 40rem),
+      radial-gradient(circle at top right, hsl(var(--page-glow-end)), transparent 35rem),
+      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
+    color: hsl(var(--text));
+  }
+  :root[data-theme="dark"][data-visual-theme="theme-3"] body {
+    background:
+      radial-gradient(circle at top left, hsl(var(--page-glow-start) / 0.1), transparent 30rem),
+      radial-gradient(circle at top right, hsl(var(--page-glow-end) / 0.1), transparent 30rem),
+      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
     color: hsl(var(--text));
   }
 
@@ -1567,7 +1746,7 @@
 
   .visual-theme-preview-theme-1 {
     background:
-      linear-gradient(135deg, hsl(356 54% 16%) 0 34%, hsl(356 76% 42%) 34% 68%, hsl(38 36% 94%) 68% 100%);
+      linear-gradient(135deg, hsl(220 12% 10%) 0 34%, hsl(356 76% 42%) 34% 68%, hsl(220 4% 98%) 68% 100%);
   }
 
   .visual-theme-preview-theme-2 {

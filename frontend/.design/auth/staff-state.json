@@ -1,0 +1,47 @@
+{
+  "cookies": [
+    {
+      "name": "refresh_token",
+      "value": "5QEgily2nLPgA-qZFdlG3LdhKGgtxm-o3qWuwP896EPX3Eq0JjrGHFikS2pXYKhHlNs3aLaSrc1nU6o1KJh3aA",
+      "domain": "localhost",
+      "path": "/api/v1/auth",
+      "expires": 1780671123.483311,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "g_state",
+      "value": "{\"i_l\":0,\"i_ll\":1780066301544,\"i_b\":\"shhf/F4Sdg2fVJ+H5BiKzklxeUa7e9JJ92Ud9xKFIlE\",\"i_e\":{\"enable_itp_optimization\":0},\"i_et\":1780066301544}",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1795618301,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:5173",
+      "localStorage": [
+        {
+          "name": "resume_ai_refresh_session_present",
+          "value": "true"
+        },
+        {
+          "name": "visual-theme",
+          "value": "theme-1"
+        },
+        {
+          "name": "pipeline:showRanking",
+          "value": "false"
+        },
+        {
+          "name": "resume_ai_access_token",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MjNhMTNmYi0xZjI5LTRjZmQtOGRjYy1kZDgxZGE4YTk5MzciLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE3ODAwNjYzMjMsImV4cCI6MTc4MDA2NzIyMywianRpIjoiODRkZTg3YmUtMGQxMy00NTFjLTlhMTktMDhjOGQ1MGE2YWFjIiwidHlwZSI6ImFjY2VzcyJ9.J_Ap-oTLN6040OdvpA7ucbCO3dpiCep-R2r2KU5DRYs"
+        }
+      ]
+    }
+  ]
+}

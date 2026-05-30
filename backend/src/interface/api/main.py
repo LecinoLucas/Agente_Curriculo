@@ -44,6 +44,7 @@ from src.interface.api.routers import (
     auth,
     behavioral_templates,
     candidate_behavioral_assessments,
+    candidaturas,
     candidates,
     collaboration,
     communications,
@@ -60,6 +61,7 @@ from src.interface.api.routers import (
     pre_admission,
     public,
     resumes,
+    rh_dashboard,
     skill_equivalences,
     skills,
     users,
@@ -119,6 +121,7 @@ app.include_router(admin_ai_limits.router, prefix=_PREFIX)
 app.include_router(admin_ai_provider_credentials.router, prefix=_PREFIX)
 app.include_router(admin_ai_provider_health.router, prefix=_PREFIX)
 app.include_router(admin_behavioral_ai.router, prefix=_PREFIX)
+app.include_router(candidaturas.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(communications.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)
@@ -145,6 +148,7 @@ app.include_router(ai_models.router, prefix=_PREFIX)
 app.include_router(document_ai.router, prefix=_PREFIX)
 app.include_router(observability.router, prefix=_PREFIX)
 app.include_router(dashboard.router, prefix=_PREFIX)
+app.include_router(rh_dashboard.router, prefix=_PREFIX)
 
 
 # ── Static files ──────────────────────────────────────────────────────────────

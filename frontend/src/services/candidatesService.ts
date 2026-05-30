@@ -260,6 +260,16 @@ function normalizeCandidateSummary(item: Partial<CandidateListSummary>): Candida
     active_job_job_fit_score:
       item.active_job_job_fit_score != null ? Number(item.active_job_job_fit_score) : null,
     ai_status: item.ai_status ?? null,
+    next_interview:
+      item.next_interview &&
+      typeof item.next_interview.scheduled_start === "string"
+        ? {
+            scheduled_start: item.next_interview.scheduled_start,
+            scheduled_end: item.next_interview.scheduled_end,
+            interview_type: item.next_interview.interview_type,
+            interview_format: item.next_interview.interview_format,
+          }
+        : null,
   };
 }
 

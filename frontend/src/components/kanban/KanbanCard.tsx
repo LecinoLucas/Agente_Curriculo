@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type DragEvent } from "react";
 import type { JobCandidate } from "../../types/domain";
 import { formatSeniority } from "../../utils/jobFormatters";
-import { Calendar, Mail, AlertTriangle, CheckCircle2, Clock, GripVertical } from "lucide-react";
+import { Calendar, Clock3, GripVertical } from "lucide-react";
 import {
   derivePipelineCardBadges,
   type PipelineCardBadgeTone,
@@ -76,34 +76,62 @@ function getAiProcessingState(candidate: JobCandidate): { label: string; tone: "
 }
 
 const BADGE_TONE_CLASS: Record<PipelineCardBadgeTone, string> = {
-  danger: "bg-danger-soft text-danger border border-[hsl(var(--danger-soft))/80]",
-  warning: "bg-warning-soft text-warning border border-[hsl(var(--warning-soft))/80]",
-  progress: "bg-[hsl(var(--accent-soft))] text-[hsl(var(--accent-foreground))] border border-[hsl(var(--accent-soft))/80]",
-  success: "bg-success-soft text-success border border-[hsl(var(--success-soft))/80]",
-  neutral: "bg-surface-muted text-text-muted border border-[hsl(var(--border))/20]",
+  danger: "border border-rose-200/80 bg-rose-50 text-rose-700",
+  warning: "border border-amber-200/80 bg-amber-50 text-amber-700",
+  progress: "border border-cyan-200/80 bg-cyan-50 text-cyan-700",
+  success: "border border-emerald-200/80 bg-emerald-50 text-emerald-700",
+  neutral: "border border-slate-200 bg-slate-100/90 text-slate-600",
 };
 
 function buildProfessionalContext(candidate: JobCandidate, aiProcessingState: ReturnType<typeof getAiProcessingState>): string | null {
   const { current_title, current_company, total_experience_years, seniority_level } = candidate;
+  const rawCandidate = candidate as any;
+  const location = rawCandidate.location || rawCandidate.city_state || rawCandidate.city || null;
 
-  if (current_title && current_company) return `${current_title} na ${current_company}`;
-  if (current_title) return current_title;
-  if (current_company) return `Experiência em ${current_company}`;
-
-  if (seniority_level || (total_experience_years !== undefined && total_experience_years !== null)) {
+  let baseContext = "";
+  if (current_title && current_company) {
+    baseContext = `${current_title} na ${current_company}`;
+  } else if (current_title) {
+    baseContext = current_title;
+  } else if (current_company) {
+    baseContext = `Experiência em ${current_company}`;
+  } else if (seniority_level || (total_experience_years !== undefined && total_experience_years !== null)) {
     const seniority = seniority_level ? formatSeniority(seniority_level) : null;
     const experience = typeof total_experience_years === "number"
       ? `${total_experience_years} ano${total_experience_years === 1 ? "" : "s"}`
       : null;
-    return [seniority, experience].filter(Boolean).join(" • ");
+    baseContext = [seniority, experience].filter(Boolean).join(" • ");
   }
 
-  return null;
+  if (baseContext) return baseContext;
+  return location || null;
 }
 
-function buildNextAction(candidate: JobCandidate, rawCandidate: any, stageSummary: string | null, aiStatus: ReturnType<typeof getAiProcessingState>): string | null {
+function buildNextAction(candidate: JobCandidate, rawCandidate: any, stageSummary: string | null, aiStatus: ReturnType<typeof getAiProcessingState>): React.ReactNode | null {
   if (rawCandidate.candidate_status === "blocked" || rawCandidate.candidate_status === "error") {
     return "Resolver pendência";
+  }
+
+  if (candidate.interview_scheduled_start) {
+    const d = new Date(candidate.interview_scheduled_start);
+    const now = new Date();
+    const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow = d.getDate() === tomorrow.getDate() && d.getMonth() === tomorrow.getMonth() && d.getFullYear() === tomorrow.getFullYear();
+    
+    const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    let text = "";
+    if (isToday) text = `Hoje, ${timeStr}`;
+    else if (isTomorrow) text = `Amanhã, ${timeStr}`;
+    else text = `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}, ${timeStr}`;
+
+    return (
+      <span className="flex items-center gap-1">
+        <Calendar className="h-3 w-3" />
+        {text}
+      </span>
+    );
   }
 
   const reqAction = rawCandidate.required_action;
@@ -111,12 +139,59 @@ function buildNextAction(candidate: JobCandidate, rawCandidate: any, stageSummar
   if (reqAction === "register_decision") return "Registrar decisão";
   if (reqAction === "run_analysis") return "Executar avaliação IA";
 
+  // Check if stageSummary is redundant with the column label
   if (stageSummary) {
-    if (stageSummary.toLowerCase().includes("protheus")) return "Integração ERP";
-    return stageSummary;
+    const isRedundant = candidate.stage && (
+      candidate.stage.includes("interview") || 
+      stageSummary.toLowerCase().includes("entrevista") ||
+      (candidate.stage === "entry" && stageSummary.toLowerCase().includes("entrada"))
+    );
+    if (!isRedundant) {
+      if (stageSummary.toLowerCase().includes("protheus")) return "Integração ERP";
+      return stageSummary;
+    }
   }
 
   if (aiStatus) return aiStatus.label;
+
+  return null;
+}
+
+function buildSkillsSummary(skills: string[] | undefined): string | null {
+  if (!skills || skills.length === 0) return null;
+
+  const visible = skills.slice(0, 2).join(" · ");
+  const remaining = skills.length - 2;
+  return remaining > 0 ? `${visible} +${remaining}` : visible;
+}
+
+function daysSince(isoDate: string | null | undefined): number | null {
+  if (!isoDate) return null;
+  const date = new Date(isoDate);
+  const time = date.getTime();
+  if (!Number.isFinite(time)) return null;
+
+  const now = new Date();
+  const diffMs = now.getTime() - time;
+  if (diffMs < 0) return null;
+
+  return Math.floor(diffMs / 86_400_000);
+}
+
+function buildProgressLabel(candidate: JobCandidate): string | null {
+  const enteredDays = daysSince(candidate.entered_at);
+  if (enteredDays !== null) {
+    if (enteredDays === 0) return "Entrou hoje";
+    if (enteredDays === 1) return "Há 1 dia na etapa";
+    return `Há ${enteredDays} dias na etapa`;
+  }
+
+  const updatedDays = daysSince(candidate.updated_at);
+  if (updatedDays !== null) {
+    if (updatedDays === 0) return "Atualizado hoje";
+    if (updatedDays === 1) return "Atualizado ontem";
+    return `Atualizado há ${updatedDays} dias`;
+  }
 
   return null;
 }
@@ -141,42 +216,52 @@ export const KanbanCard = memo(function KanbanCard({
 
   // Cast candidate to any to check for optionally populated values (source/origem/updated_at) without breaking types
   const rawCandidate = candidate as any;
-  const source = rawCandidate.application_source_label || rawCandidate.application_source || rawCandidate.source || null;
-
-  let timeInStageLabel = "";
-  if (rawCandidate.updated_at) {
-    const updatedAt = new Date(rawCandidate.updated_at);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - updatedAt.getTime());
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      timeInStageLabel = "hoje";
-    } else if (diffDays === 1) {
-      timeInStageLabel = "há 1 dia";
-    } else {
-      timeInStageLabel = `há ${diffDays} dias`;
-    }
-  }
 
   // Derive indicators based on actual candidate data
   const aiProcessingState = getAiProcessingState(candidate);
-  const stageSubstatus = candidate.stage ? PIPELINE_STAGE_SUBSTATUS_LABEL[candidate.stage] : null;
-  const currentStageText = stageSubstatus || "Entrada";
-  const timeLabel = timeInStageLabel ? `· parado ${timeInStageLabel}` : "";
   const stageSummary = candidate.stage ? PIPELINE_STAGE_OPERATIONAL_SUMMARY[candidate.stage] : null;
 
   const professionalContext = buildProfessionalContext(candidate, aiProcessingState);
+  const skillsSummary = buildSkillsSummary(candidate.top_skills);
+  const progressLabel = buildProgressLabel(candidate);
   const nextAction = buildNextAction(candidate, rawCandidate, stageSummary, aiProcessingState);
 
   const rawBadges = derivePipelineCardBadges(candidate);
-  // Limit badges: 1 main badge (e.g. Danger/Warning) and maybe 1 other, or just 1 action-based
-  const operationalBadges = rawBadges
-    .sort((a, b) => {
-      const toneWeight = { danger: 0, warning: 1, progress: 2, success: 3, neutral: 4 };
-      return toneWeight[a.tone] - toneWeight[b.tone];
-    })
-    .slice(0, 1); // just show the most critical one to reduce noise
+  let primaryBadge: { label: string; tone: PipelineCardBadgeTone; reason?: string } | null =
+    rawBadges.find((badge) => badge.label !== "Etapa final") ?? null;
+
+  // Fallback to candidate.candidate_status if no operational badge is present and status is not redundant
+  if (!primaryBadge && candidate.candidate_status) {
+    const statusLower = candidate.candidate_status.toLowerCase();
+    const stageLabel = candidate.stage ? PIPELINE_STAGE_SUBSTATUS_LABEL[candidate.stage]?.toLowerCase() : "";
+    const isRedundant = statusLower === "em processo" || statusLower === "active" || statusLower === stageLabel;
+    if (!isRedundant) {
+      primaryBadge = { label: candidate.candidate_status, tone: "neutral" };
+    }
+  }
+
+  // Determine score color and border accent color dynamically
+  let scoreColorClass = "text-slate-500 dark:text-slate-400";
+  let borderAccentClass = "border-l-slate-300 dark:border-l-slate-700";
+
+  if (jobFitScore !== null && jobFitScore !== undefined) {
+    const score = Math.round(jobFitScore);
+    if (score >= 80) {
+      scoreColorClass = "text-emerald-600 dark:text-emerald-400";
+      borderAccentClass = "border-l-emerald-400 dark:border-l-emerald-500";
+    } else if (score >= 60) {
+      scoreColorClass = "text-cyan-700 dark:text-cyan-400";
+      borderAccentClass = "border-l-cyan-400 dark:border-l-cyan-500";
+    } else if (score >= 40) {
+      scoreColorClass = "text-amber-600 dark:text-amber-500";
+      borderAccentClass = "border-l-amber-400 dark:border-l-amber-500";
+    } else {
+      scoreColorClass = "text-rose-500 dark:text-rose-400";
+      borderAccentClass = "border-l-rose-300 dark:border-l-rose-500";
+    }
+  } else if (isTopMatch) {
+    borderAccentClass = "border-l-emerald-400 dark:border-l-emerald-500";
+  }
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
     if (!draggable) {
@@ -195,9 +280,11 @@ export const KanbanCard = memo(function KanbanCard({
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       className={[
-        "pipeline-candidate-card group relative w-full select-none rounded-xl bg-white dark:bg-slate-900 p-2.5 shadow-sm transition-all duration-200 overflow-hidden",
-        "border hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md",
-        isTopMatch ? "border-slate-200 border-l-4 border-l-emerald-400 ring-1 ring-emerald-200 bg-emerald-50/10 dark:border-slate-800 dark:border-l-emerald-500 dark:ring-emerald-500/20" : "border-slate-200 dark:border-slate-800",
+        "pipeline-candidate-card group relative w-full select-none overflow-hidden rounded-[18px] bg-white/98 p-3 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)] transition-all duration-200 dark:bg-slate-900/95",
+        "border border-slate-200/85 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700 hover:shadow-[0_18px_34px_-24px_rgba(15,23,42,0.38)]",
+        "border-l-[3px]",
+        borderAccentClass,
+        isTopMatch ? "ring-1 ring-emerald-200/60 bg-emerald-50/30 dark:ring-emerald-500/10" : "",
         isSaving ? "cursor-wait opacity-50" : draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         isDragging ? "opacity-40 ring-2 ring-slate-400 dark:ring-slate-500 scale-95 rotate-1" : "opacity-100",
         "kanban-card-enter",
@@ -208,76 +295,99 @@ export const KanbanCard = memo(function KanbanCard({
       data-testid={`kanban-card-${candidate.candidate_id}`}
       data-dragging={isDragging ? "true" : "false"}
     >
-      {/* Top Row: Score and Time */}
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        {jobFitScore !== null && jobFitScore !== undefined ? (
-          <span className="pipeline-candidate-card__score shrink-0 rounded bg-emerald-50 dark:bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-extrabold tracking-tight text-emerald-700 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/60 flex items-center gap-1">
-            <CheckCircle2 className="h-2.5 w-2.5" />
-            {Math.round(jobFitScore)}% aderência
-          </span>
-        ) : aiProcessingState ? (
-          <span className="shrink-0 rounded bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200 dark:border-slate-700">
-            IA {aiProcessingState.tone === "pending" ? "na fila" : "analisando"}
-          </span>
-        ) : <div />}
-
-        {timeInStageLabel && (
-          <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500">
-            <Clock className="h-3 w-3 shrink-0" />
-            <span className="text-[10px] font-medium capitalize">{timeInStageLabel}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Middle Row: Avatar, Name & Professional Context */}
-      <div className="flex items-start gap-2.5">
-        {draggable && (
-          <div className="absolute -left-1 top-1/2 -translate-y-1/2 flex h-5 w-3 shrink-0 cursor-grab items-center justify-center opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40">
-            <GripVertical className="h-3.5 w-3.5 text-slate-400" />
-          </div>
-        )}
-        <span className={`pipeline-candidate-card__avatar flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-[11px] font-extrabold ${avatarClass}`}>
-          {initials}
-        </span>
-        <div className="flex flex-col min-w-0">
-          <span className="truncate text-sm font-bold tracking-tight text-slate-800 dark:text-slate-100 transition-colors group-hover:text-slate-600 dark:group-hover:text-slate-200">
-            {name}
-          </span>
-          {professionalContext && (
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate block font-medium mt-0.5">
-              {professionalContext}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Next Action / Status */}
-      {nextAction && (
-        <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 dark:border-slate-800/60 pt-2">
-          <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 truncate block bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
-            {nextAction}
-          </span>
-          {source && (
-            <span className="shrink-0 text-[9px] font-bold tracking-wider uppercase text-slate-400 dark:text-slate-500">
-              {source === "public_application" ? "Pública" : source}
-            </span>
-          )}
+      {draggable && (
+        <div className="absolute -left-1 top-1/2 -translate-y-1/2 flex h-5 w-3 shrink-0 cursor-grab items-center justify-center opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40">
+          <GripVertical className="h-3.5 w-3.5 text-slate-400" />
         </div>
       )}
 
-      {/* Operational badges row */}
-      {operationalBadges.length > 0 ? (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {operationalBadges.map((badge) => (
-            <span
-              key={badge.label}
-              className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${BADGE_TONE_CLASS[badge.tone]}`}
-            >
-              {badge.label}
+      <div className="flex min-w-0 items-start justify-between gap-2.5">
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <span className={`pipeline-candidate-card__avatar mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[9px] font-extrabold shadow-sm ${avatarClass}`}>
+            {initials}
+          </span>
+          <div className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-bold tracking-tight text-slate-800 transition-colors group-hover:text-slate-600 dark:text-slate-100 dark:group-hover:text-slate-200">
+              {name}
             </span>
-          ))}
+            {professionalContext && (
+              <span
+                className="mt-0.5 block truncate text-[10.5px] font-medium text-slate-500 dark:text-slate-400"
+                data-testid="kanban-card-context"
+              >
+                {professionalContext}
+              </span>
+            )}
+            {skillsSummary && (
+              <span
+                className="mt-1 block truncate text-[10px] font-medium text-slate-400 dark:text-slate-500"
+                data-testid="kanban-card-skills"
+                title={candidate.top_skills?.join(", ")}
+              >
+                {skillsSummary}
+              </span>
+            )}
+          </div>
         </div>
-      ) : null}
+
+        {jobFitScore !== null && jobFitScore !== undefined ? (
+          <div
+            className="flex shrink-0 flex-col items-end leading-none"
+            title={`${Math.round(jobFitScore)}% aderência`}
+            data-testid="kanban-card-score"
+          >
+            <span className={`text-[19px] font-black tracking-tight ${scoreColorClass}`}>
+              {Math.round(jobFitScore)}%
+            </span>
+            <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">
+              aderência
+            </span>
+          </div>
+        ) : (
+          <div className="flex shrink-0 flex-col items-end leading-none" data-testid="kanban-card-score-empty">
+            <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">
+              Sem score
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-2.5 flex flex-col gap-1.5">
+        {progressLabel && (
+          <div
+            className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 dark:text-slate-400"
+            data-testid="kanban-card-progress"
+          >
+            <Clock3 className="h-3 w-3 shrink-0 text-slate-400 dark:text-slate-500" />
+            <span className="truncate">{progressLabel}</span>
+          </div>
+        )}
+
+        {nextAction && (
+          <div
+            className="flex items-center gap-1.5 rounded-lg border border-slate-100/80 bg-slate-50/75 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-300"
+            data-testid="kanban-card-next-action"
+          >
+            {typeof nextAction === "string" ? (
+              <span className="truncate">{nextAction}</span>
+            ) : (
+              <span className="flex min-w-0 items-center gap-1.5 truncate">{nextAction}</span>
+            )}
+          </div>
+        )}
+
+        {primaryBadge ? (
+          <div className="pt-0.5">
+            <span
+              className={`inline-flex max-w-full truncate rounded-md px-1.5 py-0.5 text-[9px] font-semibold shadow-sm ${BADGE_TONE_CLASS[primaryBadge.tone]}`}
+              title={primaryBadge.reason || primaryBadge.label}
+              data-testid="kanban-card-primary-badge"
+            >
+              {primaryBadge.label}
+            </span>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 });

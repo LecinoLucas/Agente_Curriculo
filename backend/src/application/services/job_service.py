@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         JobQualityResult,
         JobQualityValidatorService,
     )
+from src.interface.workers.matching_dispatcher import enqueue_job_match_recompute
 from src.application.services.job_profiler_service import (
     JobProfilerService,
     build_job_profile_hash,
@@ -124,6 +125,11 @@ class JobService:
             responsibilities=self._clean_optional_text(body.responsibilities),
             experience_context=self._clean_optional_text(body.experience_context),
             behavioral_requirements=self._clean_string_list(body.behavioral_requirements),
+            mandatory_skills=self._clean_string_list(body.mandatory_skills),
+            nice_to_have_skills=self._clean_string_list(body.nice_to_have_skills),
+            screening_questions=self._clean_string_list(body.screening_questions),
+            benefits=self._clean_string_list(body.benefits),
+            working_hours=self._clean_optional_text(body.working_hours),
             behavioral_template_id=body.behavioral_template_id,
             priority=body.priority,
             skill_requirements=validated_skill_requirements,
@@ -202,6 +208,11 @@ class JobService:
             "responsibilities",
             "experience_context",
             "behavioral_requirements",
+            "mandatory_skills",
+            "nice_to_have_skills",
+            "screening_questions",
+            "benefits",
+            "working_hours",
             "behavioral_template_id",
             "priority",
             "skill_requirements",
@@ -220,13 +231,25 @@ class JobService:
                 if val is None:
                     continue
                 val = self._clean_required_text(val)
-            if field_name in {"requirements", "location", "responsibilities", "experience_context"}:
+            if field_name in {
+                "requirements",
+                "location",
+                "responsibilities",
+                "experience_context",
+                "working_hours",
+            }:
                 val = self._clean_optional_text(val)
             if field_name == "salary_currency" and isinstance(val, str):
                 val = val.upper()
             if field_name == "deal_breakers" and isinstance(val, list):
                 val = [db.model_dump(exclude_none=True) for db in val]
-            if field_name == "behavioral_requirements" and isinstance(val, list):
+            if field_name in {
+                "behavioral_requirements",
+                "mandatory_skills",
+                "nice_to_have_skills",
+                "screening_questions",
+                "benefits",
+            } and isinstance(val, list):
                 val = self._clean_string_list(val)
             if field_name == "skill_requirements":
                 val = validated_skill_requirements
@@ -238,7 +261,8 @@ class JobService:
         job.updated_at = datetime.now(timezone.utc)
         saved_job = await self._repository.save(job)
 
-        # Invalidate stale scores/matches if structural fields changed
+        # Invalidate stale scores/matches if structural fields changed, then
+        # enqueue background recompute — no LLM, uses persisted profiles.
         if provided_fields.intersection({
             "title",
             "description",
@@ -258,8 +282,7 @@ class JobService:
         }):
             await self._invalidate_job_scores_and_matches(job_id)
             await self._maybe_generate_job_profile(saved_job)
-            if skills_configuration_changed:
-                await self._recompute_active_pipeline_matches(job_id)
+            await enqueue_job_match_recompute(job_id)
 
         await self._maybe_refresh_quality(saved_job.id)
 
@@ -293,65 +316,6 @@ class JobService:
                 superseded_at=datetime.now(timezone.utc),
             )
         )
-
-    async def _recompute_active_pipeline_matches(self, job_id: UUID) -> None:
-        if not hasattr(self._repository, "_session"):
-            return
-
-        import sqlalchemy as sa
-
-        from src.application.services.analysis_service import AnalysisService
-        from src.infrastructure.database.models.candidate_job_pipeline_model import (
-            CandidateJobPipelineModel,
-        )
-        from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
-            SQLAlchemyAnalysisRepository,
-        )
-
-        session = self._repository._session
-        active_entries = list(
-            (
-                await session.scalars(
-                    sa.select(CandidateJobPipelineModel).where(
-                        CandidateJobPipelineModel.job_id == job_id,
-                        CandidateJobPipelineModel.relationship_status == "active",
-                        CandidateJobPipelineModel.is_terminal.is_(False),
-                        CandidateJobPipelineModel.terminated_at.is_(None),
-                    )
-                )
-            ).all()
-        )
-        if not active_entries:
-            return
-
-        analysis_repo = SQLAlchemyAnalysisRepository(session)
-        analysis_service = AnalysisService(analysis_repo)
-        for entry in active_entries:
-            resume_version_id = getattr(entry, "resume_version_id", None)
-            if resume_version_id is None:
-                continue
-
-            latest_completed = await analysis_repo.find_latest_completed_for_version(
-                resume_version_id,
-                job_id,
-            )
-            if latest_completed is None:
-                continue
-
-            try:
-                await analysis_service.match_completed_analysis_to_job(
-                    analysis_id=latest_completed.id,
-                    job_id=job_id,
-                    force_recompute=True,
-                )
-            except Exception:
-                logger.warning(
-                    "job.skill_recompute_failed",
-                    job_id=str(job_id),
-                    candidate_id=str(entry.candidate_id),
-                    analysis_id=str(latest_completed.id),
-                    exc_info=True,
-                )
 
     async def transition_status(self, job_id: UUID, next_status: str) -> JobModel:
         if next_status == "archived":
@@ -470,7 +434,7 @@ class JobService:
         job = await self.sync_skill_requirements_snapshot(job_id)
         await self._invalidate_job_scores_and_matches(job_id)
         await self._maybe_generate_job_profile(job)
-        await self._recompute_active_pipeline_matches(job_id)
+        await enqueue_job_match_recompute(job_id)
         await self._maybe_refresh_quality(job.id)
         return self._required_skill_response(saved, skill.name)
 
@@ -485,7 +449,7 @@ class JobService:
         job = await self.sync_skill_requirements_snapshot(job_id)
         await self._invalidate_job_scores_and_matches(job_id)
         await self._maybe_generate_job_profile(job)
-        await self._recompute_active_pipeline_matches(job_id)
+        await enqueue_job_match_recompute(job_id)
         await self._maybe_refresh_quality(job.id)
 
     async def update_required_skill(
@@ -516,7 +480,7 @@ class JobService:
         job = await self.sync_skill_requirements_snapshot(job_id)
         await self._invalidate_job_scores_and_matches(job_id)
         await self._maybe_generate_job_profile(job)
-        await self._recompute_active_pipeline_matches(job_id)
+        await enqueue_job_match_recompute(job_id)
         await self._maybe_refresh_quality(job.id)
         return self._required_skill_response(saved, skill.name if skill is not None else "")
 

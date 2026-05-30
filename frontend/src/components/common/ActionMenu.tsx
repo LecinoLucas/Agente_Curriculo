@@ -1,12 +1,14 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 export type ActionMenuItem = {
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
+  to?: string;
   tone?: "default" | "danger";
   disabled?: boolean;
 };
@@ -75,23 +77,40 @@ export function ActionMenu({ items, className, buttonClassName, buttonLabel = "A
             className="z-[9999] w-48 overflow-hidden rounded-xl border border-border bg-surface text-text shadow-lg"
             style={menuStyle}
           >
-            {visibleItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                disabled={item.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  item.onClick();
-                }}
-                className={cn(
-                  "flex w-full items-center px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50",
-                  item.tone === "danger" ? "text-danger" : "text-text"
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
+            {visibleItems.map((item) => {
+              const baseClassName = cn(
+                "flex w-full items-center px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50",
+                item.tone === "danger" ? "text-danger" : "text-text"
+              );
+
+              if (item.to) {
+                return (
+                  <Link
+                    key={item.label}
+                    to={item.to}
+                    onClick={() => setOpen(false)}
+                    className={baseClassName}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              }
+
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  disabled={item.disabled}
+                  onClick={() => {
+                    setOpen(false);
+                    item.onClick?.();
+                  }}
+                  className={baseClassName}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
         </>,
         document.body
@@ -99,3 +118,4 @@ export function ActionMenu({ items, className, buttonClassName, buttonLabel = "A
     </div>
   );
 }
+
