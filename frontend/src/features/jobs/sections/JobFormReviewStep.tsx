@@ -113,38 +113,52 @@ export function JobFormReviewStep({
       </div>
 
       <SectionCard
-        title="Checklist por etapa"
-        description="Acompanhe as pendências para publicação em cada aba do formulário."
+        title="Pendências antes de publicar"
+        description="Acompanhe e resolva as pendências em cada aba do formulário para liberar a publicação."
       >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           {[
             { id: "context" as MacroStepId, label: "Contexto" },
             { id: "requirements" as MacroStepId, label: "Requisitos" },
             { id: "skills" as MacroStepId, label: "Skills" },
             { id: "screening" as MacroStepId, label: "Triagem" },
           ].map(step => {
-            const hasBlockers = blockersByStep[step.id].length > 0;
+            const stepBlockers = blockersByStep[step.id];
+            const hasBlockers = stepBlockers.length > 0;
             return (
-              <div key={step.id} className="flex flex-col gap-2 rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2">
-                  {hasBlockers ? (
-                    <ShieldAlert className="h-4 w-4 text-danger" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 text-success" />
+              <div key={step.id} className="flex flex-col gap-3 rounded-2xl border border-border p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {hasBlockers ? (
+                      <ShieldAlert className="h-4 w-4 text-danger" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                    )}
+                    <span className="font-semibold text-text">{step.label}</span>
+                  </div>
+                  {hasBlockers && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-7 text-xs" 
+                      onClick={() => onNavigateToStep(step.id)}
+                    >
+                      Ir para aba
+                    </Button>
                   )}
-                  <span className="font-semibold text-text">{step.label}</span>
                 </div>
-                <div className="text-xs text-text-muted">
-                  {hasBlockers ? `${blockersByStep[step.id].length} pendência(s)` : "Status: OK"}
-                </div>
-                {hasBlockers && (
-                  <Button 
-                    variant="link" 
-                    className="h-auto p-0 justify-start text-xs mt-2" 
-                    onClick={() => onNavigateToStep(step.id)}
-                  >
-                    Ir para aba <ArrowRight className="ml-1 h-3 w-3" />
-                  </Button>
+                
+                {hasBlockers ? (
+                  <ul className="mt-1 space-y-1.5">
+                    {stepBlockers.map(blocker => (
+                      <li key={blocker} className="flex items-start gap-2 text-sm text-danger">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-danger"></span>
+                        <span>{formatPublicationBlocker(blocker)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mt-1 text-sm text-text-muted">Status: OK</div>
                 )}
               </div>
             );
@@ -152,36 +166,22 @@ export function JobFormReviewStep({
         </div>
       </SectionCard>
 
-      {(blockingItems.length > 0 || backendPublishErrors.length > 0) && (
+      {(backendPublishErrors.length > 0 || blockingItems.filter(b => !BLOCKER_STEP_MAP[b]).length > 0) && (
         <SectionCard
-          title="Pendências bloqueantes"
-          description="Resolva os seguintes itens para liberar a publicação da vaga."
+          title="Erros adicionais"
+          description="Resolva os seguintes erros retornados pelo sistema."
         >
           <div className="space-y-3">
             {backendPublishErrors.map((error, idx) => (
-              <div key={`backend-${idx}`} className="flex items-center justify-between gap-4 rounded-2xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-4 py-3 text-sm text-danger">
+              <div key={`backend-${idx}`} className="flex items-center gap-4 rounded-2xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-4 py-3 text-sm text-danger">
                 <span>{error}</span>
               </div>
             ))}
-            
-            {blockingItems.map(blocker => {
-              const step = BLOCKER_STEP_MAP[blocker];
-              return (
-                <div key={blocker} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 rounded-2xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-4 py-3 text-sm text-danger">
-                  <span>{formatPublicationBlocker(blocker)}</span>
-                  {step && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="shrink-0 bg-surface text-text hover:bg-surface-muted"
-                      onClick={() => onNavigateToStep(step)}
-                    >
-                      Ir para {step === "context" ? "Contexto" : step === "requirements" ? "Requisitos" : step === "skills" ? "Skills" : "Triagem"}
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
+            {blockingItems.filter(b => !BLOCKER_STEP_MAP[b]).map(blocker => (
+              <div key={`unmapped-${blocker}`} className="flex items-center gap-4 rounded-2xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-4 py-3 text-sm text-danger">
+                <span>{formatPublicationBlocker(blocker)}</span>
+              </div>
+            ))}
           </div>
         </SectionCard>
       )}
