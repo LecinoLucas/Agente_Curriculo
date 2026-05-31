@@ -3,7 +3,7 @@ import { ChevronDown, X, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
-import { TopNavGroup } from "./TopNavDropdown";
+import { TopNavGroup, TopNavDropdown } from "./TopNavDropdown";
 import { VisualThemeSwitcher } from "./VisualThemeSwitcher";
 import { NotificationsBell } from "../../features/notifications/components/NotificationsBell";
 
@@ -41,7 +41,6 @@ export function Sidebar({
     }));
   };
 
-  // Fechar todos os grupos quando sair do menu
   useEffect(() => {
     if (!isHovered && !mobileMenuOpen) {
       setExpandedGroups({});
@@ -59,21 +58,19 @@ export function Sidebar({
         onClick={onToggleMobileMenu}
       />
 
-      {/* Placeholder space for the fixed sidebar so main content doesn't underlap */}
-      <div className="hidden lg:block lg:w-[4.5rem] shrink-0" />
-
       {/* ── Sidebar Container ── */}
       <aside
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          "group/sidebar fixed inset-y-0 left-0 z-50 flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]/50",
-          mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[4.5rem]",
-          isHovered && "lg:w-56"
+          "group/sidebar z-50 flex bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] transition-all duration-300 ease-in-out",
+          "fixed inset-y-0 left-0 flex-col border-r border-[hsl(var(--nav-border))]/50 shadow-xl",
+          mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full",
+          "lg:static lg:translate-x-0 lg:flex-row lg:h-14 lg:w-full lg:border-b lg:border-r-0 lg:shadow-none lg:items-center"
         )}
       >
         {/* Header / Logo */}
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[hsl(var(--nav-border))]/50 px-4">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[hsl(var(--nav-border))]/50 px-4 lg:border-b-0 lg:w-auto lg:pr-8">
           <button
             type="button"
             onClick={() => {
@@ -87,11 +84,7 @@ export function Sidebar({
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[hsl(var(--nav-active-bg))] text-[10px] font-extrabold text-white">
               RA
             </div>
-            <div className={cn("flex flex-col min-w-0 transition-opacity duration-300", 
-              "lg:opacity-0",
-              (isHovered || mobileMenuOpen) && "lg:opacity-100",
-              mobileMenuOpen ? "opacity-100" : ""
-            )}>
+            <div className="flex flex-col min-w-0 transition-opacity duration-300 opacity-100">
               <span className="truncate font-heading text-[13px] font-extrabold leading-tight tracking-tight text-[hsl(var(--nav-text))]">
                 Marajo RH
               </span>
@@ -110,7 +103,10 @@ export function Sidebar({
         </div>
 
         {/* Navigation Links */}
-        <nav aria-label="Navegação principal" className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+        <nav aria-label="Navegação principal" className={cn(
+          "flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20",
+          "lg:flex lg:flex-row lg:items-center lg:overflow-visible lg:p-0 lg:space-y-0 lg:space-x-1 lg:ml-2"
+        )}>
           {groups.map((group) => {
             if (!group.isDropdown) {
               const item = group.items[0];
@@ -127,7 +123,8 @@ export function Sidebar({
                     "group flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
                     active
                       ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-                      : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                      : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
+                    "lg:h-9 lg:px-2.5 lg:py-0 lg:text-[13px]"
                   )}
                   title={item.label}
                 >
@@ -136,9 +133,7 @@ export function Sidebar({
                   </div>
                   <span className={cn(
                     "ml-3 truncate transition-opacity duration-300",
-                    "lg:opacity-0",
-                    (isHovered || mobileMenuOpen) && "lg:opacity-100",
-                    mobileMenuOpen ? "opacity-100" : ""
+                    "lg:ml-2 opacity-100"
                   )}>
                     {item.label}
                   </span>
@@ -150,90 +145,94 @@ export function Sidebar({
             const isOpen = expandedGroups[group.label];
 
             return (
-              <div key={group.label} className="flex flex-col">
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.label)}
-                  className={cn(
-                    "flex items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
-                    isGroupActive && !isOpen
-                      ? "text-[hsl(var(--nav-active-text))] bg-white/5"
-                      : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
-                  )}
-                  title={group.label}
-                >
-                  <div className="flex items-center min-w-0">
-                    <div className="flex shrink-0 items-center justify-center">
-                      {renderIcon(group.label)}
-                    </div>
-                    <span className={cn(
-                      "ml-3 truncate transition-opacity duration-300",
-                      "lg:opacity-0",
-                      (isHovered || mobileMenuOpen) && "lg:opacity-100",
-                      mobileMenuOpen ? "opacity-100" : ""
-                    )}>
-                      {group.label}
-                    </span>
-                  </div>
-                  <ChevronDown
+              <div key={group.label} className="relative flex flex-col lg:flex-row lg:items-center">
+                {/* Mobile Accordion */}
+                <div className="lg:hidden flex flex-col">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.label)}
                     className={cn(
-                      "h-4 w-4 shrink-0 transition-transform duration-300 opacity-60",
-                      isOpen && "rotate-180",
-                      "lg:hidden",
-                      (isHovered || mobileMenuOpen) && "lg:block",
-                      mobileMenuOpen ? "block" : ""
+                      "flex items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
+                      isGroupActive && !isOpen
+                        ? "text-[hsl(var(--nav-active-text))] bg-white/5"
+                        : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
                     )}
-                  />
-                </button>
+                    title={group.label}
+                  >
+                    <div className="flex items-center min-w-0">
+                      <div className="flex shrink-0 items-center justify-center">
+                        {renderIcon(group.label)}
+                      </div>
+                      <span className="ml-3 truncate transition-opacity duration-300 opacity-100">
+                        {group.label}
+                      </span>
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 transition-transform duration-300 opacity-60",
+                        isOpen && "rotate-180"
+                      )}
+                    />
+                  </button>
 
-                <div
-                  className={cn(
-                    "flex flex-col gap-1 overflow-hidden transition-all duration-300",
-                    isOpen ? "max-h-[400px] mt-1" : "max-h-0"
-                  )}
-                >
-                  {group.items.map((item) => {
-                    const active = isItemActive(item.to);
-                    return (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        onClick={() => {
-                          if (mobileMenuOpen) onToggleMobileMenu();
-                          if (item.to === "/pipeline") onPipelineClick();
-                        }}
-                        className={cn(
-                          "flex items-center rounded-lg py-2 pl-10 pr-3 text-[13px] font-medium transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))]",
-                          active
-                            ? "bg-[hsl(var(--nav-active-bg))]/50 text-[hsl(var(--nav-active-text))] font-semibold"
-                            : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-                          "lg:hidden",
-                          (isHovered || mobileMenuOpen) && "lg:flex",
-                          mobileMenuOpen ? "flex" : ""
-                        )}
-                        title={item.label}
-                      >
-                        <span className="truncate">{item.label}</span>
-                      </NavLink>
-                    );
-                  })}
+                  <div
+                    className={cn(
+                      "flex flex-col gap-1 overflow-hidden transition-all duration-300",
+                      isOpen ? "max-h-[400px] mt-1" : "max-h-0"
+                    )}
+                  >
+                    {group.items.map((item) => {
+                      const active = isItemActive(item.to);
+                      return (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          onClick={() => {
+                            if (mobileMenuOpen) onToggleMobileMenu();
+                            if (item.to === "/pipeline") onPipelineClick();
+                          }}
+                          className={cn(
+                            "flex items-center rounded-lg py-2 pl-10 pr-3 text-[13px] font-medium transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))]",
+                            active
+                              ? "bg-[hsl(var(--nav-active-bg))]/50 text-[hsl(var(--nav-active-text))] font-semibold"
+                              : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                          )}
+                          title={item.label}
+                        >
+                          <span className="truncate">{item.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Desktop Dropdown */}
+                <div className="hidden lg:block">
+                  <TopNavDropdown
+                    group={group as any}
+                    isOpen={isOpen || false}
+                    isActive={isGroupActive}
+                    onToggle={() => toggleGroup(group.label)}
+                    onClose={() => setExpandedGroups({})}
+                    isItemActive={isItemActive}
+                    renderIcon={renderIcon}
+                    onPipelineClick={onPipelineClick}
+                  />
                 </div>
               </div>
             );
           })}
         </nav>
 
-        {/* Footer — logout always visible; utilities shown when expanded */}
-        <div className="shrink-0 border-t border-[hsl(var(--nav-border))]/40 p-2 flex flex-col gap-1">
-          {/* Expanded-only: theme switcher + profile */}
+        {/* Footer */}
+        <div className="shrink-0 border-t border-[hsl(var(--nav-border))]/40 p-2 flex flex-col gap-1 lg:border-t-0 lg:flex-row lg:items-center lg:p-0 lg:pr-4 lg:ml-auto">
           <div className={cn(
             "flex items-center justify-between px-1 pb-1",
-            "lg:hidden",
-            (isHovered || mobileMenuOpen) && "lg:flex",
-            mobileMenuOpen ? "flex" : ""
+            "lg:px-0 lg:pb-0 lg:flex"
           )}>
-            <VisualThemeSwitcher />
-            <div className="flex items-center gap-1">
+            <div className="lg:hidden"><VisualThemeSwitcher /></div>
+            <div className="flex items-center gap-1 lg:gap-2 lg:ml-4">
+              <div className="hidden lg:block"><NotificationsBell /></div>
               <button
                 type="button"
                 onClick={onToggleTheme}
@@ -256,20 +255,14 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Always visible: logout (icon only when collapsed, icon+label when expanded) */}
           <button
             type="button"
             onClick={onLogout}
-            className="group/logout flex items-center rounded-lg px-3 py-2 text-[hsl(var(--nav-muted))] transition hover:bg-red-900/30 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]"
+            className="group/logout flex items-center rounded-lg px-3 py-2 text-[hsl(var(--nav-muted))] transition hover:bg-red-900/30 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))] lg:h-9 lg:px-2.5 lg:ml-2"
             title="Sair"
           >
             <LogOut className="h-[1.125rem] w-[1.125rem] shrink-0" />
-            <span className={cn(
-              "ml-3 truncate text-[13px] font-medium transition-opacity duration-300",
-              "lg:opacity-0",
-              (isHovered || mobileMenuOpen) && "lg:opacity-100",
-              mobileMenuOpen ? "opacity-100" : ""
-            )}>
+            <span className="ml-3 truncate text-[13px] font-medium lg:hidden">
               Sair
             </span>
           </button>

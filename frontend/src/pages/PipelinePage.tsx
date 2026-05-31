@@ -839,10 +839,10 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="pipeline-page flex h-full w-full min-w-0 flex-col gap-3 px-1 pb-1 pt-1 text-slate-800 bg-[#F4F7FB] dark:bg-[#09090b] dark:text-slate-100 sm:px-2 sm:pt-2 lg:px-3">
+    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-1 text-slate-800 bg-[#F4F7FB] dark:bg-[#09090b] dark:text-slate-100 sm:px-2 sm:pt-2 lg:px-3">
       
       {/* ── Header Area ── */}
-      <div className="mb-2 mt-0 flex flex-col gap-3">
+      <div className="mb-1 mt-0 flex flex-col gap-2">
         {/* Top Row: Breadcrumb */}
         <nav aria-label="breadcrumb" className="sr-only">
           <span>Recrutamento</span>
@@ -852,14 +852,14 @@ export function PipelinePage() {
 
         {/* Second Row: Title, Combobox, Actions */}
         <div className="relative z-30 flex flex-col gap-3 pr-14 xl:flex-row xl:items-start xl:justify-between">
-          <div className="relative z-10 min-w-0 flex-1 rounded-[22px] border border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_18px_42px_-32px_rgba(15,23,42,0.38)] backdrop-blur">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <h1 className="shrink-0 text-3xl font-black tracking-tight text-[#0f172a] dark:text-white">Pipeline</h1>
+          <div className="relative z-10 min-w-0 flex-1 rounded-2xl border border-slate-200/80 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <h1 className="shrink-0 text-2xl font-black tracking-tight text-[#0f172a] dark:text-white">Pipeline</h1>
 
               {pipelineJobsError ? (
                 <span className="text-xs font-bold text-rose-500">{pipelineJobsError}</span>
               ) : (
-                <div className="relative z-20 min-w-[350px] max-w-full flex-1 rounded-[18px] border border-slate-200/80 bg-slate-50/85 px-3 py-2 shadow-inner shadow-white/80 dark:border-slate-800 dark:bg-slate-900">
+                <div className="relative z-20 min-w-[300px] max-w-full flex-1 rounded-xl border border-slate-200/80 bg-slate-50/85 px-2 py-1.5 shadow-inner shadow-white/80 dark:border-slate-800 dark:bg-slate-900">
                   <JobCombobox
                     jobs={pipelineJobs}
                     loading={pipelineJobsLoading}
@@ -873,37 +873,37 @@ export function PipelinePage() {
             {selectedJob && (selectedJob.seniority_level || selectedJob.work_model || selectedJob.location) && (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {selectedJob.seniority_level && (
-                  <div className="flex h-[42px] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 shadow-sm shadow-slate-200/30">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-400">
-                      <Briefcase className="h-3 w-3" />
+                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400">
+                      <Briefcase className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Senioridade</span>
-                      <span className="mt-0.5 text-[10.5px] font-bold text-slate-700">{selectedJob.seniority_level}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">Senioridade</span>
+                      <span className="text-[10px] font-bold text-slate-700">{selectedJob.seniority_level}</span>
                     </div>
                   </div>
                 )}
 
                 {selectedJob.work_model && (
-                  <div className="flex h-[42px] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 shadow-sm shadow-slate-200/30">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-400">
-                      <Home className="h-3 w-3" />
+                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400">
+                      <Home className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Modalidade</span>
-                      <span className="mt-0.5 text-[10.5px] font-bold text-slate-700">{formatWorkModel(selectedJob.work_model)}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">Modalidade</span>
+                      <span className="text-[10px] font-bold text-slate-700">{formatWorkModel(selectedJob.work_model)}</span>
                     </div>
                   </div>
                 )}
 
                 {selectedJob.location && (
-                  <div className="flex h-[42px] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 shadow-sm shadow-slate-200/30">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-400">
-                      <MapPin className="h-3 w-3" />
+                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400">
+                      <MapPin className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Localização</span>
-                      <span className="mt-0.5 text-[10.5px] font-bold text-slate-700">{selectedJob.location}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">Localização</span>
+                      <span className="text-[10px] font-bold text-slate-700">{selectedJob.location}</span>
                     </div>
                   </div>
                 )}
@@ -912,13 +912,13 @@ export function PipelinePage() {
           </div>
 
           {/* Action Controls */}
-          <div className="flex flex-wrap gap-2 rounded-[18px] border border-slate-200/80 bg-white/95 p-2 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.42)] backdrop-blur sm:flex-nowrap sm:items-center">
+          <div className="flex flex-wrap gap-2 rounded-[14px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur sm:flex-nowrap sm:items-center">
             {canMutate && (
               <button
                 type="button"
                 onClick={handleOpenSourceCandidates}
                 disabled={!canUse}
-                className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-bold transition-all ${
+                className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border px-3 text-[11px] font-bold transition-all ${
                   canUse
                     ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e]"
                     : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
@@ -933,7 +933,7 @@ export function PipelinePage() {
               <button
                 type="button"
                 onClick={() => setShowRanking((current) => !current)}
-                className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 ${showRanking ? "bg-slate-50 text-slate-800" : ""}`}
+                className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 ${showRanking ? "bg-slate-50 text-slate-800" : ""}`}
               >
                 <BarChart3 className="h-3.5 w-3.5 text-slate-400" />
                 Ver Ranking IA
@@ -946,7 +946,7 @@ export function PipelinePage() {
                 aria-label="Atualizar board"
                 onClick={() => void handleManualRefresh()}
                 disabled={boardLoading}
-                className="pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50"
+                className="pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 text-slate-400 ${boardLoading ? "animate-spin" : ""}`} />
                 Atualizar
