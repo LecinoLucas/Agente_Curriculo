@@ -1,23 +1,33 @@
-/**
- * Placeholder para integração futura com /api/v1/public
- * Não faz chamadas reais nesta fase — todos os dados são mockados.
- */
+const BASE_URL =
+  (import.meta as ImportMeta & { env?: { VITE_PUBLIC_API_BASE_URL?: string } }).env
+    ?.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1/public';
 
-const BASE_URL = '/api/v1/public';
+export class HttpError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
 
 export const publicApiClient = {
   baseUrl: BASE_URL,
 
-  // Placeholder para implementação futura
-  async get<T>(_path: string): Promise<T> {
-    throw new Error(
-      `publicApiClient não está habilitado nesta fase. Use mockCandidatePortalService. Path: ${_path}`,
-    );
-  },
-
-  async post<T>(_path: string, _body: unknown): Promise<T> {
-    throw new Error(
-      `publicApiClient não está habilitado nesta fase. Use mockCandidatePortalService. Path: ${_path}`,
-    );
+  async get<T>(path: string): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch(`${BASE_URL}${path}`, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Falha na conexão com o servidor. Verifique sua internet e tente novamente.');
+    }
+    if (!response.ok) {
+      throw new HttpError(response.status, `HTTP ${response.status}: ${path}`);
+    }
+    return response.json() as Promise<T>;
   },
 };

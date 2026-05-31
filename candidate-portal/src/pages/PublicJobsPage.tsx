@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Briefcase, Users, Search, ChevronRight } from 'lucide-react';
+import { MapPin, Briefcase, Users, Search, ChevronRight, AlertCircle } from 'lucide-react';
 import { CandidatePortalLayout } from '../components/layout/CandidatePortalLayout';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { LoadingState } from '../components/shared/LoadingState';
-import { getPublicJobs } from '../services/mockCandidatePortalService';
-import type { PublicJob, JobArea, WorkModel } from '../types/candidatePortal';
-import { JOB_AREA_LABELS, WORK_MODEL_LABELS } from '../types/candidatePortal';
+import { publicJobsService } from '../services/publicJobsService';
+import type { PublicJob, JobArea } from '../types/candidatePortal';
+import { JOB_AREA_LABELS } from '../types/candidatePortal';
 
 const AREAS: Array<{ value: JobArea | 'all'; label: string }> = [
   { value: 'all', label: 'Todas as áreas' },
@@ -19,25 +19,19 @@ const AREAS: Array<{ value: JobArea | 'all'; label: string }> = [
   { value: 'rh', label: 'RH' },
 ];
 
-const MODELS: Array<{ value: WorkModel | 'all'; label: string }> = [
-  { value: 'all', label: 'Todos os modelos' },
-  { value: 'presencial', label: 'Presencial' },
-  { value: 'hibrido', label: 'Híbrido' },
-  { value: 'remoto', label: 'Remoto' },
-];
-
 export function PublicJobsPage() {
   const [jobs, setJobs] = useState<PublicJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [areaFilter, setAreaFilter] = useState<JobArea | 'all'>('all');
-  const [modelFilter, setModelFilter] = useState<WorkModel | 'all'>('all');
 
   useEffect(() => {
-    void getPublicJobs().then((data) => {
-      setJobs(data);
-      setLoading(false);
-    });
+    publicJobsService
+      .listJobs()
+      .then(setJobs)
+      .catch(() => setError('Não foi possível carregar as vagas. Tente novamente em instantes.'))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = jobs.filter((job) => {
@@ -46,8 +40,7 @@ export function PublicJobsPage() {
       job.title.toLowerCase().includes(search.toLowerCase()) ||
       job.location.toLowerCase().includes(search.toLowerCase());
     const matchArea = areaFilter === 'all' || job.area === areaFilter;
-    const matchModel = modelFilter === 'all' || job.work_model === modelFilter;
-    return matchSearch && matchArea && matchModel;
+    return matchSearch && matchArea;
   });
 
   return (
@@ -88,26 +81,10 @@ export function PublicJobsPage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {MODELS.map((m) => (
-            <button
-              key={m.value}
-              onClick={() => setModelFilter(m.value as WorkModel | 'all')}
-              className={[
-                'rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
-                modelFilter === m.value
-                  ? 'border-emerald-600 bg-emerald-600 text-white'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-600/50',
-              ].join(' ')}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Results count */}
-      {!loading && (
+      {!loading && !error && (
         <p className="mb-4 text-sm text-gray-500">
           {filtered.length} {filtered.length === 1 ? 'vaga encontrada' : 'vagas encontradas'}
         </p>
@@ -124,15 +101,38 @@ export function PublicJobsPage() {
         </div>
       )}
 
-      {/* Job list */}
-      {!loading && filtered.length === 0 && (
+      {/* Error */}
+      {!loading && error && (
+        <div className="flex flex-col items-center py-16 text-center">
+          <AlertCircle className="mb-3 h-8 w-8 text-red-400" />
+          <p className="text-base font-semibold text-gray-700">{error}</p>
+          <button
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              publicJobsService
+                .listJobs()
+                .then(setJobs)
+                .catch(() => setError('Não foi possível carregar as vagas. Tente novamente em instantes.'))
+                .finally(() => setLoading(false));
+            }}
+            className="mt-4 text-sm text-primary-700 underline hover:text-primary-800"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {/* Empty */}
+      {!loading && !error && filtered.length === 0 && (
         <div className="py-16 text-center">
           <p className="text-lg font-semibold text-gray-500">Nenhuma vaga encontrada</p>
           <p className="mt-1 text-sm text-gray-400">Tente ajustar os filtros ou a busca.</p>
         </div>
       )}
 
-      {!loading && (
+      {/* Job list */}
+      {!loading && !error && filtered.length > 0 && (
         <div className="space-y-4">
           {filtered.map((job) => (
             <Card key={job.id} padding="none" hover>
@@ -150,12 +150,15 @@ export function PublicJobsPage() {
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <Badge variant="area">{JOB_AREA_LABELS[job.area]}</Badge>
-                    <Badge variant="model">{WORK_MODEL_LABELS[job.work_model]}</Badge>
-                    <span className="flex items-center gap-1 text-xs text-gray-500">
-                      <MapPin className="h-3 w-3" />
-                      {job.location}
-                    </span>
+                    {job.area && JOB_AREA_LABELS[job.area] && (
+                      <Badge variant="area">{JOB_AREA_LABELS[job.area]}</Badge>
+                    )}
+                    {job.location && (
+                      <span className="flex items-center gap-1 text-xs text-gray-500">
+                        <MapPin className="h-3 w-3" />
+                        {job.location}
+                      </span>
+                    )}
                     {job.applicants_count !== undefined && (
                       <span className="flex items-center gap-1 text-xs text-gray-400">
                         <Users className="h-3 w-3" />
@@ -163,11 +166,10 @@ export function PublicJobsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-2 text-sm text-gray-600 line-clamp-2">{job.short_description}</p>
                 </div>
 
                 <div className="flex-shrink-0">
-                  <Link to={`/vagas/${job.slug}`}>
+                  <Link to={`/vagas/${job.id}`}>
                     <Button variant="outline" size="sm">
                       Ver vaga
                       <ChevronRight className="h-3.5 w-3.5" />

@@ -17,7 +17,7 @@ export function CandidatePortalRouter() {
 
         {/* Public job pages */}
         <Route path="/vagas" element={<PublicJobsPage />} />
-        <Route path="/vagas/:slug" element={<PublicJobPage />} />
+        <Route path="/vagas/:identifier" element={<PublicJobPage />} />
 
         {/* Application flow */}
         <Route path="/candidatar/:slug" element={<ApplicationFormPage />} />
