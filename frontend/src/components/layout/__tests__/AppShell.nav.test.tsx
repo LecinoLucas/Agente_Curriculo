@@ -41,7 +41,7 @@ function makeUser(role: UserRole) {
   };
 }
 
-function renderShell(role: UserRole, route = "/dashboard") {
+function renderShell(role: UserRole, route = "/rh") {
   mockUseAuth.mockReturnValue({ user: makeUser(role), logout: vi.fn() });
   mockUsePipeline.mockReturnValue({ closeCandidate: closeCandidateMock });
   mockUseTheme.mockReturnValue({ theme: "light", toggleTheme: vi.fn() });
@@ -90,7 +90,7 @@ describe("AppShell — Sidebar Nav", () => {
       renderShell("admin");
 
       expectTopNavLabels([
-        "Dashboard",
+        "Central RH",
         "Recrutamento",
         "Avaliações",
         "Admissão",
@@ -109,7 +109,7 @@ describe("AppShell — Sidebar Nav", () => {
     it("renderiza a navegação para recruiter sem áreas de gestor/admin totais", () => {
       renderShell("recruiter");
 
-      expectTopNavLabels(["Dashboard", "Recrutamento", "Avaliações", "Administração", "Outros"]);
+      expectTopNavLabels(["Central RH", "Recrutamento", "Avaliações", "Administração", "Outros"]);
       expectTopNavMissing(["Admissão", "Gestores"]);
       fireEvent.click(within(topNav()).getByRole("button", { name: "Outros" }));
       expect(screen.getByRole("link", { name: /Demo RH/ })).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe("AppShell — Sidebar Nav", () => {
     it("renderiza menu Admitidos para RH", () => {
       renderShell("hr");
 
-      expectTopNavLabels(["Dashboard", "Recrutamento", "Admissão"]);
+      expectTopNavLabels(["Central RH", "Recrutamento", "Admissão"]);
       expectTopNavMissing(["Outros", "Administração", "Avaliações"]);
       fireEvent.click(within(topNav()).getByRole("button", { name: "Admissão" }));
       expect(screen.getByRole("link", { name: /Admitidos/ })).toBeInTheDocument();
@@ -127,14 +127,14 @@ describe("AppShell — Sidebar Nav", () => {
     it("renderiza a navegação para manager com apenas grupos permitidos", () => {
       renderShell("manager");
 
-      expectTopNavLabels(["Dashboard", "Recrutamento", "Gestores"]);
+      expectTopNavLabels(["Central RH", "Recrutamento", "Gestores"]);
       expectTopNavMissing(["Avaliações", "Administração", "Outros"]);
     });
 
     it("não exibe Avaliações para viewer", () => {
       renderShell("viewer");
 
-      expectTopNavLabels(["Dashboard", "Recrutamento"]);
+      expectTopNavLabels(["Central RH", "Recrutamento"]);
       expectTopNavMissing(["Avaliações", "Gestores", "Administração", "Outros"]);
     });
 
@@ -170,7 +170,7 @@ describe("AppShell — Sidebar Nav", () => {
       localStorage.setItem(
         "app_screens_config",
         JSON.stringify([
-          { path: "/dashboard", roles: ["recruiter"] },
+          { path: "/rh", roles: ["recruiter"] },
           { path: "/pipeline", roles: ["recruiter"] },
           { path: "/vagas", roles: ["admin"] },
           { path: "/candidatos", roles: ["admin"] },
@@ -184,7 +184,7 @@ describe("AppShell — Sidebar Nav", () => {
 
       renderShell("recruiter");
 
-      expectTopNavLabels(["Dashboard", "Recrutamento"]);
+      expectTopNavLabels(["Central RH", "Recrutamento"]);
       expectTopNavMissing(["Avaliações", "Gestores", "Administração"]);
       // Pipeline is allowed, so Recrutamento is visible, but Vagas/Candidatos/Agenda are hidden.
       fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
@@ -196,7 +196,7 @@ describe("AppShell — Sidebar Nav", () => {
       localStorage.setItem(
         "app_screens_config",
         JSON.stringify([
-          { path: "/dashboard", roles: ["recruiter"] },
+          { path: "/rh", roles: ["recruiter"] },
           { path: "/pipeline", roles: ["admin"] },
           { path: "/vagas", roles: ["recruiter"] },
           { path: "/candidatos", roles: ["recruiter"] },
@@ -206,7 +206,7 @@ describe("AppShell — Sidebar Nav", () => {
 
       renderShell("recruiter");
 
-      expectTopNavLabels(["Dashboard", "Recrutamento"]);
+      expectTopNavLabels(["Central RH", "Recrutamento"]);
 
       fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
       expect(screen.queryByRole("link", { name: /Pipeline/ })).not.toBeInTheDocument();
@@ -227,10 +227,10 @@ describe("AppShell — Sidebar Nav", () => {
       expect(item).toHaveClass("bg-[hsl(var(--nav-active-bg))]/50");
     });
 
-    it("destaca Dashboard como link ativo em /dashboard", () => {
-      renderShell("admin", "/dashboard");
+    it("destaca Central RH como link ativo em /rh", () => {
+      renderShell("admin", "/rh");
 
-      const link = within(topNav()).getByRole("link", { name: "Dashboard" });
+      const link = within(topNav()).getByRole("link", { name: "Central RH" });
       expect(link).toHaveClass("bg-[hsl(var(--nav-active-bg))]");
     });
   });

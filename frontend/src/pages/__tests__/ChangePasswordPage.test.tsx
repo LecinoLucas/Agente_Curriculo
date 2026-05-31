@@ -54,7 +54,7 @@ function renderPage(user: AuthUser = adminUser, updateUser = vi.fn()) {
     <MemoryRouter initialEntries={["/trocar-senha"]}>
       <Routes>
         <Route path="/trocar-senha" element={<ChangePasswordPage />} />
-        <Route path="/dashboard" element={<div>Dashboard destino</div>} />
+        <Route path="/rh" element={<div>RH destino</div>} />
         <Route path="/candidato/portal" element={<div>Portal candidato destino</div>} />
       </Routes>
     </MemoryRouter>,
@@ -87,7 +87,7 @@ describe("ChangePasswordPage", () => {
     const user = await fillValidPasswordForm();
     await user.click(screen.getByRole("button", { name: /salvar nova senha/i }));
 
-    expect(await screen.findByText("Dashboard destino")).toBeInTheDocument();
+    expect(await screen.findByText("RH destino")).toBeInTheDocument();
     expect(updateUser).toHaveBeenCalledWith(expect.objectContaining({ must_change_password: false }));
     expect(toast.success).toHaveBeenCalledWith("Senha alterada com sucesso.");
   });
@@ -120,6 +120,6 @@ describe("ChangePasswordPage", () => {
 
     expect(authService.updateMyPassword).toHaveBeenCalledTimes(1);
     resolveRequest({ ...adminUser, must_change_password: false });
-    await waitFor(() => expect(screen.getByText("Dashboard destino")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("RH destino")).toBeInTheDocument());
   });
 });

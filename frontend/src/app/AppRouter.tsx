@@ -126,7 +126,9 @@ const DashboardPage = lazy(() =>
   import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
 );
 
-// Removed AgendaPage import and route
+const AgendaPage = lazy(() =>
+  import("../pages/AgendaPage").then((m) => ({ default: m.AgendaPage }))
+);
 
 const ImportPage = lazy(() =>
   import("../pages/ImportPage").then((m) => ({ default: m.ImportPage }))
@@ -175,7 +177,7 @@ const ManagerReviewPage = lazy(() =>
 type UserRole = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr";
 
 const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
-const RH_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "hr"];
+const RH_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
 const AGENDA_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "hr"];
 const ADMIN_ROLES: UserRole[] = ["admin"];
 const DEMO_RH_ROLES: UserRole[] = ["admin", "recruiter"];
@@ -242,11 +244,11 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<Navigate to="/rh" replace />} />
 
         <Route
           path="dashboard"
-          element={protectedPage(<DashboardPage />, STAFF_ROLES)}
+          element={<Navigate to="/rh" replace />}
         />
 
         <Route
@@ -254,7 +256,10 @@ export function AppRouter() {
           element={protectedPage(<RhDashboardPage />, RH_ROLES)}
         />
 
-        {/* Removed agenda route */}
+        <Route
+          path="agenda"
+          element={protectedPage(<AgendaPage />, AGENDA_ROLES)}
+        />
 
         <Route
           path="pipeline"

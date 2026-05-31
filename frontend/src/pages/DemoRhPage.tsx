@@ -215,7 +215,7 @@ export function DemoRhPage() {
               Trocar vaga demo
             </Button>
           ) : null}
-          <Button variant="ghost" className="min-h-11" onClick={() => navigate("/dashboard")}>Voltar ao Dashboard</Button>
+          <Button variant="ghost" className="min-h-11" onClick={() => navigate("/rh")}>Voltar à Central RH</Button>
         </div>
       </section>
 

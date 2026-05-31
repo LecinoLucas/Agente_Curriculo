@@ -50,21 +50,13 @@ const NAVIGATION_CONFIG: NavGroup[] = [
   {
     label: "Central RH",
     caption: "Pendências do dia",
-    roles: ["admin", "recruiter", "viewer", "hr"],
-    isDropdown: false,
-    items: [
-      { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: ["admin", "recruiter", "viewer", "hr"] }
-    ],
-  },
-  {
-    label: "Visão geral",
-    caption: "Dashboard",
     roles: ["admin", "recruiter", "viewer", "manager", "hr"],
     isDropdown: false,
     items: [
-      { to: "/dashboard", label: "Dashboard", caption: "Visão geral", roles: ["admin", "recruiter", "viewer", "manager", "hr"] }
+      { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: ["admin", "recruiter", "viewer", "manager", "hr"] }
     ],
   },
+
   {
     label: "Recrutamento",
     caption: "Processo Seletivo",

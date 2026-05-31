@@ -11,7 +11,7 @@ import { toast } from "../shared/utils/toast";
 
 function postPasswordChangeRoute(role?: string | null): string {
   if (role === "candidate") return "/candidato/portal";
-  return "/dashboard";
+  return "/rh";
 }
 
 function passwordStrengthLabel(password: string): { label: string; tone: string } {

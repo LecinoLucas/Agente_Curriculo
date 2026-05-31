@@ -48,7 +48,7 @@ function makeUser(role: UserRole): AuthUser {
 
 function renderProvider({
   role,
-  route = "/dashboard",
+  route = "/rh",
   token = "access-token",
 }: {
   role?: UserRole;
@@ -125,7 +125,7 @@ describe("NotificationsContext", () => {
         },
       ]);
 
-      renderProvider({ role, route: "/dashboard" });
+      renderProvider({ role, route: "/rh" });
 
       await waitFor(() => {
         expect(notificationService.getNotifications).toHaveBeenCalledTimes(1);
@@ -141,7 +141,7 @@ describe("NotificationsContext", () => {
       new HttpError(401, "Não autorizado"),
     );
 
-    renderProvider({ role: "admin", route: "/dashboard" });
+    renderProvider({ role: "admin", route: "/rh" });
 
     await act(async () => {
       await Promise.resolve();
@@ -164,7 +164,7 @@ describe("NotificationsContext", () => {
       new HttpError(500, "Erro interno"),
     );
 
-    renderProvider({ role: "admin", route: "/dashboard" });
+    renderProvider({ role: "admin", route: "/rh" });
 
     await waitFor(() => {
       expect(notificationService.getNotifications).toHaveBeenCalledTimes(1);
