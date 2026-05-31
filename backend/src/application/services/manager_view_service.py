@@ -67,39 +67,45 @@ class ManagerViewService:
                 JobModel.title,
             )
         else:
-            # MANAGER sees jobs where they are evaluator OR have a directed review_request
-            scorecard_job_ids = (
-                sa.select(InterviewScorecardModel.job_id)
-                .where(InterviewScorecardModel.evaluator_id == user_id)
-            )
-            review_request_job_ids = (
-                sa.select(CollaborationCommentModel.job_id)
-                .where(
+            # MANAGER sees jobs/candidates only through explicit assignments.
+            accessible_pairs = sa.union(
+                sa.select(
+                    InterviewScorecardModel.job_id.label("job_id"),
+                    InterviewScorecardModel.candidate_id.label("candidate_id"),
+                ).where(InterviewScorecardModel.evaluator_id == user_id),
+                sa.select(
+                    CollaborationCommentModel.job_id.label("job_id"),
+                    CollaborationCommentModel.candidate_id.label("candidate_id"),
+                ).where(
                     CollaborationCommentModel.comment_type == _REVIEW_REQUEST_TYPE,
                     CollaborationCommentModel.target_manager_id == user_id,
-                )
-            )
+                ),
+            ).subquery()
+
             query = sa.select(
                 JobModel.id,
                 JobModel.title,
                 sa.func.count(sa.distinct(CandidateJobPipelineModel.candidate_id)).label("candidate_count"),
-                sa.func.count(sa.distinct(InterviewScorecardModel.id)).label("assigned_count"),
+                sa.func.count(sa.distinct(InterviewScorecardModel.candidate_id)).label("assigned_count"),
             ).select_from(
                 JobModel
+            ).join(
+                accessible_pairs,
+                accessible_pairs.c.job_id == JobModel.id,
             ).outerjoin(
                 CandidateJobPipelineModel,
                 sa.and_(
                     CandidateJobPipelineModel.job_id == JobModel.id,
+                    CandidateJobPipelineModel.candidate_id == accessible_pairs.c.candidate_id,
                     CandidateJobPipelineModel.pipeline_status == "active",
                 )
             ).outerjoin(
                 InterviewScorecardModel,
                 sa.and_(
                     InterviewScorecardModel.job_id == JobModel.id,
+                    InterviewScorecardModel.candidate_id == CandidateJobPipelineModel.candidate_id,
                     InterviewScorecardModel.evaluator_id == user_id,
                 )
-            ).where(
-                JobModel.id.in_(sa.union(scorecard_job_ids, review_request_job_ids))
             ).group_by(
                 JobModel.id,
                 JobModel.title,
@@ -118,7 +124,7 @@ class ManagerViewService:
             for row in rows
         ]
 
-    async def list_job_candidates(self, user_id: UUID, job_id: UUID) -> list[dict]:
+    async def list_job_candidates(self, user_id: UUID, job_id: UUID) -> list[dict] | None:
         """
         List candidates in a job where user is evaluator or has a directed review_request.
 
@@ -128,20 +134,26 @@ class ManagerViewService:
         # Verify manager has access to this job
         can_access = await self._verify_manager_job_access(user_id, job_id)
         if not can_access:
-            return []
+            return None
 
-        # Candidates reachable via scorecard evaluator_id or directed review_request
-        accessible_candidate_ids_sq = sa.union(
-            sa.select(InterviewScorecardModel.candidate_id).where(
-                InterviewScorecardModel.job_id == job_id,
-                InterviewScorecardModel.evaluator_id == user_id,
-            ),
-            sa.select(CollaborationCommentModel.candidate_id).where(
-                CollaborationCommentModel.job_id == job_id,
-                CollaborationCommentModel.comment_type == _REVIEW_REQUEST_TYPE,
-                CollaborationCommentModel.target_manager_id == user_id,
-            ),
-        )
+        if self.is_admin:
+            accessible_candidate_filter = sa.true()
+        else:
+            # Candidates reachable via scorecard evaluator_id or directed review_request.
+            accessible_candidate_ids_sq = sa.union(
+                sa.select(InterviewScorecardModel.candidate_id).where(
+                    InterviewScorecardModel.job_id == job_id,
+                    InterviewScorecardModel.evaluator_id == user_id,
+                ),
+                sa.select(CollaborationCommentModel.candidate_id).where(
+                    CollaborationCommentModel.job_id == job_id,
+                    CollaborationCommentModel.comment_type == _REVIEW_REQUEST_TYPE,
+                    CollaborationCommentModel.target_manager_id == user_id,
+                ),
+            )
+            accessible_candidate_filter = CandidateJobPipelineModel.candidate_id.in_(
+                accessible_candidate_ids_sq
+            )
 
         query = sa.select(
             CandidateModel.id,
@@ -164,7 +176,7 @@ class ManagerViewService:
             sa.and_(
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.candidate_id.in_(accessible_candidate_ids_sq),
+                accessible_candidate_filter,
             )
         ).group_by(
             CandidateModel.id,

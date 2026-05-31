@@ -11,6 +11,7 @@ from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.collaboration_comments_model import CollaborationCommentModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.security.password_service import hash_password
 
@@ -64,14 +65,22 @@ async def _create_job(db: AsyncSession, created_by: UUID | None = None) -> str:
     return str(job.id)
 
 
-async def _create_candidate(db: AsyncSession, created_by: UUID | None = None) -> str:
+async def _create_candidate(
+    db: AsyncSession,
+    created_by: UUID | None = None,
+    *,
+    name: str = "Test Candidate",
+    email: str | None = None,
+) -> str:
     """Helper to create a test candidate."""
     if created_by is None:
         created_by = uuid4()
+    if email is None:
+        email = "candidate@test.com"
     candidate = CandidateModel(
         id=uuid4(),
-        full_name="Test Candidate",
-        email="candidate@test.com",
+        full_name=name,
+        email=email,
         created_by=created_by if isinstance(created_by, UUID) else UUID(created_by),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -117,6 +126,32 @@ async def _create_scorecard(
     await db.commit()
 
 
+async def _create_review_request(
+    db: AsyncSession,
+    manager_id: str,
+    candidate_id: str,
+    job_id: str,
+    author_id: UUID | None = None,
+) -> None:
+    """Helper to create a directed manager review request."""
+    comment = CollaborationCommentModel(
+        id=uuid4(),
+        candidate_id=UUID(candidate_id),
+        job_id=UUID(job_id),
+        author_id=author_id,
+        author_role="recruiter",
+        comment_type="review_request",
+        visibility="internal",
+        target_manager_id=UUID(manager_id),
+        priority="medium",
+        message="Revise este candidato.",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add(comment)
+    await db.commit()
+
+
 @pytest.mark.asyncio
 async def test_manager_lists_assigned_jobs(client: AsyncClient, db_session: AsyncSession):
     """MANAGER sees jobs where they are evaluator."""
@@ -143,7 +178,47 @@ async def test_manager_lists_assigned_jobs(client: AsyncClient, db_session: Asyn
     data = response.json()
     assert len(data["jobs"]) == 1
     assert data["jobs"][0]["title"] == "Software Engineer"
+    assert data["jobs"][0]["candidate_count"] == 1
     assert data["jobs"][0]["assigned_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_manager_job_candidate_count_counts_only_visible_candidates(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """candidate_count reflects candidates visible to the manager, not the whole job."""
+    manager = await _create_user(db_session, "manager-visible-count@test.com", UserRole.MANAGER)
+    job_id = await _create_job(db_session)
+    visible_candidate_id = await _create_candidate(
+        db_session,
+        name="Visible Candidate",
+        email="visible-count@test.com",
+    )
+    hidden_candidate_id = await _create_candidate(
+        db_session,
+        name="Hidden Candidate",
+        email="hidden-count@test.com",
+    )
+    await _create_pipeline(db_session, visible_candidate_id, job_id)
+    await _create_pipeline(db_session, hidden_candidate_id, job_id)
+    await _create_scorecard(db_session, str(manager.id), visible_candidate_id, job_id)
+
+    login = await client.post("/api/v1/auth/login", json={
+        "email": "manager-visible-count@test.com",
+        "password": "test1234",
+    })
+    token = login.json()["access_token"]
+
+    response = await client.get(
+        "/api/v1/manager/jobs",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    jobs = response.json()["jobs"]
+    assert len(jobs) == 1
+    assert jobs[0]["candidate_count"] == 1
+    assert jobs[0]["assigned_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -209,6 +284,73 @@ async def test_manager_lists_candidates_in_assigned_job(
 
 
 @pytest.mark.asyncio
+async def test_manager_candidate_list_excludes_unassigned_candidates_in_same_job(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """MANAGER must not see another active candidate in the same job without assignment."""
+    manager = await _create_user(db_session, "manager-candidate-scope@test.com", UserRole.MANAGER)
+    job_id = await _create_job(db_session)
+    visible_candidate_id = await _create_candidate(
+        db_session,
+        name="Visible Candidate",
+        email="visible-scope@test.com",
+    )
+    hidden_candidate_id = await _create_candidate(
+        db_session,
+        name="Hidden Candidate",
+        email="hidden-scope@test.com",
+    )
+    await _create_pipeline(db_session, visible_candidate_id, job_id)
+    await _create_pipeline(db_session, hidden_candidate_id, job_id)
+    await _create_scorecard(db_session, str(manager.id), visible_candidate_id, job_id)
+
+    login = await client.post("/api/v1/auth/login", json={
+        "email": "manager-candidate-scope@test.com",
+        "password": "test1234",
+    })
+    token = login.json()["access_token"]
+
+    response = await client.get(
+        f"/api/v1/manager/jobs/{job_id}/candidates",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    candidates = response.json()["candidates"]
+    assert [item["id"] for item in candidates] == [visible_candidate_id]
+    assert all(item["id"] != hidden_candidate_id for item in candidates)
+
+
+@pytest.mark.asyncio
+async def test_manager_candidate_list_returns_200_empty_for_authorized_empty_job(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """A valid assignment with no active visible candidates is an empty list, not 403."""
+    manager = await _create_user(db_session, "manager-empty-list@test.com", UserRole.MANAGER)
+    job_id = await _create_job(db_session)
+    candidate_id = await _create_candidate(
+        db_session,
+        name="Inactive Candidate",
+        email="inactive-empty@test.com",
+    )
+    await _create_review_request(db_session, str(manager.id), candidate_id, job_id)
+
+    login = await client.post("/api/v1/auth/login", json={
+        "email": "manager-empty-list@test.com",
+        "password": "test1234",
+    })
+    token = login.json()["access_token"]
+
+    response = await client.get(
+        f"/api/v1/manager/jobs/{job_id}/candidates",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["candidates"] == []
+
+
+@pytest.mark.asyncio
 async def test_manager_cannot_list_candidates_in_unassigned_job(
     client: AsyncClient, db_session: AsyncSession
 ):
@@ -229,6 +371,7 @@ async def test_manager_cannot_list_candidates_in_unassigned_job(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
+    assert response.json()["detail"] == "Gestor não tem acesso a esta vaga."
 
 
 @pytest.mark.asyncio
@@ -295,6 +438,7 @@ async def test_manager_cannot_access_unassigned_candidate(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
+    assert response.json()["detail"] == "Gestor não tem acesso a este candidato nesta vaga."
 
 
 @pytest.mark.asyncio

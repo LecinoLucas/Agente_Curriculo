@@ -193,6 +193,33 @@ describe("ManagerReviewPage", () => {
     expect(await screen.findByText("Senior Developer")).toBeInTheDocument();
   });
 
+  it("mostra contador de candidatos atribuídos sem sugerir total da vaga", async () => {
+    mockListJobs.mockResolvedValue({
+      jobs: [{ id: "job-1", title: "Senior Developer", candidate_count: 1, assigned_count: 1 }],
+    });
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(screen.getByRole("button", { name: /^Candidatos$/i }));
+
+    expect(await screen.findByText("1 candidato atribuído")).toBeInTheDocument();
+    expect(screen.queryByText(/1 \/ 1 candidatos/i)).not.toBeInTheDocument();
+  });
+
+  it("exibe estado vazio claro quando a vaga não tem candidatos atribuídos visíveis", async () => {
+    mockListCandidates.mockResolvedValue({
+      job_id: "job-1",
+      candidates: [],
+    });
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(screen.getByRole("button", { name: /^Candidatos$/i }));
+    await user.click(await screen.findByRole("button", { name: /Senior Developer/i }));
+
+    expect(await screen.findByText("Nenhum candidato atribuído nesta vaga")).toBeInTheDocument();
+  });
+
   it("mostra erro se não conseguir carregar solicitações", async () => {
     mockListReviewRequests.mockRejectedValueOnce(new Error("Falha ao carregar"));
 
@@ -213,6 +240,44 @@ describe("ManagerReviewPage", () => {
       expect(mockGetScorecard).toHaveBeenCalledWith("job-1", "cand-1");
     });
     expect(await screen.findByText("Avaliação do Gestor")).toBeInTheDocument();
+  });
+
+  it("não engole erro ao carregar resumo seguro", async () => {
+    mockGetCandidateSummary.mockRejectedValueOnce(new Error("summary failed"));
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+
+    expect(
+      await screen.findByText("Não foi possível carregar o resumo seguro deste candidato."),
+    ).toBeInTheDocument();
+  });
+
+  it("não engole erro ao carregar scorecard", async () => {
+    mockGetScorecard.mockRejectedValueOnce(new Error("scorecard failed"));
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+
+    expect(
+      await screen.findByText("Não foi possível carregar a avaliação do gestor."),
+    ).toBeInTheDocument();
+  });
+
+  it("exibe erro localizado se o resumo da aba candidatos falhar", async () => {
+    mockGetCandidateSummary.mockRejectedValueOnce(new Error("browse summary failed"));
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(screen.getByRole("button", { name: /^Candidatos$/i }));
+    await user.click(await screen.findByRole("button", { name: /Senior Developer/i }));
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+
+    expect(
+      await screen.findByText("Não foi possível carregar o resumo seguro deste candidato."),
+    ).toBeInTheDocument();
   });
 
   it("exibe formulário de scorecard com recomendação e observações quando não há scorecard salvo", async () => {

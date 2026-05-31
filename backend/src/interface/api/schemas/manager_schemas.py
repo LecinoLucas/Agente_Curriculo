@@ -8,8 +8,8 @@ class ManagerJobResponse(BaseModel):
     """Safe summary of a job for manager view."""
     id: str = Field(..., description="Job ID")
     title: str = Field(..., description="Job title")
-    candidate_count: int = Field(..., description="Total active candidates")
-    assigned_count: int = Field(..., description="Candidates with scorecard from this evaluator")
+    candidate_count: int = Field(..., description="Active candidates visible to this manager")
+    assigned_count: int = Field(..., description="Visible candidates with scorecard from this evaluator")
 
 
 class ManagerJobListResponse(BaseModel):

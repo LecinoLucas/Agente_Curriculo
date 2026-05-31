@@ -84,10 +84,10 @@ async def list_job_candidates(
     Omits: documents, ERP payload, technical AI details.
     """
     candidates = await _service(db, current_user).list_job_candidates(current_user.id, job_id)
-    if not candidates:
+    if candidates is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Manager not assigned to this job",
+            detail="Gestor não tem acesso a esta vaga.",
         )
 
     return ManagerJobCandidatesResponse(
@@ -127,7 +127,7 @@ async def get_candidate_summary(
     if not summary:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Manager not assigned to this candidate/job",
+            detail="Gestor não tem acesso a este candidato nesta vaga.",
         )
 
     return ManagerCandidateDetailResponse(**summary)

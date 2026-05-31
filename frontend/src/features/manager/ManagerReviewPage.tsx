@@ -32,6 +32,10 @@ const RECOMMENDATION_LABELS: Record<string, string> = {
 
 type ActiveTab = "requests" | "candidates";
 
+function formatCandidateCount(count: number) {
+  return count === 1 ? "1 candidato atribuído" : `${count} candidatos atribuídos`;
+}
+
 export function ManagerReviewPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("requests");
 
@@ -41,6 +45,7 @@ export function ManagerReviewPage() {
   const [selectedRequest, setSelectedRequest] = useState<ReviewRequestItem | null>(null);
   const [candidateSummary, setCandidateSummary] = useState<ManagerCandidateDetailResponse | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // Feedback form state
   const [feedbackMessage, setFeedbackMessage] = useState("");
@@ -56,6 +61,7 @@ export function ManagerReviewPage() {
   const [savingScorecard, setSavingScorecard] = useState(false);
   const [submittingScorecard, setSubmittingScorecard] = useState(false);
   const [scorecardError, setScorecardError] = useState<string | null>(null);
+  const [scorecardLoadError, setScorecardLoadError] = useState<string | null>(null);
 
   // Candidate browse state (tab 2)
   const [jobs, setJobs] = useState<{ id: string; title: string; candidate_count: number; assigned_count: number }[]>([]);
@@ -65,6 +71,7 @@ export function ManagerReviewPage() {
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [browseSummary, setBrowseSummary] = useState<ManagerCandidateDetailResponse | null>(null);
   const [loadingBrowseSummary, setLoadingBrowseSummary] = useState(false);
+  const [browseSummaryError, setBrowseSummaryError] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -96,16 +103,18 @@ export function ManagerReviewPage() {
     setFeedbackMessage("");
     setFeedbackSent(false);
     setCandidateSummary(null);
+    setSummaryError(null);
     setScorecard(null);
     setSuggestedQuestions([]);
     setQuestionsOpen(false);
     setScorecardError(null);
+    setScorecardLoadError(null);
     setLoadingSummary(true);
     setLoadingScorecard(true);
 
     void managerService.getCandidateSummary(req.job_id, req.candidate_id)
       .then(setCandidateSummary)
-      .catch(() => {})
+      .catch(() => setSummaryError("Não foi possível carregar o resumo seguro deste candidato."))
       .finally(() => setLoadingSummary(false));
 
     void managerService.getScorecard(req.job_id, req.candidate_id)
@@ -113,7 +122,7 @@ export function ManagerReviewPage() {
         setScorecard(env.scorecard);
         setSuggestedQuestions(env.suggested_behavioral_questions ?? []);
       })
-      .catch(() => {})
+      .catch(() => setScorecardLoadError("Não foi possível carregar a avaliação do gestor."))
       .finally(() => setLoadingScorecard(false));
   }
 
@@ -177,6 +186,7 @@ export function ManagerReviewPage() {
   async function loadJobs() {
     try {
       setLoadingJobs(true);
+      setError(null);
       const resp = await managerService.listJobs();
       setJobs(resp.jobs);
     } catch {
@@ -189,8 +199,10 @@ export function ManagerReviewPage() {
   async function handleJobSelect(jobId: string) {
     setSelectedJobId(jobId);
     setBrowseSummary(null);
+    setBrowseSummaryError(null);
     setLoadingCandidates(true);
     try {
+      setError(null);
       const resp = await managerService.listCandidates(jobId);
       setCandidates(resp.candidates);
     } catch {
@@ -203,12 +215,14 @@ export function ManagerReviewPage() {
   async function handleBrowseCandidateSelect(candidateId: string) {
     if (!selectedJobId) return;
     setBrowseSummary(null);
+    setBrowseSummaryError(null);
     setLoadingBrowseSummary(true);
     try {
+      setError(null);
       const summary = await managerService.getCandidateSummary(selectedJobId, candidateId);
       setBrowseSummary(summary);
     } catch {
-      setError("Não foi possível carregar o resumo.");
+      setBrowseSummaryError("Não foi possível carregar o resumo seguro deste candidato.");
     } finally {
       setLoadingBrowseSummary(false);
     }
@@ -411,6 +425,10 @@ export function ManagerReviewPage() {
                       Documentos, ERP e logs técnicos não são exibidos ao gestor.
                     </p>
                   </div>
+                ) : summaryError ? (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                    {summaryError}
+                  </div>
                 ) : null}
 
                 {/* Scorecard panel */}
@@ -420,6 +438,10 @@ export function ManagerReviewPage() {
                     <div className="flex items-center gap-2 text-sm text-text-muted">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Carregando avaliação...
+                    </div>
+                  ) : scorecardLoadError ? (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                      {scorecardLoadError}
                     </div>
                   ) : scorecard?.status === "submitted" ? (
                     <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1 text-sm text-emerald-800">
@@ -561,7 +583,10 @@ export function ManagerReviewPage() {
                   >
                     <p className="font-medium truncate">{job.title}</p>
                     <p className="text-xs text-text-muted mt-0.5">
-                      {job.assigned_count} / {job.candidate_count} candidatos
+                      {formatCandidateCount(job.candidate_count)}
+                      {job.assigned_count !== job.candidate_count
+                        ? ` · ${job.assigned_count} com scorecard`
+                        : ""}
                     </p>
                   </button>
                 ))}
@@ -578,7 +603,7 @@ export function ManagerReviewPage() {
               </div>
             ) : candidates.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-text-muted">
-                {selectedJobId ? "Nenhum candidato atribuído" : "Selecione uma vaga"}
+                {selectedJobId ? "Nenhum candidato atribuído nesta vaga" : "Selecione uma vaga"}
               </div>
             ) : (
               <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -613,6 +638,10 @@ export function ManagerReviewPage() {
             {loadingBrowseSummary ? (
               <div className="flex items-center justify-center h-32">
                 <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
+              </div>
+            ) : browseSummaryError ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+                {browseSummaryError}
               </div>
             ) : !browseSummary ? (
               <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-text-muted">
