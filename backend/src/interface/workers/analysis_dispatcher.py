@@ -6,6 +6,7 @@ import structlog
 
 from src.core.settings import settings
 from src.interface.workers.analysis_tasks import process_analysis
+from src.interface.workers.dev_analysis_processor import enqueue_dev_analysis
 
 logger = structlog.get_logger(__name__)
 ANALYSIS_QUEUE = "analysis"
@@ -26,9 +27,9 @@ def enqueue_analysis(
         logger.info(
             "analysis.enqueued_local",
             analysis_id=analysis_id_str,
-            mode="apply",
+            mode="async_task",
         )
-        process_analysis.apply(args=[analysis_id_str])
+        enqueue_dev_analysis(analysis_id)
         return
 
     # ─────────────────────────────────────────

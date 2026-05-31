@@ -93,12 +93,6 @@ async def _process_analysis(analysis_id: UUID) -> None:
             session.add(
                 AnalysisResultModel(
                     analysis_id=analysis_id,
-                    overall_score=overall,
-                    technical_score=technical,
-                    experience_score=experience,
-                    education_score=education,
-                    communication_score=communication,
-                    leadership_score=leadership,
                     candidate_summary=(
                         "Candidato com perfil técnico consistente para vagas de tecnologia."
                     ),
