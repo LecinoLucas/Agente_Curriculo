@@ -1,23 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within, act, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { EMPTY_FORM, SELECTION_FLOW_DEFAULTS } from "../../features/jobs/jobFormConfig";
 import { buildFrontendPublicationBlockers } from "../../features/jobs/utils/jobFormHelpers";
 import { MOCK_AI_PROMPT_EXAMPLE } from "../../features/jobs/utils/mockJobAiDraft";
 import { STEPS, MACRO_STEPS, JobFormPage } from "../JobFormPage";
-import {
-  extractJobTextFromImage,
-  generateJobAiDraft,
-} from "../../features/jobs/services/jobAiDraftService";
 import { skillsService, type SkillCatalog } from "@/services/skillsService";
-
-// ─── Service mocks ────────────────────────────────────────────────────────────
-
-vi.mock("../../features/jobs/services/jobAiDraftService", () => ({
-  extractJobTextFromImage: vi.fn(),
-  generateJobAiDraft: vi.fn(),
-}));
 
 vi.mock("@/services/skillsService", () => ({
   skillsService: {
@@ -27,43 +16,9 @@ vi.mock("@/services/skillsService", () => ({
 
 const MOCK_MANDATORY_SKILLS = [
   "Atendimento ao cliente",
-  "Operação de caixa",
-  "Responsabilidade com dinheiro",
+  "Responsabilidade com caixa",
+  "Rotina operacional",
 ];
-
-const MOCK_GENERATE_RESPONSE = {
-  draft: {
-    title: "Operador de Caixa",
-    area: "Atendimento",
-    seniority: null,
-    work_model: "onsite",
-    unit: "São Paulo, SP",
-    salary_min: null,
-    salary_max: null,
-    description: "Vaga para operador de caixa em loja de varejo.",
-    responsibilities: ["Operar caixa registradora", "Atender clientes"],
-    requirements: ["Ensino médio completo"],
-    mandatory_skills: MOCK_MANDATORY_SKILLS,
-    nice_to_have_skills: ["Experiência anterior com caixa"],
-    benefits: [],
-    working_hours: "6x1",
-    screening_questions: ["Tem disponibilidade para turno integral?"],
-    pipeline_steps: ["Triagem", "Entrevista RH", "Decisão"],
-    matching_criteria: ["Experiência em atendimento ao cliente"],
-    requires_manager_review: true,
-    requires_behavioral_assessment: false,
-  },
-  needs_review: ["salary_range", "unit"],
-  source: { text_used: true, ocr_used: false, input_character_count: 50 },
-  usage: {
-    provider: "google",
-    model: "gemini-2.5-flash",
-    input_tokens: 150,
-    output_tokens: 80,
-    total_tokens: 230,
-    estimated_cost: null,
-  },
-};
 
 function skill(name: string, id = name.toLowerCase().replace(/\s+/g, "-")): SkillCatalog {
   return {
@@ -240,23 +195,10 @@ function renderForm() {
   );
 }
 
-async function waitForAiSkillSuggestionResolution() {
-  if (!screen.queryByTestId("ai-skill-suggestions")) return;
-  await waitFor(() =>
-    expect(screen.queryByText("Validando catálogo")).not.toBeInTheDocument(),
-  );
-}
-
 describe("JobFormPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFormState.form = EMPTY_FORM;
-    vi.mocked(generateJobAiDraft).mockResolvedValue(MOCK_GENERATE_RESPONSE);
-    vi.mocked(extractJobTextFromImage).mockResolvedValue({
-      extracted_text: "Texto extraído por OCR da imagem da vaga.",
-      character_count: 42,
-      source: "ocr",
-    });
     mockSkillLookup();
   });
 
@@ -532,524 +474,105 @@ describe("JobFormPage", () => {
     });
   });
 
-  // ── Fase IA Vaga 1+4 — Criar com IA ──────────────────────────────────────
+  // ── IA Vaga Visual Mock ───────────────────────────────────────────────────
 
-  describe("Fase IA Vaga 1 — Criar com IA", () => {
-    it("1. botão 'Criar com IA' está presente na página", () => {
+  describe("IA Vaga Visual Mock", () => {
+    async function openAiMode() {
       renderForm();
-      expect(screen.getByRole("button", { name: /Criar com IA/i })).toBeInTheDocument();
-    });
+      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
+      expect(screen.getByTestId("ai-draft-panel")).toBeInTheDocument();
+    }
 
-    it("2. ao clicar 'Criar com IA', painel de IA é exibido", () => {
+    async function generateDraft() {
+      await openAiMode();
+      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
+        target: { value: "Preciso contratar um frentista para posto de combustível." },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Gerar exemplo com IA/i }));
+      await screen.findByTestId("ai-draft-result");
+    }
+
+    it("alterna entre 'Cadastro manual' e 'Criar com IA'", async () => {
       renderForm();
       expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      expect(screen.getByTestId("ai-draft-panel")).toBeInTheDocument();
-    });
-
-    it("3. ao clicar 'Cadastro manual', painel de IA é ocultado", () => {
-      renderForm();
       fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
       expect(screen.getByTestId("ai-draft-panel")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /Cadastro manual/i }));
-
       expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
     });
 
-    it("4. botão 'Preencher exemplo' preenche o prompt com texto de exemplo", () => {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
+    it("botão 'Usar exemplo' preenche a descrição", async () => {
+      await openAiMode();
       const textarea = screen.getByLabelText(/Descrição da vaga para IA/i);
+
       expect(textarea).toHaveValue("");
-
-      fireEvent.click(screen.getByRole("button", { name: /Preencher exemplo/i }));
-
+      fireEvent.click(screen.getByRole("button", { name: /Usar exemplo/i }));
       expect(textarea).toHaveValue(MOCK_AI_PROMPT_EXAMPLE);
     });
 
-    it("5. botão 'Gerar rascunho com IA' está presente no painel", () => {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
+    it("botão 'Gerar exemplo com IA' mostra loading e depois o rascunho", async () => {
+      await openAiMode();
 
+      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
+        target: { value: "Preciso contratar um frentista para posto de combustível." },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Gerar exemplo com IA/i }));
+
+      expect(screen.getByRole("status")).toBeInTheDocument();
+      expect(screen.getByText(/Gerando rascunho de exemplo/i)).toBeInTheDocument();
+      expect(await screen.findByTestId("ai-draft-result")).toBeInTheDocument();
+    });
+
+    it("rascunho mostra título, requisitos e perguntas", async () => {
+      await generateDraft();
+
+      expect(screen.getByTestId("draft-title-input")).toHaveValue("Frentista");
       expect(
-        screen.getByRole("button", { name: /Gerar rascunho com IA/i }),
+        within(screen.getByTestId("draft-requirements")).getByDisplayValue(/Boa comunicação/i)
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId("draft-screening-questions")).getByDisplayValue(/Você tem disponibilidade para trabalhar em escala\?/i)
       ).toBeInTheDocument();
     });
 
-    it("6. ao clicar 'Gerar rascunho' com texto, exibe estado de carregamento", async () => {
-      // Keep promise pending so loading state is visible during assertion
-      vi.mocked(generateJobAiDraft).mockReturnValue(new Promise(() => {}));
+    it("botão 'Aplicar ao formulário' preenche os campos reais e fecha o painel", async () => {
+      await generateDraft();
 
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
 
-      const textarea = screen.getByLabelText(/Descrição da vaga para IA/i);
-      fireEvent.change(textarea, { target: { value: "Operador de Caixa" } });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-
-      await waitFor(() => {
-        expect(screen.getByRole("status")).toBeInTheDocument();
-      });
-    });
-
-    it("6b. sem texto nem imagem, exibe mensagem de validação", () => {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-
-      expect(screen.getByRole("alert")).toBeInTheDocument();
-      expect(
-        screen.getByText(/Informe uma descrição ou selecione uma imagem/i),
-      ).toBeInTheDocument();
-    });
-
-    // Tests 7-12: real mocked API
-    describe("com rascunho gerado (API mockada)", () => {
-      async function openAndGenerate() {
-        renderForm();
-        fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-        const textarea = screen.getByLabelText(/Descrição da vaga para IA/i);
-        fireEvent.change(textarea, { target: { value: "Operador de Caixa" } });
-        fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-        return screen.findByTestId("ai-draft-result");
-      }
-
-      it("7. rascunho é exibido com título 'Operador de Caixa'", async () => {
-        await openAndGenerate();
-        expect(screen.getByTestId("draft-title")).toHaveTextContent(
-          MOCK_GENERATE_RESPONSE.draft.title,
-        );
-      });
-
-      it("8. rascunho exibe competências obrigatórias", async () => {
-        await openAndGenerate();
-
-        const skillsList = screen.getByTestId("draft-mandatory-skills");
-        for (const skill of MOCK_MANDATORY_SKILLS) {
-          expect(within(skillsList).getByText(skill)).toBeInTheDocument();
-        }
-      });
-
-      it("9. botão 'Aplicar ao formulário' aparece no rascunho", async () => {
-        await openAndGenerate();
-
-        expect(
-          screen.getByRole("button", { name: /Aplicar ao formulário/i }),
-        ).toBeInTheDocument();
-      });
-
-      it("10. ao clicar 'Aplicar ao formulário', painel de IA é fechado", async () => {
-        await openAndGenerate();
-
-        expect(screen.getByTestId("ai-draft-panel")).toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-        await waitForAiSkillSuggestionResolution();
-
-        expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
-      });
-
-      it("11. aviso de revisão humana é obrigatória aparece no rascunho", async () => {
-        await openAndGenerate();
-
-        expect(
-          screen.getByText(/revisão humana é obrigatória antes da publicação/i),
-        ).toBeInTheDocument();
-      });
-
-      it("12. campos que precisam de revisão são listados no rascunho", async () => {
-        await openAndGenerate();
-
-        expect(screen.getByTestId("needs-review-salary_range")).toBeInTheDocument();
-        expect(screen.getByTestId("needs-review-unit")).toBeInTheDocument();
-      });
-
-      it("13. aplicar ao formulário passa working_hours dedicado ao updateForm", async () => {
-        // MOCK_GENERATE_RESPONSE.draft.working_hours = "6x1"
-        await openAndGenerate();
-        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-        await waitForAiSkillSuggestionResolution();
-
-        expect(mockUpdateForm).toHaveBeenCalledWith(
-          expect.objectContaining({ working_hours: "6x1" }),
-        );
-      });
-
-      it("14. aplicar ao formulário passa mandatory_skills ao campo dedicado mandatory_skills", async () => {
-        await openAndGenerate();
-        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-        await waitForAiSkillSuggestionResolution();
-
-        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
-        const ms = call.mandatory_skills as string[];
-        expect(Array.isArray(ms)).toBe(true);
-        for (const skill of MOCK_MANDATORY_SKILLS) {
-          expect(ms).toContain(skill);
-        }
-      });
-
-      it("15. aplicar ao formulário passa screening_questions ao campo dedicado screening_questions", async () => {
-        await openAndGenerate();
-        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-        await waitForAiSkillSuggestionResolution();
-
-        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
-        const sq = call.screening_questions as string[];
-        expect(sq).toContain("Tem disponibilidade para turno integral?");
-      });
-
-      it("16. seniority null no draft não inclui seniority_level no updateForm", async () => {
-        // MOCK_GENERATE_RESPONSE.draft.seniority = null
-        await openAndGenerate();
-        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-        await waitForAiSkillSuggestionResolution();
-
-        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
-        expect(call.seniority_level).toBeUndefined();
-      });
-
-      it("17. aplicar ao formulário NÃO inclui mandatory_skills em behavioral_requirements (campo dedicado)", async () => {
-        await openAndGenerate();
-        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-        await waitForAiSkillSuggestionResolution();
-
-        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
-        expect(call.behavioral_requirements).toBeUndefined();
-      });
-
-      it("18. aplicar ao formulário passa nice_to_have_skills ao campo dedicado", async () => {
-        await openAndGenerate();
-        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-        await waitForAiSkillSuggestionResolution();
-
-        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
-        const nh = call.nice_to_have_skills as string[];
-        expect(nh).toContain("Experiência anterior com caixa");
-      });
-
-      it("19. aplicar ao formulário NÃO sobrescreve experience_context com working_hours", async () => {
-        await openAndGenerate();
-        fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-        await waitForAiSkillSuggestionResolution();
-
-        const call = mockUpdateForm.mock.calls[0][0] as Record<string, unknown>;
-        expect(call.experience_context).toBeUndefined();
-      });
-    });
-  });
-
-  // ── Fase IA Vaga 4 — Integração real OCR + geração ───────────────────────
-
-  describe("Fase IA Vaga 4 — Integração real", () => {
-    it("gerar com texto chama generateJobAiDraft sem chamar OCR", async () => {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      const textarea = screen.getByLabelText(/Descrição da vaga para IA/i);
-      fireEvent.change(textarea, { target: { value: "Operador de Caixa" } });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-      await screen.findByTestId("ai-draft-result");
-
-      expect(extractJobTextFromImage).not.toHaveBeenCalled();
-      expect(generateJobAiDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ text_input: "Operador de Caixa", ocr_text: null }),
-      );
-    });
-
-    it("gerar com imagem chama OCR antes de generateJobAiDraft", async () => {
-      const mockFile = new File(["img"], "vaga.png", { type: "image/png" });
-
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      const fileInput = screen.getByLabelText(/Selecionar imagem da vaga/i);
-      fireEvent.change(fileInput, { target: { files: [mockFile] } });
-
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-      await screen.findByTestId("ai-draft-result");
-
-      expect(extractJobTextFromImage).toHaveBeenCalledWith(mockFile);
-      expect(generateJobAiDraft).toHaveBeenCalledWith(
+      expect(mockUpdateForm).toHaveBeenCalledWith(
         expect.objectContaining({
-          ocr_text: "Texto extraído por OCR da imagem da vaga.",
+          title: "Frentista",
+          job_area: "Operação de pista",
+          work_model: "onsite",
+          mandatory_skills: expect.arrayContaining(MOCK_MANDATORY_SKILLS),
+          screening_questions: expect.arrayContaining([
+            "Você tem disponibilidade para trabalhar em escala?",
+          ]),
         }),
       );
-    });
-
-    it("se OCR falha e há texto, continua e gera rascunho com texto apenas", async () => {
-      vi.mocked(extractJobTextFromImage).mockRejectedValue(new Error("OCR error"));
-      const mockFile = new File(["img"], "vaga.png", { type: "image/png" });
-
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      const textarea = screen.getByLabelText(/Descrição da vaga para IA/i);
-      fireEvent.change(textarea, { target: { value: "Operador de Caixa" } });
-
-      const fileInput = screen.getByLabelText(/Selecionar imagem da vaga/i);
-      fireEvent.change(fileInput, { target: { files: [mockFile] } });
-
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-      await screen.findByTestId("ai-draft-result");
-
-      expect(generateJobAiDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ text_input: "Operador de Caixa", ocr_text: null }),
-      );
-    });
-
-    it("se OCR falha e não há texto, exibe mensagem de erro e não chama generate", async () => {
-      vi.mocked(extractJobTextFromImage).mockRejectedValue(new Error("OCR error"));
-      const mockFile = new File(["img"], "vaga.png", { type: "image/png" });
-
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      const fileInput = screen.getByLabelText(/Selecionar imagem da vaga/i);
-      fireEvent.change(fileInput, { target: { files: [mockFile] } });
-
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-
-      await waitFor(() => {
-        expect(screen.getByRole("alert")).toBeInTheDocument();
-      });
-      expect(screen.getByText(/Não foi possível ler a imagem/i)).toBeInTheDocument();
-      expect(generateJobAiDraft).not.toHaveBeenCalled();
-    });
-
-    it("seção 'Uso de IA' aparece após geração bem-sucedida", async () => {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
-        target: { value: "Operador de Caixa" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-      await screen.findByTestId("usage-section");
-
-      expect(screen.getByTestId("usage-section")).toBeInTheDocument();
-      expect(screen.getByText(/Uso de IA/i)).toBeInTheDocument();
-    });
-
-    it("falha na geração da IA exibe mensagem de erro", async () => {
-      vi.mocked(generateJobAiDraft).mockRejectedValue(new Error("AI error"));
-
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
-        target: { value: "Operador de Caixa" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-
-      await waitFor(() => {
-        expect(screen.getByRole("alert")).toBeInTheDocument();
-      });
+      expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
       expect(
-        screen.getByText(/Não foi possível gerar o rascunho agora/i),
+        screen.getByText(/Rascunho aplicado\. Revise antes de salvar\./i),
       ).toBeInTheDocument();
     });
 
-    it("OCR exibe preview do texto extraído da imagem", async () => {
-      const mockFile = new File(["img"], "vaga.png", { type: "image/png" });
-
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      const fileInput = screen.getByLabelText(/Selecionar imagem da vaga/i);
-      fireEvent.change(fileInput, { target: { files: [mockFile] } });
-
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-      await screen.findByTestId("ai-draft-result");
-
-      expect(screen.getByTestId("ocr-preview")).toBeInTheDocument();
-      expect(
-        screen.getByText(/A IA receberá apenas o texto extraído, não a imagem/i),
-      ).toBeInTheDocument();
-    });
-
-    it("aviso de segurança OCR está visível no painel", () => {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-
-      expect(
-        screen.getByText(/A imagem é lida por OCR. A IA recebe apenas o texto extraído/i),
-      ).toBeInTheDocument();
-    });
-
-    it("salvar rascunho continua funcionando pelo fluxo existente após aplicar IA", async () => {
-      renderForm();
-      // Salvar rascunho não deve estar desabilitado em nenhuma etapa
-      expect(screen.getByRole("button", { name: /Salvar rascunho/i })).not.toBeDisabled();
-
-      // Abrir painel de IA, gerar e aplicar
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
-        target: { value: "Operador de Caixa" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-      await screen.findByTestId("ai-draft-result");
+    it("salvar rascunho manual continua disponível após aplicar o rascunho", async () => {
+      await generateDraft();
       fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-      await waitForAiSkillSuggestionResolution();
 
-      // Painel fechado, volta ao modo manual — salvar rascunho ainda disponível
-      expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Salvar rascunho/i })).not.toBeDisabled();
     });
 
-    it("aplicar ao formulário chama onApply com campos do rascunho", async () => {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
-        target: { value: "Operador de Caixa" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-      await screen.findByTestId("ai-draft-result");
-
-      // Should not be in error state — draft is shown
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-      expect(screen.getByTestId("draft-title")).toHaveTextContent("Operador de Caixa");
-
-      // Applying closes the panel (onApply triggers setAiMode("manual") in page)
+    it("não publica automaticamente após aplicar o rascunho", async () => {
+      await generateDraft();
       fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-      await waitForAiSkillSuggestionResolution();
-      await act(async () => {});
-      expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
-    });
-  });
 
-  // ── Fase IA Vaga 5 — Rate limit (429) ────────────────────────────────────
-
-  describe("Fase IA Vaga 5 — Rate limit handling", () => {
-    it("429 de generateJobAiDraft mostra mensagem de limite atingido", async () => {
-      const { HttpError } = await import("../../services/http");
-      vi.mocked(generateJobAiDraft).mockRejectedValue(
-        new HttpError(429, "Limite de gerações de rascunho atingido. Tente novamente amanhã."),
-      );
-
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
-        target: { value: "Operador de Caixa" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-
-      const alert = await screen.findByRole("alert");
-      expect(alert).toHaveTextContent(/limite de gerações atingido/i);
-    });
-
-    it("erros não-429 continuam mostrando mensagem genérica", async () => {
-      vi.mocked(generateJobAiDraft).mockRejectedValue(new Error("network error"));
-
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
-        target: { value: "Operador de Caixa" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-
-      const alert = await screen.findByRole("alert");
-      expect(alert).toHaveTextContent(/não foi possível gerar o rascunho/i);
-    });
-  });
-
-  // ── Fase IA Vaga 8 — Skills sugeridas ────────────────────────────────────────
-
-  describe("Fase IA Vaga 8 — Skills sugeridas na aba Skills", () => {
-    async function applyDraft() {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
-      fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
-        target: { value: "Operador de Caixa" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar rascunho com IA/i }));
-      await screen.findByTestId("ai-draft-result");
-      fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
-      await waitForAiSkillSuggestionResolution();
-    }
-
-    async function waitForSkillResolution() {
-      await waitFor(() =>
-        expect(screen.queryByText("Validando catálogo")).not.toBeInTheDocument(),
-      );
-    }
-
-    it("após aplicar rascunho com skills, navega automaticamente para aba Skills", async () => {
-      await applyDraft();
-      // Skills step is now active — mandatory-skills step mock is rendered
-      expect(screen.getByTestId("step-mandatory-skills")).toBeInTheDocument();
-    });
-
-    it("bloco 'Skills sugeridas pela IA' aparece na aba Skills após aplicar", async () => {
-      await applyDraft();
-      expect(screen.getByTestId("ai-skill-suggestions")).toBeInTheDocument();
-    });
-
-    it("bloco mostra skills obrigatórias da IA", async () => {
-      await applyDraft();
-      const block = screen.getByTestId("ai-skill-suggestions");
-      for (const skill of MOCK_MANDATORY_SKILLS) {
-        expect(block.textContent).toContain(skill);
-      }
-    });
-
-    it("bloco mostra skills diferenciais da IA", async () => {
-      await applyDraft();
-      const block = screen.getByTestId("ai-skill-suggestions");
-      expect(block.textContent).toContain("Experiência anterior com caixa");
-    });
-
-    it("botão 'Ignorar sugestões' remove o bloco da aba Skills", async () => {
-      await applyDraft();
-      expect(screen.getByTestId("ai-skill-suggestions")).toBeInTheDocument();
-      fireEvent.click(screen.getByTestId("ai-suggestions-dismiss"));
-      expect(screen.queryByTestId("ai-skill-suggestions")).not.toBeInTheDocument();
-    });
-
-    it("botão 'Aplicar skills selecionadas' chama handleAddSkill para cada skill marcada", async () => {
-      await applyDraft();
-      await waitForSkillResolution();
-      fireEvent.click(screen.getByTestId("ai-suggestions-apply"));
-      await waitFor(() => expect(mockHandleAddSkill).toHaveBeenCalled());
-      // Called for mandatory + optional skills (all checked by default)
-      expect(mockHandleAddSkill.mock.calls.length).toBe(
-        MOCK_MANDATORY_SKILLS.length + 1, // +1 for nice_to_have
-      );
-      expect(mockHandleAddSkill).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "skill-atendimento", name: "Atendimento ao cliente" }),
-        "priority",
-      );
-      expect(mockHandleAddSkill).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "skill-exp-caixa", name: "Experiência anterior com caixa" }),
-        "complementary",
-      );
-    });
-
-    it("após aplicar skills, bloco de sugestões é removido", async () => {
-      await applyDraft();
-      await waitForSkillResolution();
-      fireEvent.click(screen.getByTestId("ai-suggestions-apply"));
-      await waitFor(() =>
-        expect(screen.queryByTestId("ai-skill-suggestions")).not.toBeInTheDocument(),
-      );
-    });
-
-    it("painel IA não aparece mais após aplicar rascunho", async () => {
-      await applyDraft();
-      expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
-    });
-
-    it("salvar rascunho continua disponível após aplicar skills", async () => {
-      await applyDraft();
-      expect(screen.getByRole("button", { name: /Salvar rascunho/i })).not.toBeDisabled();
-    });
-
-    it("campos básicos (step-basic, step-requirements) não aparecem enquanto skills estão ativas", async () => {
-      await applyDraft();
-      expect(screen.queryByTestId("step-basic")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("step-requirements")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Publicar$/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId("step-basic")).toBeInTheDocument();
+      expect(screen.getByTestId("step-requirements")).toBeInTheDocument();
     });
   });
 });

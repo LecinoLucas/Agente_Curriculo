@@ -28,7 +28,6 @@ import { JobAssessmentPolicyStep } from "../features/jobs/components/JobAssessme
 import { JobFormReviewStep } from "../features/jobs/sections/JobFormReviewStep";
 import { JobAiDraftPanel } from "../features/jobs/components/JobAiDraftPanel";
 import { AiSkillSuggestionsBlock, type ApplicableSkill } from "../features/jobs/components/AiSkillSuggestionsBlock";
-import type { AiSkillSuggestions } from "../features/jobs/services/jobAiDraftService";
 import {
   buildCreateJobPayload,
   buildUpdateJobPayload,
@@ -75,6 +74,7 @@ type StepId =
   | "review";
 
 export type MacroStepId = "context" | "skills" | "evaluation" | "review";
+type AiSkillSuggestionsState = { mandatory: string[]; optional: string[] };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -120,7 +120,8 @@ export function JobFormPage() {
   const [activeMacroStep, setActiveMacroStep] = useState<MacroStepId>("context");
   const [showQualityDrawer, setShowQualityDrawer] = useState(false);
   const [aiMode, setAiMode] = useState<"manual" | "ai">("manual");
-  const [aiSkillSuggestions, setAiSkillSuggestions] = useState<AiSkillSuggestions | null>(null);
+  const [aiSkillSuggestions, setAiSkillSuggestions] = useState<AiSkillSuggestionsState | null>(null);
+  const [aiApplyNotice, setAiApplyNotice] = useState<string | null>(null);
   const [currentJob, setCurrentJob] = useState<Job | null>(null);
   const [pageLoading, setPageLoading] = useState(isEditing);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -733,11 +734,18 @@ export function JobFormPage() {
               skillSuggestions.mandatory.length > 0 || skillSuggestions.optional.length > 0;
             if (hasSuggestions) {
               setAiSkillSuggestions(skillSuggestions);
-              setActiveMacroStep("skills");
             }
+            setAiApplyNotice("Rascunho aplicado. Revise antes de salvar.");
             setAiMode("manual");
           }}
         />
+      )}
+
+      {aiApplyNotice && (
+        <div className="flex items-start gap-2 rounded-2xl border border-[hsl(var(--success))]/20 bg-success-soft px-4 py-3 text-sm text-success">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{aiApplyNotice}</span>
+        </div>
       )}
 
       {/* ── Macro-step stepper ── */}
