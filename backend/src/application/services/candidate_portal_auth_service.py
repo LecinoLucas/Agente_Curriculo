@@ -9,16 +9,18 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.cache.redis_client import get_redis
 from src.infrastructure.database.models.candidate_auth_token_model import (
     CandidateAuthTokenModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.cache.redis_client import get_redis
-from src.infrastructure.security.password_service import verify_password
+from src.infrastructure.security.password_service import hash_password, verify_password
 
 PORTAL_SESSION_PURPOSE = "portal_session"
+PASSWORD_SETUP_PURPOSE = "password_setup"
 CANDIDATE_PORTAL_COOKIE_NAME = "candidate_portal_token"
 PORTAL_SESSION_TTL_HOURS = 24
+PASSWORD_SETUP_TTL_HOURS = 2
 
 MAX_CANDIDATE_FAILED_LOGINS = 5
 CANDIDATE_LOCKOUT_TTL_SECONDS = 15 * 60  # 15 minutos
@@ -41,10 +43,23 @@ class CandidatePortalLockedError(CandidatePortalAuthError):
     pass
 
 
+class CandidatePortalPasswordSetupInvalidTokenError(CandidatePortalAuthError):
+    pass
+
+
 @dataclass(slots=True)
 class CandidatePortalSession:
     candidate_id: UUID
     session_id: UUID
+
+
+@dataclass(slots=True)
+class CandidatePasswordSetupToken:
+    candidate_id: UUID
+    email: str
+    full_name: str | None
+    token: str
+    expires_at: datetime
 
 
 class CandidatePortalAuthService:
@@ -122,6 +137,106 @@ class CandidatePortalAuthService:
         self._db.add(session)
         await self._db.flush()
         return session_token, session_expires_at
+
+    async def request_password_setup(
+        self,
+        *,
+        email: str,
+        ip_address: str,
+        user_agent: str,
+    ) -> CandidatePasswordSetupToken | None:
+        clean_email = self._normalize_email(email)
+        if clean_email is None:
+            return None
+
+        row = await self._db.execute(
+            sa.select(
+                CandidateModel.id,
+                CandidateModel.email,
+                CandidateModel.full_name,
+            )
+            .where(
+                sa.func.lower(CandidateModel.email) == clean_email,
+                CandidateModel.deleted_at.is_(None),
+                CandidateModel.archived_at.is_(None),
+            )
+            .limit(1)
+        )
+        candidate = row.mappings().first()
+        if candidate is None:
+            return None
+
+        now = datetime.now(UTC)
+        await self._db.execute(
+            sa.update(CandidateAuthTokenModel)
+            .where(
+                CandidateAuthTokenModel.candidate_id == candidate["id"],
+                CandidateAuthTokenModel.purpose == PASSWORD_SETUP_PURPOSE,
+                CandidateAuthTokenModel.used_at.is_(None),
+            )
+            .values(used_at=now)
+        )
+
+        raw_token = secrets.token_urlsafe(32)
+        expires_at = now + timedelta(hours=PASSWORD_SETUP_TTL_HOURS)
+        self._db.add(
+            CandidateAuthTokenModel(
+                candidate_id=candidate["id"],
+                purpose=PASSWORD_SETUP_PURPOSE,
+                token_hash=self._sha256(raw_token),
+                expires_at=expires_at,
+                ip_hash=self._sha256(ip_address),
+                user_agent_hash=self._sha256(user_agent),
+            )
+        )
+        await self._db.flush()
+        return CandidatePasswordSetupToken(
+            candidate_id=candidate["id"],
+            email=candidate["email"],
+            full_name=candidate["full_name"],
+            token=raw_token,
+            expires_at=expires_at,
+        )
+
+    async def confirm_password_setup(
+        self,
+        *,
+        token: str,
+        password: str,
+    ) -> UUID:
+        if not token or not password:
+            raise CandidatePortalPasswordSetupInvalidTokenError
+
+        now = datetime.now(UTC)
+        token_hash = self._sha256(token)
+        row = await self._db.execute(
+            sa.select(CandidateAuthTokenModel, CandidateModel)
+            .join(CandidateModel, CandidateModel.id == CandidateAuthTokenModel.candidate_id)
+            .where(
+                CandidateAuthTokenModel.purpose == PASSWORD_SETUP_PURPOSE,
+                CandidateAuthTokenModel.token_hash == token_hash,
+                CandidateAuthTokenModel.used_at.is_(None),
+                CandidateModel.deleted_at.is_(None),
+                CandidateModel.archived_at.is_(None),
+            )
+            .limit(1)
+        )
+        result = row.first()
+        if result is None:
+            raise CandidatePortalPasswordSetupInvalidTokenError
+
+        auth_token, candidate = result
+        expires_at = auth_token.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at <= now:
+            raise CandidatePortalPasswordSetupInvalidTokenError
+
+        candidate.password_hash = hash_password(password)
+        candidate.password_created_at = now
+        auth_token.used_at = now
+        await self._db.flush()
+        return candidate.id
 
     async def authenticate(self, session_token: str | None) -> CandidatePortalSession:
         if not session_token:

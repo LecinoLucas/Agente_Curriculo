@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "node scripts/verify-public-contract.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

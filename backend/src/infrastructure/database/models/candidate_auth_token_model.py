@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.base import Base
 
-_PURPOSE_VALUES = "'login_code', 'portal_session'"
+_PURPOSE_VALUES = "'login_code', 'portal_session', 'password_setup'"
 
 
 class CandidateAuthTokenModel(Base):

@@ -45,6 +45,10 @@ from src.infrastructure.security.google_identity_verifier import (
 )
 from src.interface.api.dependencies import CurrentCandidateSession, CurrentCompleteCandidateSession, get_db
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
+from src.interface.api.routers.candidate_portal_auth import (
+    confirm_password_setup_response,
+    request_password_setup_response,
+)
 from src.interface.api.schemas.behavioral_assignment_schemas import (
     BehavioralAssignmentAnswersRequest,
     BehavioralAssignmentDetailResponse,
@@ -56,6 +60,9 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidateAuthGoogleResponse,
     CandidateAuthLoginRequest,
     CandidateAuthLoginResponse,
+    CandidatePasswordSetupConfirmRequest,
+    CandidatePasswordSetupRequest,
+    CandidatePasswordSetupResponse,
 )
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionDocumentUploadResponse,
@@ -230,6 +237,31 @@ async def auth_logout(
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(CANDIDATE_PORTAL_COOKIE_NAME, path="/")
     return response
+
+
+@router.post(
+    "/auth/request-password-setup",
+    response_model=CandidatePasswordSetupResponse,
+    summary="[Alias] Solicitar primeiro acesso ou recuperação de senha",
+)
+async def auth_request_password_setup(
+    body: CandidatePasswordSetupRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> CandidatePasswordSetupResponse:
+    return await request_password_setup_response(body, request, db)
+
+
+@router.post(
+    "/auth/confirm-password-setup",
+    response_model=CandidatePasswordSetupResponse,
+    summary="[Alias] Confirmar definição ou recuperação de senha",
+)
+async def auth_confirm_password_setup(
+    body: CandidatePasswordSetupConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+) -> CandidatePasswordSetupResponse:
+    return await confirm_password_setup_response(body, db)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

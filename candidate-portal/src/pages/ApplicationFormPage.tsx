@@ -9,6 +9,7 @@ import { Badge } from '../components/ui/Badge';
 import { LoadingState } from '../components/shared/LoadingState';
 import { publicJobsService } from '../services/publicJobsService';
 import { publicApplicationService } from '../services/publicApplicationService';
+import { HttpError } from '../services/publicApiClient';
 import type { PublicJob } from '../types/candidatePortal';
 import { JOB_AREA_LABELS, WORK_MODEL_LABELS } from '../types/candidatePortal';
 
@@ -94,6 +95,7 @@ export function ApplicationFormPage() {
   const [stepError, setStepError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [existingAccountConflict, setExistingAccountConflict] = useState(false);
 
   useEffect(() => {
     if (!identifier) { setLoadingJob(false); return; }
@@ -107,6 +109,7 @@ export function ApplicationFormPage() {
   function update(updates: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...updates }));
     setStepError(null);
+    setExistingAccountConflict(false);
   }
 
   function advance(nextStep: FormStep, validate: (f: FormState) => string | null) {
@@ -123,6 +126,7 @@ export function ApplicationFormPage() {
 
     setSubmitting(true);
     setApiError(null);
+    setExistingAccountConflict(false);
     try {
       await publicApplicationService.apply({
         full_name: form.full_name,
@@ -142,11 +146,22 @@ export function ApplicationFormPage() {
       });
       navigate('/sucesso');
     } catch (err) {
-      setApiError(
-        err instanceof Error
-          ? err.message
-          : 'Erro ao enviar candidatura. Tente novamente.',
-      );
+      if (
+        err instanceof HttpError &&
+        err.status === 409 &&
+        !err.message.toLowerCase().includes('candidatura em andamento')
+      ) {
+        setExistingAccountConflict(true);
+        setApiError(
+          'Já existe um cadastro com estes dados. Acesse sua área do candidato ou use primeiro acesso/esqueci minha senha.',
+        );
+      } else {
+        setApiError(
+          err instanceof Error
+            ? err.message
+            : 'Erro ao enviar candidatura. Tente novamente.',
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -164,7 +179,7 @@ export function ApplicationFormPage() {
     <CandidatePortalLayout maxWidth="page">
       {/* Breadcrumb */}
       <nav className="mb-5 flex items-center gap-1.5 text-sm text-gray-500">
-        <Link to="/vagas" className="hover:text-primary-700 transition-colors">Vagas</Link>
+        <Link to="/" className="hover:text-primary-700 transition-colors">Vagas</Link>
         <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
         <Link to={`/vagas/${identifier}`} className="hover:text-primary-700 transition-colors">
           {job?.title ?? 'Vaga'}
@@ -466,17 +481,35 @@ export function ApplicationFormPage() {
                 />
                 <span className="text-sm text-gray-700 leading-relaxed">
                   Autorizo o uso dos meus dados para fins de recrutamento conforme a{' '}
-                  <a href="#" className="text-primary-700 hover:underline">
+                  <Link to="/privacidade" className="text-primary-700 hover:underline">
                     Política de Privacidade
-                  </a>
+                  </Link>
                   .
                 </span>
               </label>
 
               {(stepError || apiError) && (
-                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
-                  <p className="text-sm text-red-700">{stepError ?? apiError}</p>
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
+                    <p className="text-sm text-red-700">{stepError ?? apiError}</p>
+                  </div>
+                  {existingAccountConflict && (
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <Link
+                        to="/login"
+                        className="inline-flex h-9 items-center justify-center rounded-lg bg-white px-3 text-sm font-semibold text-red-700 ring-1 ring-red-200 hover:bg-red-50"
+                      >
+                        Acessar área do candidato
+                      </Link>
+                      <Link
+                        to="/login?firstAccess=1"
+                        className="inline-flex h-9 items-center justify-center rounded-lg bg-red-700 px-3 text-sm font-semibold text-white hover:bg-red-800"
+                      >
+                        Primeiro acesso ou esqueci minha senha
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -9,11 +9,11 @@ interface PublicHeaderProps {
 }
 
 const navLinks = [
-  { label: 'Vagas', href: '/vagas' },
-  { label: 'Sobre nós', href: '#' },
-  { label: 'Nossas unidades', href: '#' },
-  { label: 'Dúvidas frequentes', href: '#' },
-  { label: 'Contato', href: '#' },
+  { label: 'Vagas', href: '/' },
+  { label: 'Sobre nós', href: '/sobre-nos' },
+  { label: 'Nossas unidades', href: '/unidades' },
+  { label: 'Dúvidas frequentes', href: '/duvidas-frequentes' },
+  { label: 'Contato', href: '/contato' },
 ];
 
 export function PublicHeader({ candidateName, onLogout }: PublicHeaderProps) {
@@ -24,7 +24,7 @@ export function PublicHeader({ candidateName, onLogout }: PublicHeaderProps) {
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-page items-center justify-between px-4 sm:px-6">
         {/* Logo */}
-        <Link to="/vagas" className="flex items-center gap-1.5 flex-shrink-0">
+        <Link to="/" className="flex items-center gap-1.5 flex-shrink-0">
           <span className="text-xl font-extrabold tracking-tight text-primary-700">Marajó</span>
           <span className="text-xl font-extrabold tracking-tight text-gray-900">RH</span>
         </Link>

@@ -12,9 +12,12 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.candidate_portal_auth_service import (
+    PASSWORD_SETUP_PURPOSE,
     PORTAL_SESSION_PURPOSE,
+    CandidatePasswordSetupToken,
 )
-from src.infrastructure.security.password_service import hash_password
+from src.core.settings import settings
+from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
@@ -23,19 +26,20 @@ from src.infrastructure.database.models.analysis_model import (
 from src.infrastructure.database.models.candidate_auth_token_model import (
     CandidateAuthTokenModel,
 )
-from src.infrastructure.database.models.communication_model import CandidateCommunicationModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
+from src.infrastructure.database.models.communication_model import CandidateCommunicationModel
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.pre_admission_model import PreAdmissionCaseModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.user_model import UserModel
+from src.infrastructure.email.smtp_email_sender import EmailDeliveryError
+from src.infrastructure.security.password_service import hash_password
 from src.interface.workers.resume_extraction_tasks import _process_resume_extraction_async
-from src.domain.entities.user import UserRole
 from tests.integration.helpers import _auth_headers, _create_active_user
 
 SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
@@ -143,7 +147,11 @@ async def _create_ai_config(db_session: AsyncSession) -> None:
     await db_session.commit()
 
 
-async def _create_portal_session(db_session: AsyncSession, candidate_id: UUID, raw_token: str) -> None:
+async def _create_portal_session(
+    db_session: AsyncSession,
+    candidate_id: UUID,
+    raw_token: str,
+) -> None:
     db_session.add(
         CandidateAuthTokenModel(
             candidate_id=candidate_id,
@@ -241,6 +249,265 @@ async def _create_interview_schedule(
     db_session.add(schedule)
     await db_session.commit()
     return schedule
+
+
+@pytest.mark.asyncio
+async def test_password_setup_request_is_generic_for_existing_and_unknown_candidates(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _create_candidate(
+        db_session,
+        full_name="Candidato Sem Senha",
+        email="sem.senha@example.com",
+        cpf="12345678001",
+    )
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-existing",
+    )
+
+    existing_response = await client.post(
+        "/api/v1/candidate-portal/auth/request-password-setup",
+        json={"email": "sem.senha@example.com"},
+    )
+    unknown_response = await client.post(
+        "/api/v1/candidate-portal/auth/request-password-setup",
+        json={"email": "nao.existe@example.com"},
+    )
+
+    assert existing_response.status_code == status.HTTP_200_OK
+    assert unknown_response.status_code == status.HTTP_200_OK
+    assert existing_response.json() == unknown_response.json()
+    assert existing_response.json() == {
+        "message": "Se houver um cadastro com este e-mail, enviaremos as instruções de acesso."
+    }
+
+    token_count = await db_session.scalar(
+        sa.select(sa.func.count(CandidateAuthTokenModel.id)).where(
+            CandidateAuthTokenModel.purpose == PASSWORD_SETUP_PURPOSE,
+        )
+    )
+    assert token_count == 1
+
+
+@pytest.mark.asyncio
+async def test_password_setup_request_sends_email_only_for_existing_candidate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _create_candidate(
+        db_session,
+        full_name="Entrega Real",
+        email="entrega.real@example.com",
+        cpf="12345678004",
+    )
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-delivery-000000",
+    )
+    deliveries: list[CandidatePasswordSetupToken] = []
+
+    async def capture_delivery(setup_token: CandidatePasswordSetupToken) -> None:
+        deliveries.append(setup_token)
+
+    monkeypatch.setattr(
+        "src.interface.api.routers.candidate_portal_auth.send_candidate_password_setup_email",
+        capture_delivery,
+    )
+
+    existing_response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "entrega.real@example.com"},
+    )
+    unknown_response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "sem.entrega@example.com"},
+    )
+
+    assert existing_response.status_code == status.HTTP_200_OK
+    assert unknown_response.status_code == status.HTTP_200_OK
+    assert existing_response.json() == unknown_response.json()
+    assert len(deliveries) == 1
+    assert deliveries[0].email == "entrega.real@example.com"
+    assert deliveries[0].token == "setup-token-delivery-000000"
+
+    token_row = await db_session.scalar(
+        sa.select(CandidateAuthTokenModel).where(
+            CandidateAuthTokenModel.purpose == PASSWORD_SETUP_PURPOSE,
+        )
+    )
+    assert token_row is not None
+    assert token_row.token_hash != "setup-token-delivery-000000"
+
+
+@pytest.mark.asyncio
+async def test_password_setup_email_failure_keeps_generic_response(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _create_candidate(
+        db_session,
+        full_name="Falha Entrega",
+        email="falha.entrega@example.com",
+        cpf="12345678005",
+    )
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-failure-000000",
+    )
+
+    async def fail_delivery(setup_token: CandidatePasswordSetupToken) -> None:
+        raise EmailDeliveryError("delivery failed")
+
+    monkeypatch.setattr(
+        "src.interface.api.routers.candidate_portal_auth.send_candidate_password_setup_email",
+        fail_delivery,
+    )
+
+    existing_response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "falha.entrega@example.com"},
+    )
+    unknown_response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "falha.desconhecida@example.com"},
+    )
+
+    assert existing_response.status_code == status.HTTP_200_OK
+    assert unknown_response.status_code == status.HTTP_200_OK
+    assert existing_response.json() == unknown_response.json()
+
+
+@pytest.mark.asyncio
+async def test_password_setup_email_uses_candidate_portal_public_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.interface.api.routers.candidate_portal_auth import (
+        send_candidate_password_setup_email,
+    )
+
+    sent_payload: dict[str, str | None] = {}
+
+    async def capture_send(self, *, to_email, subject, text_body, html_body=None) -> None:
+        sent_payload["to_email"] = to_email
+        sent_payload["subject"] = subject
+        sent_payload["text_body"] = text_body
+        sent_payload["html_body"] = html_body
+
+    monkeypatch.setattr(settings, "CANDIDATE_PORTAL_PUBLIC_URL", "https://vagas.marajo.test")
+    monkeypatch.setattr(
+        "src.infrastructure.email.smtp_email_sender.SMTPEmailSender.send",
+        capture_send,
+    )
+
+    await send_candidate_password_setup_email(
+        CandidatePasswordSetupToken(
+            candidate_id=uuid4(),
+            email="link.portal@example.com",
+            full_name="Link Portal",
+            token="setup-token-url-000000",
+            expires_at=datetime.now(UTC) + timedelta(hours=2),
+        )
+    )
+
+    assert sent_payload["to_email"] == "link.portal@example.com"
+    assert sent_payload["subject"] == "Acesso ao Portal do Candidato - Marajó RH"
+    assert (
+        "https://vagas.marajo.test/definir-senha?token=setup-token-url-000000"
+        in str(sent_payload["text_body"])
+    )
+    assert (
+        "https://vagas.marajo.test/definir-senha?token=setup-token-url-000000"
+        in str(sent_payload["html_body"])
+    )
+
+
+@pytest.mark.asyncio
+async def test_password_setup_valid_token_defines_password_and_allows_login(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Primeiro Acesso",
+        email="primeiro.acesso@example.com",
+        cpf="12345678002",
+    )
+    assert candidate.password_hash is None
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-valid-000000",
+    )
+
+    request_response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "primeiro.acesso@example.com"},
+    )
+    assert request_response.status_code == status.HTTP_200_OK
+
+    confirm_response = await client.post(
+        "/api/v1/public/auth/confirm-password-setup",
+        json={"token": "setup-token-valid-000000", "password": "SenhaSegura123"},
+    )
+
+    assert confirm_response.status_code == status.HTTP_200_OK
+    assert confirm_response.json() == {
+        "message": "Senha definida com sucesso. Acesse sua área do candidato."
+    }
+    await db_session.refresh(candidate)
+    assert candidate.password_hash is not None
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "portal-session-valid-000000",
+    )
+
+    login_response = await client.post(
+        "/api/v1/public/candidate-auth/login",
+        json={"email": "primeiro.acesso@example.com", "password": "SenhaSegura123"},
+    )
+    assert login_response.status_code == status.HTTP_200_OK
+    assert "candidate_portal_token=" in login_response.headers.get("set-cookie", "")
+
+
+@pytest.mark.asyncio
+async def test_password_setup_invalid_or_expired_token_fails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Token Expirado",
+        email="token.expirado@example.com",
+        cpf="12345678003",
+    )
+    db_session.add(
+        CandidateAuthTokenModel(
+            candidate_id=candidate.id,
+            purpose=PASSWORD_SETUP_PURPOSE,
+            token_hash=sha256(b"expired-token-value-000000").hexdigest(),
+            expires_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+    )
+    await db_session.commit()
+
+    invalid_response = await client.post(
+        "/api/v1/public/auth/confirm-password-setup",
+        json={"token": "invalid-token-value-000000", "password": "SenhaSegura123"},
+    )
+    expired_response = await client.post(
+        "/api/v1/public/auth/confirm-password-setup",
+        json={"token": "expired-token-value-000000", "password": "SenhaSegura123"},
+    )
+
+    assert invalid_response.status_code == status.HTTP_400_BAD_REQUEST
+    assert expired_response.status_code == status.HTTP_400_BAD_REQUEST
+    assert invalid_response.json()["detail"] == "Link inválido ou expirado."
+    assert expired_response.json()["detail"] == "Link inválido ou expirado."
 
 
 @pytest.mark.asyncio
@@ -830,7 +1097,10 @@ async def test_resume_extraction_failure_marks_waiting_analysis_failed(
                 page_count=None,
                 word_count=None,
             ),
-            SimpleNamespace(id=UUID(payload["resume_id"]), candidate_id=UUID(payload["candidate_id"])),
+            SimpleNamespace(
+                id=UUID(payload["resume_id"]),
+                candidate_id=UUID(payload["candidate_id"]),
+            ),
             SimpleNamespace(id=UUID(payload["candidate_id"])),
         )
 
@@ -1142,7 +1412,12 @@ async def test_transfer_endpoint_updates_overview_analysis_for_new_active_job(
 
     destination_job = await _create_published_job(db_session, title="Vaga Destino Oficial")
 
-    await _create_active_user(db_session, "transfer-admin@example.com", "password123", UserRole.ADMIN)
+    await _create_active_user(
+        db_session,
+        "transfer-admin@example.com",
+        "password123",
+        UserRole.ADMIN,
+    )
     headers = await _auth_headers(client, "transfer-admin@example.com", "password123")
 
     transfer_response = await client.patch(
@@ -1478,7 +1753,10 @@ async def test_portal_overview_uses_dismissed_pre_admission_case_without_talent_
     assert payload["application_status"] == "dismissed"
     assert payload["current_process_status_label"] == "Processo admissional encerrado"
     assert payload["is_process_closed"] is True
-    assert payload["closed_reason_public_label"] == "Seu vínculo admissional foi encerrado pela equipe de RH."
+    assert (
+        payload["closed_reason_public_label"]
+        == "Seu vínculo admissional foi encerrado pela equipe de RH."
+    )
     assert payload["can_apply_to_other_jobs"] is False
     assert payload["can_request_contact"] is True
     assert payload["talent_pool"] is False
@@ -1529,7 +1807,10 @@ async def test_portal_overview_returns_rejected_status_without_internal_reason(
     assert payload["status_public"] == "Processo encerrado"
     assert payload["current_process_status_label"] == "Processo encerrado"
     assert payload["is_process_closed"] is True
-    assert payload["closed_reason_public_label"] == "Você não foi selecionado para esta vaga no momento."
+    assert (
+        payload["closed_reason_public_label"]
+        == "Você não foi selecionado para esta vaga no momento."
+    )
     assert payload["talent_pool"] is True
     assert payload["can_request_contact"] is True
     assert payload["can_apply_to_other_jobs"] is True
@@ -1582,7 +1863,10 @@ async def test_portal_overview_returns_closed_status_for_withdrawn_pipeline(
     assert payload["status_public"] == "Processo encerrado"
     assert payload["current_process_status_label"] == "Processo encerrado"
     assert payload["is_process_closed"] is True
-    assert payload["closed_reason_public_label"] == "Você não foi selecionado para esta vaga no momento."
+    assert (
+        payload["closed_reason_public_label"]
+        == "Você não foi selecionado para esta vaga no momento."
+    )
     assert payload["public_timeline"]["current_step_key"] == "result"
 
 
@@ -1625,7 +1909,10 @@ async def test_candidate_contact_request_creates_hr_communication(
         json={
             "job_id": str(job.id),
             "subject": "Solicitação de contato sobre processo encerrado",
-            "body": "Olá, gostaria de solicitar contato sobre o processo seletivo da vaga Vaga com Contato.",
+            "body": (
+                "Olá, gostaria de solicitar contato sobre o processo seletivo da vaga "
+                "Vaga com Contato."
+            ),
         },
     )
 
@@ -1638,7 +1925,9 @@ async def test_candidate_contact_request_creates_hr_communication(
     assert payload["job_id"] == str(job.id)
 
     saved = await db_session.scalar(
-        sa.select(CandidateCommunicationModel).where(CandidateCommunicationModel.id == UUID(payload["id"]))
+        sa.select(CandidateCommunicationModel).where(
+            CandidateCommunicationModel.id == UUID(payload["id"])
+        )
     )
     assert saved is not None
     assert saved.template_key == "candidate_contact_request"
@@ -1764,7 +2053,9 @@ async def test_portal_overview_does_not_return_interview_from_other_candidate(
     payload = response.json()
 
     assert payload["public_interview"] is None
-    interview_step = next(step for step in payload["public_timeline"]["steps"] if step["key"] == "interview")
+    interview_step = next(
+        step for step in payload["public_timeline"]["steps"] if step["key"] == "interview"
+    )
     assert interview_step["interview"] is None
 
 

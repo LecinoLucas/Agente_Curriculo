@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     PUBLIC_API_BASE_URL: str = ""
     FRONTEND_BASE_URL: str = ""
+    CANDIDATE_PORTAL_PUBLIC_URL: str = ""
     GOOGLE_REDIRECT_URI: str = ""
     GOOGLE_CALENDAR_SCOPES: str = "openid email profile https://www.googleapis.com/auth/calendar.events"
     ALLOW_AI_TOKEN_SPEND: bool = True
@@ -121,6 +122,17 @@ class Settings(BaseSettings):
 
     # Monitoring
     SENTRY_DSN: str = ""
+
+    # Email delivery (SMTP)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "Marajó RH"
+    SMTP_STARTTLS: bool = True
+    SMTP_SSL: bool = False
+    SMTP_TIMEOUT_SECONDS: float = 10.0
 
     # Rate limiting
     RATE_LIMIT_ENABLED: bool = True
@@ -257,6 +269,14 @@ class Settings(BaseSettings):
         if self.PUBLIC_API_BASE_URL:
             return self.PUBLIC_API_BASE_URL.rstrip("/")
         return "http://127.0.0.1:8000"
+
+    @property
+    def candidate_portal_public_url(self) -> str:
+        if self.CANDIDATE_PORTAL_PUBLIC_URL:
+            return self.CANDIDATE_PORTAL_PUBLIC_URL.rstrip("/")
+        if self.APP_ENV != "production":
+            return "http://127.0.0.1:5174"
+        return ""
 
     @property
     def frontend_base_url(self) -> str:

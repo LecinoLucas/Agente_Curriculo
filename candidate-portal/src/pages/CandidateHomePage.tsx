@@ -165,7 +165,7 @@ export function CandidateHomePage() {
                 <p className="text-base font-semibold text-gray-500">
                   Nenhuma candidatura ativa no momento.
                 </p>
-                <Link to="/vagas" className="mt-3 inline-block text-sm text-primary-700 hover:underline">
+                <Link to="/" className="mt-3 inline-block text-sm text-primary-700 hover:underline">
                   Ver vagas disponíveis
                 </Link>
               </div>
@@ -242,7 +242,7 @@ export function CandidateHomePage() {
                   )}
                   {overview.activeApplication?.isTalentPool === false && (
                     <Link
-                      to="/vagas"
+                      to="/"
                       className="mt-2 inline-block text-sm text-primary-700 hover:underline"
                     >
                       Ver novas vagas
@@ -302,7 +302,7 @@ export function CandidateHomePage() {
 
 // ── Inline timeline renderer ──────────────────────────────────────────────────
 // Renders the public_timeline steps from the API without coupling to the
-// ProcessStep enum (which was designed for mock data).
+// fixed ProcessStep labels used by the public vacancy pages.
 
 function ProcessTimeline({ steps }: { steps: TimelineStep[] }) {
   return (

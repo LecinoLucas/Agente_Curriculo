@@ -18,6 +18,19 @@ class CandidateAuthLoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class CandidatePasswordSetupRequest(BaseModel):
+    email: EmailStr
+
+
+class CandidatePasswordSetupConfirmRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=256)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class CandidatePasswordSetupResponse(BaseModel):
+    message: str
+
+
 class CandidateAuthGoogleRequest(BaseModel):
     id_token: str = Field(min_length=1, max_length=4096)
 
@@ -168,6 +181,9 @@ __all__ = [
     "CandidateAuthRegisterRequest",
     "CandidateAuthLoginRequest",
     "CandidateAuthLoginResponse",
+    "CandidatePasswordSetupRequest",
+    "CandidatePasswordSetupConfirmRequest",
+    "CandidatePasswordSetupResponse",
     "CandidateAuthGoogleRequest",
     "CandidateAuthGoogleResponse",
     "CandidateAuthGoogleCandidateResponse",

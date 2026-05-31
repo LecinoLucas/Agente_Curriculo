@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 export function PublicFooter() {
   return (
     <footer className="border-t border-gray-200 bg-white mt-auto">
@@ -19,8 +21,8 @@ export function PublicFooter() {
                 Candidatos
               </p>
               <ul className="space-y-1.5 text-sm text-gray-600">
-                <li><a href="/vagas" className="hover:text-primary-700 transition-colors">Ver vagas</a></li>
-                <li><a href="/login" className="hover:text-primary-700 transition-colors">Minha área</a></li>
+                <li><Link to="/" className="hover:text-primary-700 transition-colors">Ver vagas</Link></li>
+                <li><Link to="/login" className="hover:text-primary-700 transition-colors">Minha área</Link></li>
               </ul>
             </div>
             <div>
@@ -28,9 +30,9 @@ export function PublicFooter() {
                 Empresa
               </p>
               <ul className="space-y-1.5 text-sm text-gray-600">
-                <li><a href="#" className="hover:text-primary-700 transition-colors">Sobre nós</a></li>
-                <li><a href="#" className="hover:text-primary-700 transition-colors">Nossas unidades</a></li>
-                <li><a href="#" className="hover:text-primary-700 transition-colors">Contato</a></li>
+                <li><Link to="/sobre-nos" className="hover:text-primary-700 transition-colors">Sobre nós</Link></li>
+                <li><Link to="/unidades" className="hover:text-primary-700 transition-colors">Nossas unidades</Link></li>
+                <li><Link to="/contato" className="hover:text-primary-700 transition-colors">Contato</Link></li>
               </ul>
             </div>
           </div>
@@ -39,8 +41,8 @@ export function PublicFooter() {
         <div className="mt-8 border-t border-gray-100 pt-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
           <p>© {new Date().getFullYear()} Rede Marajó. Todos os direitos reservados.</p>
           <div className="flex items-center gap-4">
-            <a href="#" className="hover:text-gray-600 transition-colors">Política de privacidade</a>
-            <a href="#" className="hover:text-gray-600 transition-colors">Termos de uso</a>
+            <Link to="/privacidade" className="hover:text-gray-600 transition-colors">Política de privacidade</Link>
+            <Link to="/termos" className="hover:text-gray-600 transition-colors">Termos de uso</Link>
           </div>
         </div>
       </div>

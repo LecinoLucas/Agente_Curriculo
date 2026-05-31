@@ -92,24 +92,6 @@ export interface CandidateProfile {
   profile_items: Array<{ label: string; done: boolean }>;
 }
 
-export interface MockCandidate {
-  id: string;
-  name: string;
-  email: string;
-  applications: CandidateApplication[];
-  profile: CandidateProfile;
-  messages: HRMessage[];
-}
-
-export interface HRMessage {
-  id: string;
-  title: string;
-  body: string;
-  type: 'info' | 'action' | 'alert';
-  date: string;
-  read: boolean;
-}
-
 export interface AssessmentQuestion {
   id: string;
   text: string;

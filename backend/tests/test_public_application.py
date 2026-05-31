@@ -604,7 +604,7 @@ async def test_apply_rejects_invalid_file(
         files={"resume_file": ("resume.txt", io.BytesIO(b"Not a PDF"), "text/plain")},
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert "PDF" in response.json()["detail"]
+    assert response.json()["detail"] == "Tipo de arquivo não permitido"
 
 
 @pytest.mark.asyncio
