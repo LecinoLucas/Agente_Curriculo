@@ -30,6 +30,7 @@ import { deriveScoreSemantics } from "../features/candidates/utils/scoreSemantic
 import { AddCandidateModal } from "../features/candidates/components/AddCandidateModal";
 import { candidatesService } from "../services/candidatesService";
 import { pipelineService } from "../services/pipelineService";
+import { canUseCandidaturasWriteActions } from "../shared/auth/roles";
 import { toast } from "../shared/utils/toast";
 import type { CandidateListSummary, PipelineStage } from "../types/domain";
 import type { InterviewFormat } from "../types/agenda";
@@ -39,6 +40,10 @@ import { Button } from "../components/ui/button";
 
 const PAGE_SIZE = 30;
 const SCHEDULE_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
+const DECISION_STAGES = new Set<PipelineStage>(["final", "offer"]);
+const CLOSED_STAGES = new Set<PipelineStage>(["rejected", "admitted"]);
+const ADMISSION_STAGES = new Set<PipelineStage>(["hired", "pre_admission", "protheus"]);
 
 const WHATSAPP_MSG_GENERIC = (name: string, job: string) =>
   `Olá, ${name}! Tudo bem? Somos do RH da Rede de Postos Marajó. Gostaríamos de falar com você sobre a vaga de ${job}. Podemos conversar por aqui?`;
@@ -81,11 +86,12 @@ async function copyToClipboard(text: string): Promise<void> {
 }
 
 type NextActionLabel =
-  | "Analisar currículo"
   | "Marcar entrevista"
-  | "Copiar WhatsApp"
   | "Registrar decisão"
-  | "Acompanhar pré-admissão"
+  | "Revisar aderência"
+  | "Abrir pipeline"
+  | "Aguardar análise IA"
+  | "Acompanhar admissão"
   | "Sem ação pendente";
 
 type NextAction = {
@@ -99,10 +105,36 @@ type ScheduledInterview = {
   scheduled_end: string;
 };
 
+type OperationalPriorityLabel =
+  | "Alta aderência"
+  | "Ação pendente"
+  | "Entrevista não marcada"
+  | "Decisão pendente"
+  | "Baixa aderência";
+
+type OperationalPriority = {
+  label: OperationalPriorityLabel;
+  description: string;
+  markerClass: string;
+  dotClass: string;
+};
+
 function getScheduledInterviewLabel(scheduledInterview: ScheduledInterview | null): string {
   if (!scheduledInterview) return "Não marcada";
   const { date, time } = formatInterviewDateTime(scheduledInterview.scheduled_start);
   return `${date} às ${time}`;
+}
+
+function getScoreSemantics(candidate: CandidateListSummary) {
+  return deriveScoreSemantics({
+    jobFitScore: candidate.active_job_job_fit_score,
+    aiStatus: candidate.ai_status,
+    hasActiveJob: Boolean(candidate.active_job_id),
+  });
+}
+
+function getPrimaryScore(candidate: CandidateListSummary): number | null {
+  return getScoreSemantics(candidate).primaryScore;
 }
 
 function deriveNextAction(
@@ -110,8 +142,9 @@ function deriveNextAction(
   scheduledInterview: ScheduledInterview | null,
 ): NextAction {
   const stage = candidate.active_job_stage;
+  const score = getPrimaryScore(candidate);
 
-  if (stage === "rejected" || stage === "admitted") {
+  if (stage && CLOSED_STAGES.has(stage as PipelineStage)) {
     return {
       label: "Sem ação pendente",
       description: "Processo encerrado para esta candidatura.",
@@ -119,15 +152,15 @@ function deriveNextAction(
     };
   }
 
-  if (stage === "hired" || stage === "pre_admission" || stage === "protheus") {
+  if (stage && ADMISSION_STAGES.has(stage as PipelineStage)) {
     return {
-      label: "Acompanhar pré-admissão",
+      label: "Acompanhar admissão",
       description: "Candidato já avançou para a rotina de admissão.",
       tone: "success",
     };
   }
 
-  if (stage === "final" || stage === "offer") {
+  if (stage && DECISION_STAGES.has(stage as PipelineStage)) {
     return {
       label: "Registrar decisão",
       description: "Há uma decisão do RH pendente no fluxo.",
@@ -135,21 +168,7 @@ function deriveNextAction(
     };
   }
 
-  if (scheduledInterview) {
-    return candidate.phone
-      ? {
-          label: "Copiar WhatsApp",
-          description: "Entrevista marcada. Envie ou confirme a mensagem com o candidato.",
-          tone: "success",
-        }
-      : {
-          label: "Registrar decisão",
-          description: "Entrevista marcada, mas o candidato não tem telefone cadastrado.",
-          tone: "warning",
-        };
-  }
-
-  if (stage === "hr_interview" || stage === "technical_interview") {
+  if (stage && INTERVIEW_STAGES.has(stage as PipelineStage) && !scheduledInterview) {
     return {
       label: "Marcar entrevista",
       description: "Etapa de entrevista sem horário registrado nesta lista.",
@@ -157,18 +176,93 @@ function deriveNextAction(
     };
   }
 
-  if (!candidate.active_job_id || candidate.active_job_job_fit_score == null || candidate.ai_status !== "completed") {
+  if (scheduledInterview) {
     return {
-      label: "Analisar currículo",
-      description: "Revise os dados disponíveis antes de avançar.",
+      label: "Abrir pipeline",
+      description: "A entrevista já está marcada. Acompanhe o andamento do processo.",
+      tone: "success",
+    };
+  }
+
+  if (!candidate.active_job_id || score == null || candidate.ai_status !== "completed") {
+    return {
+      label: "Aguardar análise IA",
+      description: "A aderência ainda não está pronta para orientar a próxima decisão.",
+      tone: "warning",
+    };
+  }
+
+  if (score < 60) {
+    return {
+      label: "Revisar aderência",
+      description: "A compatibilidade está baixa e pede revisão antes de avançar.",
+      tone: "warning",
+    };
+  }
+
+  if (score >= 80) {
+    return {
+      label: "Marcar entrevista",
+      description: "A candidatura já tem aderência suficiente para avançar.",
       tone: "primary",
     };
   }
 
   return {
-    label: "Marcar entrevista",
-    description: "Score disponível e candidatura ativa para triagem.",
+    label: "Revisar aderência",
+    description: "Há contexto suficiente para validar a aderência antes de decidir o próximo passo.",
     tone: "primary",
+  };
+}
+
+function deriveOperationalPriority(
+  candidate: CandidateListSummary,
+  scheduledInterview: ScheduledInterview | null,
+): OperationalPriority {
+  const stage = candidate.active_job_stage;
+  const score = getPrimaryScore(candidate);
+
+  if (stage && DECISION_STAGES.has(stage as PipelineStage)) {
+    return {
+      label: "Decisão pendente",
+      description: "O candidato já chegou ao ponto de decisão.",
+      markerClass: "bg-[hsl(var(--warning)/0.78)]",
+      dotClass: "bg-[hsl(var(--warning)/0.78)]",
+    };
+  }
+
+  if (stage && INTERVIEW_STAGES.has(stage as PipelineStage) && !scheduledInterview) {
+    return {
+      label: "Entrevista não marcada",
+      description: "A etapa de entrevista está aberta, mas ainda sem horário.",
+      markerClass: "bg-[hsl(var(--primary))/0.76]",
+      dotClass: "bg-[hsl(var(--primary))/0.76]",
+    };
+  }
+
+  if (score != null && score >= 80) {
+    return {
+      label: "Alta aderência",
+      description: "Aderência alta para a vaga ativa.",
+      markerClass: "bg-[hsl(var(--success)/0.76)]",
+      dotClass: "bg-[hsl(var(--success)/0.76)]",
+    };
+  }
+
+  if (score != null && score < 60) {
+    return {
+      label: "Baixa aderência",
+      description: "Compatibilidade baixa para a vaga ativa.",
+      markerClass: "bg-[hsl(var(--danger)/0.72)]",
+      dotClass: "bg-[hsl(var(--danger)/0.72)]",
+    };
+  }
+
+  return {
+    label: "Ação pendente",
+    description: "A candidatura precisa de acompanhamento operacional.",
+    markerClass: "bg-[hsl(var(--text-muted)/0.38)]",
+    dotClass: "bg-[hsl(var(--text-muted)/0.58)]",
   };
 }
 
@@ -207,11 +301,7 @@ function toneDotClasses(tone: NextAction["tone"]): string {
 // ── Score chip ─────────────────────────────────────────────────────────────────
 
 function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
-  const s = deriveScoreSemantics({
-    jobFitScore: candidate.active_job_job_fit_score,
-    aiStatus: candidate.ai_status,
-    hasActiveJob: Boolean(candidate.active_job_id),
-  });
+  const s = getScoreSemantics(candidate);
 
   if (s.primaryScore === null) {
     return (
@@ -226,10 +316,10 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
 
   const label =
     s.primaryScore >= 80
-      ? "Alta aderência"
+      ? "Alta"
       : s.primaryScore >= 60
-        ? "Avaliar"
-        : "Baixa aderência";
+        ? "Média"
+        : "Baixa";
 
   const colorClass =
     s.statusTone === "high"
@@ -240,7 +330,7 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
 
   return (
     <div
-      className="inline-flex min-w-[6.25rem] flex-col rounded-lg border border-border/70 bg-surface-muted/30 px-2 py-1 leading-tight"
+      className="inline-flex min-w-[5.5rem] flex-col rounded-lg border border-border/70 bg-surface-muted/30 px-2 py-1 leading-tight"
       data-testid="score-chip"
     >
       <span className={`text-sm font-semibold tabular-nums ${colorClass}`}>{s.primaryDisplay}</span>
@@ -274,11 +364,25 @@ function StageBadge({ stage }: { stage: string | null }) {
 function NextActionBadge({ action }: { action: NextAction }) {
   return (
     <span
-      className={`inline-flex w-fit items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneClasses(action.tone)}`}
+      className={`inline-flex w-fit max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneClasses(action.tone)}`}
+      title={action.description}
       data-testid="next-action"
     >
       <span className={`h-1.5 w-1.5 rounded-full ${toneDotClasses(action.tone)}`} aria-hidden="true" />
-      {action.label}
+      <span className="truncate">{action.label}</span>
+    </span>
+  );
+}
+
+function PriorityBadge({ priority }: { priority: OperationalPriority }) {
+  return (
+    <span
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-surface-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted"
+      title={priority.description}
+      data-testid="candidate-priority"
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${priority.dotClass}`} aria-hidden="true" />
+      <span className="truncate">{priority.label}</span>
     </span>
   );
 }
@@ -355,11 +459,10 @@ function MoreActionsMenu({
         aria-label={`Mais ações de ${candidate.full_name}`}
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
         data-testid={`action-more-${candidate.id}`}
       >
         <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        Mais
       </button>
 
       {open
@@ -383,7 +486,7 @@ function MoreActionsMenu({
                   data-testid={`action-profile-${candidate.id}`}
                 >
                   <User className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                  Abrir perfil completo
+                  Abrir candidato
                 </button>
                 <button
                   type="button"
@@ -988,7 +1091,7 @@ function CandidaturaDrawer({
 export function CandidaturasPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isReadOnly = user?.role === "viewer";
+  const isReadOnly = !canUseCandidaturasWriteActions(user?.role);
 
   const [candidates, setCandidates] = useState<CandidateListSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1090,6 +1193,15 @@ export function CandidaturasPage() {
       .catch(() => { toast.error("Não foi possível copiar a mensagem."); });
   }
 
+  function handleCopyContact(candidate: CandidateListSummary) {
+    const contact = candidate.phone ?? candidate.email;
+    if (!contact) return;
+
+    void copyToClipboard(contact)
+      .then(() => { toast.success("Contato copiado."); })
+      .catch(() => { toast.error("Não foi possível copiar o contato."); });
+  }
+
   function handleInterviewSuccess(
     candidateId: string,
     scheduledStart: string,
@@ -1116,6 +1228,53 @@ export function CandidaturasPage() {
   }
 
   const anyModalOpen = Boolean(interviewTarget || rejectTarget || addModalOpen);
+  const visibleCandidates = filtered;
+  const operationalSummary = useMemo(() => {
+    const highFitCount = visibleCandidates.filter((candidate) => {
+      const score = getPrimaryScore(candidate);
+      return score != null && score >= 80;
+    }).length;
+
+    const readyForInterviewCount = visibleCandidates.filter((candidate) => {
+      const stage = candidate.active_job_stage;
+      const score = getPrimaryScore(candidate);
+      const hasInterview = Boolean(scheduledInterviews[candidate.id]);
+      return Boolean(
+        score != null &&
+          score >= 80 &&
+          !hasInterview &&
+          stage &&
+          !INTERVIEW_STAGES.has(stage as PipelineStage) &&
+          !DECISION_STAGES.has(stage as PipelineStage) &&
+          !ADMISSION_STAGES.has(stage as PipelineStage) &&
+          !CLOSED_STAGES.has(stage as PipelineStage),
+      );
+    }).length;
+
+    const decisionPendingCount = visibleCandidates.filter((candidate) => {
+      const stage = candidate.active_job_stage;
+      return Boolean(stage && DECISION_STAGES.has(stage as PipelineStage));
+    }).length;
+
+    const interviewMissingCount = visibleCandidates.filter((candidate) => {
+      const stage = candidate.active_job_stage;
+      return Boolean(
+        stage &&
+          INTERVIEW_STAGES.has(stage as PipelineStage) &&
+          !scheduledInterviews[candidate.id],
+      );
+    }).length;
+
+    const awaitingActionCount = visibleCandidates.filter((candidate) => {
+      const action = deriveNextAction(candidate, scheduledInterviews[candidate.id] ?? null);
+      return action.label === "Aguardar análise IA" || action.label === "Revisar aderência";
+    }).length;
+
+    return {
+      primary: `${highFitCount} com alta aderência · ${readyForInterviewCount} prontos para entrevista · ${decisionPendingCount} prontos para decisão`,
+      secondary: `Atenção: ${interviewMissingCount} sem entrevista marcada · ${awaitingActionCount} aguardando ação`,
+    };
+  }, [scheduledInterviews, visibleCandidates]);
 
   return (
     <div className="flex flex-col gap-4 pt-8 sm:pt-10 lg:pt-0">
@@ -1131,6 +1290,20 @@ export function CandidaturasPage() {
         </div>
         <p className="text-sm text-text-muted">Triagem diária de candidatos vinculados a vagas ativas.</p>
       </div>
+
+      {!loading && visibleCandidates.length > 0 && (
+        <section
+          className="rounded-xl border border-border/70 bg-surface px-3 py-2.5 shadow-sm"
+          data-testid="operational-summary"
+        >
+          <p className="text-sm font-semibold text-text" data-testid="operational-summary-primary">
+            {operationalSummary.primary}
+          </p>
+          <p className="mt-1 text-xs text-text-muted" data-testid="operational-summary-secondary">
+            {operationalSummary.secondary}
+          </p>
+        </section>
+      )}
 
       {/* Unified Control Bar */}
       <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-surface p-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1223,28 +1396,28 @@ export function CandidaturasPage() {
 
       {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
-        <table className="w-full min-w-full table-fixed text-sm md:min-w-[760px] lg:min-w-[1080px]" data-testid="candidaturas-table">
+        <table className="w-full min-w-full table-fixed text-sm md:min-w-[760px] lg:min-w-[1120px]" data-testid="candidaturas-table">
           <thead>
             <tr className="border-b border-border bg-surface-muted/45">
-              <th className="w-[38%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:w-[31%] lg:w-[25%]">
+              <th className="w-[72%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:w-[31%] lg:w-[24%]">
                 Candidato
               </th>
-              <th className="w-[34%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:w-[23%] lg:w-[18%]">
+              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:table-cell sm:w-[23%] lg:w-[17%]">
                 Vaga
               </th>
-              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:table-cell md:w-[14%] lg:w-[12%]">
+              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:table-cell md:w-[14%] lg:w-[11%]">
                 Status
               </th>
-              <th className="w-[28%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:w-[18%] lg:w-[12%]">
+              <th className="w-[28%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:w-[18%] lg:w-[11%]">
                 Score IA
               </th>
               <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:table-cell lg:w-[15%]">
                 Entrevista
               </th>
-              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:table-cell md:w-[14%] lg:w-[10%]">
+              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:table-cell md:w-[14%] lg:w-[12%]">
                 Próxima ação
               </th>
-              <th className="hidden px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:table-cell lg:w-[8%]">
+              <th className="hidden px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:table-cell lg:w-[10%]">
                 Ações
               </th>
             </tr>
@@ -1286,10 +1459,13 @@ export function CandidaturasPage() {
             )}
 
             {!loading &&
-              filtered.map((c) => {
+              visibleCandidates.map((c) => {
                 const scheduledInterview = scheduledInterviews[c.id] ?? null;
                 const hasInterview = Boolean(scheduledInterview);
                 const nextAction = deriveNextAction(c, scheduledInterview);
+                const priority = deriveOperationalPriority(c, scheduledInterview);
+                const mobileContact = c.phone ?? c.email;
+                const mobileContactIcon = c.phone ? Phone : Mail;
                 return (
                   <tr
                     key={c.id}
@@ -1300,10 +1476,21 @@ export function CandidaturasPage() {
                     {/* Candidate */}
                     <td className="px-3 py-2 align-top">
                       <div className="flex items-start gap-2.5">
+                        <span className={`mt-0.5 h-10 w-1 shrink-0 rounded-full ${priority.markerClass}`} aria-hidden="true" />
                         <Avatar name={c.full_name} />
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-text">{c.full_name}</p>
-                          <div className="mt-0.5 flex min-w-0 flex-col gap-0.5 text-[11px] text-text-muted md:flex-row md:flex-wrap md:gap-x-3">
+                          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted sm:hidden">
+                            <Briefcase className="h-3 w-3 shrink-0" aria-hidden="true" />
+                            <span className="truncate">{c.active_job_title ?? "Vaga não informada"}</span>
+                          </div>
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                            <PriorityBadge priority={priority} />
+                            <div className="min-w-0 md:hidden">
+                              <NextActionBadge action={nextAction} />
+                            </div>
+                          </div>
+                          <div className="mt-1 hidden min-w-0 items-center gap-3 text-[11px] text-text-muted md:flex md:flex-wrap">
                             <span className="flex min-w-0 items-center gap-1.5">
                               <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
                               <span className="truncate">{c.email ?? "E-mail não informado"}</span>
@@ -1313,12 +1500,41 @@ export function CandidaturasPage() {
                               {c.phone ?? "Telefone não informado"}
                             </span>
                           </div>
+                          <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted md:hidden">
+                            {mobileContact ? (
+                              <>
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  {mobileContactIcon === Phone ? (
+                                    <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                  ) : (
+                                    <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                  )}
+                                  <span className="truncate">{mobileContact}</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  aria-label={`Copiar contato de ${c.full_name}`}
+                                  title="Copiar contato"
+                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleCopyContact(c);
+                                  }}
+                                  data-testid={`action-copy-contact-${c.id}`}
+                                >
+                                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
+                              </>
+                            ) : (
+                              <span>Contato não informado</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
 
                     {/* Job */}
-                    <td className="px-3 py-2 align-top">
+                    <td className="hidden px-3 py-2 align-top sm:table-cell">
                       <div className="flex min-w-0 items-start gap-2">
                         <Briefcase className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
                         <div className="min-w-0">
@@ -1365,23 +1581,46 @@ export function CandidaturasPage() {
 
                     {/* Next action */}
                     <td className="hidden px-3 py-2 align-top md:table-cell">
-                      <NextActionBadge action={nextAction} />
+                      <div className="max-w-[10rem]">
+                        <NextActionBadge action={nextAction} />
+                      </div>
                     </td>
 
                     {/* Actions */}
                     <td className="hidden px-3 py-2 align-top lg:table-cell" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          title="Abrir candidato"
+                          aria-label={`Abrir candidato ${c.full_name}`}
+                          onClick={() => openProfile(c.id)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text"
+                          data-testid={`action-open-profile-${c.id}`}
+                        >
+                          <User className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+
+                        <button
+                          type="button"
+                          title="Abrir pipeline"
+                          aria-label={`Abrir pipeline de ${c.full_name}`}
+                          onClick={() => openPipeline(c)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text"
+                          data-testid={`action-open-pipeline-${c.id}`}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+
                         {!isReadOnly && (
                           <button
                             type="button"
                             title="Marcar entrevista"
                             aria-label={`Marcar entrevista com ${c.full_name}`}
                             onClick={() => setInterviewTarget(c)}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-surface px-2.5 text-xs font-medium text-text transition-colors hover:bg-surface-muted/40"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-surface text-text transition-colors hover:bg-surface-muted/40"
                             data-testid={`action-interview-${c.id}`}
                           >
                             <Calendar className="h-3.5 w-3.5 text-[hsl(var(--primary))]" aria-hidden="true" />
-                            Entrevista
                           </button>
                         )}
 

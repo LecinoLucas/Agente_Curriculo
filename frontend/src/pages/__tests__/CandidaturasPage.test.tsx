@@ -232,31 +232,34 @@ describe("CandidaturasPage — core", () => {
     expect(screen.getByTestId("pipeline-link")).toBeInTheDocument();
   });
 
-  it("score ≥ 80 mostra 'Alta aderência'", async () => {
+  it("score ≥ 80 mostra label curta de alta aderência", async () => {
     listSummariesMock.mockResolvedValue(
       makePaginatedResponse([makeCandidate({ active_job_job_fit_score: 85 })]),
     );
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/alta aderência/i)).toBeInTheDocument());
+    const row = await screen.findByTestId("row-cand-1");
+    expect(within(row).getByText("Alta")).toBeInTheDocument();
   });
 
-  it("score 60-79 mostra 'Avaliar'", async () => {
+  it("score 60-79 mostra label curta de aderência média", async () => {
     listSummariesMock.mockResolvedValue(
       makePaginatedResponse([makeCandidate({ active_job_job_fit_score: 65 })]),
     );
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/avaliar/i)).toBeInTheDocument());
+    const row = await screen.findByTestId("row-cand-1");
+    expect(within(row).getByText("Média")).toBeInTheDocument();
   });
 
-  it("score < 60 mostra 'Baixa aderência'", async () => {
+  it("score < 60 mostra label curta de baixa aderência", async () => {
     listSummariesMock.mockResolvedValue(
       makePaginatedResponse([makeCandidate({ active_job_job_fit_score: 40 })]),
     );
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/baixa aderência/i)).toBeInTheDocument());
+    const row = await screen.findByTestId("row-cand-1");
+    expect(within(row).getByText("Baixa")).toBeInTheDocument();
   });
 
   it("sem score mostra 'Aguardando IA'", async () => {
@@ -314,6 +317,26 @@ describe("CandidaturasPage — core", () => {
 // ── Phase 7 — Polimento visual e usabilidade ────────────────────────────────
 
 describe("CandidaturasPage — Phase 7 UX", () => {
+  it("mostra resumo operacional com contadores da lista visível", async () => {
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([
+        makeCandidate({ id: "cand-1", full_name: "Ana Silva", active_job_stage: "screening", active_job_job_fit_score: 85 }),
+        makeCandidate({ id: "cand-2", full_name: "Bruno Costa", active_job_stage: "final", active_job_job_fit_score: 55 }),
+        makeCandidate({ id: "cand-3", full_name: "Carla Souza", active_job_stage: "hr_interview", active_job_job_fit_score: 72 }),
+        makeCandidate({ id: "cand-4", full_name: "Diego Lima", active_job_job_fit_score: null, ai_status: "pending" }),
+      ]),
+    );
+
+    renderPage();
+
+    expect(await screen.findByTestId("operational-summary-primary")).toHaveTextContent(
+      "1 com alta aderência · 1 prontos para entrevista · 1 prontos para decisão",
+    );
+    expect(screen.getByTestId("operational-summary-secondary")).toHaveTextContent(
+      "Atenção: 1 sem entrevista marcada · 1 aguardando ação",
+    );
+  });
+
   it("mostra próxima ação derivada dos dados da candidatura", async () => {
     listSummariesMock.mockResolvedValue(
       makePaginatedResponse([makeCandidate({ active_job_stage: "screening", active_job_job_fit_score: 85 })]),
@@ -322,8 +345,25 @@ describe("CandidaturasPage — Phase 7 UX", () => {
     renderPage();
 
     const row = await screen.findByTestId("row-cand-1");
-    expect(within(row).getByText("Marcar entrevista")).toBeInTheDocument();
-    expect(within(row).getByText("Não marcada")).toBeInTheDocument();
+    expect(within(row).getAllByText("Marcar entrevista").length).toBeGreaterThan(0);
+    expect(within(row).getByText("Alta aderência")).toBeInTheDocument();
+  });
+
+  it("mostra prioridade discreta de alta aderência e ação pendente", async () => {
+    listSummariesMock.mockResolvedValue(
+      makePaginatedResponse([
+        makeCandidate({ id: "cand-1", full_name: "Ana Silva", active_job_job_fit_score: 85 }),
+        makeCandidate({ id: "cand-2", full_name: "Bruno Costa", active_job_job_fit_score: 65 }),
+      ]),
+    );
+
+    renderPage();
+
+    const highPriorityRow = await screen.findByTestId("row-cand-1");
+    const pendingPriorityRow = await screen.findByTestId("row-cand-2");
+
+    expect(within(highPriorityRow).getByTestId("candidate-priority")).toHaveTextContent("Alta aderência");
+    expect(within(pendingPriorityRow).getByTestId("candidate-priority")).toHaveTextContent("Ação pendente");
   });
 
   it("ações destrutivas ficam separadas no drawer", async () => {
@@ -366,8 +406,33 @@ describe("CandidaturasPage — Phase 7 UX", () => {
     expect(screen.getByTestId("drawer-next-action")).toHaveTextContent(/marcar entrevista/i);
   });
 
+  it("mantém ações rápidas principais na linha", async () => {
+    renderPage();
+
+    expect(await screen.findByTestId("action-open-profile-cand-1")).toBeInTheDocument();
+    expect(screen.getByTestId("action-open-pipeline-cand-1")).toBeInTheDocument();
+    expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument();
+    expect(screen.getByTestId("action-more-cand-1")).toBeInTheDocument();
+  });
+
   it("viewer continua sem ações de escrita no menu e no drawer", async () => {
     mockUseAuth.mockReturnValue({ user: { id: "viewer-1", role: "viewer" as const } });
+
+    renderPage();
+
+    await openMoreActions();
+    expect(screen.queryByTestId("action-reject-cand-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("action-interview-cand-1")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Fechar menu"));
+    fireEvent.click(screen.getByTestId("row-cand-1"));
+
+    expect(screen.queryByTestId("drawer-schedule")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("drawer-reject")).not.toBeInTheDocument();
+  });
+
+  it("manager continua sem ações de escrita no menu e no drawer", async () => {
+    mockUseAuth.mockReturnValue({ user: { id: "manager-1", role: "manager" as const } });
 
     renderPage();
 
@@ -749,6 +814,14 @@ describe("CandidaturasPage — Adicionar candidatos", () => {
 
   it("viewer não vê botão 'Adicionar candidatos'", async () => {
     mockUseAuth.mockReturnValue({ user: { id: "viewer-1", role: "viewer" as const } });
+    renderPage();
+
+    await waitFor(() => expect(listSummariesMock).toHaveBeenCalled());
+    expect(screen.queryByTestId("add-candidates-btn")).not.toBeInTheDocument();
+  });
+
+  it("manager não vê botão 'Adicionar candidatos'", async () => {
+    mockUseAuth.mockReturnValue({ user: { id: "manager-1", role: "manager" as const } });
     renderPage();
 
     await waitFor(() => expect(listSummariesMock).toHaveBeenCalled());
