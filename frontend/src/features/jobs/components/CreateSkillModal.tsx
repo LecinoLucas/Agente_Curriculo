@@ -17,14 +17,16 @@ const CATEGORIES = [
 type CreateSkillModalProps = {
   open: boolean;
   initialName?: string;
+  initialAliases?: string;
+  initialCategory?: string;
   onClose: () => void;
   onSuccess: (skill: SkillCatalog) => void;
 };
 
-export function CreateSkillModal({ open, initialName = "", onClose, onSuccess }: CreateSkillModalProps) {
+export function CreateSkillModal({ open, initialName = "", initialAliases = "", initialCategory = "", onClose, onSuccess }: CreateSkillModalProps) {
   const [name, setName] = useState(initialName);
-  const [category, setCategory] = useState("");
-  const [aliases, setAliases] = useState("");
+  const [category, setCategory] = useState(initialCategory);
+  const [aliases, setAliases] = useState(initialAliases);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -32,12 +34,12 @@ export function CreateSkillModal({ open, initialName = "", onClose, onSuccess }:
   useEffect(() => {
     if (open) {
       setName(initialName);
-      setCategory("");
-      setAliases("");
+      setCategory(initialCategory);
+      setAliases(initialAliases);
       setDescription("");
       setError("");
     }
-  }, [open, initialName]);
+  }, [open, initialName, initialAliases, initialCategory]);
 
   if (!open) return null;
 

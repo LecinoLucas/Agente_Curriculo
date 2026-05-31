@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { skillsService, type SkillCatalog } from "@/services/skillsService";
 import type { JobSkill } from "@/types/domain";
 import type { PendingJobSkill } from "../jobFormConfig";
+import { useAuth } from "@/features/auth/useAuth";
+import { CreateSkillModal } from "./CreateSkillModal";
+import { toast } from "@/shared/utils/toast";
 
 type SkillItem = {
   key: string;
@@ -38,6 +41,19 @@ function normalizeSkillName(value: string | null | undefined): string {
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
+}
+
+function getSuggestedAliases(skillName: string): string {
+  const map: Record<string, string> = {
+    "atendimento ao cliente": "Atendimento, Atendimento ao público, Relacionamento com cliente, Experiência do cliente",
+    "responsabilidade com caixa": "Operação de caixa, Fechamento de caixa, Controle de valores, Manuseio de dinheiro",
+    "rotina operacional": "Operação de pista, Procedimentos operacionais, Rotina de posto, Organização operacional",
+    "experiencia em posto de combustivel": "Posto de combustível, Atendimento em pista, Abastecimento, Operação de posto",
+    "venda adicional na pista": "Venda adicional, Oferta de produtos, Venda consultiva, Abordagem comercial",
+  };
+  const normalized = normalizeSkillName(skillName);
+  if (map[normalized]) return map[normalized];
+  return skillName;
 }
 
 function buildItems(mandatory: string[], optional: string[]): SkillItem[] {
@@ -117,6 +133,10 @@ export function AiSkillSuggestionsBlock({
   const [items, setItems] = useState<SkillItem[]>(initialItems);
   const [applying, setApplying] = useState(false);
   const [resolving, setResolving] = useState(false);
+
+  const { user } = useAuth();
+  const canCreateSkill = user?.role === "admin" || user?.role === "recruiter";
+  const [creatingSkillItem, setCreatingSkillItem] = useState<SkillItem | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,6 +264,18 @@ export function AiSkillSuggestionsBlock({
                     {getStatusLabel(item.status)}
                   </span>
                 </label>
+                {item.status === "not_found" && canCreateSkill && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] ml-auto text-[hsl(var(--primary))]"
+                    onClick={() => setCreatingSkillItem(item)}
+                    data-testid={`create-skill-btn-${item.name}`}
+                  >
+                    + Criar
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
@@ -283,6 +315,18 @@ export function AiSkillSuggestionsBlock({
                     {getStatusLabel(item.status)}
                   </span>
                 </label>
+                {item.status === "not_found" && canCreateSkill && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] ml-auto text-[hsl(var(--primary))]"
+                    onClick={() => setCreatingSkillItem(item)}
+                    data-testid={`create-skill-btn-${item.name}`}
+                  >
+                    + Criar
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
@@ -311,6 +355,25 @@ export function AiSkillSuggestionsBlock({
           Ignorar sugestões
         </Button>
       </div>
+
+      <CreateSkillModal
+        open={creatingSkillItem !== null}
+        initialName={creatingSkillItem?.name ?? ""}
+        initialAliases={creatingSkillItem ? getSuggestedAliases(creatingSkillItem.name) : ""}
+        onClose={() => setCreatingSkillItem(null)}
+        onSuccess={(createdSkill) => {
+          setItems((prev) =>
+            prev.map((i) => {
+              if (i.key === creatingSkillItem?.key) {
+                return { ...i, status: "found", checked: true, skill: createdSkill };
+              }
+              return i;
+            })
+          );
+          setCreatingSkillItem(null);
+          toast.success("Skill criada e selecionada.");
+        }}
+      />
     </div>
   );
 }

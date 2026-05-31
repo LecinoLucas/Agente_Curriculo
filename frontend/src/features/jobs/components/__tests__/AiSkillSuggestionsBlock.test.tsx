@@ -9,6 +9,12 @@ vi.mock("@/services/skillsService", () => ({
   },
 }));
 
+vi.mock("@/features/auth/useAuth", () => ({
+  useAuth: vi.fn(() => ({
+    user: { id: "user-1", role: "admin", name: "Admin Test" },
+  })),
+}));
+
 const MANDATORY = ["Atendimento ao cliente", "Operação de caixa"];
 const OPTIONAL = ["Experiência anterior com caixa"];
 
