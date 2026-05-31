@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CandidatesPage } from "../CandidatesPage";
 import { CandidateProfilePage } from "../CandidateProfilePage";
+import { ProtectedRoute } from "../../app/ProtectedRoute";
 import { candidatesService } from "../../services/candidatesService";
 import { agendaService } from "../../services/agendaService";
 import { analysisService } from "../../services/analysisService";
@@ -34,6 +35,8 @@ let mockedUserRole = "admin";
 
 vi.mock("../../features/auth/useAuth", () => ({
   useAuth: () => ({
+    isAuthenticated: true,
+    isLoading: false,
     user: {
       id: "user-1",
       role: mockedUserRole,
@@ -852,6 +855,29 @@ describe("Candidate workspace flow", () => {
     fireEvent.click(screen.getByText("Ana Souza").closest("tr")!);
 
     expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("candidate-1");
+  });
+
+  it("manager não acessa /candidatos porque backend exige admin ou recruiter", async () => {
+    mockedUserRole = "manager";
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos"]}>
+        <Routes>
+          <Route
+            path="/candidatos"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "recruiter"]}>
+                <CandidatesPage />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Acesso negado")).toBeInTheDocument();
+    expect(screen.queryByText("Ana Souza")).not.toBeInTheDocument();
+    expect(candidatesService.listSummaries).not.toHaveBeenCalled();
   });
 
   it("/candidatos/:id renderiza workspace completo com ações portadas", async () => {

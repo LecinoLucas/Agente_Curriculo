@@ -12,8 +12,10 @@ export const ALL_AUTH_ROLES: UserRole[] = [
 export const ADMIN_ONLY_ROLES: UserRole[] = ["admin"];
 export const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
 export const INTERNAL_STAFF_ROLES: UserRole[] = ["admin", "recruiter", "manager", "hr"];
+export const RH_DASHBOARD_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "hr"];
 export const AGENDA_ACCESS_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "hr"];
 export const AGENDA_MUTATION_ROLES: UserRole[] = ["admin", "hr", "recruiter"];
+export const CANDIDATES_ACCESS_ROLES: UserRole[] = ["admin", "recruiter"];
 export const JOB_MANAGEMENT_ROLES: UserRole[] = ["admin", "recruiter"];
 export const ANALYSIS_ROLES: UserRole[] = ["admin", "recruiter"];
 export const PRE_ADMISSION_AREA_ROLES: UserRole[] = ["admin", "hr"];
@@ -100,6 +102,10 @@ export function canUseCandidaturasWriteActions(role: UserRole | null | undefined
 
 export function canMutateAgenda(role: UserRole | null | undefined): boolean {
   return hasRole(role, AGENDA_MUTATION_ROLES);
+}
+
+export function canAccessCandidates(role: UserRole | null | undefined): boolean {
+  return hasRole(role, CANDIDATES_ACCESS_ROLES);
 }
 
 export function canAccessInternalNotifications(role: UserRole | null | undefined): boolean {

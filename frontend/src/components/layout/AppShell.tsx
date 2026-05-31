@@ -31,9 +31,11 @@ import {
   AGENDA_ACCESS_ROLES,
   ANALYSIS_ROLES,
   CANDIDATE_PORTAL_ROLES,
+  CANDIDATES_ACCESS_ROLES,
   JOB_MANAGEMENT_ROLES,
   MANAGER_AREA_ROLES,
   PRE_ADMISSION_AREA_ROLES,
+  RH_DASHBOARD_ROLES,
   STAFF_ROLES,
   isAdmin,
 } from "../../shared/auth/roles";
@@ -60,10 +62,10 @@ const NAVIGATION_CONFIG: NavGroup[] = [
   {
     label: "Central RH",
     caption: "Pendências do dia",
-    roles: STAFF_ROLES,
+    roles: RH_DASHBOARD_ROLES,
     isDropdown: false,
     items: [
-      { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: STAFF_ROLES }
+      { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: RH_DASHBOARD_ROLES }
     ],
   },
 
@@ -76,7 +78,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
       { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: STAFF_ROLES },
       { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: STAFF_ROLES },
       { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: STAFF_ROLES },
-      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: STAFF_ROLES },
+      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: CANDIDATES_ACCESS_ROLES },
       { to: "/agenda", label: "Agenda", caption: "Calendário", roles: AGENDA_ACCESS_ROLES },
     ],
   },

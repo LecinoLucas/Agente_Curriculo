@@ -56,7 +56,7 @@ function makeDashboardResponse(overrides = {}) {
   };
 }
 
-function authUser(role: "admin" | "hr" | "recruiter" | "viewer" | "candidate" = "admin") {
+function authUser(role: "admin" | "hr" | "recruiter" | "viewer" | "manager" | "candidate" = "admin") {
   return {
     id: "user-1",
     email: `${role}@test.com`,
@@ -137,6 +137,26 @@ describe("RhDashboardPage", () => {
       isAuthenticated: true,
       isLoading: false,
       user: authUser("candidate"),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/rh"]}>
+        <ProtectedRoute allowedRoles={["admin", "hr", "recruiter", "viewer"]}>
+          <RhDashboardPage />
+        </ProtectedRoute>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Acesso negado")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Central RH" })).not.toBeInTheDocument();
+    expect(mockGetDashboard).not.toHaveBeenCalled();
+  });
+
+  it("manager não acessa a rota protegida porque backend bloqueia Central RH", async () => {
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: authUser("manager"),
     });
 
     render(

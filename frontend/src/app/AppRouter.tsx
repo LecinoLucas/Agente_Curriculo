@@ -8,9 +8,11 @@ import {
   AGENDA_ACCESS_ROLES,
   ALL_AUTH_ROLES,
   ANALYSIS_ROLES,
+  CANDIDATES_ACCESS_ROLES,
   JOB_MANAGEMENT_ROLES,
   MANAGER_AREA_ROLES,
   PRE_ADMISSION_AREA_ROLES,
+  RH_DASHBOARD_ROLES,
   STAFF_ROLES,
 } from "../shared/auth/roles";
 import type { UserRole } from "../types/auth";
@@ -249,7 +251,7 @@ export function AppRouter() {
 
         <Route
           path="rh"
-          element={protectedPage(<RhDashboardPage />, STAFF_ROLES)}
+          element={protectedPage(<RhDashboardPage />, RH_DASHBOARD_ROLES)}
         />
 
         <Route
@@ -274,12 +276,12 @@ export function AppRouter() {
 
         <Route
           path="candidatos"
-          element={protectedPage(<CandidatesPage />, STAFF_ROLES)}
+          element={protectedPage(<CandidatesPage />, CANDIDATES_ACCESS_ROLES)}
         />
 
         <Route
           path="candidatos/:candidateId"
-          element={protectedPage(<CandidateProfilePage />, STAFF_ROLES)}
+          element={protectedPage(<CandidateProfilePage />, CANDIDATES_ACCESS_ROLES)}
         />
 
         <Route

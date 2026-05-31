@@ -1,4 +1,18 @@
-export type Role = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr";
+import {
+  ADMIN_ONLY_ROLES,
+  AGENDA_ACCESS_ROLES,
+  ALL_AUTH_ROLES,
+  ANALYSIS_ROLES,
+  CANDIDATES_ACCESS_ROLES,
+  JOB_MANAGEMENT_ROLES,
+  MANAGER_AREA_ROLES,
+  PRE_ADMISSION_AREA_ROLES,
+  RH_DASHBOARD_ROLES,
+  STAFF_ROLES,
+} from "../../../shared/auth/roles";
+import type { UserRole } from "../../../types/auth";
+
+export type Role = UserRole;
 
 export const ROLES: { key: Role; label: string; description: string }[] = [
   { key: "admin",     label: "Administrador", description: "Acesso total à plataforma" },
@@ -10,23 +24,23 @@ export const ROLES: { key: Role; label: string; description: string }[] = [
 ];
 
 export const SCREENS: { label: string; path: string; roles: Role[] }[] = [
-  { label: "Central RH",      path: "/rh",            roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
-  { label: "Pipeline",        path: "/pipeline",      roles: ["admin", "recruiter", "viewer", "manager"] },
-  { label: "Candidatos",      path: "/candidatos",    roles: ["admin", "recruiter", "viewer", "manager"] },
-  { label: "Vagas",           path: "/vagas",         roles: ["admin", "recruiter", "viewer", "manager"] },
-  { label: "Agenda",          path: "/agenda",        roles: ["admin", "recruiter", "viewer", "manager"] },
-  { label: "Importação",      path: "/importar",      roles: ["admin", "recruiter"] },
-  { label: "Formulários",     path: "/importar-formulario", roles: ["admin", "recruiter"] },
-  { label: "Análises IA",     path: "/analises-ia",   roles: ["admin", "recruiter"] },
-  { label: "Revisão",         path: "/manager",       roles: ["admin", "manager"] },
-  { label: "Meu perfil",      path: "/perfil",        roles: ["admin", "recruiter", "candidate", "viewer", "manager", "hr"] },
-  { label: "Painel Admin",    path: "/admin",         roles: ["admin"] },
-  { label: "Usuários Internos", path: "/admin/usuarios", roles: ["admin"] },
-  { label: "Cadastros Gerais", path: "/admin/cadastros", roles: ["admin"] },
-  { label: "Auditoria",       path: "/admin/auditoria", roles: ["admin"] },
-  { label: "System Health",   path: "/admin/health",    roles: ["admin"] },
-  { label: "Credenciais IA",  path: "/admin/ai-provider-credentials", roles: ["admin"] },
-  { label: "BI & Métricas",   path: "/admin/bi",        roles: ["admin"] },
-  { label: "Templates IA",    path: "/admin/behavioral-templates", roles: ["admin", "recruiter"] },
-  { label: "Checklists Admissionais", path: "/admissao/checklists", roles: ["admin", "hr"] },
+  { label: "Central RH",      path: "/rh",            roles: RH_DASHBOARD_ROLES },
+  { label: "Pipeline",        path: "/pipeline",      roles: STAFF_ROLES },
+  { label: "Candidatos",      path: "/candidatos",    roles: CANDIDATES_ACCESS_ROLES },
+  { label: "Vagas",           path: "/vagas",         roles: STAFF_ROLES },
+  { label: "Agenda",          path: "/agenda",        roles: AGENDA_ACCESS_ROLES },
+  { label: "Importação",      path: "/importar",      roles: JOB_MANAGEMENT_ROLES },
+  { label: "Formulários",     path: "/importar-formulario", roles: JOB_MANAGEMENT_ROLES },
+  { label: "Análises IA",     path: "/analises-ia",   roles: ANALYSIS_ROLES },
+  { label: "Revisão",         path: "/manager",       roles: MANAGER_AREA_ROLES },
+  { label: "Meu perfil",      path: "/perfil",        roles: ALL_AUTH_ROLES },
+  { label: "Painel Admin",    path: "/admin",         roles: ADMIN_ONLY_ROLES },
+  { label: "Usuários Internos", path: "/admin/usuarios", roles: ADMIN_ONLY_ROLES },
+  { label: "Cadastros Gerais", path: "/admin/cadastros", roles: ADMIN_ONLY_ROLES },
+  { label: "Auditoria",       path: "/admin/auditoria", roles: ADMIN_ONLY_ROLES },
+  { label: "System Health",   path: "/admin/health",    roles: ADMIN_ONLY_ROLES },
+  { label: "Credenciais IA",  path: "/admin/ai-provider-credentials", roles: ADMIN_ONLY_ROLES },
+  { label: "BI & Métricas",   path: "/admin/bi",        roles: ADMIN_ONLY_ROLES },
+  { label: "Templates IA",    path: "/admin/behavioral-templates", roles: JOB_MANAGEMENT_ROLES },
+  { label: "Checklists Admissionais", path: "/admissao/checklists", roles: PRE_ADMISSION_AREA_ROLES },
 ];

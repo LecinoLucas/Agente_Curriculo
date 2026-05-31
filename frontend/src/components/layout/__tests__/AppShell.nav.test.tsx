@@ -120,6 +120,8 @@ describe("AppShell — Sidebar Nav", () => {
 
       expectTopNavLabels(["Central RH", "Recrutamento", "Admissão"]);
       expectTopNavMissing(["Outros", "Administração", "Avaliações"]);
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
+      expect(screen.queryByRole("link", { name: /Candidatos/ })).not.toBeInTheDocument();
       fireEvent.click(within(topNav()).getByRole("button", { name: "Admissão" }));
       expect(screen.getByRole("link", { name: /Admitidos/ })).toBeInTheDocument();
     });
@@ -127,8 +129,10 @@ describe("AppShell — Sidebar Nav", () => {
     it("renderiza a navegação para manager com apenas grupos permitidos", () => {
       renderShell("manager");
 
-      expectTopNavLabels(["Central RH", "Recrutamento", "Gestores"]);
-      expectTopNavMissing(["Avaliações", "Administração", "Outros"]);
+      expectTopNavLabels(["Recrutamento", "Gestores"]);
+      expectTopNavMissing(["Central RH", "Avaliações", "Administração", "Outros"]);
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
+      expect(screen.queryByRole("link", { name: /Candidatos/ })).not.toBeInTheDocument();
     });
 
     it("não exibe Avaliações para viewer", () => {
@@ -136,6 +140,8 @@ describe("AppShell — Sidebar Nav", () => {
 
       expectTopNavLabels(["Central RH", "Recrutamento"]);
       expectTopNavMissing(["Avaliações", "Gestores", "Administração", "Outros"]);
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
+      expect(screen.queryByRole("link", { name: /Candidatos/ })).not.toBeInTheDocument();
     });
 
     it("exibe Outros (Demo RH) para admin", () => {
