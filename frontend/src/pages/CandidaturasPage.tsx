@@ -1471,22 +1471,22 @@ export function CandidaturasPage() {
         <table className="block lg:table w-full min-w-full table-fixed text-sm" data-testid="candidaturas-table">
           <thead className="hidden lg:table-header-group">
             <tr className="border-b border-border/60 bg-surface-muted/30">
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[25%]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[27%]">
                 Candidato
               </th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[23%]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[19%]">
                 Vaga &bull; Etapa
               </th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[13%]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[12%]">
                 Score IA
               </th>
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[15%]">
                 Entrevista
               </th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[14%]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[15%]">
                 Próxima ação
               </th>
-              <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[10%]">
+              <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[12%]">
                 Ações
               </th>
             </tr>
@@ -1538,22 +1538,24 @@ export function CandidaturasPage() {
                 return (
                   <tr
                     key={c.id}
-                    className="block lg:table-row cursor-pointer rounded-2xl lg:rounded-none border border-border/60 lg:border-x-0 lg:border-t-0 lg:border-b lg:border-border/40 p-4 lg:p-0 bg-surface hover:bg-surface-muted/30 transition-all duration-200 mb-3 lg:mb-0 shadow-sm lg:shadow-none"
+                    className="block lg:table-row cursor-pointer rounded-2xl lg:rounded-none border border-border/60 lg:border-x-0 lg:border-t-0 lg:border-b lg:border-border/40 px-3 py-3 lg:p-0 bg-surface hover:bg-surface-muted/30 transition-all duration-200 mb-3 lg:mb-0 shadow-sm lg:shadow-none"
                     onClick={() => setSelectedId(c.id)}
                     data-testid={`row-${c.id}`}
                   >
                     {/* Candidate */}
-                    <td className="block lg:table-cell px-3 py-2 align-top">
-                      <div className="flex items-start gap-2.5">
-                        <span className={`mt-0.5 h-10 w-1 shrink-0 rounded-full ${priority.markerClass}`} aria-hidden="true" />
+                    <td className="block lg:table-cell px-3 py-1.5 align-middle">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`h-8 w-1 shrink-0 rounded-full ${priority.markerClass}`} aria-hidden="true" />
                         <Avatar name={c.full_name} />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-base font-semibold text-text leading-tight">{c.full_name}</p>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                            <PriorityBadge priority={priority} />
+                        <div className="min-w-0 flex-1 py-0.5">
+                          <div className="flex flex-col lg:flex-row lg:items-center gap-1 lg:gap-2">
+                            <p className="truncate text-[15px] font-bold text-text leading-tight">{c.full_name}</p>
+                            <div className="w-fit">
+                              <PriorityBadge priority={priority} />
+                            </div>
                           </div>
                           {/* Desktop contacts */}
-                          <div className="mt-1.5 hidden lg:flex lg:flex-wrap items-center gap-3 text-[11px] text-text-muted">
+                          <div className="mt-1 hidden lg:flex lg:flex-wrap items-center gap-3 text-[11px] text-text-muted">
                             {c.email && (
                               <span className="flex min-w-0 items-center gap-1.5">
                                 <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -1569,7 +1571,7 @@ export function CandidaturasPage() {
                           </div>
                           {/* Mobile contacts */}
                           {mobileContact && (
-                            <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted lg:hidden">
+                            <div className="mt-1.5 flex items-center gap-2 text-[11px] text-text-muted lg:hidden">
                               <span className="flex min-w-0 items-center gap-1.5">
                                 {mobileContactIcon === Phone ? (
                                   <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -1598,12 +1600,12 @@ export function CandidaturasPage() {
                     </td>
 
                     {/* Vaga & Etapa */}
-                    <td className="block lg:table-cell px-3 py-2 align-top lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
-                      <div className="flex lg:flex-col items-center lg:items-start justify-between lg:justify-start gap-2">
+                    <td className="block lg:table-cell px-3 py-1.5 align-middle lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
+                      <div className="flex lg:flex-col items-center lg:items-start justify-between lg:justify-start gap-1">
                         <span className="text-xs font-medium text-text-muted lg:hidden">Vaga / Etapa</span>
                         <div className="text-right lg:text-left min-w-0">
-                          <p className="truncate font-semibold text-text text-sm lg:text-base">{c.active_job_title ?? "Vaga não informada"}</p>
-                          <div className="mt-1.5 flex items-center justify-end lg:justify-start gap-2">
+                          <p className="truncate font-medium text-text-muted text-[13px]">{c.active_job_title ?? "Vaga não informada"}</p>
+                          <div className="mt-0.5 flex items-center justify-end lg:justify-start gap-1.5">
                             <StageBadge stage={c.active_job_stage} />
                             <span className="text-[10px] text-text-muted hidden lg:inline">
                               {c.application_source === "manual" ? "Manual" : "Candidatura"}
@@ -1614,7 +1616,7 @@ export function CandidaturasPage() {
                     </td>
 
                     {/* Score IA */}
-                    <td className="block lg:table-cell px-3 py-2 align-top lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
+                    <td className="block lg:table-cell px-3 py-1.5 align-middle lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
                       <div className="flex lg:block items-center justify-between gap-2">
                         <span className="text-xs font-medium text-text-muted lg:hidden">Score IA</span>
                         <ScoreChip candidate={c} />
@@ -1622,7 +1624,7 @@ export function CandidaturasPage() {
                     </td>
 
                     {/* Entrevista */}
-                    <td className="block lg:table-cell px-3 py-2 align-top lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
+                    <td className="block lg:table-cell px-3 py-1.5 align-middle lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
                       <div className="flex lg:block items-center justify-between gap-2">
                         <span className="text-xs font-medium text-text-muted lg:hidden">Entrevista</span>
                         <div>
@@ -1650,20 +1652,53 @@ export function CandidaturasPage() {
                     </td>
 
                     {/* Próxima ação */}
-                    <td className="block lg:table-cell px-3 py-2 align-top lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
+                    <td className="block lg:table-cell px-3 py-1.5 align-middle lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
                       <div className="flex lg:block items-center justify-between gap-2">
                         <span className="text-xs font-medium text-text-muted lg:hidden">Próxima Ação</span>
-                        <div className="max-w-[14rem] text-right lg:text-left">
+                        <div className="text-right lg:text-left">
                           <NextActionBadge action={nextAction} />
                         </div>
                       </div>
                     </td>
 
                     {/* Ações */}
-                    <td className="block lg:table-cell px-3 py-2 align-middle text-right lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0" onClick={(e) => e.stopPropagation()}>
+                    <td className="block lg:table-cell px-3 py-1.5 align-middle text-right lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0" onClick={(e) => e.stopPropagation()}>
                       <div className="flex lg:block items-center justify-between lg:justify-end gap-2">
                         <span className="text-xs font-medium text-text-muted lg:hidden">Ações</span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center lg:justify-end gap-1.5">
+                          {nextAction.label === "Marcar entrevista" && !isReadOnly && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2.5 text-xs font-medium"
+                              onClick={() => setInterviewTarget(c)}
+                              data-testid={`action-btn-marcar-${c.id}`}
+                            >
+                              Marcar
+                            </Button>
+                          )}
+                          {nextAction.label === "Revisar aderência" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2.5 text-xs font-medium"
+                              onClick={() => openProfile(c.id)}
+                              data-testid={`action-btn-revisar-${c.id}`}
+                            >
+                              Revisar
+                            </Button>
+                          )}
+                          {nextAction.label === "Abrir pipeline" && c.active_job_id && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2.5 text-xs font-medium"
+                              onClick={() => openPipeline(c)}
+                              data-testid={`action-btn-pipeline-${c.id}`}
+                            >
+                              Pipeline
+                            </Button>
+                          )}
                           <MoreActionsMenu
                             candidate={c}
                             isReadOnly={isReadOnly}
