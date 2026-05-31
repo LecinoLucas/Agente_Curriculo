@@ -26,7 +26,12 @@ export const publicApiClient = {
       throw new Error('Falha na conexão com o servidor. Verifique sua internet e tente novamente.');
     }
     if (!response.ok) {
-      throw new HttpError(response.status, `HTTP ${response.status}: ${path}`);
+      let message = `Erro ${response.status}`;
+      try {
+        const json = await response.json() as { detail?: unknown };
+        if (json?.detail) message = String(json.detail);
+      } catch { /* ignore parse error */ }
+      throw new HttpError(response.status, message);
     }
     return response.json() as Promise<T>;
   },

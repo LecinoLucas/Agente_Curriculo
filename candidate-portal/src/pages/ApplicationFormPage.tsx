@@ -39,6 +39,8 @@ interface FormState {
   works_at_marajo_group: boolean;
   resume_file: File | null;
   lgpd_consent: boolean;
+  password?: string;
+  confirm_password?: string;
 }
 
 const INITIAL_FORM: FormState = {
@@ -53,6 +55,8 @@ const INITIAL_FORM: FormState = {
   works_at_marajo_group: false,
   resume_file: null,
   lgpd_consent: false,
+  password: '',
+  confirm_password: '',
 };
 
 function validateStep1(f: FormState): string | null {
@@ -63,6 +67,9 @@ function validateStep1(f: FormState): string | null {
   if (!f.address_city.trim()) return 'Cidade é obrigatória.';
   if (!f.address_state) return 'Estado é obrigatório.';
   if (!f.desired_contract_type) return 'Regime de contratação é obrigatório.';
+  if (!f.password) return 'Senha é obrigatória para concluir o cadastro.';
+  if (f.password.length < 8) return 'A senha deve ter no mínimo 8 caracteres.';
+  if (f.password !== f.confirm_password) return 'A confirmação de senha não confere.';
   return null;
 }
 
@@ -130,6 +137,8 @@ export function ApplicationFormPage() {
         job_id: identifier ?? null,
         lgpd_consent: form.lgpd_consent,
         resume_file: form.resume_file,
+        password: form.password,
+        confirm_password: form.confirm_password,
       });
       navigate('/sucesso');
     } catch (err) {
@@ -260,10 +269,11 @@ export function ApplicationFormPage() {
                   required
                 />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="address_state" className="block text-sm font-medium text-gray-700 mb-1.5">
                     Estado <span className="text-red-500">*</span>
                   </label>
                   <select
+                    id="address_state"
                     value={form.address_state}
                     onChange={(e) => update({ address_state: e.target.value })}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-700/20"
@@ -282,6 +292,22 @@ export function ApplicationFormPage() {
                     placeholder="Ex: R$ 2.500,00"
                   />
                 </div>
+                <Input
+                  label="Senha para o Portal"
+                  type="password"
+                  value={form.password || ''}
+                  onChange={(e) => update({ password: e.target.value })}
+                  placeholder="Mínimo 8 caracteres"
+                  required
+                />
+                <Input
+                  label="Confirme a senha"
+                  type="password"
+                  value={form.confirm_password || ''}
+                  onChange={(e) => update({ confirm_password: e.target.value })}
+                  placeholder="Repita a senha"
+                  required
+                />
               </div>
 
               {/* Regime de contratação */}

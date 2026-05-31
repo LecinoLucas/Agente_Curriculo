@@ -21,6 +21,7 @@ import type {
   AnswerPayload,
 } from '../services/candidateAssessmentService';
 import { HttpError } from '../services/publicApiClient';
+import { useSessionRestore } from '../hooks/useSessionRestore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -154,6 +155,7 @@ function formatDate(iso: string | null): string {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CandidateAssessmentPage() {
+  useSessionRestore();
   const navigate = useNavigate();
   const [phase, setPhase] = useState<Phase>('loading');
   const [summary, setSummary] = useState<AssessmentSummary | null>(null);

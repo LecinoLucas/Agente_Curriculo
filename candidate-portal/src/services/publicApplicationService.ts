@@ -13,6 +13,8 @@ export interface ApplyPayload {
   job_id: string | null;
   lgpd_consent: boolean;
   resume_file: File;
+  password?: string;
+  confirm_password?: string;
 }
 
 export interface ApplyResponse {
@@ -49,6 +51,8 @@ export const publicApplicationService = {
     fd.append('desired_contract_type', payload.desired_contract_type);
     fd.append('works_at_marajo_group', payload.works_at_marajo_group ? 'true' : 'false');
     if (payload.job_id) fd.append('job_id', payload.job_id);
+    if (payload.password) fd.append('password', payload.password);
+    if (payload.confirm_password) fd.append('confirm_password', payload.confirm_password);
     fd.append('lgpd_consent', payload.lgpd_consent ? 'true' : 'false');
     fd.append('resume_file', payload.resume_file, payload.resume_file.name);
 

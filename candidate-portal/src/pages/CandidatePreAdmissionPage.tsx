@@ -22,6 +22,7 @@ import type {
   ItemStatus,
 } from '../services/candidatePreAdmissionService';
 import { HttpError } from '../services/publicApiClient';
+import { useSessionRestore } from '../hooks/useSessionRestore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -95,6 +96,7 @@ function formatDate(iso: string | null): string {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CandidatePreAdmissionPage() {
+  useSessionRestore();
   const navigate = useNavigate();
   const [phase, setPhase] = useState<PagePhase>('loading');
   const [caseData, setCaseData] = useState<PreAdmissionCase | null>(null);

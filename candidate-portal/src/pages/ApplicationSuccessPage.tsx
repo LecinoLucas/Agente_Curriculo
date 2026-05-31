@@ -54,7 +54,7 @@ export function ApplicationSuccessPage() {
           </div>
 
           <div className="mt-6 space-y-3">
-            <Link to="/login">
+            <Link to="/minha-area">
               <Button fullWidth>
                 Acessar minha área
                 <ArrowRight className="h-4 w-4" />
