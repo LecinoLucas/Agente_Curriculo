@@ -77,7 +77,7 @@ export type AgendaListParams = {
 
 export type InterviewScheduleCreatePayload = {
   candidate_id: string;
-  job_id?: string | null;
+  job_id: string;
   pipeline_id?: string | null;
   title: string;
   description?: string | null;

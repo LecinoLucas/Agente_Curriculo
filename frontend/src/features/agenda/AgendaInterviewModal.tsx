@@ -55,6 +55,18 @@ const INTERVIEW_FORMATS = [
   { value: "telefone", label: "Telefone" },
 ];
 
+const PUBLIC_NOTES_INTERNAL_TERMS = [
+  "scorecard",
+  "pipeline",
+  "ranking",
+  "fit score",
+  "job_fit",
+  "gate",
+  "parecer interno",
+  "nota interna",
+  "recomendação interna",
+];
+
 interface FormState {
   candidate_id: string;
   job_id: string;
@@ -265,6 +277,10 @@ export function AgendaInterviewModal({
       setValidationError("Candidato é obrigatório");
       return false;
     }
+    if (!form.job_id) {
+      setValidationError("Selecione uma vaga vinculada ao candidato para agendar a entrevista.");
+      return false;
+    }
     if (!form.title) {
       setValidationError("Título é obrigatório");
       return false;
@@ -283,6 +299,16 @@ export function AgendaInterviewModal({
     }
     if (!form.interview_type) {
       setValidationError("Tipo de entrevista é obrigatório");
+      return false;
+    }
+    const normalizedPublicNotes = form.public_notes.trim().toLowerCase();
+    if (
+      normalizedPublicNotes &&
+      PUBLIC_NOTES_INTERNAL_TERMS.some((term) => normalizedPublicNotes.includes(term))
+    ) {
+      setValidationError(
+        "A observação pública aparece para o candidato. Use notas internas para termos técnicos ou internos."
+      );
       return false;
     }
 
@@ -380,7 +406,7 @@ export function AgendaInterviewModal({
       } else {
         const payload: InterviewScheduleCreatePayload = {
           candidate_id: form.candidate_id,
-          job_id: form.job_id || null,
+          job_id: form.job_id,
           pipeline_id: form.pipeline_id || null,
           title: form.title,
           description: form.description || null,
@@ -495,8 +521,8 @@ export function AgendaInterviewModal({
               </Select>
             </Field>
 
-            {/* Job (optional) */}
-            <Field label="Vaga (opcional)">
+            {/* Job */}
+            <Field label="Vaga *">
               <Select
                 value={form.job_id}
                 onChange={(e) =>
@@ -504,7 +530,7 @@ export function AgendaInterviewModal({
                 }
                 className="h-11 rounded-xl px-3 text-sm"
               >
-                <option value="">Nenhuma vaga</option>
+                <option value="">Selecione uma vaga vinculada</option>
                 {jobs.map((j) => (
                   <option key={j.id} value={j.id}>
                     {j.title}
@@ -739,13 +765,13 @@ export function AgendaInterviewModal({
               </div>
             </div>
 
-            <Field label="Observação pública para o candidato">
+            <Field label="Observação pública para o candidato (aparece no portal)">
               <Textarea
                 value={form.public_notes}
                 onChange={(e) =>
                   handleFormChange({ public_notes: e.target.value })
                 }
-                placeholder="Mensagem visível no portal do candidato"
+                placeholder="Mensagem segura para o candidato"
                 className="rounded-xl px-3 py-2 text-sm resize-none"
                 rows={3}
               />

@@ -13,6 +13,7 @@ from src.application.services.interview_schedule_service import (
     InterviewScheduleConflictError,
     InterviewScheduleValidationError,
 )
+from src.domain.entities.user import User, UserRole
 from src.infrastructure.repositories.sqlalchemy_interview_schedule_repository import (
     SQLAlchemyInterviewScheduleRepository,
 )
@@ -53,6 +54,63 @@ def _get_service(db: AsyncSession = Depends(get_db)) -> InterviewScheduleService
     return InterviewScheduleService(repository, sync_service)
 
 
+def _forbidden(message: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=message)
+
+
+def _ensure_global_agenda_reader(current_user: User) -> None:
+    if current_user.role == UserRole.MANAGER:
+        raise _forbidden("Gestores devem acessar entrevistas pelo painel do gestor.")
+    if current_user.role not in {UserRole.ADMIN, UserRole.HR, UserRole.RECRUITER, UserRole.VIEWER}:
+        raise _forbidden("Você não tem permissão para acessar a agenda.")
+
+
+def _ensure_agenda_operator(current_user: User) -> None:
+    if current_user.role not in {UserRole.ADMIN, UserRole.HR, UserRole.RECRUITER}:
+        raise _forbidden("Você não tem permissão para operar a agenda.")
+
+
+def _recruiter_scope_user_id(current_user: User) -> UUID | None:
+    return current_user.id if current_user.role == UserRole.RECRUITER else None
+
+
+async def _ensure_candidate_job_scope(
+    current_user: User,
+    service: InterviewScheduleService,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> None:
+    if current_user.role in {UserRole.ADMIN, UserRole.HR}:
+        return
+    if current_user.role == UserRole.RECRUITER:
+        allowed = await service.is_recruiter_in_candidate_job_scope(
+            user_id=current_user.id,
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+        if allowed:
+            return
+    raise _forbidden("Você não tem permissão para operar entrevistas deste candidato ou vaga.")
+
+
+async def _ensure_interview_scope(
+    current_user: User,
+    service: InterviewScheduleService,
+    schedule_id: UUID,
+) -> None:
+    if current_user.role in {UserRole.ADMIN, UserRole.HR}:
+        return
+    if current_user.role == UserRole.RECRUITER:
+        allowed = await service.is_recruiter_in_interview_scope(
+            user_id=current_user.id,
+            schedule_id=schedule_id,
+        )
+        if allowed:
+            return
+    raise _forbidden("Você não tem permissão para operar esta entrevista.")
+
+
 @router.get("/interviews", response_model=PaginatedResponse[InterviewScheduleResponse])
 async def list_interviews(
     current_user: InternalUser,
@@ -67,6 +125,7 @@ async def list_interviews(
     search: Optional[str] = Query(None),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> PaginatedResponse[InterviewScheduleResponse]:
+    _ensure_global_agenda_reader(current_user)
     # Parse dates if provided
     date_from_dt = None
     date_to_dt = None
@@ -86,6 +145,7 @@ async def list_interviews(
         job_id=job_id,
         interviewer=interviewer,
         search=search,
+        recruiter_scope_user_id=_recruiter_scope_user_id(current_user),
     )
 
     return PaginatedResponse(
@@ -103,6 +163,18 @@ async def create_interview(
     current_user: InternalUser,
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_agenda_operator(current_user)
+    if body.job_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Selecione uma vaga vinculada ao candidato para agendar a entrevista.",
+        )
+    await _ensure_candidate_job_scope(
+        current_user,
+        service,
+        candidate_id=body.candidate_id,
+        job_id=body.job_id,
+    )
     try:
         schedule = await service.create_interview(
             candidate_id=body.candidate_id,
@@ -140,6 +212,9 @@ async def get_interview(
     current_user: InternalUser,
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_global_agenda_reader(current_user)
+    if current_user.role == UserRole.RECRUITER:
+        await _ensure_interview_scope(current_user, service, schedule_id)
     try:
         details = await service.get_interview_details(schedule_id)
         return InterviewScheduleResponse(**details)
@@ -154,6 +229,8 @@ async def update_interview(
     current_user: InternalUser,
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_agenda_operator(current_user)
+    await _ensure_interview_scope(current_user, service, schedule_id)
     try:
         schedule = await service.update_interview(
             schedule_id,
@@ -192,6 +269,8 @@ async def cancel_interview(
     current_user: InternalUser,
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_agenda_operator(current_user)
+    await _ensure_interview_scope(current_user, service, schedule_id)
     try:
         schedule = await service.cancel_interview(
             schedule_id, 
@@ -219,6 +298,7 @@ async def get_kpis(
     interviewer: Optional[str] = Query(None),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> AgendaKpiResponse:
+    _ensure_global_agenda_reader(current_user)
     # Parse dates if provided
     date_from_dt = None
     date_to_dt = None
@@ -236,6 +316,7 @@ async def get_kpis(
         candidate_id=candidate_id,
         job_id=job_id,
         interviewer=interviewer,
+        recruiter_scope_user_id=_recruiter_scope_user_id(current_user),
     )
 
     return kpis
@@ -285,6 +366,13 @@ async def create_candidate_job_interview(
     db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_agenda_operator(current_user)
+    await _ensure_candidate_job_scope(
+        current_user,
+        service,
+        candidate_id=candidate_id,
+        job_id=job_id,
+    )
     try:
         schedule = await service.create_interview(
             candidate_id=candidate_id,
@@ -338,6 +426,8 @@ async def reschedule_interview(
     db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_agenda_operator(current_user)
+    await _ensure_interview_scope(current_user, service, interview_id)
     try:
         schedule = await service.reschedule_interview(
             interview_id,
@@ -384,6 +474,8 @@ async def cancel_interview_operational(
     db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_agenda_operator(current_user)
+    await _ensure_interview_scope(current_user, service, interview_id)
     try:
         schedule = await service.cancel_interview(
             interview_id,
@@ -420,6 +512,8 @@ async def complete_interview(
     db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_agenda_operator(current_user)
+    await _ensure_interview_scope(current_user, service, interview_id)
     try:
         schedule = await service.complete_interview(
             interview_id,
@@ -455,6 +549,8 @@ async def mark_interview_no_show(
     db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
+    _ensure_agenda_operator(current_user)
+    await _ensure_interview_scope(current_user, service, interview_id)
     try:
         schedule = await service.mark_no_show(
             interview_id,

@@ -1,21 +1,32 @@
 import {
+  AlertCircle,
+  BriefcaseBusiness,
   Calendar,
+  CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Clock,
-  Users,
-  Video,
-  AlertCircle,
+  Edit2,
+  ExternalLink,
+  Filter,
   Loader2,
   MoreVertical,
-  Edit2,
-  X,
+  RefreshCw,
+  Search,
+  UserRound,
+  Users,
   UserX,
+  Video,
+  X,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { AuthContext } from "../features/auth/AuthContext";
 import { useGoogleCalendarConnection } from "../features/agenda/useGoogleCalendarConnection";
 import { cn } from "../lib/utils";
 import { agendaService } from "../services/agendaService";
@@ -24,11 +35,49 @@ import { InterviewSchedule, AgendaKpis, AgendaListParams } from "../types/agenda
 import { AgendaInterviewModal } from "../features/agenda/AgendaInterviewModal";
 import { CancelInterviewModal } from "../features/agenda/CancelInterviewModal";
 import {
+  interviewFormatLabel,
   interviewStatusLabel,
   interviewTypeLabel,
   scorecardActionLabel,
   scorecardStatusLabel,
 } from "../features/agenda/interviewDisplay";
+
+type AgendaPeriod = "today" | "week" | "month" | "all";
+type AgendaSection = {
+  key: string;
+  title: string;
+  description: string;
+  interviews: InterviewSchedule[];
+  icon: typeof Calendar;
+  emptyLabel?: string;
+};
+
+const TODAY = new Date();
+const MUTABLE_AGENDA_ROLES = new Set(["admin", "hr", "recruiter"]);
+const OPEN_STATUSES = new Set(["scheduled", "rescheduled", "awaiting_feedback"]);
+const CLOSED_STATUSES = new Set(["completed", "cancelled", "no_show"]);
+
+const PERIOD_OPTIONS: Array<{ value: AgendaPeriod; label: string; shortLabel: string }> = [
+  { value: "today", label: "Hoje", shortLabel: "Hoje" },
+  { value: "week", label: "Semana", shortLabel: "Semana" },
+  { value: "month", label: "Mês", shortLabel: "Mês" },
+  { value: "all", label: "Todas", shortLabel: "Todas" },
+];
+
+const STATUS_BADGE_VARIANTS: Record<string, "neutral" | "success" | "warning" | "danger" | "outline"> = {
+  scheduled: "neutral",
+  completed: "success",
+  awaiting_feedback: "warning",
+  cancelled: "danger",
+  rescheduled: "warning",
+  no_show: "warning",
+};
+
+const FORMAT_BADGE_VARIANTS: Record<string, "neutral" | "success" | "warning" | "outline"> = {
+  online: "success",
+  presencial: "outline",
+  telefone: "warning",
+};
 
 function dayStart(d: Date) {
   const c = new Date(d);
@@ -36,256 +85,480 @@ function dayStart(d: Date) {
   return c;
 }
 
-function weekDays(base: Date): Date[] {
-  const mon = new Date(base);
-  mon.setDate(base.getDate() - ((base.getDay() + 6) % 7));
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(mon);
-    d.setDate(mon.getDate() + i);
-    return d;
-  });
+function addDays(d: Date, days: number) {
+  const c = dayStart(d);
+  c.setDate(c.getDate() + days);
+  return c;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  scheduled: "text-blue-600",
-  completed: "text-emerald-600",
-  awaiting_feedback: "text-amber-600",
-  cancelled: "text-rose-400",
-  rescheduled: "text-amber-600",
-  no_show: "text-amber-600",
-};
-
-interface InterviewRowProps {
-  iv: InterviewSchedule;
-  onEdit?: (id: string) => void;
-  onCancel?: (id: string, name: string) => void;
-  onComplete?: (iv: InterviewSchedule) => void;
-  onNoShow?: (iv: InterviewSchedule) => void;
-  onScorecard?: (iv: InterviewSchedule) => void;
+function startOfWeek(base: Date) {
+  const d = dayStart(base);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
 }
 
-function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard }: InterviewRowProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+function startOfMonth(base: Date) {
+  const d = dayStart(base);
+  d.setDate(1);
+  return d;
+}
 
-  const startDate = new Date(iv.scheduled_start);
-  const time = startDate.toLocaleTimeString("pt-BR", {
+function addMonths(base: Date, months: number) {
+  const d = startOfMonth(base);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function formatDate(value: Date | string, options?: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat("pt-BR", options).format(
+    typeof value === "string" ? new Date(value) : value
+  );
+}
+
+function formatTimeRange(iv: InterviewSchedule) {
+  const start = new Date(iv.scheduled_start);
+  const end = new Date(iv.scheduled_end);
+  const time = new Intl.DateTimeFormat("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
   });
+  return `${time.format(start)}-${time.format(end)}`;
+}
 
-  const endDate = new Date(iv.scheduled_end);
-  const durationMs = endDate.getTime() - startDate.getTime();
-  const durationMinutes = Math.round(durationMs / 60000);
+function formatPeriodLabel(period: AgendaPeriod, selected: Date) {
+  if (period === "all") return "Todo o histórico";
 
-  const statusColor = STATUS_COLORS[iv.status] || "text-gray-600";
-  const statusLabel = interviewStatusLabel(iv.status);
+  if (period === "today") {
+    return formatDate(selected, {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }
 
-  const initials = iv.candidate_name
+  if (period === "week") {
+    const start = startOfWeek(selected);
+    const end = addDays(start, 6);
+    const startLabel = formatDate(start, { day: "2-digit", month: "short" });
+    const endLabel = formatDate(end, { day: "2-digit", month: "short", year: "numeric" });
+    return `${startLabel} a ${endLabel}`;
+  }
+
+  return formatDate(selected, { month: "long", year: "numeric" });
+}
+
+function buildDateParams(period: AgendaPeriod, selected: Date) {
+  if (period === "all") return {};
+
+  if (period === "today") {
+    const start = dayStart(selected);
+    return {
+      date_from: start.toISOString(),
+      date_to: addDays(start, 1).toISOString(),
+    };
+  }
+
+  if (period === "week") {
+    const start = startOfWeek(selected);
+    return {
+      date_from: start.toISOString(),
+      date_to: addDays(start, 7).toISOString(),
+    };
+  }
+
+  const start = startOfMonth(selected);
+  return {
+    date_from: start.toISOString(),
+    date_to: addMonths(start, 1).toISOString(),
+  };
+}
+
+function sortInterviews(interviews: InterviewSchedule[]) {
+  return [...interviews].sort(
+    (a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
+  );
+}
+
+function isSameDay(a: Date | string, b: Date) {
+  return dayStart(typeof a === "string" ? new Date(a) : a).getTime() === dayStart(b).getTime();
+}
+
+function groupByDate(interviews: InterviewSchedule[]) {
+  return sortInterviews(interviews).reduce<Array<{ dateKey: string; date: Date; interviews: InterviewSchedule[] }>>(
+    (groups, interview) => {
+      const date = dayStart(new Date(interview.scheduled_start));
+      const dateKey = date.toISOString();
+      const current = groups[groups.length - 1];
+
+      if (current?.dateKey === dateKey) {
+        current.interviews.push(interview);
+      } else {
+        groups.push({ dateKey, date, interviews: [interview] });
+      }
+
+      return groups;
+    },
+    []
+  );
+}
+
+function getPeriodSections(interviews: InterviewSchedule[], selected: Date): AgendaSection[] {
+  const now = new Date();
+  const selectedDay = dayStart(selected);
+  const today = sortInterviews(interviews.filter((iv) => isSameDay(iv.scheduled_start, selectedDay)));
+  const overdue = sortInterviews(
+    interviews.filter(
+      (iv) =>
+        OPEN_STATUSES.has(iv.status) &&
+        new Date(iv.scheduled_start) < now &&
+        !isSameDay(iv.scheduled_start, selectedDay)
+    )
+  );
+  const upcoming = sortInterviews(
+    interviews.filter(
+      (iv) =>
+        OPEN_STATUSES.has(iv.status) &&
+        new Date(iv.scheduled_start) >= now &&
+        !isSameDay(iv.scheduled_start, selected)
+    )
+  );
+  const closed = sortInterviews(interviews.filter((iv) => CLOSED_STATUSES.has(iv.status)));
+
+  return [
+    {
+      key: "today",
+      title: "Hoje",
+      description: "Entrevistas do dia selecionado.",
+      interviews: today,
+      icon: Clock,
+      emptyLabel: "Sem entrevistas hoje.",
+    },
+    {
+      key: "upcoming",
+      title: "Próximas",
+      description: "Compromissos ainda em aberto no período.",
+      interviews: upcoming,
+      icon: CalendarDays,
+      emptyLabel: "Sem próximas entrevistas neste período.",
+    },
+    {
+      key: "overdue",
+      title: "Atrasadas/pendentes",
+      description: "Entrevistas em aberto com horário já vencido.",
+      interviews: overdue,
+      icon: AlertCircle,
+      emptyLabel: "Nenhuma pendência atrasada.",
+    },
+    {
+      key: "closed",
+      title: "Realizadas/canceladas",
+      description: "Histórico operacional do período.",
+      interviews: closed,
+      icon: CheckCircle2,
+      emptyLabel: "Sem entrevistas finalizadas no período.",
+    },
+  ];
+}
+
+function getInitials(name: string) {
+  return name
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
 
+interface InterviewRowProps {
+  iv: InterviewSchedule;
+  canMutate: boolean;
+  onEdit?: (id: string) => void;
+  onCancel?: (id: string, name: string) => void;
+  onComplete?: (iv: InterviewSchedule) => void;
+  onNoShow?: (iv: InterviewSchedule) => void;
+  onScorecard?: (iv: InterviewSchedule) => void;
+  onOpenCandidate: (candidateId: string) => void;
+  onOpenPipeline: (iv: InterviewSchedule) => void;
+}
+
+function InterviewRow({
+  iv,
+  canMutate,
+  onEdit,
+  onCancel,
+  onComplete,
+  onNoShow,
+  onScorecard,
+  onOpenCandidate,
+  onOpenPipeline,
+}: InterviewRowProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const isCancelled = iv.status === "cancelled";
-  const canComplete = iv.status === "scheduled" || iv.status === "rescheduled";
-  const canScorecard = iv.status === "completed" || iv.status === "awaiting_feedback";
-  const canNoShow = iv.status === "scheduled" || iv.status === "rescheduled";
+  const canComplete = canMutate && (iv.status === "scheduled" || iv.status === "rescheduled");
+  const canNoShow = canMutate && (iv.status === "scheduled" || iv.status === "rescheduled");
+  const canScorecard = canMutate && (iv.status === "completed" || iv.status === "awaiting_feedback");
+  const canOpenPipeline = Boolean(iv.job_id || iv.pipeline_id);
+  const hasMutableActions = Boolean(onEdit || onCancel || onComplete || onNoShow || onScorecard);
 
   return (
-    <div
+    <article
       data-testid="agenda-interview-row"
       className={cn(
-        "group flex items-center gap-4 rounded-xl px-3 py-3 transition relative",
-        isCancelled
-          ? "bg-surface-muted/20 opacity-60"
-          : "hover:bg-surface-muted/30"
+        "grid gap-3 rounded-xl border border-border/60 bg-surface px-3 py-3 shadow-sm transition sm:grid-cols-[112px_minmax(0,1fr)_auto]",
+        isCancelled ? "opacity-70" : "hover:border-border-strong"
       )}
     >
-      {/* Time */}
-      <div className="w-12 shrink-0 text-right">
-        <p className={cn("text-sm font-bold", isCancelled ? "text-text-muted" : "text-text")}>{time}</p>
-        <p className="text-[10px] text-text-muted">{durationMinutes}m</p>
-      </div>
-
-      {/* Divider dot */}
-      <div className={cn("h-full w-px", isCancelled ? "bg-[hsl(var(--border))]/20" : "bg-[hsl(var(--border))]/40")} />
-
-      {/* Avatar */}
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-muted/80 text-[11px] font-bold text-text-muted">
-        {initials}
-      </div>
-
-      {/* Details */}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-text">
-          {iv.candidate_name}
-        </p>
-        <p className="truncate text-xs text-text-muted">
-          {iv.job_title || "-"} · {interviewTypeLabel(iv.interview_type)} · Scorecard: {scorecardStatusLabel(iv)}
-        </p>
-      </div>
-
-      {/* Platform — subtle */}
-      {iv.meeting_url && (
-        <div className="hidden items-center gap-1 sm:flex">
-          <Video className="h-3 w-3 text-text-muted" />
-          <span className="text-xs text-text-muted">Online</span>
+      <div className="flex items-center gap-3 sm:block">
+        <div className="rounded-lg bg-surface-muted px-3 py-2 text-left sm:text-center">
+          <p className="text-sm font-bold text-text">{formatTimeRange(iv)}</p>
+          <p className="mt-0.5 text-[11px] font-medium text-text-muted">
+            {formatDate(iv.scheduled_start, { day: "2-digit", month: "short" })}
+          </p>
         </div>
-      )}
-
-      {/* Google Calendar Sync Indicator */}
-      {iv.calendar_provider === "google" && (
-        <div className="hidden items-center gap-1 sm:flex">
-          <Calendar className={cn("h-3 w-3", 
-            iv.calendar_sync_status === "synced" ? "text-emerald-600" :
-            iv.calendar_sync_status === "failed" ? "text-rose-600" :
-            "text-text-muted"
-          )} />
-          {iv.calendar_sync_status === "synced" && iv.external_calendar_html_link ? (
-            <a
-              href={iv.external_calendar_html_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-emerald-600 hover:underline"
-            >
-              Abrir no Calendar
-            </a>
-          ) : (
-            <span className={cn("text-xs", 
-              iv.calendar_sync_status === "synced" ? "text-emerald-600" :
-              iv.calendar_sync_status === "failed" ? "text-rose-600" :
-              "text-text-muted"
-            )}>
-              {iv.calendar_sync_status === "synced" ? "Sincronizado" :
-               iv.calendar_sync_status === "failed" ? "Falha" :
-               "Não sincronizado"}
-            </span>
-          )}
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))]/10 text-xs font-bold text-[hsl(var(--primary))] sm:mx-auto sm:mt-3">
+          {getInitials(iv.candidate_name)}
         </div>
-      )}
+      </div>
 
-      {/* Status */}
-      <span className={cn("shrink-0 text-xs font-semibold", statusColor)}>
-        {statusLabel}
-      </span>
+      <div className="min-w-0 space-y-3">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-bold text-text sm:truncate">{iv.candidate_name}</h3>
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-muted">
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0" />
+                <span className="sm:truncate">{iv.job_title || "Vaga não informada"}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Users className="h-3.5 w-3.5" />
+                {iv.interviewer_name || iv.interviewer_email || "Responsável não informado"}
+              </span>
+            </p>
+          </div>
 
-      {/* Actions menu */}
-      {(onEdit || onCancel || onComplete || onNoShow || onScorecard) && (
-        <div className="relative">
-          <button
-            data-testid="agenda-actions-button"
+          <div className="flex flex-wrap gap-1.5 sm:justify-end">
+            <Badge variant={STATUS_BADGE_VARIANTS[iv.status] ?? "neutral"}>
+              {interviewStatusLabel(iv.status)}
+            </Badge>
+            <Badge variant={FORMAT_BADGE_VARIANTS[iv.interview_format] ?? "outline"}>
+              {interviewFormatLabel(iv.interview_format)}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="grid gap-2 text-xs text-text-muted sm:grid-cols-3">
+          <span>{interviewTypeLabel(iv.interview_type)}</span>
+          <span>{scorecardStatusLabel(iv)}</span>
+          <span className="inline-flex items-center gap-1">
+            {iv.meeting_url ? <Video className="h-3.5 w-3.5" /> : <Calendar className="h-3.5 w-3.5" />}
+            {iv.meeting_url ? "Online com link" : iv.location || "Local a definir"}
+          </span>
+        </div>
+
+        {iv.public_notes ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-text-muted">Nota pública</p>
+            <p className="rounded-lg border border-border/50 bg-surface-muted/50 px-3 py-2 text-sm text-text">
+              {iv.public_notes}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          <Button
             type="button"
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="h-8 w-8 rounded-lg text-text-muted hover:bg-surface-muted/50 hover:text-text transition"
-            aria-label="Menu de ações"
+            size="sm"
+            variant="outline"
+            onClick={() => onOpenCandidate(iv.candidate_id)}
           >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-
-          {menuOpen && (
-            <div className="absolute right-0 mt-1 w-56 rounded-lg border border-border bg-surface shadow-lg z-10">
-              {onEdit && (
-                <button
-                  data-testid="agenda-edit-action"
-                  type="button"
-                  onClick={() => {
-                    onEdit(iv.id);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-surface-muted flex items-center gap-2 text-text transition first:rounded-t-lg"
-                >
-                  <Edit2 className="h-4 w-4" />
-                  {isCancelled || iv.status === "no_show" ? "Reagendar" : "Reagendar/editar"}
-                </button>
-              )}
-
-              {canComplete && onComplete ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onComplete(iv);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-surface-muted flex items-center gap-2 text-text transition"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Marcar como concluída
-                </button>
-              ) : null}
-
-              {canNoShow && onNoShow ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onNoShow(iv);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-surface-muted flex items-center gap-2 text-text transition"
-                >
-                  <UserX className="h-4 w-4" />
-                  Não compareceu
-                </button>
-              ) : null}
-
-              {canScorecard && onScorecard ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onScorecard(iv);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-surface-muted flex items-center gap-2 text-text transition"
-                >
-                  <ClipboardCheck className="h-4 w-4" />
-                  {scorecardActionLabel(iv)}
-                </button>
-              ) : null}
-
-              {!isCancelled && onCancel && (
-                <button
-                  data-testid="agenda-cancel-action"
-                  type="button"
-                  onClick={() => {
-                    onCancel(iv.id, iv.candidate_name);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-rose-50 flex items-center gap-2 text-rose-600 transition last:rounded-b-lg"
-                >
-                  <X className="h-4 w-4" />
-                  Cancelar
-                </button>
-              )}
-            </div>
-          )}
+            <UserRound className="mr-1.5 h-3.5 w-3.5" />
+            Abrir candidato
+          </Button>
+          {canOpenPipeline ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onOpenPipeline(iv)}
+            >
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Abrir pipeline
+            </Button>
+          ) : null}
         </div>
-      )}
+      </div>
+
+      <div className="flex items-start justify-end">
+        {hasMutableActions ? (
+          <div className="relative">
+            <Button
+              data-testid="agenda-actions-button"
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() => setMenuOpen((current) => !current)}
+              aria-label="Menu de ações"
+              aria-expanded={menuOpen}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+
+            {menuOpen ? (
+              <div className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+                {onEdit ? (
+                  <button
+                    data-testid="agenda-edit-action"
+                    type="button"
+                    onClick={() => {
+                      onEdit(iv.id);
+                      setMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                    {isCancelled || iv.status === "no_show" ? "Reagendar" : "Editar/remarcar"}
+                  </button>
+                ) : null}
+
+                {canComplete && onComplete ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onComplete(iv);
+                      setMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Marcar como concluída
+                  </button>
+                ) : null}
+
+                {canNoShow && onNoShow ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onNoShow(iv);
+                      setMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
+                  >
+                    <UserX className="h-4 w-4" />
+                    Não compareceu
+                  </button>
+                ) : null}
+
+                {canScorecard && onScorecard ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onScorecard(iv);
+                      setMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
+                  >
+                    <ClipboardCheck className="h-4 w-4" />
+                    {scorecardActionLabel(iv)}
+                  </button>
+                ) : null}
+
+                {!isCancelled && onCancel ? (
+                  <button
+                    data-testid="agenda-cancel-action"
+                    type="button"
+                    onClick={() => {
+                      onCancel(iv.id, iv.candidate_name);
+                      setMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-danger transition hover:bg-danger-soft"
+                  >
+                    <X className="h-4 w-4" />
+                    Cancelar
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <Badge variant="outline">Somente leitura</Badge>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function FiltersContent({
+  searchInput,
+  setSearchInput,
+  filterStatus,
+  setFilterStatus,
+  loading,
+}: {
+  searchInput: string;
+  setSearchInput: (value: string) => void;
+  filterStatus: string | "all";
+  setFilterStatus: (value: string | "all") => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-[minmax(240px,1fr)_220px]">
+      <label className="relative block">
+        <span className="sr-only">Buscar entrevistas</span>
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+        <input
+          type="text"
+          placeholder="Buscar candidato, vaga, avaliador..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="h-11 w-full rounded-xl border border-border/60 bg-surface px-10 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+        />
+        {loading ? (
+          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-text-muted" />
+        ) : null}
+      </label>
+
+      <label className="block">
+        <span className="sr-only">Filtrar por status</span>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="h-11 w-full rounded-xl border border-border/60 bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+        >
+          <option value="all">Todos os status</option>
+          <option value="scheduled">Agendada</option>
+          <option value="completed">Concluída</option>
+          <option value="awaiting_feedback">Aguardando feedback</option>
+          <option value="cancelled">Cancelada</option>
+          <option value="rescheduled">Reagendada</option>
+          <option value="no_show">Não compareceu</option>
+        </select>
+      </label>
     </div>
   );
 }
 
-const TODAY = new Date();
-
 export function AgendaPage() {
   const navigate = useNavigate();
+  const auth = useContext(AuthContext);
+  const userRole = auth?.user?.role ?? "admin";
+  const canMutateAgenda = MUTABLE_AGENDA_ROLES.has(userRole);
   const [selected, setSelected] = useState(dayStart(TODAY));
   const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
   const [kpis, setKpis] = useState<AgendaKpis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | "all">("all");
-  const [filterPeriod, setFilterPeriod] = useState<"today" | "week" | "month" | "all">("week");
+  const [filterPeriod, setFilterPeriod] = useState<AgendaPeriod>("week");
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [hasInitialized, setHasInitialized] = useState(false);
-
-  // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editScheduleId, setEditScheduleId] = useState<string | undefined>();
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelScheduleId, setCancelScheduleId] = useState<string | undefined>();
-  const [cancelScheduleName, setCancelScheduleName] = useState<string>("");
+  const [cancelScheduleName, setCancelScheduleName] = useState("");
   const {
     googleConnected,
     googleAccountEmail,
@@ -294,10 +567,8 @@ export function AgendaPage() {
     connectGoogleCalendar,
   } = useGoogleCalendarConnection();
 
-  const days = weekDays(selected);
-  const todayTs = dayStart(TODAY).getTime();
+  const periodLabel = formatPeriodLabel(filterPeriod, selected);
 
-  // Debounce search query
   useEffect(() => {
     const handler = setTimeout(() => {
       setSearchQuery(searchInput);
@@ -310,35 +581,9 @@ export function AgendaPage() {
     setError(null);
 
     try {
-      // Build date params based on selected period
-      let dateFrom: string | undefined;
-      let dateTo: string | undefined;
-      const now = new Date();
-
-      if (filterPeriod === "today") {
-        const today = dayStart(now);
-        dateFrom = today.toISOString();
-        dateTo = new Date(today.getTime() + 86400000).toISOString();
-      } else if (filterPeriod === "week") {
-        const weekStart = dayStart(now);
-        weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-        dateFrom = weekStart.toISOString();
-        dateTo = new Date(weekStart.getTime() + 604800000).toISOString();
-      } else if (filterPeriod === "month") {
-        const monthStart = dayStart(now);
-        monthStart.setDate(1);
-        dateFrom = monthStart.toISOString();
-        const monthEnd = new Date(monthStart);
-        monthEnd.setMonth(monthEnd.getMonth() + 1);
-        dateTo = monthEnd.toISOString();
-      } else if (filterPeriod === "all") {
-        dateFrom = "1970-01-01T00:00:00Z";
-        dateTo = "2100-01-01T00:00:00Z";
-      }
-
+      const dateParams = buildDateParams(filterPeriod, selected);
       const params: AgendaListParams = {
-        date_from: dateFrom,
-        date_to: dateTo,
+        ...dateParams,
         status: filterStatus === "all" ? undefined : filterStatus,
         search: searchQuery || undefined,
         page: 1,
@@ -348,8 +593,7 @@ export function AgendaPage() {
       const [result, kpisResult] = await Promise.all([
         agendaService.listInterviews(params),
         agendaService.getAgendaKpis({
-          date_from: dateFrom,
-          date_to: dateTo,
+          ...dateParams,
           status: filterStatus === "all" ? undefined : filterStatus,
           search: searchQuery || undefined,
         }),
@@ -358,8 +602,7 @@ export function AgendaPage() {
       setInterviews(result.data);
       setKpis(kpisResult);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao carregar agenda";
+      const message = err instanceof Error ? err.message : "Erro ao carregar agenda";
       setError(message);
     } finally {
       setLoading(false);
@@ -369,7 +612,26 @@ export function AgendaPage() {
 
   useEffect(() => {
     void loadData();
-  }, [filterStatus, filterPeriod, searchQuery]);
+  }, [filterStatus, filterPeriod, searchQuery, selected]);
+
+  const handlePeriodChange = (period: AgendaPeriod) => {
+    setFilterPeriod(period);
+    if (period === "today") setSelected(dayStart(TODAY));
+  };
+
+  const handlePreviousPeriod = () => {
+    if (filterPeriod === "all") return;
+    if (filterPeriod === "today") setSelected((current) => addDays(current, -1));
+    if (filterPeriod === "week") setSelected((current) => addDays(current, -7));
+    if (filterPeriod === "month") setSelected((current) => addMonths(current, -1));
+  };
+
+  const handleNextPeriod = () => {
+    if (filterPeriod === "all") return;
+    if (filterPeriod === "today") setSelected((current) => addDays(current, 1));
+    if (filterPeriod === "week") setSelected((current) => addDays(current, 7));
+    if (filterPeriod === "month") setSelected((current) => addMonths(current, 1));
+  };
 
   const handleEditClick = (scheduleId: string) => {
     setEditScheduleId(scheduleId);
@@ -406,11 +668,22 @@ export function AgendaPage() {
     navigate(`/candidatos/${interview.candidate_id}?tab=interviews&focus=scorecard&interview_id=${interview.id}`);
   };
 
+  const handleOpenCandidate = (candidateId: string) => {
+    navigate(`/candidatos/${candidateId}`);
+  };
+
+  const handleOpenPipeline = (interview: InterviewSchedule) => {
+    if (interview.job_id) {
+      navigate(`/pipeline/${interview.job_id}?candidateId=${interview.candidate_id}`);
+      return;
+    }
+    navigate(`/pipeline?candidateId=${interview.candidate_id}`);
+  };
+
   const handleModalSuccess = async () => {
     setIsCreateModalOpen(false);
     setIsEditModalOpen(false);
     setIsCancelModalOpen(false);
-    // Reload data
     await loadData();
   };
 
@@ -423,312 +696,311 @@ export function AgendaPage() {
     }
   };
 
-  // Group interviews by day for display
-  function byDay(day: Date) {
-    const t = dayStart(day).getTime();
-    return interviews.filter((iv) =>
-      dayStart(new Date(iv.scheduled_start)).getTime() === t
-    );
-  }
-
-  const todayIvs = filterPeriod === 'all'
-    ? [...interviews].sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
-    : byDay(selected).sort(
-        (a, b) =>
-          new Date(a.scheduled_start).getTime() -
-          new Date(b.scheduled_start).getTime()
-      );
-  const weekIvs = days.flatMap(byDay);
-
+  const sortedInterviews = useMemo(() => sortInterviews(interviews), [interviews]);
+  const groupedInterviews = useMemo(() => groupByDate(sortedInterviews), [sortedInterviews]);
+  const sections = useMemo(
+    () => getPeriodSections(sortedInterviews, filterPeriod === "today" ? selected : dayStart(TODAY)),
+    [sortedInterviews, filterPeriod, selected]
+  );
+  const overdueCount = sections.find((section) => section.key === "overdue")?.interviews.length ?? 0;
+  const hasActiveFilters = filterStatus !== "all" || Boolean(searchQuery);
   const showInitialLoading = loading && !hasInitialized && !error;
+
+  const renderInterviewRow = (iv: InterviewSchedule) => (
+    <InterviewRow
+      key={iv.id}
+      iv={iv}
+      canMutate={canMutateAgenda}
+      onEdit={canMutateAgenda ? handleEditClick : undefined}
+      onCancel={canMutateAgenda ? handleCancelClick : undefined}
+      onComplete={canMutateAgenda ? (interview) => void handleCompleteClick(interview) : undefined}
+      onNoShow={canMutateAgenda ? (interview) => void handleNoShowClick(interview) : undefined}
+      onScorecard={canMutateAgenda ? handleScorecardClick : undefined}
+      onOpenCandidate={handleOpenCandidate}
+      onOpenPipeline={handleOpenPipeline}
+    />
+  );
 
   if (showInitialLoading) {
     return (
-      <div className="mx-auto w-full max-w-4xl space-y-5 px-4 pb-16 pt-6 sm:px-6">
-        <PageHeader
-          title="Agenda de Entrevistas"
-          subtitle="Visão semanal e detalhe diário"
-        />
-        <div className="flex h-64 items-center justify-center">
+      <main className="mx-auto w-full max-w-7xl space-y-5 px-4 pb-16 pt-5 sm:px-6">
+        <div className="rounded-2xl border border-border/60 bg-surface p-6">
+          <div className="h-8 w-40 animate-pulse rounded bg-surface-muted" />
+          <div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded bg-surface-muted" />
+        </div>
+        <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-border/60 bg-surface">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-text-muted" />
             <p className="text-sm text-text-muted">Carregando agenda...</p>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (error) {
     return (
-      <div className="mx-auto w-full max-w-4xl space-y-5 px-4 pb-16 pt-6 sm:px-6">
-        <PageHeader
-          title="Agenda de Entrevistas"
-          subtitle="Visão semanal e detalhe diário"
-        />
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-rose-600" />
+      <main className="mx-auto w-full max-w-7xl space-y-5 px-4 pb-16 pt-5 sm:px-6">
+        <section className="rounded-2xl border border-border/60 bg-surface p-5">
+          <h1 className="text-2xl font-extrabold text-text">Agenda</h1>
+          <p className="mt-1 text-sm text-text-muted">Entrevistas e compromissos do processo seletivo.</p>
+        </section>
+        <div className="rounded-2xl border border-danger/25 bg-danger-soft p-5">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 text-danger" />
             <div>
-              <p className="font-semibold text-rose-900">Erro ao carregar</p>
-              <p className="text-sm text-rose-700">{error}</p>
+              <p className="font-semibold text-danger">Erro ao carregar</p>
+              <p className="text-sm text-danger">{error}</p>
+              <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => void loadData()}>
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                Atualizar
+              </Button>
             </div>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-5 px-4 pb-16 pt-6 sm:px-6">
-      <div className="flex items-center justify-between">
-        <PageHeader
-          title="Agenda de Entrevistas"
-          subtitle="Visão semanal e detalhe diário"
-        />
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="h-11 px-5 rounded-xl bg-[hsl(var(--primary))] text-white text-sm font-medium hover:opacity-90 transition"
-        >
-          + Novo agendamento
-        </button>
-      </div>
-
-      {/* Google Calendar Connection Banner */}
-      <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]">
-            <Calendar className="h-5 w-5" />
-          </div>
+    <main className="mx-auto w-full max-w-7xl space-y-5 px-4 pb-16 pt-5 sm:px-6">
+      <section className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm sm:p-5">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
           <div>
-            <p className="text-sm font-semibold text-text">Integração com Google Agenda</p>
-            <p className="text-xs text-text-muted">
-              {googleConnected
-                ? `Conta conectada${googleAccountEmail ? `: ${googleAccountEmail}` : ""}.`
-                : "Conecte sua conta para sincronizar as entrevistas automaticamente."}
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-extrabold tracking-normal text-text sm:text-3xl">Agenda</h1>
+              <Badge variant={canMutateAgenda ? "success" : "outline"}>
+                {canMutateAgenda ? "Operação" : "Somente leitura"}
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-text-muted">
+              Entrevistas e compromissos do processo seletivo.
             </p>
           </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => void handleConnectGoogle()}
-          disabled={connectingGoogle || loadingGoogleConnection}
-          className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm h-10 rounded-lg border-border bg-surface px-4 text-sm font-medium text-text hover:bg-surface-muted disabled:opacity-60"
-        >
-          {connectingGoogle
-            ? "Conectando..."
-            : loadingGoogleConnection
-            ? "Verificando..."
-            : googleConnected
-            ? "Reconectar Google Agenda"
-            : "Conectar Google Agenda"}
-        </button>
-      </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: "Total agendadas", value: kpis?.total_scheduled ?? 0, icon: Calendar },
-          { label: "Concluídas", value: kpis?.completed_count ?? 0, icon: CheckCircle2 },
-          { label: "Hoje", value: kpis?.today_count ?? 0, icon: Clock },
-          { label: "Avaliadores", value: kpis?.unique_interviewers_count ?? 0, icon: Users },
-        ].map((k) => (
-          <div
-            key={k.label}
-            className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface px-4 py-3"
-          >
-            <k.icon className="h-4 w-4 shrink-0 text-text-muted" />
-            <div>
-              <p className="text-lg font-extrabold text-text">{k.value}</p>
-              <p className="text-[11px] text-text-muted">{k.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="space-y-3 rounded-xl border border-border/60 bg-surface p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Search */}
-          <div className="relative flex-1 flex items-center">
-            <input
-              type="text"
-              placeholder="Buscar candidato, vaga, avaliador..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full rounded-lg border border-border/40 bg-surface-muted pl-3 pr-9 py-2 text-sm text-text placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
-            />
-            {loading && (
-              <Loader2 className="absolute right-3 h-4 w-4 animate-spin text-text-muted" />
-            )}
-          </div>
-
-          {/* Period filter */}
-          <select
-            value={filterPeriod}
-            onChange={(e) => setFilterPeriod(e.target.value as any)}
-            className="rounded-lg border border-border/40 bg-surface-muted px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
-          >
-            <option value="today">Hoje</option>
-            <option value="week">Esta semana</option>
-            <option value="month">Este mês</option>
-            <option value="all">Todos</option>
-          </select>
-
-          {/* Status filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="rounded-lg border border-border/40 bg-surface-muted px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
-          >
-            <option value="all">Todos os status</option>
-            <option value="scheduled">Agendada</option>
-            <option value="completed">Concluída</option>
-            <option value="awaiting_feedback">Aguardando feedback</option>
-            <option value="cancelled">Cancelada</option>
-            <option value="rescheduled">Reagendada</option>
-            <option value="no_show">Não compareceu</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Week strip */}
-      <div className="flex gap-1 overflow-x-auto rounded-xl border border-border/60 bg-surface p-2">
-        {days.map((day) => {
-          const ts = dayStart(day).getTime();
-          const isToday = ts === todayTs;
-          const isSelected = ts === selected.getTime();
-          const count = byDay(day).length;
-
-          return (
-            <button
-              key={ts}
-              onClick={() => setSelected(dayStart(day))}
-              className={cn(
-                "flex flex-1 flex-col items-center gap-1 rounded-lg px-2 py-2.5 text-center transition min-w-[44px]",
-                isSelected
-                  ? "bg-[hsl(var(--primary))] text-white"
-                  : isToday
-                  ? "border border-[hsl(var(--primary))]/30 text-[hsl(var(--primary))]"
-                  : "text-text-muted hover:bg-surface-muted/40"
-              )}
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            {canMutateAgenda ? (
+              <Button type="button" onClick={() => setIsCreateModalOpen(true)}>
+                <Calendar className="mr-2 h-4 w-4" />
+                Nova entrevista
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void loadData()}
+              disabled={loading}
             >
-              <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
-                {day.toLocaleDateString("pt-BR", { weekday: "short" })}
+              <RefreshCw className={cn("mr-2 h-4 w-4", loading ? "animate-spin" : "")} />
+              Atualizar
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "Hoje", value: kpis?.today_count ?? 0, icon: Clock },
+            { label: "Próximas", value: kpis?.upcoming_count ?? 0, icon: CalendarDays },
+            { label: "Pendentes", value: overdueCount, icon: AlertCircle },
+            { label: "Canceladas", value: kpis?.cancelled_count ?? 0, icon: X },
+          ].map((kpi) => (
+            <div key={kpi.label} className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface-muted/35 px-4 py-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface text-text-muted">
+                <kpi.icon className="h-4 w-4" />
               </span>
-              <span className="text-base font-extrabold">{day.getDate()}</span>
-              {count > 0 ? (
-                <span
+              <div>
+                <p className="text-xl font-extrabold text-text">{kpi.value}</p>
+                <p className="text-xs font-medium text-text-muted">{kpi.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-4 rounded-2xl border border-border/60 bg-surface p-4 shadow-sm lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="inline-flex rounded-xl border border-border/60 bg-surface-muted/40 p-1" aria-label="Navegação temporal">
+              {PERIOD_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handlePeriodChange(option.value)}
                   className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold",
-                    isSelected
-                      ? "bg-white/25 text-white"
-                      : "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]"
+                    "h-10 rounded-lg px-3 text-sm font-semibold transition sm:px-4",
+                    filterPeriod === option.value
+                      ? "bg-[hsl(var(--primary))] text-primary-foreground shadow-sm"
+                      : "text-text-muted hover:bg-surface hover:text-text"
                   )}
                 >
-                  {count}
-                </span>
-              ) : (
-                <span className="h-4" />
-              )}
-            </button>
-          );
-        })}
-      </div>
+                  {option.label}
+                </button>
+              ))}
+            </div>
 
-      {/* Day detail */}
-      <div className="rounded-2xl border border-border/60 bg-surface p-5">
-        <div className="mb-4">
-          <h2 className="text-sm font-bold text-text">
-            {selected.toLocaleDateString("pt-BR", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
-          </h2>
-          <p className="text-xs text-text-muted">
-            {todayIvs.length === 0
-              ? "Sem entrevistas neste dia"
-              : `${todayIvs.length} entrevista${todayIvs.length > 1 ? "s" : ""}`}
-          </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handlePreviousPeriod}
+                disabled={filterPeriod === "all"}
+                aria-label="Período anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="min-w-0 rounded-xl border border-border/60 bg-surface px-3 py-2 text-sm font-semibold text-text sm:min-w-[260px] sm:text-center">
+                {periodLabel}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleNextPeriod}
+                disabled={filterPeriod === "all"}
+                aria-label="Próximo período"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <details open className="rounded-xl border border-border/60 bg-surface-muted/25 p-3">
+            <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-text sm:hidden">
+              <Filter className="h-4 w-4" />
+              Filtros
+            </summary>
+            <div className="mt-3 sm:mt-0">
+              <FiltersContent
+                searchInput={searchInput}
+                setSearchInput={setSearchInput}
+                filterStatus={filterStatus}
+                setFilterStatus={setFilterStatus}
+                loading={loading}
+              />
+            </div>
+          </details>
         </div>
 
-        {todayIvs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Calendar className="mb-3 h-8 w-8 text-text-muted/50" />
-            <p className="text-sm text-text-muted">
-              Nenhuma entrevista agendada.
+        <aside className="rounded-xl border border-border/60 bg-surface-muted/25 p-4">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface text-[hsl(var(--primary))]">
+              <Calendar className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-text">Google Agenda</p>
+              <p className="mt-1 text-xs text-text-muted">
+                {googleConnected
+                  ? `Conta conectada${googleAccountEmail ? `: ${googleAccountEmail}` : ""}.`
+                  : "Opcional para sincronização operacional."}
+              </p>
+            </div>
+          </div>
+          {canMutateAgenda ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3 w-full"
+              onClick={() => void handleConnectGoogle()}
+              disabled={connectingGoogle || loadingGoogleConnection}
+            >
+              {connectingGoogle
+                ? "Conectando..."
+                : loadingGoogleConnection
+                ? "Verificando..."
+                : googleConnected
+                ? "Reconectar Google Agenda"
+                : "Conectar Google Agenda"}
+            </Button>
+          ) : (
+            <p className="mt-3 rounded-lg border border-border/60 bg-surface px-3 py-2 text-xs text-text-muted">
+              Viewer acompanha a agenda sem ações mutáveis.
             </p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {todayIvs.map((iv) => (
-              <InterviewRow
-                key={iv.id}
-                iv={iv}
-                onEdit={handleEditClick}
-                onCancel={handleCancelClick}
-                onComplete={(iv) => void handleCompleteClick(iv)}
-                onNoShow={(iv) => void handleNoShowClick(iv)}
-                onScorecard={handleScorecardClick}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          )}
+        </aside>
+      </section>
 
-      {/* Week list */}
-      <div className="rounded-2xl border border-border/60 bg-surface p-5">
-        <h3 className="mb-3 text-sm font-bold text-text">
-          Semana completa
-        </h3>
-        {weekIvs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <Calendar className="mb-2 h-6 w-6 text-text-muted/50" />
-            <p className="text-xs text-text-muted">
-              Nenhuma entrevista neste período.
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-extrabold text-text">
+              {filterPeriod === "all" ? "Todas as entrevistas" : "Blocos operacionais"}
+            </h2>
+            <p className="text-sm text-text-muted">
+              {filterPeriod === "all"
+                ? "Agrupadas por data para evitar leitura de um único dia."
+                : `${sortedInterviews.length} entrevista${sortedInterviews.length === 1 ? "" : "s"} no período selecionado.`}
             </p>
           </div>
-        ) : (
-          <div className="divide-y divide-[hsl(var(--border))]/30">
-            {days.map((day) => {
-              const ivs = byDay(day);
-              if (ivs.length === 0) return null;
-              return (
-                <div key={day.toISOString()} className="py-3 first:pt-0 last:pb-0">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                    {day.toLocaleDateString("pt-BR", {
-                      weekday: "long",
-                      day: "numeric",
-                    })}
-                  </p>
-                  <div className="space-y-1">
-                    {ivs
-                      .sort(
-                        (a, b) =>
-                          new Date(a.scheduled_start).getTime() -
-                          new Date(b.scheduled_start).getTime()
-                      )
-                      .map((iv) => (
-                        <InterviewRow
-                          key={iv.id}
-                          iv={iv}
-                          onEdit={handleEditClick}
-                          onCancel={handleCancelClick}
-                          onComplete={(iv) => void handleCompleteClick(iv)}
-                          onNoShow={(iv) => void handleNoShowClick(iv)}
-                          onScorecard={handleScorecardClick}
-                        />
-                      ))}
+          {hasActiveFilters ? (
+            <Badge variant="outline">Filtro aplicado</Badge>
+          ) : null}
+        </div>
+
+        {sortedInterviews.length === 0 ? (
+          <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-border/60 bg-surface p-8 text-center">
+            <Calendar className="mb-3 h-8 w-8 text-text-muted" />
+            <h3 className="text-base font-bold text-text">
+              {hasActiveFilters ? "Sem resultado para o filtro" : filterPeriod === "today" ? "Sem entrevistas hoje" : "Sem entrevistas no período"}
+            </h3>
+            <p className="mt-1 max-w-md text-sm text-text-muted">
+              {hasActiveFilters
+                ? "Ajuste busca, status ou período para encontrar entrevistas."
+                : "Quando houver entrevistas vinculadas a candidato e vaga, elas aparecerão aqui."}
+            </p>
+          </div>
+        ) : filterPeriod === "all" ? (
+          <div className="space-y-4">
+            {groupedInterviews.map((group) => (
+              <section key={group.dateKey} className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold uppercase text-text">
+                      {formatDate(group.date, { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
+                    </h3>
+                    <p className="text-xs text-text-muted">
+                      {group.interviews.length} entrevista{group.interviews.length === 1 ? "" : "s"}
+                    </p>
                   </div>
                 </div>
+                <div className="space-y-3">{group.interviews.map(renderInterviewRow)}</div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {sections.map((section) => {
+              const Icon = section.icon;
+              return (
+                <section key={section.key} className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-text-muted" />
+                        <h3 className="text-base font-bold text-text">{section.title}</h3>
+                      </div>
+                      <p className="mt-1 text-xs text-text-muted">{section.description}</p>
+                    </div>
+                    <Badge variant={section.interviews.length > 0 ? "neutral" : "outline"}>
+                      {section.interviews.length}
+                    </Badge>
+                  </div>
+
+                  {section.interviews.length === 0 ? (
+                    <div className="flex min-h-[132px] items-center justify-center rounded-xl border border-dashed border-border/70 bg-surface-muted/20 px-4 text-center text-sm text-text-muted">
+                      {section.emptyLabel}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">{section.interviews.map(renderInterviewRow)}</div>
+                  )}
+                </section>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Modals */}
       <AgendaInterviewModal
         isOpen={isCreateModalOpen}
         isEdit={false}
@@ -758,6 +1030,6 @@ export function AgendaPage() {
         }}
         onSuccess={handleModalSuccess}
       />
-    </div>
+    </main>
   );
 }

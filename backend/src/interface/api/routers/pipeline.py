@@ -366,6 +366,7 @@ async def schedule_pipeline_interview(
             meeting_url=body.meeting_url,
             interviewer_name=None,
             interviewer_email=None,
+            requested_by_user_id=current_user.id,
         )
         details = await interview_service.get_interview_details(schedule.id)
         await db.commit()

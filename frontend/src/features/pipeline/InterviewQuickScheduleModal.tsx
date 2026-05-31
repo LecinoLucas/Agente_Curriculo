@@ -5,7 +5,6 @@ import { Modal } from "../../components/common/Modal";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useGoogleCalendarConnection } from "../agenda/useGoogleCalendarConnection";
 import type { InterviewFormat } from "../../types/agenda";
 
 type InterviewQuickScheduleModalProps = {
@@ -21,8 +20,6 @@ type InterviewQuickScheduleModalProps = {
     location: string | null;
     meeting_url: string | null;
     public_notes: string | null;
-    create_google_event?: boolean;
-    create_google_meet?: boolean;
   }) => Promise<void>;
   onOpenFullAgenda: () => void;
 };
@@ -60,25 +57,8 @@ export function InterviewQuickScheduleModal({
   const [meetingUrl, setMeetingUrl] = useState("");
   const [publicNotes, setPublicNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [createGoogleEvent, setCreateGoogleEvent] = useState(false);
-  const [createGoogleMeet, setCreateGoogleMeet] = useState(false);
-  const { googleConnected, googleAccountEmail } = useGoogleCalendarConnection();
 
   const endTime = useMemo(() => addMinutes(startTime, Number(duration) || 60), [duration, startTime]);
-
-  const handleGoogleEventChange = (checked: boolean) => {
-    setCreateGoogleEvent(checked);
-    if (!checked) {
-      setCreateGoogleMeet(false);
-    }
-  };
-
-  const handleGoogleMeetChange = (checked: boolean) => {
-    setCreateGoogleMeet(checked);
-    if (checked) {
-      setCreateGoogleEvent(true);
-    }
-  };
 
   const handleSchedule = async () => {
     setError(null);
@@ -99,8 +79,6 @@ export function InterviewQuickScheduleModal({
       location: interviewFormat === "presencial" ? location.trim() || null : null,
       meeting_url: interviewFormat === "online" ? meetingUrl.trim() || null : null,
       public_notes: publicNotes.trim() || null,
-      create_google_event: googleConnected && createGoogleEvent,
-      create_google_meet: googleConnected && createGoogleEvent && createGoogleMeet,
     });
   };
 
@@ -143,7 +121,7 @@ export function InterviewQuickScheduleModal({
         </div>
 
         <label className="space-y-1.5 text-sm font-medium">
-          <span>Tipo</span>
+          <span>Formato</span>
           <Select className="h-10 w-full rounded-lg px-3" value={interviewFormat} onChange={(event) => setInterviewFormat(event.target.value as InterviewFormat)}>
             <option value="online">Online</option>
             <option value="presencial">Presencial</option>
@@ -169,51 +147,6 @@ export function InterviewQuickScheduleModal({
           <span>Observação pública para o candidato</span>
           <Textarea className="min-h-20 w-full rounded-lg px-3 py-2" value={publicNotes} onChange={(event) => setPublicNotes(event.target.value)} />
         </label>
-
-        {/* Sincronização com calendário */}
-        <div className="space-y-2 pt-2">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <input
-              id="quick-schedule-google-calendar"
-              type="checkbox"
-              checked={createGoogleEvent}
-              onChange={(e) => handleGoogleEventChange(e.target.checked)}
-              disabled={!googleConnected}
-              className="h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
-            />
-            <label htmlFor="quick-schedule-google-calendar">Adicionar ao Google Calendar</label>
-          </div>
-          
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <input
-              id="quick-schedule-google-meet"
-              type="checkbox"
-              checked={createGoogleMeet}
-              onChange={(e) => handleGoogleMeetChange(e.target.checked)}
-              disabled={!googleConnected}
-              className="h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
-            />
-            <label htmlFor="quick-schedule-google-meet">Criar link do Google Meet</label>
-          </div>
-          
-          {!googleConnected && (
-            <p className="text-xs text-text-muted">
-              Conecte o Google Calendar para criar evento e link do Meet.
-            </p>
-          )}
-
-          {googleConnected && (
-            <p className="text-xs text-emerald-600">
-              Google Calendar conectado{googleAccountEmail ? `: ${googleAccountEmail}` : ""}
-            </p>
-          )}
-
-          {googleConnected && !createGoogleEvent ? (
-            <p className="text-xs text-text-muted">
-              Marque Google Calendar para criar link do Meet.
-            </p>
-          ) : null}
-        </div>
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border bg-surface-muted px-6 py-4 sm:flex-row sm:justify-end">

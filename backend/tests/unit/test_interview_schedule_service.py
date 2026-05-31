@@ -21,6 +21,7 @@ from src.infrastructure.database.models.interview_schedule_model import Intervie
 def mock_repository():
     repository = AsyncMock()
     repository.find_conflicting_schedule.return_value = None
+    repository.find_active_pipeline_id.return_value = uuid4()
     return repository
 
 
@@ -297,7 +298,7 @@ class TestCreateInterview:
         with pytest.raises(InterviewScheduleConflictError, match="avaliador"):
             await service.create_interview(
                 candidate_id=candidate_id,
-                job_id=None,
+                job_id=uuid4(),
                 pipeline_id=None,
                 title="Tech Interview",
                 description=None,
@@ -325,7 +326,7 @@ class TestCreateInterview:
         with pytest.raises(InterviewScheduleConflictError, match="candidato"):
             await service.create_interview(
                 candidate_id=candidate_id,
-                job_id=None,
+                job_id=uuid4(),
                 pipeline_id=None,
                 title="Tech Interview",
                 description=None,
@@ -350,7 +351,7 @@ class TestCreateInterview:
 
         result = await service.create_interview(
             candidate_id=candidate_id,
-            job_id=None,
+            job_id=uuid4(),
             pipeline_id=None,
             title="Tech Interview",
             description=None,
@@ -368,6 +369,55 @@ class TestCreateInterview:
         assert result.candidate_id == candidate_id
 
     @pytest.mark.asyncio
+    async def test_create_interview_requires_candidate_job_link(self, service, mock_repository):
+        candidate_id = uuid4()
+        start = datetime.now(timezone.utc) + timedelta(hours=4)
+        end = start + timedelta(hours=1)
+
+        with pytest.raises(InterviewScheduleValidationError, match="Selecione uma vaga vinculada"):
+            await service.create_interview(
+                candidate_id=candidate_id,
+                job_id=None,
+                pipeline_id=None,
+                title="Tech Interview",
+                description=None,
+                scheduled_start=start,
+                scheduled_end=end,
+                timezone="America/Recife",
+                interview_type="technical",
+                status="scheduled",
+                location=None,
+                meeting_url=None,
+                interviewer_name="Livre",
+                interviewer_email="livre@empresa.com",
+            )
+
+    @pytest.mark.asyncio
+    async def test_create_interview_blocks_internal_public_notes(self, service, mock_repository):
+        candidate_id = uuid4()
+        start = datetime.now(timezone.utc) + timedelta(hours=4)
+        end = start + timedelta(hours=1)
+
+        with pytest.raises(InterviewScheduleValidationError, match="observação pública"):
+            await service.create_interview(
+                candidate_id=candidate_id,
+                job_id=uuid4(),
+                pipeline_id=None,
+                title="Tech Interview",
+                description=None,
+                public_notes="Scorecard pendente para o pipeline interno.",
+                scheduled_start=start,
+                scheduled_end=end,
+                timezone="America/Recife",
+                interview_type="technical",
+                status="scheduled",
+                location=None,
+                meeting_url=None,
+                interviewer_name="Livre",
+                interviewer_email="livre@empresa.com",
+            )
+
+    @pytest.mark.asyncio
     async def test_create_interview_allows_cancelled_conflict(self, service, mock_repository):
         candidate_id = uuid4()
         start = datetime.now(timezone.utc) + timedelta(hours=4)
@@ -377,7 +427,7 @@ class TestCreateInterview:
 
         result = await service.create_interview(
             candidate_id=candidate_id,
-            job_id=None,
+            job_id=uuid4(),
             pipeline_id=None,
             title="Tech Interview",
             description=None,
@@ -403,7 +453,7 @@ class TestCreateInterview:
         with pytest.raises(InterviewScheduleValidationError):
             await service.create_interview(
                 candidate_id=candidate_id,
-                job_id=None,
+                job_id=uuid4(),
                 pipeline_id=None,
                 title="Tech Interview",
                 description=None,
@@ -427,7 +477,7 @@ class TestCreateInterview:
         with pytest.raises(InterviewScheduleValidationError, match="passado"):
             await service.create_interview(
                 candidate_id=candidate_id,
-                job_id=None,
+                job_id=uuid4(),
                 pipeline_id=None,
                 title="Tech Interview",
                 description=None,
@@ -451,7 +501,7 @@ class TestCreateInterview:
         with pytest.raises(InterviewScheduleValidationError):
             await service.create_interview(
                 candidate_id=candidate_id,
-                job_id=None,
+                job_id=uuid4(),
                 pipeline_id=None,
                 title="Tech Interview",
                 description=None,
@@ -475,7 +525,7 @@ class TestCreateInterview:
         with pytest.raises(InterviewScheduleValidationError):
             await service.create_interview(
                 candidate_id=candidate_id,
-                job_id=None,
+                job_id=uuid4(),
                 pipeline_id=None,
                 title="Tech Interview",
                 description=None,

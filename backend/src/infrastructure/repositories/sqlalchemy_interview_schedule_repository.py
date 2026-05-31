@@ -76,6 +76,13 @@ class SQLAlchemyInterviewScheduleRepository:
 
         return filters
 
+    def _recruiter_scope_filter(self, user_id: UUID):
+        return sa.or_(
+            JobModel.created_by == user_id,
+            CandidateModel.created_by == user_id,
+            InterviewScheduleModel.created_by == user_id,
+        )
+
     def _build_base_from(self):
         # FROM compartilhado por list/count/KPIs: garante joins explícitos para
         # candidates e jobs antes de aplicar filtros. Sem isso, filtros do `search`
@@ -110,6 +117,43 @@ class SQLAlchemyInterviewScheduleRepository:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def is_recruiter_in_candidate_job_scope(
+        self,
+        *,
+        user_id: UUID,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> bool:
+        result = await self._session.scalar(
+            sa.select(sa.literal(True))
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+                sa.or_(JobModel.created_by == user_id, CandidateModel.created_by == user_id),
+            )
+            .limit(1)
+        )
+        return bool(result)
+
+    async def is_recruiter_in_interview_scope(self, *, user_id: UUID, schedule_id: UUID) -> bool:
+        result = await self._session.scalar(
+            self._build_detail_select()
+            .where(
+                InterviewScheduleModel.id == schedule_id,
+                self._recruiter_scope_filter(user_id),
+            )
+            .limit(1)
+        )
+        return bool(result)
 
     def _active_pipeline_id_subquery(self):
         return (
@@ -243,6 +287,7 @@ class SQLAlchemyInterviewScheduleRepository:
         interviewer: Optional[str] = None,
         search: Optional[str] = None,
         active_pipeline_only: bool = False,
+        recruiter_scope_user_id: Optional[UUID] = None,
     ) -> tuple[list[dict], int]:
         filters = self._build_filters(
             date_from=date_from,
@@ -257,6 +302,8 @@ class SQLAlchemyInterviewScheduleRepository:
             active_pipeline_id = self._active_pipeline_id_subquery()
             filters.append(active_pipeline_id.is_not(None))
             filters.append(InterviewScheduleModel.pipeline_id == active_pipeline_id)
+        if recruiter_scope_user_id is not None:
+            filters.append(self._recruiter_scope_filter(recruiter_scope_user_id))
 
         # Count total — usa o mesmo FROM com joins explícitos (ver _build_base_from)
         # para que filtros que referenciam candidates/jobs no `search` não acionem
@@ -301,6 +348,7 @@ class SQLAlchemyInterviewScheduleRepository:
         candidate_id: Optional[UUID] = None,
         job_id: Optional[UUID] = None,
         interviewer: Optional[str] = None,
+        recruiter_scope_user_id: Optional[UUID] = None,
     ) -> dict:
         filters = self._build_filters(
             date_from=date_from,
@@ -311,6 +359,8 @@ class SQLAlchemyInterviewScheduleRepository:
             interviewer=interviewer,
             search=search,
         )
+        if recruiter_scope_user_id is not None:
+            filters.append(self._recruiter_scope_filter(recruiter_scope_user_id))
 
         # KPIs aggregation
         # Calculate today's range in America/Recife timezone, then convert to UTC for comparison

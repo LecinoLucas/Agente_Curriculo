@@ -80,6 +80,9 @@ describe("AgendaInterviewModal", () => {
     fireEvent.change(screen.getByLabelText("Candidato *"), {
       target: { value: "candidate-1" },
     });
+    fireEvent.change(screen.getByLabelText("Vaga *"), {
+      target: { value: "job-1" },
+    });
     fireEvent.change(screen.getByLabelText("Título *"), {
       target: { value: "Entrevista de conflito" },
     });
@@ -177,6 +180,9 @@ describe("AgendaInterviewModal", () => {
     fireEvent.change(screen.getByLabelText("Candidato *"), {
       target: { value: "candidate-1" },
     });
+    fireEvent.change(screen.getByLabelText("Vaga *"), {
+      target: { value: "job-1" },
+    });
     fireEvent.change(screen.getByLabelText("Título *"), {
       target: { value: "Entrevista com Meet" },
     });
@@ -197,8 +203,47 @@ describe("AgendaInterviewModal", () => {
         expect.objectContaining({
           create_google_event: true,
           create_google_meet: true,
+          job_id: "job-1",
         }),
       );
     });
+  });
+
+  it("exige vaga vinculada antes de criar entrevista", async () => {
+    render(
+      <MemoryRouter future={routerFuture}>
+        <AgendaInterviewModal
+          isOpen={true}
+          isEdit={false}
+          onClose={onClose}
+          onSuccess={onSuccess}
+        />
+      </MemoryRouter>
+    );
+
+    await screen.findByLabelText("Candidato *");
+
+    fireEvent.change(screen.getByLabelText("Candidato *"), {
+      target: { value: "candidate-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Título *"), {
+      target: { value: "Entrevista sem vaga" },
+    });
+    fireEvent.change(screen.getByLabelText("Data *"), {
+      target: { value: tomorrow },
+    });
+    fireEvent.change(screen.getByLabelText("Início *"), {
+      target: { value: "10:00" },
+    });
+    fireEvent.change(screen.getByLabelText("Fim *"), {
+      target: { value: "11:00" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar" }));
+
+    expect(
+      screen.getByText("Selecione uma vaga vinculada ao candidato para agendar a entrevista.")
+    ).toBeInTheDocument();
+    expect(agendaService.createInterview).not.toHaveBeenCalled();
   });
 });

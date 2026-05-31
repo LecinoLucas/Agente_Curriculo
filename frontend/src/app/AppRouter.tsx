@@ -126,9 +126,7 @@ const DashboardPage = lazy(() =>
   import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
 );
 
-const AgendaPage = lazy(() =>
-  import("../pages/AgendaPage").then((m) => ({ default: m.AgendaPage }))
-);
+// Removed AgendaPage import and route
 
 const ImportPage = lazy(() =>
   import("../pages/ImportPage").then((m) => ({ default: m.ImportPage }))
@@ -178,6 +176,7 @@ type UserRole = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr
 
 const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
 const RH_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "hr"];
+const AGENDA_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "hr"];
 const ADMIN_ROLES: UserRole[] = ["admin"];
 const DEMO_RH_ROLES: UserRole[] = ["admin", "recruiter"];
 const PRE_ADMISSION_ROLES: UserRole[] = ["admin", "hr"];
@@ -255,10 +254,7 @@ export function AppRouter() {
           element={protectedPage(<RhDashboardPage />, RH_ROLES)}
         />
 
-        <Route
-          path="agenda"
-          element={protectedPage(<AgendaPage />, STAFF_ROLES)}
-        />
+        {/* Removed agenda route */}
 
         <Route
           path="pipeline"

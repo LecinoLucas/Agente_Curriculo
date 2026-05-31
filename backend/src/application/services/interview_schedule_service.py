@@ -34,6 +34,18 @@ class InterviewScheduleConflictError(ValidationException):
 VALID_STATUSES = ("scheduled", "completed", "cancelled", "rescheduled", "no_show", "awaiting_feedback")
 VALID_TYPES = ("screening", "technical", "manager", "hr", "final", "other")
 VALID_FORMATS = ("online", "presencial", "telefone")
+PUBLIC_NOTES_INTERNAL_TERMS = (
+    "scorecard",
+    "pipeline",
+    "ranking",
+    "fit score",
+    "job_fit",
+    "gate",
+    "parecer interno",
+    "nota interna",
+    "recomendação interna",
+)
+LINK_REQUIRED_MESSAGE = "Selecione uma vaga vinculada ao candidato para agendar a entrevista."
 
 
 class InterviewScheduleService:
@@ -58,6 +70,7 @@ class InterviewScheduleService:
         interviewer: Optional[str] = None,
         search: Optional[str] = None,
         active_pipeline_only: bool = False,
+        recruiter_scope_user_id: Optional[UUID] = None,
     ) -> tuple[list[dict], int]:
         if date_from and date_to and date_from > date_to:
             raise ValidationException("date_from não pode ser maior que date_to")
@@ -73,6 +86,7 @@ class InterviewScheduleService:
             interviewer=interviewer,
             search=search,
             active_pipeline_only=active_pipeline_only,
+            recruiter_scope_user_id=recruiter_scope_user_id,
         )
 
         return items, total
@@ -87,6 +101,7 @@ class InterviewScheduleService:
         candidate_id: Optional[UUID] = None,
         job_id: Optional[UUID] = None,
         interviewer: Optional[str] = None,
+        recruiter_scope_user_id: Optional[UUID] = None,
     ) -> AgendaKpiResponse:
         if date_from and date_to and date_from > date_to:
             raise ValidationException("date_from não pode ser maior que date_to")
@@ -99,6 +114,7 @@ class InterviewScheduleService:
             candidate_id=candidate_id,
             job_id=job_id,
             interviewer=interviewer,
+            recruiter_scope_user_id=recruiter_scope_user_id,
         )
 
         return AgendaKpiResponse(**kpis_dict)
@@ -116,12 +132,41 @@ class InterviewScheduleService:
             raise InterviewScheduleNotFoundError("Entrevista não encontrada")
         return details
 
+    async def is_recruiter_in_candidate_job_scope(
+        self,
+        *,
+        user_id: UUID,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> bool:
+        return await self._repository.is_recruiter_in_candidate_job_scope(
+            user_id=user_id,
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+
+    async def is_recruiter_in_interview_scope(self, *, user_id: UUID, schedule_id: UUID) -> bool:
+        return await self._repository.is_recruiter_in_interview_scope(
+            user_id=user_id,
+            schedule_id=schedule_id,
+        )
+
     @staticmethod
     def _normalize_optional_text(value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
         normalized = value.strip()
         return normalized or None
+
+    def _validate_public_notes(self, value: Optional[str]) -> None:
+        normalized = self._normalize_optional_text(value)
+        if normalized is None:
+            return
+        lowered = normalized.lower()
+        if any(term in lowered for term in PUBLIC_NOTES_INTERNAL_TERMS):
+            raise InterviewScheduleValidationError(
+                "A observação pública aparece para o candidato. Use notas internas para termos técnicos ou internos."
+            )
 
     async def _ensure_no_conflicts(
         self,
@@ -208,10 +253,15 @@ class InterviewScheduleService:
             raise InterviewScheduleValidationError(f"Tipo de entrevista inválido: {interview_type}")
         if interview_format not in VALID_FORMATS:
             raise InterviewScheduleValidationError(f"Formato de entrevista inválido: {interview_format}")
+        self._validate_public_notes(public_notes)
+        if job_id is None:
+            raise InterviewScheduleValidationError(LINK_REQUIRED_MESSAGE)
         if pipeline_id is None and job_id is not None:
             resolved_pipeline_id = await self._repository.find_active_pipeline_id(candidate_id, job_id)
             if isinstance(resolved_pipeline_id, UUID):
                 pipeline_id = resolved_pipeline_id
+        if pipeline_id is None:
+            raise InterviewScheduleValidationError(LINK_REQUIRED_MESSAGE)
 
         await self._ensure_no_conflicts(
             candidate_id=candidate_id,
@@ -240,6 +290,7 @@ class InterviewScheduleService:
             meeting_url=meeting_url,
             interviewer_name=interviewer_name,
             interviewer_email=interviewer_email,
+            created_by=requested_by_user_id,
         )
 
         schedule = await self._repository.create(schedule)
@@ -381,6 +432,8 @@ class InterviewScheduleService:
         new_interview_format = interview_format or schedule.interview_format or "online"
         if new_interview_format not in VALID_FORMATS:
             raise InterviewScheduleValidationError(f"Formato de entrevista inválido: {new_interview_format}")
+        if public_notes is not None:
+            self._validate_public_notes(public_notes)
 
         time_changed = new_start != schedule.scheduled_start or new_end != schedule.scheduled_end
         new_status = status or schedule.status

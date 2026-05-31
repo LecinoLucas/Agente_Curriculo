@@ -75,7 +75,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
       { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
       { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
       { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
-      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
+      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer", "hr"] },
     ],
   },
   {
