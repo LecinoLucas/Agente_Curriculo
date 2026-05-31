@@ -196,6 +196,28 @@ pipeline interna detalhada (stage, scores, decisões internas)
 
 ---
 
+## Débitos técnicos conhecidos
+
+### `test_apply_rejects_invalid_file` — falha pré-existente
+
+**Arquivo:** `backend/tests/test_public_application.py:607`
+
+**Sintoma:** o teste espera `"PDF" in response.json()["detail"]`, mas o serviço retorna
+`"Tipo de arquivo não permitido"` (via `upload_validation_service.py:94`).
+
+**Causa:** a mensagem de erro foi internacionalizada/alterada em `UploadValidationError`
+antes da C2. O teste não foi atualizado para refletir a nova mensagem.
+
+**Confirmação de que não é da C2:** `upload_validation_service.py` não aparece no diff
+do commit `a4b614f feat(candidate-portal): add public candidate API contract aliases`.
+O `public_candidate_portal.py` (novo em C2) não usa esse caminho de upload.
+
+**Ação recomendada:** atualizar o teste em fase futura para verificar
+`"não permitido" in response.json()["detail"]` ou checar status 422 sem depender
+da mensagem exata.
+
+---
+
 ## Próximas fases
 
 **C3 — Integração controlada do `candidate-portal/` com `/api/v1/public/*`**
