@@ -171,8 +171,6 @@ export type SchedulePipelineInterviewPayload = {
   internal_notes?: string | null;
   title?: string | null;
   interview_type?: string;
-  create_google_event?: boolean;
-  create_google_meet?: boolean;
 };
 
 export type PipelineJobSummary = {

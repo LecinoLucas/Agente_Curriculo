@@ -255,8 +255,6 @@ function DrawerPanel({
     location: string | null;
     meeting_url: string | null;
     public_notes: string | null;
-    create_google_event?: boolean;
-    create_google_meet?: boolean;
   }) => {
     if (!activeEntry || !interviewStageToSchedule || stageSaving) return;
 
