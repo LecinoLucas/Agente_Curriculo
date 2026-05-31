@@ -13,6 +13,30 @@ class PublicJobResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PublicJobDetailResponse(BaseModel):
+    """Detalhe público de uma vaga — apenas campos seguros para exibição ao candidato.
+
+    Campos excluídos intencionalmente: created_by, quality_score, quality_status,
+    deal_breakers, mandatory_skills, behavioral_template_id, screening_questions,
+    job_profile_json, skill_requirements, audit timestamps.
+    """
+
+    id: UUID
+    title: str
+    description: str
+    requirements: str | None = None
+    responsibilities: str | None = None
+    location: str | None = None
+    job_area: str | None = None
+    work_model: str | None = None
+    seniority_level: str | None = None
+    benefits: list = Field(default_factory=list)
+    working_hours: str | None = None
+    published_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class PublicApplyResponse(BaseModel):
     candidate_id: UUID
     resume_id: UUID

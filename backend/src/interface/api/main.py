@@ -60,6 +60,7 @@ from src.interface.api.routers import (
     pipeline,
     pre_admission,
     public,
+    public_candidate_portal,
     resumes,
     rh_dashboard,
     skill_equivalences,
@@ -109,6 +110,7 @@ _cors_allow_origin_regex = (
 _PREFIX = "/api/v1"
 
 app.include_router(public.router, prefix=_PREFIX)
+app.include_router(public_candidate_portal.router, prefix=_PREFIX)
 app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(users.router, prefix=_PREFIX)
 app.include_router(internal_users.router, prefix=_PREFIX)
