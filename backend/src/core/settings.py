@@ -17,8 +17,12 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = False
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
+        # frontend interno (staff/admin)
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        # candidate-portal standalone
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ]
 
     # Database
