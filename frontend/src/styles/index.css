@@ -443,23 +443,23 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borda/fundo base de inputs. */
-    --input:               356 10% 85%;
+    --input:               220 8% 85%;
 
-    --nav-bg:              356 10% 20%;
-    --nav-text:            356 10% 98%;
-    --nav-muted:           356 10% 70%;
+    --nav-bg:              220 12% 16%;
+    --nav-text:            220 8% 98%;
+    --nav-muted:           220 8% 65%;
     --nav-active-bg:       356 76% 42%;
     --nav-active-text:     0 0% 100%;
-    --nav-border:          356 10% 15%;
+    --nav-border:          220 12% 12%;
 
     --sidebar-accent:      356 76% 42%;
     --hero-start:          356 76% 42%;
-    --hero-end:            356 10% 20%;
+    --hero-end:            220 12% 16%;
 
-    --page-glow-start:     356 10% 98%;
-    --page-glow-end:       356 10% 94%;
-    --page-gradient-start: 356 10% 98%;
-    --page-gradient-end:   356 10% 94%;
+    --page-glow-start:     220 8% 98%;
+    --page-glow-end:       220 8% 94%;
+    --page-gradient-start: 220 8% 98%;
+    --page-gradient-end:   220 8% 94%;
   }
 
   :root[data-visual-theme="theme-2"] {

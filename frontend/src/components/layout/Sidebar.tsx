@@ -41,21 +41,12 @@ export function Sidebar({
     }));
   };
 
-  // Sync expanded groups based on active items, but only if hovered or explicitly toggled
+  // Fechar todos os grupos quando sair do menu
   useEffect(() => {
     if (!isHovered && !mobileMenuOpen) {
       setExpandedGroups({});
-      return;
     }
-
-    const newExpanded: Record<string, boolean> = {};
-    groups.forEach((group) => {
-      if (group.isDropdown && group.items.some((item) => isItemActive(item.to))) {
-        newExpanded[group.label] = true;
-      }
-    });
-    setExpandedGroups((prev) => ({ ...prev, ...newExpanded }));
-  }, [groups, isItemActive, isHovered, mobileMenuOpen]);
+  }, [isHovered, mobileMenuOpen]);
 
   return (
     <>
@@ -83,7 +74,16 @@ export function Sidebar({
       >
         {/* Header / Logo */}
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-[hsl(var(--nav-border))]/50 px-4">
-          <div className="flex items-center gap-3 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => {
+              navigate("/pipeline");
+              onPipelineClick();
+              if (mobileMenuOpen) onToggleMobileMenu();
+            }}
+            className="flex items-center gap-3 overflow-hidden text-left outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] rounded-lg transition-transform hover:scale-[1.02]"
+            title="Ir para Pipeline"
+          >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[hsl(var(--nav-active-bg))] text-[10px] font-extrabold text-white">
               RA
             </div>
@@ -99,7 +99,7 @@ export function Sidebar({
                 ATS & Recrutamento IA
               </span>
             </div>
-          </div>
+          </button>
           <button
             type="button"
             onClick={onToggleMobileMenu}

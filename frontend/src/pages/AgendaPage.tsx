@@ -294,238 +294,204 @@ function InterviewRow({
     <article
       data-testid="agenda-interview-row"
       className={cn(
-        "grid gap-3 rounded-xl border border-border/60 bg-surface px-3 py-3 shadow-sm transition sm:grid-cols-[112px_minmax(0,1fr)_auto]",
-        isCancelled ? "opacity-70" : "hover:border-border-strong"
+        "group flex flex-col sm:flex-row gap-4 rounded-xl border border-border/40 bg-surface p-4 shadow-sm transition-all hover:border-border-strong hover:shadow-md",
+        isCancelled ? "opacity-70" : ""
       )}
     >
-      <div className="flex items-center gap-3 sm:block">
-        <div className="rounded-lg bg-surface-muted px-3 py-2 text-left sm:text-center">
-          <p className="text-sm font-bold text-text">{formatTimeRange(iv)}</p>
-          <p className="mt-0.5 text-[11px] font-medium text-text-muted">
+      <div className="flex sm:flex-col items-center sm:items-start gap-3 sm:w-28 shrink-0 border-b sm:border-b-0 sm:border-r border-border/40 pb-3 sm:pb-0 sm:pr-4">
+        <div className="text-left">
+          <p className="text-base font-extrabold text-text">{formatTimeRange(iv)}</p>
+          <p className="mt-0.5 text-xs font-medium text-text-muted">
             {formatDate(iv.scheduled_start, { day: "2-digit", month: "short" })}
           </p>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))]/10 text-xs font-bold text-[hsl(var(--primary))] sm:mx-auto sm:mt-3">
-          {getInitials(iv.candidate_name)}
-        </div>
+        <Badge variant={INTERVIEW_FORMAT_BADGE_VARIANTS[iv.interview_format] ?? "outline"} className="ml-auto sm:ml-0 sm:mt-auto">
+          {interviewFormatLabel(iv.interview_format)}
+        </Badge>
       </div>
 
-      <div className="min-w-0 space-y-3">
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold text-text sm:truncate">{iv.candidate_name}</h3>
-            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-muted">
-              <span className="inline-flex min-w-0 items-center gap-1">
-                <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0" />
-                <span className="sm:truncate">{iv.job_title || "Vaga não informada"}</span>
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Users className="h-3.5 w-3.5" />
-                {iv.interviewer_name || iv.interviewer_email || "Responsável não informado"}
-              </span>
-            </p>
+      <div className="min-w-0 flex-1 flex flex-col">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--primary))]/10 text-xs font-bold text-[hsl(var(--primary))]">
+              {getInitials(iv.candidate_name)}
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-text truncate" title={iv.candidate_name}>
+                {iv.candidate_name}
+              </h3>
+            </div>
           </div>
-
-          <div className="flex flex-wrap gap-1.5 sm:justify-end">
+          <div className="flex shrink-0 items-center gap-2">
             <Badge variant={INTERVIEW_STATUS_BADGE_VARIANTS[iv.status] ?? "neutral"}>
               {interviewStatusLabel(iv.status)}
             </Badge>
-            <Badge variant={INTERVIEW_FORMAT_BADGE_VARIANTS[iv.interview_format] ?? "outline"}>
-              {interviewFormatLabel(iv.interview_format)}
-            </Badge>
           </div>
         </div>
 
-        <div className="grid gap-2 text-xs text-text-muted sm:grid-cols-3">
-          <span>{interviewTypeLabel(iv.interview_type)}</span>
-          <span>{scorecardStatusLabel(iv)}</span>
-          <span className="inline-flex items-center gap-1">
-            {iv.meeting_url ? <Video className="h-3.5 w-3.5" /> : <Calendar className="h-3.5 w-3.5" />}
-            {iv.meeting_url ? "Online com link" : iv.location || "Local a definir"}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-text-muted">
+          <span className="flex max-w-[200px] items-center gap-1.5 truncate">
+            <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate" title={iv.job_title || "Vaga não informada"}>
+              {iv.job_title || "Vaga não informada"}
+            </span>
           </span>
+          <span className="flex max-w-[200px] items-center gap-1.5 truncate">
+            <Users className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate" title={iv.interviewer_name || iv.interviewer_email || "Responsável não informado"}>
+              {iv.interviewer_name || iv.interviewer_email || "Responsável não informado"}
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            {iv.meeting_url ? <Video className="h-3.5 w-3.5" /> : <Calendar className="h-3.5 w-3.5" />}
+            <span className="max-w-[150px] truncate" title={iv.location || "Local a definir"}>
+              {iv.meeting_url ? "Online com link" : iv.location || "Local a definir"}
+            </span>
+          </span>
+          <span className="hidden sm:inline">•</span>
+          <span>{interviewTypeLabel(iv.interview_type)}</span>
+          <span className="hidden sm:inline">•</span>
+          <span>{scorecardStatusLabel(iv)}</span>
         </div>
 
         {iv.public_notes ? (
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-text-muted">Nota pública</p>
-            <p className="rounded-lg border border-border/50 bg-surface-muted/50 px-3 py-2 text-sm text-text">
-              {iv.public_notes}
-            </p>
+          <div className="mt-3 rounded-lg border border-border/30 bg-surface-muted/30 px-3 py-2 text-sm text-text-muted">
+            <span className="font-semibold text-text">Nota: </span>
+            {iv.public_notes}
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => onOpenCandidate(iv.candidate_id)}
-          >
-            <UserRound className="mr-1.5 h-3.5 w-3.5" />
-            Abrir candidato
-          </Button>
-          {canOpenPipeline ? (
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => onOpenPipeline(iv)}
+              className="h-8 px-3 text-xs bg-surface"
+              onClick={() => onOpenCandidate(iv.candidate_id)}
             >
-              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-              Abrir pipeline
+              <UserRound className="mr-1.5 h-3.5 w-3.5" />
+              Abrir candidato
             </Button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="flex items-start justify-end">
-        {hasMutableActions ? (
-          <div className="relative">
-            <Button
-              data-testid="agenda-actions-button"
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={() => setMenuOpen((current) => !current)}
-              aria-label="Menu de ações"
-              aria-expanded={menuOpen}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-
-            {menuOpen ? (
-              <div className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
-                {onEdit ? (
-                  <button
-                    data-testid="agenda-edit-action"
-                    type="button"
-                    onClick={() => {
-                      onEdit(iv.id);
-                      setMenuOpen(false);
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                    {isCancelled || iv.status === "no_show" ? "Reagendar" : "Editar/remarcar"}
-                  </button>
-                ) : null}
-
-                {canComplete && onComplete ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onComplete(iv);
-                      setMenuOpen(false);
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Marcar como concluída
-                  </button>
-                ) : null}
-
-                {canNoShow && onNoShow ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onNoShow(iv);
-                      setMenuOpen(false);
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
-                  >
-                    <UserX className="h-4 w-4" />
-                    Não compareceu
-                  </button>
-                ) : null}
-
-                {canScorecard && onScorecard ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onScorecard(iv);
-                      setMenuOpen(false);
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
-                  >
-                    <ClipboardCheck className="h-4 w-4" />
-                    {scorecardActionLabel(iv)}
-                  </button>
-                ) : null}
-
-                {!isCancelled && onCancel ? (
-                  <button
-                    data-testid="agenda-cancel-action"
-                    type="button"
-                    onClick={() => {
-                      onCancel(iv.id, iv.candidate_name);
-                      setMenuOpen(false);
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-danger transition hover:bg-danger-soft"
-                  >
-                    <X className="h-4 w-4" />
-                    Cancelar
-                  </button>
-                ) : null}
-              </div>
+            {canOpenPipeline ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs bg-surface"
+                onClick={() => onOpenPipeline(iv)}
+              >
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                Abrir pipeline
+              </Button>
             ) : null}
           </div>
-        ) : (
-          <Badge variant="outline">Somente leitura</Badge>
-        )}
+
+          <div className="flex items-center justify-end">
+            {hasMutableActions ? (
+              <div className="relative">
+                <Button
+                  data-testid="agenda-actions-button"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setMenuOpen((current) => !current)}
+                  aria-label="Menu de ações"
+                  aria-expanded={menuOpen}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+
+                {menuOpen ? (
+                  <div className="absolute right-0 bottom-full mb-1 z-20 w-60 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+                    {onEdit ? (
+                      <button
+                        data-testid="agenda-edit-action"
+                        type="button"
+                        onClick={() => {
+                          onEdit(iv.id);
+                          setMenuOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                        {isCancelled || iv.status === "no_show" ? "Reagendar" : "Editar/remarcar"}
+                      </button>
+                    ) : null}
+
+                    {canComplete && onComplete ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onComplete(iv);
+                          setMenuOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Marcar como concluída
+                      </button>
+                    ) : null}
+
+                    {canNoShow && onNoShow ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onNoShow(iv);
+                          setMenuOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
+                      >
+                        <UserX className="h-4 w-4" />
+                        Não compareceu
+                      </button>
+                    ) : null}
+
+                    {canScorecard && onScorecard ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onScorecard(iv);
+                          setMenuOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-text transition hover:bg-surface-muted"
+                      >
+                        <ClipboardCheck className="h-4 w-4" />
+                        {scorecardActionLabel(iv)}
+                      </button>
+                    ) : null}
+
+                    {!isCancelled && onCancel ? (
+                      <button
+                        data-testid="agenda-cancel-action"
+                        type="button"
+                        onClick={() => {
+                          onCancel(iv.id, iv.candidate_name);
+                          setMenuOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-danger transition hover:bg-danger-soft"
+                      >
+                        <X className="h-4 w-4" />
+                        Cancelar
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                Leitura
+              </Badge>
+            )}
+          </div>
+        </div>
       </div>
     </article>
   );
 }
 
-function FiltersContent({
-  searchInput,
-  setSearchInput,
-  filterStatus,
-  setFilterStatus,
-  loading,
-}: {
-  searchInput: string;
-  setSearchInput: (value: string) => void;
-  filterStatus: string | "all";
-  setFilterStatus: (value: string | "all") => void;
-  loading: boolean;
-}) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-[minmax(240px,1fr)_220px]">
-      <label className="relative block">
-        <span className="sr-only">Buscar entrevistas</span>
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-        <input
-          type="text"
-          placeholder="Buscar candidato, vaga, avaliador..."
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="h-11 w-full rounded-xl border border-border/60 bg-surface px-10 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
-        />
-        {loading ? (
-          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-text-muted" />
-        ) : null}
-      </label>
-
-      <label className="block">
-        <span className="sr-only">Filtrar por status</span>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="h-11 w-full rounded-xl border border-border/60 bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
-        >
-          <option value="all">Todos os status</option>
-          <option value="scheduled">Agendada</option>
-          <option value="completed">Concluída</option>
-          <option value="awaiting_feedback">Aguardando feedback</option>
-          <option value="cancelled">Cancelada</option>
-          <option value="rescheduled">Reagendada</option>
-          <option value="no_show">Não compareceu</option>
-        </select>
-      </label>
-    </div>
-  );
-}
+// FiltersContent removido, integrado no layout principal
 
 export function AgendaPage() {
   const navigate = useNavigate();
@@ -712,16 +678,10 @@ export function AgendaPage() {
 
   if (showInitialLoading) {
     return (
-      <main className="mx-auto w-full max-w-7xl space-y-5 px-4 pb-16 pt-5 sm:px-6">
-        <div className="rounded-2xl border border-border/60 bg-surface p-6">
-          <div className="h-8 w-40 animate-pulse rounded bg-surface-muted" />
-          <div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded bg-surface-muted" />
-        </div>
-        <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-border/60 bg-surface">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-text-muted" />
-            <p className="text-sm text-text-muted">Carregando agenda...</p>
-          </div>
+      <main className="mx-auto w-full max-w-[1440px] space-y-6 px-4 pb-16 pt-6 sm:px-6">
+        <div className="flex flex-col gap-4">
+          <div className="h-10 w-48 animate-pulse rounded-lg bg-surface-muted" />
+          <div className="h-32 w-full animate-pulse rounded-2xl bg-surface-muted" />
         </div>
       </main>
     );
@@ -729,20 +689,16 @@ export function AgendaPage() {
 
   if (error) {
     return (
-      <main className="mx-auto w-full max-w-7xl space-y-5 px-4 pb-16 pt-5 sm:px-6">
-        <section className="rounded-2xl border border-border/60 bg-surface p-5">
-          <h1 className="text-2xl font-extrabold text-text">Agenda</h1>
-          <p className="mt-1 text-sm text-text-muted">Entrevistas e compromissos do processo seletivo.</p>
-        </section>
+      <main className="mx-auto w-full max-w-[1440px] space-y-6 px-4 pb-16 pt-6 sm:px-6">
         <div className="rounded-2xl border border-danger/25 bg-danger-soft p-5">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 h-5 w-5 text-danger" />
             <div>
               <p className="font-semibold text-danger">Erro ao carregar</p>
               <p className="text-sm text-danger">{error}</p>
-              <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => void loadData()}>
+              <Button type="button" variant="outline" size="sm" className="mt-4 bg-surface" onClick={() => void loadData()}>
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                Atualizar
+                Tentar novamente
               </Button>
             </div>
           </div>
@@ -752,24 +708,25 @@ export function AgendaPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-5 px-4 pb-16 pt-5 sm:px-6">
-      <section className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm sm:p-5">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+    <main className="mx-auto w-full max-w-[1440px] space-y-4 lg:space-y-5 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+      {/* HEADER & METRICS */}
+      <section className="flex flex-col gap-6 rounded-2xl border border-border/40 bg-surface p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-extrabold tracking-normal text-text sm:text-3xl">Agenda</h1>
-              <Badge variant={canMutateAgendaActions ? "success" : "outline"}>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-extrabold tracking-tight text-text">Agenda</h1>
+              <Badge variant={canMutateAgendaActions ? "success" : "outline"} className="rounded-full px-2.5 py-0.5 text-xs">
                 {canMutateAgendaActions ? "Operação" : "Somente leitura"}
               </Badge>
             </div>
             <p className="mt-1 text-sm text-text-muted">
-              Entrevistas e compromissos do processo seletivo.
+              Gerencie entrevistas e compromissos do processo seletivo.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2 lg:justify-end">
+          <div className="flex flex-wrap items-center gap-3">
             {canMutateAgendaActions ? (
-              <Button type="button" onClick={() => setIsCreateModalOpen(true)}>
+              <Button type="button" className="shadow-sm" onClick={() => setIsCreateModalOpen(true)}>
                 <Calendar className="mr-2 h-4 w-4" />
                 Nova entrevista
               </Button>
@@ -779,6 +736,7 @@ export function AgendaPage() {
               variant="outline"
               onClick={() => void loadData()}
               disabled={loading}
+              className="bg-surface shadow-sm"
             >
               <RefreshCw className={cn("mr-2 h-4 w-4", loading ? "animate-spin" : "")} />
               Atualizar
@@ -786,209 +744,220 @@ export function AgendaPage() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             { label: "Hoje", value: kpis?.today_count ?? 0, icon: Clock },
             { label: "Próximas", value: kpis?.upcoming_count ?? 0, icon: CalendarDays },
             { label: "Pendentes", value: overdueCount, icon: AlertCircle },
             { label: "Canceladas", value: kpis?.cancelled_count ?? 0, icon: X },
           ].map((kpi) => (
-            <div key={kpi.label} className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface-muted/35 px-4 py-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface text-text-muted">
+            <div key={kpi.label} className="flex items-center gap-3 rounded-xl border border-border/40 bg-surface-muted/20 p-3 transition-colors hover:bg-surface-muted/40">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface text-text-muted shadow-sm">
                 <kpi.icon className="h-4 w-4" />
               </span>
-              <div>
-                <p className="text-xl font-extrabold text-text">{kpi.value}</p>
-                <p className="text-xs font-medium text-text-muted">{kpi.label}</p>
+              <div className="min-w-0">
+                <p className="truncate text-xl font-extrabold leading-none text-text">{kpi.value}</p>
+                <p className="mt-1 truncate text-xs font-medium text-text-muted">{kpi.label}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="grid gap-4 rounded-2xl border border-border/60 bg-surface p-4 shadow-sm lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="inline-flex rounded-xl border border-border/60 bg-surface-muted/40 p-1" aria-label="Navegação temporal">
-              {PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handlePeriodChange(option.value)}
-                  className={cn(
-                    "h-10 rounded-lg px-3 text-sm font-semibold transition sm:px-4",
-                    filterPeriod === option.value
-                      ? "bg-[hsl(var(--primary))] text-primary-foreground shadow-sm"
-                      : "text-text-muted hover:bg-surface hover:text-text"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
+      {/* CONTROLS */}
+      <section className="rounded-2xl border border-border/40 bg-surface p-4 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="inline-flex overflow-x-auto rounded-xl border border-border/40 bg-surface-muted/30 p-1 custom-scrollbar">
+            {PERIOD_OPTIONS.map((option) => (
+              <button
+                key={option.value}
                 type="button"
-                variant="outline"
-                size="icon"
-                onClick={handlePreviousPeriod}
-                disabled={filterPeriod === "all"}
-                aria-label="Período anterior"
+                onClick={() => handlePeriodChange(option.value)}
+                className={cn(
+                  "whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-all",
+                  filterPeriod === option.value
+                    ? "bg-[hsl(var(--primary))] text-primary-foreground shadow-sm"
+                    : "text-text-muted hover:bg-surface hover:text-text"
+                )}
               >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="min-w-0 rounded-xl border border-border/60 bg-surface px-3 py-2 text-sm font-semibold text-text sm:min-w-[260px] sm:text-center">
-                {periodLabel}
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={handleNextPeriod}
-                disabled={filterPeriod === "all"}
-                aria-label="Próximo período"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+                {option.label}
+              </button>
+            ))}
           </div>
 
-          <details open className="rounded-xl border border-border/60 bg-surface-muted/25 p-3">
-            <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-text sm:hidden">
-              <Filter className="h-4 w-4" />
-              Filtros
-            </summary>
-            <div className="mt-3 sm:mt-0">
-              <FiltersContent
-                searchInput={searchInput}
-                setSearchInput={setSearchInput}
-                filterStatus={filterStatus}
-                setFilterStatus={setFilterStatus}
-                loading={loading}
-              />
-            </div>
-          </details>
-        </div>
-
-        <aside className="rounded-xl border border-border/60 bg-surface-muted/25 p-4">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface text-[hsl(var(--primary))]">
-              <Calendar className="h-5 w-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-text">Google Agenda</p>
-              <p className="mt-1 text-xs text-text-muted">
-                {googleConnected
-                  ? `Conta conectada${googleAccountEmail ? `: ${googleAccountEmail}` : ""}.`
-                  : "Opcional para sincronização operacional."}
-              </p>
-            </div>
-          </div>
-          {canMutateAgendaActions ? (
+          <div className="flex items-center gap-2">
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="mt-3 w-full"
-              onClick={() => void handleConnectGoogle()}
-              disabled={connectingGoogle || loadingGoogleConnection}
+              size="icon"
+              className="h-10 w-10 shrink-0"
+              onClick={handlePreviousPeriod}
+              disabled={filterPeriod === "all"}
+              aria-label="Período anterior"
             >
-              {connectingGoogle
-                ? "Conectando..."
-                : loadingGoogleConnection
-                ? "Verificando..."
-                : googleConnected
-                ? "Reconectar Google Agenda"
-                : "Conectar Google Agenda"}
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-          ) : (
-            <p className="mt-3 rounded-lg border border-border/60 bg-surface px-3 py-2 text-xs text-text-muted">
-              Viewer acompanha a agenda sem ações mutáveis.
-            </p>
-          )}
-        </aside>
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-extrabold text-text">
-              {filterPeriod === "all" ? "Todas as entrevistas" : "Blocos operacionais"}
-            </h2>
-            <p className="text-sm text-text-muted">
-              {filterPeriod === "all"
-                ? "Agrupadas por data para evitar leitura de um único dia."
-                : `${sortedInterviews.length} entrevista${sortedInterviews.length === 1 ? "" : "s"} no período selecionado.`}
-            </p>
+            <div className="flex h-10 min-w-[200px] flex-1 items-center justify-center rounded-xl border border-border/40 bg-surface px-4 text-sm font-bold text-text shadow-sm sm:flex-none">
+              {periodLabel}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 shrink-0"
+              onClick={handleNextPeriod}
+              disabled={filterPeriod === "all"}
+              aria-label="Próximo período"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
-          {hasActiveFilters ? (
-            <Badge variant="outline">Filtro aplicado</Badge>
-          ) : null}
         </div>
 
-        {sortedInterviews.length === 0 ? (
-          <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-border/60 bg-surface p-8 text-center">
-            <Calendar className="mb-3 h-8 w-8 text-text-muted" />
-            <h3 className="text-base font-bold text-text">
-              {hasActiveFilters ? "Sem resultado para o filtro" : filterPeriod === "today" ? "Sem entrevistas hoje" : "Sem entrevistas no período"}
-            </h3>
-            <p className="mt-1 max-w-md text-sm text-text-muted">
-              {hasActiveFilters
-                ? "Ajuste busca, status ou período para encontrar entrevistas."
-                : "Quando houver entrevistas vinculadas a candidato e vaga, elas aparecerão aqui."}
-            </p>
-          </div>
-        ) : filterPeriod === "all" ? (
-          <div className="space-y-4">
-            {groupedInterviews.map((group) => (
-              <section key={group.dateKey} className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-bold uppercase text-text">
-                      {formatDate(group.date, { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
-                    </h3>
-                    <p className="text-xs text-text-muted">
-                      {group.interviews.length} entrevista{group.interviews.length === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                </div>
-                <div className="space-y-3">{group.interviews.map(renderInterviewRow)}</div>
-              </section>
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {sections.map((section) => {
-              const Icon = section.icon;
-              return (
-                <section key={section.key} className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-text-muted" />
-                        <h3 className="text-base font-bold text-text">{section.title}</h3>
-                      </div>
-                      <p className="mt-1 text-xs text-text-muted">{section.description}</p>
-                    </div>
-                    <Badge variant={section.interviews.length > 0 ? "neutral" : "outline"}>
-                      {section.interviews.length}
-                    </Badge>
-                  </div>
+        <div className="mt-4 grid gap-3 border-t border-border/40 pt-4 md:grid-cols-[1fr_200px_minmax(220px,auto)]">
+          <label className="relative block">
+            <span className="sr-only">Buscar entrevistas</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              placeholder="Buscar candidato, vaga, avaliador..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="h-10 w-full rounded-xl border border-border/60 bg-surface px-10 text-sm text-text placeholder:text-text-muted transition focus:border-[hsl(var(--primary))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+            />
+            {loading ? (
+              <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-text-muted" />
+            ) : null}
+          </label>
 
-                  {section.interviews.length === 0 ? (
-                    <div className="flex min-h-[132px] items-center justify-center rounded-xl border border-dashed border-border/70 bg-surface-muted/20 px-4 text-center text-sm text-text-muted">
-                      {section.emptyLabel}
-                    </div>
-                  ) : (
-                    <div className="space-y-3">{section.interviews.map(renderInterviewRow)}</div>
+          <label className="block">
+            <span className="sr-only">Filtrar por status</span>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="h-10 w-full cursor-pointer rounded-xl border border-border/60 bg-surface px-3 text-sm text-text transition focus:border-[hsl(var(--primary))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+            >
+              <option value="all">Todos os status</option>
+              <option value="scheduled">Agendada</option>
+              <option value="completed">Concluída</option>
+              <option value="awaiting_feedback">Aguardando feedback</option>
+              <option value="cancelled">Cancelada</option>
+              <option value="rescheduled">Reagendada</option>
+              <option value="no_show">Não compareceu</option>
+            </select>
+          </label>
+
+          <div className="flex h-10 items-center justify-between rounded-xl border border-border/40 bg-surface-muted/20 px-3 transition-colors hover:bg-surface-muted/40">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <Calendar className="h-4 w-4 shrink-0 text-text-muted" />
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-text-muted">Integração</span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {googleConnected ? (
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75"></span>
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
+                    </span>
+                  ) : null}
+                  {googleConnected && googleAccountEmail && (
+                    <span className="sr-only">Conta conectada: {googleAccountEmail}.</span>
                   )}
-                </section>
-              );
-            })}
+                  <span className="truncate text-xs font-semibold text-text" title={googleAccountEmail || "Google Agenda"}>
+                    {googleConnected && googleAccountEmail ? googleAccountEmail : "Google Agenda"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {canMutateAgendaActions ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="ml-2 h-7 px-2 text-[10px] font-bold uppercase tracking-wider"
+                onClick={() => void handleConnectGoogle()}
+                disabled={connectingGoogle || loadingGoogleConnection}
+              >
+                {connectingGoogle ? "Conectando..." : loadingGoogleConnection ? "Verificando..." : googleConnected ? "Reconectar Google Agenda" : "Conectar Google Agenda"}
+              </Button>
+            ) : null}
           </div>
-        )}
+        </div>
       </section>
+
+      {/* CONTENT */}
+      <h2 className="sr-only">
+        {filterPeriod === "all" ? "Todas as entrevistas" : "Blocos operacionais"}
+      </h2>
+      {sortedInterviews.length === 0 ? (
+        <div className="flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-surface p-8 text-center shadow-sm">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-muted/50">
+            <Calendar className="h-8 w-8 text-text-muted" />
+          </div>
+          <h3 className="text-lg font-bold text-text">
+            {hasActiveFilters ? "Sem resultados" : filterPeriod === "today" ? "Sem entrevistas hoje" : "Sem entrevistas no período"}
+          </h3>
+          <p className="mt-2 max-w-sm text-sm text-text-muted">
+            {hasActiveFilters
+              ? "Tente ajustar sua busca, status ou período para encontrar o que procura."
+              : "Nenhuma entrevista marcada. Quando houver, elas aparecerão aqui."}
+          </p>
+        </div>
+      ) : filterPeriod === "all" ? (
+        <div className="space-y-6">
+          {groupedInterviews.map((group) => (
+            <section key={group.dateKey} className="space-y-4 rounded-2xl border border-border/40 bg-surface p-5 shadow-sm">
+              <div className="flex items-center justify-between border-b border-border/40 pb-3">
+                <h3 className="text-base font-bold text-text">
+                  {formatDate(group.date, { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
+                </h3>
+                <Badge variant="neutral">{group.interviews.length}</Badge>
+              </div>
+              <div className="grid gap-3">{group.interviews.map(renderInterviewRow)}</div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="grid items-start gap-4 lg:grid-cols-2 lg:gap-5">
+          {sections.map((section) => {
+            const Icon = section.icon;
+            const isPrimary = section.key === "today" || section.key === "upcoming";
+            const isToday = section.key === "today";
+
+            return (
+              <section
+                key={section.key}
+                className={cn(
+                  "flex flex-col gap-3 rounded-2xl border border-border/40 p-4 shadow-sm",
+                  isToday ? "bg-surface ring-1 ring-[hsl(var(--primary))]/10" : "bg-surface-muted/10"
+                )}
+              >
+                <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Icon
+                      className={cn(
+                        "h-5 w-5",
+                        isPrimary ? "text-[hsl(var(--primary))]" : "text-text-muted"
+                      )}
+                    />
+                    <h3 className="text-base font-extrabold text-text">{section.title}</h3>
+                  </div>
+                  <Badge variant="neutral" className="h-6 px-2 text-xs">
+                    {section.interviews.length}
+                  </Badge>
+                </div>
+
+                {section.interviews.length === 0 ? (
+                  <div className="flex py-6 mt-1 items-center justify-center rounded-xl border border-dashed border-border/60 bg-surface-muted/20 text-sm font-medium text-text-muted">
+                    {section.emptyLabel}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 mt-1">{section.interviews.map(renderInterviewRow)}</div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
 
       <AgendaInterviewModal
         isOpen={isCreateModalOpen}
