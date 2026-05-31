@@ -9,14 +9,18 @@ from __future__ import annotations
 import csv
 import io
 import re
-import structlog
-from uuid import UUID
+from dataclasses import dataclass
+from uuid import UUID, uuid4
 
+import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.analysis_dispatch_service import CandidateJobAnalysisDispatcher
+from src.application.services.analysis_dispatch_service import (
+    AnalysisDispatchDecision,
+    CandidateJobAnalysisDispatcher,
+)
 from src.application.services.audit_service import AuditService
 from src.application.services.candidate_service import (
     APPLICATION_SOURCE_MANUAL,
@@ -30,13 +34,13 @@ from src.application.services.pipeline_service import (
     PipelineJobNotFoundError,
     PipelineService,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
-from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.interface.api.dependencies import HrRecruiterOrAdmin, get_db
 from src.interface.api.schemas.candidaturas_schemas import (
     ImportCandidatesResponse,
@@ -58,6 +62,12 @@ _REQUIRED_COLUMNS = {"nome"}
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
+@dataclass(frozen=True)
+class LinkCandidateResult:
+    job_linked: bool
+    analysis_decision: AnalysisDispatchDecision | None = None
+
+
 def _candidate_service(db: AsyncSession) -> CandidateService:
     return CandidateService(
         SQLAlchemyCandidateRepository(db),
@@ -69,13 +79,36 @@ def _pipeline_service(db: AsyncSession) -> PipelineService:
     return PipelineService(SQLAlchemyPipelineRepository(db), db)
 
 
+async def _validate_default_job_for_import(
+    default_job_id: UUID | None,
+    db: AsyncSession,
+) -> None:
+    if default_job_id is None:
+        return
+    job = await SQLAlchemyPipelineRepository(db).find_available_job(default_job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vaga não encontrada ou não disponível.",
+        )
+
+
+def _http_exception_message(exc: HTTPException) -> str:
+    detail = exc.detail
+    if isinstance(detail, str):
+        return detail
+    return str(detail)
+
+
 async def _link_candidate_to_job(
     candidate_id: UUID,
     job_id: UUID,
     actor_id: UUID,
     db: AsyncSession,
-) -> bool:
-    """Vincula candidato à vaga usando o fluxo canônico. Retorna True se vinculou."""
+    *,
+    request_analysis: bool = True,
+) -> LinkCandidateResult:
+    """Vincula candidato à vaga usando o fluxo canônico."""
     try:
         result = await _pipeline_service(db).add_candidate_to_job(
             candidate_id=candidate_id,
@@ -83,33 +116,36 @@ async def _link_candidate_to_job(
             moved_by=actor_id,
         )
         await db.commit()
-        await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
-            candidate_id=candidate_id,
-            job_id=job_id,
-            requested_by=actor_id,
-        )
+        analysis_decision = None
+        if request_analysis:
+            analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
+                candidate_id=candidate_id,
+                job_id=job_id,
+                requested_by=actor_id,
+            )
         logger.info(
             "candidatura.manual.linked",
             candidate_id=str(candidate_id),
             job_id=str(job_id),
             stage=result.stage,
+            analysis_reason=analysis_decision.reason if analysis_decision else None,
         )
-        return True
+        return LinkCandidateResult(job_linked=True, analysis_decision=analysis_decision)
     except (
         PipelineCandidateAlreadyActiveInSameJobError,
         PipelineDuplicateEntryError,
     ):
-        return False
-    except PipelineCandidateAlreadyActiveInAnotherJobError:
+        return LinkCandidateResult(job_linked=False)
+    except PipelineCandidateAlreadyActiveInAnotherJobError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Candidato já possui vínculo ativo com outra vaga.",
-        )
-    except (PipelineJobNotFoundError, PipelineDestinationJobUnavailableError):
+        ) from exc
+    except (PipelineJobNotFoundError, PipelineDestinationJobUnavailableError) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vaga não encontrada ou não disponível.",
-        )
+        ) from exc
 
 
 @router.post(
@@ -134,7 +170,13 @@ async def create_manual_candidate(
             candidate_id = check.candidate_id
             job_linked = False
             if body.job_id:
-                job_linked = await _link_candidate_to_job(candidate_id, body.job_id, current_user.id, db)
+                link_result = await _link_candidate_to_job(
+                    candidate_id,
+                    body.job_id,
+                    current_user.id,
+                    db,
+                )
+                job_linked = link_result.job_linked
             return ManualCandidateResponse(
                 candidate_id=candidate_id,
                 full_name=check.full_name or body.full_name,
@@ -146,9 +188,6 @@ async def create_manual_candidate(
             )
 
     # Criar candidato diretamente via repositório (sem validação EmailStr do CreateCandidateRequest)
-    from uuid import uuid4
-    from datetime import UTC, datetime
-
     repo = SQLAlchemyCandidateRepository(db)
     candidate_model = CandidateModel(
         id=uuid4(),
@@ -163,17 +202,18 @@ async def create_manual_candidate(
         candidate = await repo.create(candidate_model)
         await db.commit()
         await db.refresh(candidate)
-    except IntegrityError:
+    except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Candidato com este e-mail já existe.",
-        )
+        ) from exc
 
     # Vincular à vaga se job_id informado
     job_linked = False
     if body.job_id:
-        job_linked = await _link_candidate_to_job(candidate.id, body.job_id, current_user.id, db)
+        link_result = await _link_candidate_to_job(candidate.id, body.job_id, current_user.id, db)
+        job_linked = link_result.job_linked
 
     logger.info(
         "candidatura.manual.created",
@@ -203,6 +243,7 @@ async def import_candidates(
     current_user: HrRecruiterOrAdmin,
     file: UploadFile = File(...),
     default_job_id: UUID | None = Form(default=None),
+    request_analysis: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> ImportCandidatesResponse:
     """
@@ -213,6 +254,7 @@ async def import_candidates(
     - pelo menos email ou telefone deve ser preenchido.
     - vaga: título ou ID da vaga (opcional; sobrepõe default_job_id se informado).
     - Limite: 200 linhas por importação.
+    - request_analysis=false por padrão para evitar fan-out automático em massa.
     """
     # Validar tipo de arquivo
     content_type = (file.content_type or "").lower()
@@ -237,11 +279,11 @@ async def import_candidates(
 
     try:
         text = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
+    except UnicodeDecodeError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Arquivo deve estar em UTF-8.",
-        )
+        ) from exc
 
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None:
@@ -251,6 +293,11 @@ async def import_candidates(
         )
 
     headers = {h.strip().lower() for h in reader.fieldnames}
+    if headers.isdisjoint(_EXPECTED_COLUMNS):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="CSV sem cabeçalho detectado.",
+        )
     missing = _REQUIRED_COLUMNS - headers
     if missing:
         raise HTTPException(
@@ -269,6 +316,8 @@ async def import_candidates(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Limite de {_MAX_IMPORT_ROWS} linhas por importação.",
         )
+
+    await _validate_default_job_for_import(default_job_id, db)
 
     svc = _candidate_service(db)
     created = 0
@@ -299,7 +348,12 @@ async def import_candidates(
                 continue
             email = email_raw.lower()
 
-        preview_entry: dict = {"row": row_num, "nome": nome, "email": email, "telefone": telefone or None}
+        preview_entry: dict = {
+            "row": row_num,
+            "nome": nome,
+            "email": email,
+            "telefone": telefone or None,
+        }
         preview.append(preview_entry)
 
         # Verificar duplicidade por e-mail
@@ -314,7 +368,6 @@ async def import_candidates(
                 candidate_id = None
 
         if candidate_id is None:
-            from uuid import uuid4
             repo = SQLAlchemyCandidateRepository(db)
             new_candidate = CandidateModel(
                 id=uuid4(),
@@ -349,12 +402,43 @@ async def import_candidates(
         job_id_to_link = default_job_id
         if candidate_id and job_id_to_link:
             try:
-                ok = await _link_candidate_to_job(candidate_id, job_id_to_link, current_user.id, db)
-                if ok:
+                link_result = await _link_candidate_to_job(
+                    candidate_id,
+                    job_id_to_link,
+                    current_user.id,
+                    db,
+                    request_analysis=request_analysis,
+                )
+                if link_result.job_linked:
                     linked += 1
                     preview_entry["job_linked"] = True
-            except HTTPException:
-                pass
+                    if request_analysis and link_result.analysis_decision is not None:
+                        preview_entry["analysis"] = link_result.analysis_decision.as_dict()
+                    elif not request_analysis:
+                        preview_entry["analysis"] = {
+                            "status": "skipped",
+                            "reason": "request_analysis_false",
+                        }
+                else:
+                    preview_entry["job_linked"] = False
+            except HTTPException as exc:
+                message = _http_exception_message(exc)
+                errors.append(
+                    ImportRowError(
+                        row=row_num,
+                        message=f"Candidato não vinculado à vaga: {message}",
+                    )
+                )
+                preview_entry["job_linked"] = False
+                preview_entry["job_link_error"] = message
+                logger.info(
+                    "candidatura.import.link_failed",
+                    row=row_num,
+                    candidate_id=str(candidate_id),
+                    job_id=str(job_id_to_link),
+                    status_code=exc.status_code,
+                    detail=message,
+                )
 
     await db.commit()
 

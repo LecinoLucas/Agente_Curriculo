@@ -9,12 +9,25 @@ import io
 from uuid import uuid4
 
 import pytest
+import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.integration.helpers import _create_active_user, _auth_headers
+from src.application.services.analysis_dispatch_service import CandidateJobAnalysisDispatcher
+from src.core.settings import settings
 from src.domain.entities.user import UserRole
-
+from src.infrastructure.database.models.analysis_model import (
+    AIModelModel,
+    AnalysisModel,
+    PromptTemplateModel,
+)
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+)
+from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from tests.integration.helpers import _auth_headers, _create_active_user
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -54,6 +67,152 @@ def _csv(rows: list[str]) -> bytes:
 
 def _csv_file(content: bytes, name: str = "candidatos.csv") -> tuple:
     return ("file", (name, io.BytesIO(content), "text/csv"))
+
+
+async def _create_published_job(
+    db_session: AsyncSession,
+    *,
+    title: str = "Import Job",
+) -> JobModel:
+    job = JobModel(
+        id=uuid4(),
+        title=f"{title} {uuid4().hex[:6]}",
+        description="Vaga para testes de importacao",
+        status="published",
+        created_by=uuid4(),
+        location="Sao Paulo, SP",
+    )
+    db_session.add(job)
+    await db_session.commit()
+    await db_session.refresh(job)
+    return job
+
+
+async def _seed_candidate_with_resume(
+    db_session: AsyncSession,
+    *,
+    created_by,
+    email: str,
+    extraction_status: str = "completed",
+    extracted_text: str | None = "Experiencia em Python e FastAPI.",
+) -> tuple[CandidateModel, ResumeVersionModel]:
+    candidate = CandidateModel(
+        full_name=f"Resume Ready {uuid4().hex[:6]}",
+        email=email.lower(),
+        created_by=created_by,
+    )
+    db_session.add(candidate)
+    await db_session.flush()
+
+    resume = ResumeModel(candidate_id=candidate.id, title="Curriculo", created_by=created_by)
+    db_session.add(resume)
+    await db_session.flush()
+
+    version = ResumeVersionModel(
+        resume_id=resume.id,
+        version_number=1,
+        s3_bucket="test",
+        s3_key=f"resumes/{uuid4().hex}.pdf",
+        original_file_name="curriculo.pdf",
+        file_size_bytes=100,
+        file_hash_sha256=(uuid4().hex * 2)[:64],
+        mime_type="application/pdf",
+        extracted_text=extracted_text,
+        extraction_status=extraction_status,
+        uploaded_by=created_by,
+    )
+    db_session.add(version)
+    await db_session.commit()
+    await db_session.refresh(candidate)
+    await db_session.refresh(version)
+    return candidate, version
+
+
+async def _seed_active_analysis_config(
+    db_session: AsyncSession,
+    *,
+    created_by,
+) -> tuple[AIModelModel, PromptTemplateModel]:
+    ai_model = AIModelModel(
+        provider="google",
+        model_id=f"gemini-import-{uuid4().hex[:8]}",
+        model_name="Gemini Import Test",
+        context_window=200000,
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        name=f"tpl-import-{uuid4().hex[:8]}",
+        version=1,
+        description="Import analysis template",
+        template_type="full_analysis",
+        user_prompt_template="Analyze: {resume}",
+        is_active=True,
+        created_by=created_by,
+    )
+    db_session.add_all([ai_model, prompt])
+    await db_session.commit()
+    await db_session.refresh(ai_model)
+    await db_session.refresh(prompt)
+    return ai_model, prompt
+
+
+async def _seed_completed_analysis_for_user(
+    db_session: AsyncSession,
+    *,
+    requested_by,
+) -> None:
+    ai_model = AIModelModel(
+        provider="google",
+        model_id=f"gemini-limit-seed-{uuid4().hex[:8]}",
+        model_name="Gemini Limit Seed",
+        context_window=200000,
+        is_active=False,
+    )
+    prompt = PromptTemplateModel(
+        name=f"tpl-limit-seed-{uuid4().hex[:8]}",
+        version=1,
+        description="Seed template",
+        template_type=f"full_analysis_seed_{uuid4().hex[:8]}",
+        user_prompt_template="x",
+        is_active=False,
+        created_by=requested_by,
+    )
+    db_session.add_all([ai_model, prompt])
+    await db_session.flush()
+
+    _, version = await _seed_candidate_with_resume(
+        db_session,
+        created_by=requested_by,
+        email=f"limit_seed_{uuid4().hex[:8]}@test.com",
+    )
+    db_session.add(
+        AnalysisModel(
+            resume_version_id=version.id,
+            ai_model_id=ai_model.id,
+            prompt_template_id=prompt.id,
+            requested_by=requested_by,
+            job_id=None,
+            idempotency_key=f"seed-{uuid4().hex}",
+            priority=5,
+            status="completed",
+        )
+    )
+    await db_session.commit()
+
+
+async def _count_candidates_by_email(db_session: AsyncSession, email: str) -> int:
+    return int(
+        await db_session.scalar(
+            sa.select(sa.func.count())
+            .select_from(CandidateModel)
+            .where(CandidateModel.email == email.lower())
+        )
+        or 0
+    )
+
+
+async def _count_analyses(db_session: AsyncSession) -> int:
+    return int(await db_session.scalar(sa.select(sa.func.count()).select_from(AnalysisModel)) or 0)
 
 
 # ── Manual endpoint ───────────────────────────────────────────────────────────
@@ -337,3 +496,277 @@ async def test_import_with_valid_job_links_candidates(
     body = resp.json()
     assert body["created"] == 1
     assert body["linked"] == 1
+
+
+async def test_import_rejects_more_than_200_rows(
+    client: AsyncClient,
+    admin_headers: dict,
+) -> None:
+    rows = [f"Candidato {i},bulk_{uuid4().hex}_{i}@test.com,," for i in range(201)]
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        files=[_csv_file(_csv(rows))],
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+    assert "200" in resp.json()["detail"]
+
+
+async def test_import_rejects_file_larger_than_2mb(
+    client: AsyncClient,
+    admin_headers: dict,
+) -> None:
+    content = b"nome,email,telefone,vaga,observacao\n" + b"a" * (2 * 1024 * 1024)
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        files=[_csv_file(content)],
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+    assert "Arquivo muito grande" in resp.json()["detail"]
+
+
+async def test_import_rejects_invalid_encoding(
+    client: AsyncClient,
+    admin_headers: dict,
+) -> None:
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        files=[_csv_file(b"nome,email\nJoao,\xff@test.com\n")],
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+    assert "UTF-8" in resp.json()["detail"]
+
+
+async def test_import_rejects_csv_without_header(
+    client: AsyncClient,
+    admin_headers: dict,
+) -> None:
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        files=[_csv_file(b"Joao Sem Header,joao_sem_header@test.com\n")],
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+    assert "sem cabe" in resp.json()["detail"].lower()
+
+
+async def test_import_invalid_default_job_id_does_not_create_candidates(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_headers: dict,
+) -> None:
+    email = f"invalid_job_{uuid4().hex[:8]}@test.com"
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        data={"default_job_id": str(uuid4())},
+        files=[_csv_file(_csv([f"Sem Vaga,{email},,"]))],
+        headers=admin_headers,
+    )
+    assert resp.status_code == 404
+    assert "Vaga" in resp.json()["detail"]
+    assert await _count_candidates_by_email(db_session, email) == 0
+
+
+async def test_import_reports_link_error_when_candidate_active_in_other_job(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user_email = f"admin_import_link_{uuid4().hex[:8]}@test.com"
+    await _create_active_user(db_session, user_email, "secret123", UserRole.ADMIN)
+    headers = await _auth_headers(client, user_email, "secret123")
+    current_job = await _create_published_job(db_session, title="Current")
+    destination_job = await _create_published_job(db_session, title="Destination")
+    candidate_email = f"active_elsewhere_{uuid4().hex[:8]}@test.com"
+
+    manual = await client.post(
+        "/api/v1/candidaturas/manual",
+        json={
+            "full_name": "Ativo Em Outra",
+            "email": candidate_email,
+            "job_id": str(current_job.id),
+        },
+        headers=headers,
+    )
+    assert manual.status_code == 201
+    assert manual.json()["job_linked"] is True
+
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        data={"default_job_id": str(destination_job.id)},
+        files=[_csv_file(_csv([f"Ativo Em Outra,{candidate_email},,"]))],
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["created"] == 0
+    assert body["duplicates"] == 1
+    assert body["linked"] == 0
+    assert len(body["errors"]) == 1
+    assert body["errors"][0]["row"] == 2
+    assert "não vinculado" in body["errors"][0]["message"]
+    assert "outra vaga" in body["errors"][0]["message"]
+
+
+async def test_import_does_not_request_analysis_by_default_for_existing_resume(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user_email = f"admin_no_analysis_{uuid4().hex[:8]}@test.com"
+    user = await _create_active_user(db_session, user_email, "secret123", UserRole.ADMIN)
+    headers = await _auth_headers(client, user_email, "secret123")
+    job = await _create_published_job(db_session)
+    candidate_email = f"ready_no_analysis_{uuid4().hex[:8]}@test.com"
+    await _seed_candidate_with_resume(db_session, created_by=user.id, email=candidate_email)
+
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        data={"default_job_id": str(job.id)},
+        files=[_csv_file(_csv([f"Ready No Analysis,{candidate_email},,"]))],
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["linked"] == 1
+    assert body["errors"] == []
+    assert await _count_analyses(db_session) == 0
+    assert body["preview"][0]["analysis"]["reason"] == "request_analysis_false"
+
+
+async def test_import_request_analysis_skips_missing_resume_without_token(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user_email = f"admin_missing_resume_{uuid4().hex[:8]}@test.com"
+    await _create_active_user(db_session, user_email, "secret123", UserRole.ADMIN)
+    headers = await _auth_headers(client, user_email, "secret123")
+    job = await _create_published_job(db_session)
+    candidate_email = f"missing_resume_{uuid4().hex[:8]}@test.com"
+
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        data={"default_job_id": str(job.id), "request_analysis": "true"},
+        files=[_csv_file(_csv([f"Sem Curriculo,{candidate_email},,"]))],
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["created"] == 1
+    assert body["linked"] == 1
+    assert await _count_analyses(db_session) == 0
+    assert body["preview"][0]["analysis"]["reason"] == "analysis_skipped_no_resume"
+
+
+async def test_import_request_analysis_respects_daily_limit(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "AI_ANALYSIS_DAILY_LIMIT_PER_USER", 1)
+    user_email = f"admin_limit_{uuid4().hex[:8]}@test.com"
+    user = await _create_active_user(db_session, user_email, "secret123", UserRole.ADMIN)
+    headers = await _auth_headers(client, user_email, "secret123")
+    await _seed_completed_analysis_for_user(db_session, requested_by=user.id)
+    job = await _create_published_job(db_session)
+    candidate_email = f"ready_limit_{uuid4().hex[:8]}@test.com"
+    await _seed_candidate_with_resume(db_session, created_by=user.id, email=candidate_email)
+
+    before_count = await _count_analyses(db_session)
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        data={"default_job_id": str(job.id), "request_analysis": "true"},
+        files=[_csv_file(_csv([f"Ready Limit,{candidate_email},,"]))],
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["linked"] == 1
+    assert await _count_analyses(db_session) == before_count
+    assert body["preview"][0]["analysis"]["blocked"] is True
+    assert body["preview"][0]["analysis"]["reason"] == "auto_analysis_blocked_daily_limit"
+
+
+async def test_dispatcher_does_not_bypass_daily_limit(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "AI_ANALYSIS_DAILY_LIMIT_PER_USER", 1)
+    user = await _create_active_user(
+        db_session,
+        f"dispatcher_limit_{uuid4().hex[:8]}@test.com",
+        "secret123",
+        UserRole.ADMIN,
+    )
+    await _seed_completed_analysis_for_user(db_session, requested_by=user.id)
+    job = await _create_published_job(db_session)
+    candidate, version = await _seed_candidate_with_resume(
+        db_session,
+        created_by=user.id,
+        email=f"dispatcher_ready_{uuid4().hex[:8]}@test.com",
+    )
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=uuid4(),
+            candidate_id=candidate.id,
+            job_id=job.id,
+            resume_version_id=version.id,
+            link_status="active",
+            relationship_status="active",
+            is_terminal=False,
+            pipeline_stage="entry",
+            pipeline_status="active",
+            source="import",
+        )
+    )
+    await db_session.commit()
+
+    before_count = await _count_analyses(db_session)
+    decision = await CandidateJobAnalysisDispatcher(db_session).request_auto_analysis(
+        candidate_id=candidate.id,
+        job_id=job.id,
+        requested_by=user.id,
+    )
+    assert decision.blocked is True
+    assert decision.reason == "auto_analysis_blocked_daily_limit"
+    assert await _count_analyses(db_session) == before_count
+
+
+async def test_import_enqueue_failure_does_not_fail_import(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_enqueue(_analysis_id):
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr(
+        "src.application.services.analysis_dispatch_service.enqueue_analysis",
+        _raise_enqueue,
+    )
+    user_email = f"admin_enqueue_fail_{uuid4().hex[:8]}@test.com"
+    user = await _create_active_user(db_session, user_email, "secret123", UserRole.ADMIN)
+    headers = await _auth_headers(client, user_email, "secret123")
+    await _seed_active_analysis_config(db_session, created_by=user.id)
+    job = await _create_published_job(db_session)
+    candidate_email = f"enqueue_fail_{uuid4().hex[:8]}@test.com"
+    await _seed_candidate_with_resume(db_session, created_by=user.id, email=candidate_email)
+
+    resp = await client.post(
+        "/api/v1/candidaturas/import",
+        data={"default_job_id": str(job.id), "request_analysis": "true"},
+        files=[_csv_file(_csv([f"Enqueue Fail,{candidate_email},,"]))],
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["linked"] == 1
+    assert body["errors"] == []
+    assert body["preview"][0]["analysis"]["reason"] == "analysis_enqueue_failed"
+    failed = await db_session.scalar(
+        sa.select(AnalysisModel)
+        .where(AnalysisModel.status == "failed")
+        .order_by(AnalysisModel.created_at.desc())
+    )
+    assert failed is not None
+    assert failed.failure_reason == "analysis_enqueue_failed"

@@ -9,6 +9,10 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
+from src.application.services.ai_limit_override_service import (
+    AIDailyLimitExceededError,
+    AILimitOverrideService,
+)
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
 from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -189,11 +193,16 @@ class AnalysisRequestPolicy:
 
 
 class CandidateJobAnalysisDispatcher:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        limit_service: AILimitOverrideService | None = None,
+    ) -> None:
         self._db = db
         self._analysis_repo = SQLAlchemyAnalysisRepository(db)
         self._resume_repo = SQLAlchemyResumeRepository(db)
         self._pipeline_repo = SQLAlchemyPipelineRepository(db)
+        self._limit_service = limit_service or AILimitOverrideService(db)
 
     async def request_auto_analysis(
         self,
@@ -270,7 +279,9 @@ class CandidateJobAnalysisDispatcher:
             pipeline_status=pipeline_status,
             link_status=link_status,
             requested_by_user_id=requested_by,
-            existing_active_status=str(existing_active.status) if existing_active is not None else None,
+            existing_active_status=(
+                str(existing_active.status) if existing_active is not None else None
+            ),
             has_reusable_completed=reusable_completed is not None,
         )
 
@@ -301,7 +312,11 @@ class CandidateJobAnalysisDispatcher:
             )
             return AnalysisDispatchDecision(
                 analysis_id=reused_analysis.id if reused_analysis is not None else None,
-                status=str(reused_analysis.status) if reused_analysis is not None else policy.status,
+                status=(
+                    str(reused_analysis.status)
+                    if reused_analysis is not None
+                    else policy.status
+                ),
                 created=False,
                 blocked=False,
                 reused=True,
@@ -315,6 +330,7 @@ class CandidateJobAnalysisDispatcher:
             use_case = RequestAnalysisUseCase(
                 self._analysis_repo,
                 self._resume_repo,
+                self._limit_service,
             )
             result = await use_case.execute(
                 RequestAnalysisCommand(
@@ -335,6 +351,30 @@ class CandidateJobAnalysisDispatcher:
                 updated_at=datetime.now(UTC),
             )
             await self._db.commit()
+        except AIDailyLimitExceededError as exc:
+            await self._db.rollback()
+            logger.info(
+                "analysis.request.blocked",
+                candidate_id=str(candidate_id),
+                job_id=str(job_id),
+                stage=stage,
+                trigger_source=trigger_source,
+                reason="auto_analysis_blocked_daily_limit",
+                limit_scope=exc.scope,
+                limit=exc.limit,
+                used=exc.used,
+            )
+            return AnalysisDispatchDecision(
+                analysis_id=None,
+                status=None,
+                created=False,
+                blocked=True,
+                reused=False,
+                stuck=False,
+                reason="auto_analysis_blocked_daily_limit",
+                stage=stage,
+                trigger_source=trigger_source,
+            )
         except Exception as exc:
             await self._db.rollback()
             logger.error(
