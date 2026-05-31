@@ -31,6 +31,30 @@ export const publicApiClient = {
     return response.json() as Promise<T>;
   },
 
+  // JSON PUT — for endpoints that require HTTP PUT with a JSON body.
+  async put<T>(path: string, body: unknown): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch(`${BASE_URL}${path}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw new Error('Falha na conexão com o servidor. Verifique sua internet e tente novamente.');
+    }
+    if (!response.ok) {
+      let message = `Erro ${response.status}`;
+      try {
+        const json = await response.json() as { detail?: unknown };
+        if (json?.detail) message = String(json.detail);
+      } catch { /* ignore parse error */ }
+      throw new HttpError(response.status, message);
+    }
+    return response.json() as Promise<T>;
+  },
+
   // JSON POST — do NOT use this for FormData (use postForm instead).
   async post<T>(path: string, body?: unknown): Promise<T> {
     let response: Response;
