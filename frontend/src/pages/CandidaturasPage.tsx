@@ -175,16 +175,32 @@ function deriveNextAction(
 function toneClasses(tone: NextAction["tone"]): string {
   switch (tone) {
     case "success":
-      return "border-[hsl(var(--success)/0.2)] bg-[hsl(var(--success)/0.05)] text-success";
+      return "border-border/70 bg-surface-muted/35 text-text";
     case "warning":
-      return "border-[hsl(var(--warning)/0.2)] bg-[hsl(var(--warning)/0.05)] text-warning";
+      return "border-border/70 bg-surface-muted/35 text-text";
     case "danger":
-      return "border-[hsl(var(--danger)/0.2)] bg-[hsl(var(--danger)/0.05)] text-danger";
+      return "border-border/70 bg-surface-muted/35 text-text";
     case "primary":
-      return "border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.05)] text-[hsl(var(--primary))]";
+      return "border-border/70 bg-surface-muted/35 text-text";
     case "muted":
     default:
-      return "border-border bg-surface-muted text-text-muted";
+      return "border-border/70 bg-surface-muted/25 text-text-muted";
+  }
+}
+
+function toneDotClasses(tone: NextAction["tone"]): string {
+  switch (tone) {
+    case "success":
+      return "bg-[hsl(var(--success)/0.8)]";
+    case "warning":
+      return "bg-[hsl(var(--warning)/0.8)]";
+    case "danger":
+      return "bg-[hsl(var(--danger)/0.8)]";
+    case "primary":
+      return "bg-[hsl(var(--primary))]/80";
+    case "muted":
+    default:
+      return "bg-[hsl(var(--text-muted)/0.6)]";
   }
 }
 
@@ -200,7 +216,7 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
   if (s.primaryScore === null) {
     return (
       <span
-        className="inline-flex w-fit items-center rounded-full border border-border bg-surface-muted px-2.5 py-1 text-xs font-semibold text-text-muted"
+        className="inline-flex w-fit items-center rounded-md border border-border/70 bg-surface-muted/30 px-2 py-1 text-[11px] font-medium text-text-muted"
         data-testid="score-awaiting"
       >
         Aguardando IA
@@ -217,18 +233,18 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
 
   const colorClass =
     s.statusTone === "high"
-      ? "border-[hsl(var(--success)/0.2)] bg-[hsl(var(--success)/0.05)] text-success"
+      ? "text-success"
       : s.statusTone === "mid"
-        ? "border-[hsl(var(--warning)/0.2)] bg-[hsl(var(--warning)/0.05)] text-warning"
-        : "border-[hsl(var(--danger)/0.2)] bg-[hsl(var(--danger)/0.05)] text-danger";
+        ? "text-warning"
+        : "text-danger";
 
   return (
     <div
-      className={`inline-flex min-w-[7rem] flex-col rounded-xl border px-2 py-1 ${colorClass}`}
+      className="inline-flex min-w-[6.25rem] flex-col rounded-lg border border-border/70 bg-surface-muted/30 px-2 py-1 leading-tight"
       data-testid="score-chip"
     >
-      <span className="text-sm font-semibold tabular-nums">{s.primaryDisplay}</span>
-      <span className="text-[10px] font-semibold uppercase tracking-wide opacity-85">
+      <span className={`text-sm font-semibold tabular-nums ${colorClass}`}>{s.primaryDisplay}</span>
+      <span className="text-[10px] font-medium uppercase text-text-muted">
         {label}
       </span>
     </div>
@@ -239,16 +255,17 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
 
 function StageBadge({ stage }: { stage: string | null }) {
   const label = stage ? (STAGE_LABEL[stage as PipelineStage] ?? stage) : "—";
-  const cls =
+  const dotCls =
     stage === "rejected"
-      ? "bg-[hsl(var(--danger)/0.05)] text-danger border-[hsl(var(--danger)/0.2)]"
+      ? "bg-[hsl(var(--danger)/0.8)]"
       : stage === "admitted" || stage === "hired"
-        ? "bg-[hsl(var(--success)/0.05)] text-success border-[hsl(var(--success)/0.2)]"
+        ? "bg-[hsl(var(--success)/0.8)]"
         : stage === "pre_admission" || stage === "protheus"
-          ? "bg-[hsl(var(--primary)/0.05)] text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.2)]"
-        : "bg-surface-muted text-text-muted border-border";
+          ? "bg-[hsl(var(--primary))]/80"
+          : "bg-[hsl(var(--text-muted)/0.6)]";
   return (
-    <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cls}`}>
+    <span className="inline-flex w-fit items-center gap-1.5 rounded-md border border-border/70 bg-surface-muted/30 px-2 py-0.5 text-[11px] font-medium text-text">
+      <span className={`h-1.5 w-1.5 rounded-full ${dotCls}`} aria-hidden="true" />
       {label}
     </span>
   );
@@ -257,9 +274,10 @@ function StageBadge({ stage }: { stage: string | null }) {
 function NextActionBadge({ action }: { action: NextAction }) {
   return (
     <span
-      className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneClasses(action.tone)}`}
+      className={`inline-flex w-fit items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneClasses(action.tone)}`}
       data-testid="next-action"
     >
+      <span className={`h-1.5 w-1.5 rounded-full ${toneDotClasses(action.tone)}`} aria-hidden="true" />
       {action.label}
     </span>
   );
@@ -274,7 +292,7 @@ function Avatar({ name }: { name: string }) {
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
   return (
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--primary)/0.12)] text-xs font-bold text-[hsl(var(--primary))]">
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-surface-muted/35 text-[11px] font-semibold text-text">
       {initials || "?"}
     </div>
   );
@@ -1100,46 +1118,46 @@ export function CandidaturasPage() {
   const anyModalOpen = Boolean(interviewTarget || rejectTarget || addModalOpen);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4 pt-8 sm:pt-10 lg:pt-0">
       {/* Page header */}
-      <div>
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-bold tracking-tight text-text">Candidaturas</h1>
           {!loading && (
-            <span className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-text-muted" aria-live="polite">
+            <span className="rounded-md border border-border/70 bg-surface-muted/30 px-2 py-0.5 text-[11px] font-medium text-text-muted" aria-live="polite">
               {total} {total === 1 ? "candidatura" : "candidaturas"}
             </span>
           )}
         </div>
-        <p className="mt-1 text-sm text-text-muted">Triagem diária de candidatos vinculados a vagas ativas.</p>
+        <p className="text-sm text-text-muted">Triagem diária de candidatos vinculados a vagas ativas.</p>
       </div>
 
       {/* Unified Control Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-surface p-1.5 shadow-sm">
+      <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-surface p-2 sm:flex-row sm:items-center sm:justify-between">
         {/* Left: Search & Filters */}
-        <div className="flex flex-col sm:flex-row items-center gap-1 w-full sm:w-auto flex-1">
-          <div className="relative w-full sm:max-w-xs">
+        <div className="flex w-full flex-1 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="relative w-full sm:max-w-sm">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted"
               aria-hidden="true"
             />
             <input
               type="search"
-              placeholder="Buscar por nome, e-mail ou telefone..."
+              placeholder="Buscar nome, e-mail ou telefone"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="h-9 w-full rounded-lg border-0 bg-transparent pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:bg-surface-muted/50 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30 transition-colors"
+              className="h-10 w-full rounded-lg border border-transparent bg-surface pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:border-border/70 focus:bg-surface-muted/25 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20 transition-colors"
               aria-label="Buscar candidaturas"
               data-testid="search-input"
             />
           </div>
 
-          <div className="hidden h-5 w-px bg-border sm:block mx-1" aria-hidden="true"></div>
+          <div className="hidden h-6 w-px bg-border/70 sm:block" aria-hidden="true"></div>
 
           <select
             value={jobFilter}
             onChange={(e) => setJobFilter(e.target.value)}
-            className="h-9 w-full sm:w-64 rounded-lg border-0 bg-transparent px-3 text-sm text-text focus:bg-surface-muted/50 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30 transition-colors"
+            className="h-10 w-full rounded-lg border border-transparent bg-surface px-3 text-sm text-text focus:border-border/70 focus:bg-surface-muted/25 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20 transition-colors sm:w-56"
             aria-label="Filtrar por vaga"
             data-testid="job-filter"
           >
@@ -1151,11 +1169,11 @@ export function CandidaturasPage() {
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 sm:pr-1.5">
+        <div className="flex w-full items-center justify-end gap-2 shrink-0 sm:w-auto">
           <button
             type="button"
             onClick={() => void load(page, search)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-transparent text-text-muted transition-colors hover:bg-surface-muted hover:text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20"
             aria-label="Atualizar"
             title="Atualizar"
             data-testid="refresh-button"
@@ -1166,7 +1184,7 @@ export function CandidaturasPage() {
           <button
             type="button"
             onClick={() => navigate("/pipeline")}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-text transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30 shadow-sm"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border/70 bg-surface px-3 text-sm font-medium text-text transition-colors hover:bg-surface-muted/40 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20"
             aria-label="Abrir Pipeline"
             data-testid="pipeline-link"
           >
@@ -1177,7 +1195,7 @@ export function CandidaturasPage() {
           {!isReadOnly && (
             <Button
               type="button"
-              className="h-9 gap-1.5 whitespace-nowrap px-3 text-sm rounded-lg shadow-sm"
+              className="h-9 gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm shadow-none"
               onClick={() => setAddModalOpen(true)}
               data-testid="add-candidates-btn"
             >
@@ -1205,28 +1223,28 @@ export function CandidaturasPage() {
 
       {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
-        <table className="w-full min-w-[1120px] text-sm" data-testid="candidaturas-table">
+        <table className="w-full min-w-full table-fixed text-sm md:min-w-[760px] lg:min-w-[1080px]" data-testid="candidaturas-table">
           <thead>
-            <tr className="border-b border-border bg-surface-muted">
-              <th className="w-[24%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+            <tr className="border-b border-border bg-surface-muted/45">
+              <th className="w-[38%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:w-[31%] lg:w-[25%]">
                 Candidato
               </th>
-              <th className="w-[19%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="w-[34%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:w-[23%] lg:w-[18%]">
                 Vaga
               </th>
-              <th className="w-[13%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:table-cell md:w-[14%] lg:w-[12%]">
                 Status
               </th>
-              <th className="w-[13%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="w-[28%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:w-[18%] lg:w-[12%]">
                 Score IA
               </th>
-              <th className="w-[13%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:table-cell lg:w-[15%]">
                 Entrevista
               </th>
-              <th className="w-[13%] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:table-cell md:w-[14%] lg:w-[10%]">
                 Próxima ação
               </th>
-              <th className="w-[10%] px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+              <th className="hidden px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:table-cell lg:w-[8%]">
                 Ações
               </th>
             </tr>
@@ -1275,17 +1293,17 @@ export function CandidaturasPage() {
                 return (
                   <tr
                     key={c.id}
-                    className="border-b border-border last:border-0 hover:bg-surface-muted/50 cursor-pointer transition-colors"
+                    className="cursor-pointer border-b border-border/70 last:border-0 hover:bg-surface-muted/25 transition-colors"
                     onClick={() => setSelectedId(c.id)}
                     data-testid={`row-${c.id}`}
                   >
                     {/* Candidate */}
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2.5">
+                    <td className="px-3 py-2 align-top">
+                      <div className="flex items-start gap-2.5">
                         <Avatar name={c.full_name} />
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-text">{c.full_name}</p>
-                          <div className="mt-0.5 flex min-w-0 flex-col gap-0.5 text-xs text-text-muted">
+                          <div className="mt-0.5 flex min-w-0 flex-col gap-0.5 text-[11px] text-text-muted md:flex-row md:flex-wrap md:gap-x-3">
                             <span className="flex min-w-0 items-center gap-1.5">
                               <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
                               <span className="truncate">{c.email ?? "E-mail não informado"}</span>
@@ -1300,12 +1318,12 @@ export function CandidaturasPage() {
                     </td>
 
                     {/* Job */}
-                    <td className="px-4 py-2.5">
+                    <td className="px-3 py-2 align-top">
                       <div className="flex min-w-0 items-start gap-2">
                         <Briefcase className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
                         <div className="min-w-0">
                           <p className="truncate font-medium text-text">{c.active_job_title ?? "Vaga não informada"}</p>
-                          <p className="text-xs text-text-muted">
+                          <p className="text-[11px] text-text-muted">
                             {c.application_source === "manual" ? "Entrada manual" : "Candidatura recebida"}
                           </p>
                         </div>
@@ -1313,32 +1331,32 @@ export function CandidaturasPage() {
                     </td>
 
                     {/* Status */}
-                    <td className="px-4 py-2.5">
+                    <td className="hidden px-3 py-2 align-top md:table-cell">
                       <StageBadge stage={c.active_job_stage} />
                     </td>
 
                     {/* Score */}
-                    <td className="px-4 py-2.5">
+                    <td className="px-3 py-2 align-top">
                       <ScoreChip candidate={c} />
                     </td>
 
                     {/* Interview */}
-                    <td className="px-4 py-2.5">
+                    <td className="hidden px-3 py-2 align-top lg:table-cell">
                       {hasInterview ? (
                         <span
-                          className="inline-flex flex-col rounded-xl border border-[hsl(var(--success)/0.2)] bg-[hsl(var(--success)/0.05)] px-2.5 py-1 text-success"
+                          className="inline-flex max-w-full flex-col rounded-lg border border-border/70 bg-surface-muted/30 px-2 py-1 text-text"
                           data-testid={`interview-badge-${c.id}`}
                         >
-                          <span className="flex items-center gap-1 text-[11px] font-semibold">
-                            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                          <span className="flex items-center gap-1 text-[11px] font-medium">
+                            <CheckCircle2 className="h-3 w-3 text-success" aria-hidden="true" />
                             Entrevista marcada
                           </span>
-                          <span className="text-[10px] font-medium opacity-85">
+                          <span className="text-[10px] text-text-muted">
                             {getScheduledInterviewLabel(scheduledInterview)}
                           </span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-text-muted">
+                        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-surface-muted/25 px-2 py-0.5 text-[11px] font-medium text-text-muted">
                           <Clock className="h-3 w-3" aria-hidden="true" />
                           Não marcada
                         </span>
@@ -1346,12 +1364,12 @@ export function CandidaturasPage() {
                     </td>
 
                     {/* Next action */}
-                    <td className="px-4 py-2.5">
+                    <td className="hidden px-3 py-2 align-top md:table-cell">
                       <NextActionBadge action={nextAction} />
                     </td>
 
                     {/* Actions */}
-                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <td className="hidden px-3 py-2 align-top lg:table-cell" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2">
                         {!isReadOnly && (
                           <button
@@ -1359,10 +1377,10 @@ export function CandidaturasPage() {
                             title="Marcar entrevista"
                             aria-label={`Marcar entrevista com ${c.full_name}`}
                             onClick={() => setInterviewTarget(c)}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.05)] px-2.5 text-xs font-medium text-[hsl(var(--primary))] transition-colors hover:bg-[hsl(var(--primary)/0.1)]"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-surface px-2.5 text-xs font-medium text-text transition-colors hover:bg-surface-muted/40"
                             data-testid={`action-interview-${c.id}`}
                           >
-                            <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+                            <Calendar className="h-3.5 w-3.5 text-[hsl(var(--primary))]" aria-hidden="true" />
                             Entrevista
                           </button>
                         )}
