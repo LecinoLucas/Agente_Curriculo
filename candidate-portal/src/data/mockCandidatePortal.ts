@@ -1,0 +1,286 @@
+import type {
+  PublicJob,
+  MockCandidate,
+  AssessmentQuestion,
+  DocumentItem,
+} from '../types/candidatePortal';
+
+export const MOCK_JOBS: PublicJob[] = [
+  {
+    id: 'job-001',
+    slug: 'frentista-rede-marajo',
+    title: 'Frentista',
+    company: 'Rede Marajó',
+    location: 'Goiânia, GO',
+    area: 'operacional',
+    work_model: 'presencial',
+    seniority: 'junior',
+    short_description:
+      'Buscamos um frentista comprometido para integrar nossa equipe. Experiência anterior é desejável, mas não obrigatória.',
+    about_role:
+      'Na Rede Marajó, o frentista é o ponto de contato direto com o cliente, sendo responsável por garantir uma experiência de atendimento excepcional. Você fará parte de um time comprometido com a excelência no serviço.',
+    responsibilities: [
+      'Abastecer veículos com diferentes tipos de combustível',
+      'Realizar calibragem de pneus e checagem de óleo',
+      'Garantir a limpeza e organização da pista',
+      'Realizar pagamentos e controle de caixa',
+      'Manter o padrão de atendimento da rede',
+    ],
+    requirements: [
+      'Ensino médio completo',
+      'Disponibilidade para trabalho em turnos',
+      'Boa comunicação e simpatia no atendimento',
+      'Capacidade de trabalho sob pressão',
+    ],
+    benefits: [
+      'Vale transporte',
+      'Vale refeição',
+      'Plano de saúde',
+      'Seguro de vida',
+      'Treinamento e capacitação contínua',
+    ],
+    image_url: '',
+    published_at: '2026-05-20',
+    applicants_count: 47,
+  },
+  {
+    id: 'job-002',
+    slug: 'analista-ti-pleno',
+    title: 'Analista de TI Pleno',
+    company: 'Rede Marajó',
+    location: 'Goiânia, GO',
+    area: 'tecnologia',
+    work_model: 'hibrido',
+    seniority: 'pleno',
+    salary_range: 'R$ 5.000 – R$ 7.500',
+    short_description:
+      'Analista de TI para atuar no desenvolvimento e manutenção de sistemas internos de gestão de postos.',
+    about_role:
+      'Você será responsável por garantir o funcionamento e evolução dos sistemas que suportam a operação de mais de 200 postos da Rede Marajó. Um ambiente dinâmico, com autonomia e impacto real no negócio.',
+    responsibilities: [
+      'Desenvolver e manter sistemas de gestão de postos',
+      'Realizar suporte técnico de nível 2 e 3',
+      'Participar de projetos de integração com parceiros',
+      'Documentar processos e sistemas',
+      'Colaborar com times de operações para entender necessidades',
+    ],
+    requirements: [
+      'Formação em TI, Computação ou área correlata',
+      'Experiência com Python ou Node.js',
+      'Conhecimento em banco de dados SQL',
+      'Familiaridade com metodologias ágeis',
+    ],
+    benefits: [
+      'Plano de saúde',
+      'Vale refeição',
+      'Home office 2x por semana',
+      'Plano de carreira estruturado',
+      'Participação nos lucros',
+    ],
+    image_url: '',
+    published_at: '2026-05-22',
+    applicants_count: 23,
+  },
+  {
+    id: 'job-003',
+    slug: 'assistente-administrativo',
+    title: 'Assistente Administrativo',
+    company: 'Rede Marajó',
+    location: 'Aparecida de Goiânia, GO',
+    area: 'administrativo',
+    work_model: 'presencial',
+    seniority: 'junior',
+    short_description:
+      'Assistente para suporte às operações administrativas do escritório regional.',
+    about_role:
+      'Apoio às equipes administrativas da regional com organização de documentos, controle de agenda e suporte a processos de RH e financeiro.',
+    responsibilities: [
+      'Organizar e arquivar documentos físicos e digitais',
+      'Controlar agenda de reuniões e visitas',
+      'Suportar processos de onboarding de novos colaboradores',
+      'Auxiliar no controle de despesas e reembolsos',
+    ],
+    requirements: [
+      'Ensino médio completo (superior em andamento é diferencial)',
+      'Domínio do pacote Office',
+      'Organização e atenção aos detalhes',
+      'Boa comunicação escrita e verbal',
+    ],
+    benefits: [
+      'Vale transporte',
+      'Vale refeição',
+      'Plano de saúde',
+      'Horário flexível',
+    ],
+    image_url: '',
+    published_at: '2026-05-25',
+    applicants_count: 61,
+  },
+];
+
+export const MOCK_CANDIDATE: MockCandidate = {
+  id: 'cand-001',
+  name: 'Lucas Ferreira',
+  email: 'lucas.ferreira@email.com',
+  applications: [
+    {
+      id: 'app-001',
+      job_id: 'job-001',
+      job_title: 'Frentista',
+      job_slug: 'frentista-rede-marajo',
+      company: 'Rede Marajó',
+      current_step: 'avaliacao',
+      completed_steps: ['candidatura', 'triagem'],
+      status: 'em_andamento',
+      applied_at: '2026-05-21',
+      next_action: 'Responder avaliação comportamental',
+      next_action_route: '/avaliacao',
+    },
+  ],
+  profile: {
+    id: 'cand-001',
+    name: 'Lucas Ferreira',
+    email: 'lucas.ferreira@email.com',
+    phone: '(62) 9 8765-4321',
+    profile_completion: 65,
+    profile_items: [
+      { label: 'Dados pessoais', done: true },
+      { label: 'Currículo enviado', done: true },
+      { label: 'Telefone verificado', done: true },
+      { label: 'Experiências profissionais', done: false },
+      { label: 'Formação acadêmica', done: false },
+    ],
+  },
+  messages: [
+    {
+      id: 'msg-001',
+      title: 'Avaliação disponível para você',
+      body: 'Sua candidatura para Frentista foi aprovada na triagem. Complete a avaliação comportamental para avançar.',
+      type: 'action',
+      date: '2026-05-28',
+      read: false,
+    },
+    {
+      id: 'msg-002',
+      title: 'Candidatura recebida',
+      body: 'Recebemos sua candidatura para Frentista na Rede Marajó. Nossa equipe irá analisar em breve.',
+      type: 'info',
+      date: '2026-05-21',
+      read: true,
+    },
+  ],
+};
+
+export const MOCK_ASSESSMENT_QUESTIONS: AssessmentQuestion[] = [
+  {
+    id: 'q1',
+    text: 'Como você avalia sua habilidade para trabalhar em equipe e colaborar com colegas diariamente?',
+    options: [
+      { value: 1, label: 'Prefiro trabalhar sozinho' },
+      { value: 2, label: 'Trabalho em equipe quando necessário' },
+      { value: 3, label: 'Me adapto bem a equipes' },
+      { value: 4, label: 'Gosto muito de trabalhar em equipe' },
+      { value: 5, label: 'Trabalho melhor em equipe' },
+    ],
+  },
+  {
+    id: 'q2',
+    text: 'Como você lida com situações de pressão ou demanda elevada no dia a dia do trabalho?',
+    options: [
+      { value: 1, label: 'Tenho dificuldade em situações de pressão' },
+      { value: 2, label: 'Preciso de apoio para lidar com pressão' },
+      { value: 3, label: 'Me adapto com o tempo' },
+      { value: 4, label: 'Lido bem com pressão' },
+      { value: 5, label: 'Trabalho muito melhor sob pressão' },
+    ],
+  },
+  {
+    id: 'q3',
+    text: 'Com que frequência você busca melhorar seus próprios processos e formas de trabalho?',
+    options: [
+      { value: 1, label: 'Raramente penso nisso' },
+      { value: 2, label: 'Às vezes quando há problemas' },
+      { value: 3, label: 'Periodicamente reviso minha forma de trabalhar' },
+      { value: 4, label: 'Frequentemente busco melhorias' },
+      { value: 5, label: 'Sempre estou buscando otimizar' },
+    ],
+  },
+  {
+    id: 'q4',
+    text: 'Como você reage quando recebe um feedback crítico sobre seu trabalho?',
+    options: [
+      { value: 1, label: 'Fico desconfortável e resistente' },
+      { value: 2, label: 'Aceito, mas demoro a mudar' },
+      { value: 3, label: 'Aceito e analiso se faz sentido' },
+      { value: 4, label: 'Acolho e procuro agir rapidamente' },
+      { value: 5, label: 'Agradeço e uso como alavanca de crescimento' },
+    ],
+  },
+  {
+    id: 'q5',
+    text: 'Como você prioriza suas tarefas quando tem muitas demandas ao mesmo tempo?',
+    options: [
+      { value: 1, label: 'Fico confuso e perco o fio' },
+      { value: 2, label: 'Faço uma coisa de cada vez sem ordem' },
+      { value: 3, label: 'Organizo por urgência geral' },
+      { value: 4, label: 'Priorizo por impacto e prazo' },
+      { value: 5, label: 'Uso sistemas de gestão de tarefas ativamente' },
+    ],
+  },
+  {
+    id: 'q6',
+    text: 'Você se sente confortável em propor soluções novas quando identifica um problema?',
+    options: [
+      { value: 1, label: 'Prefiro seguir o que já existe' },
+      { value: 2, label: 'Proponho quando muito necessário' },
+      { value: 3, label: 'Proponho quando tenho certeza' },
+      { value: 4, label: 'Proponho com frequência' },
+      { value: 5, label: 'Sempre busco novas abordagens para os desafios' },
+    ],
+  },
+];
+
+export const MOCK_DOCUMENTS: DocumentItem[] = [
+  {
+    id: 'doc-001',
+    name: 'RG (Registro Geral)',
+    description: 'Frente e verso do documento de identidade',
+    required: true,
+    status: 'aprovado',
+    file_name: 'rg_frente_verso.pdf',
+    file_size: '1,2 MB',
+  },
+  {
+    id: 'doc-002',
+    name: 'CPF',
+    description: 'Cadastro de Pessoa Física',
+    required: true,
+    status: 'enviado',
+    file_name: 'CPF_documento.pdf',
+    file_size: '0,8 MB',
+  },
+  {
+    id: 'doc-003',
+    name: 'Comprovante de residência',
+    description: 'Conta de luz, água ou gás dos últimos 3 meses',
+    required: true,
+    status: 'rejeitado',
+    file_name: 'comprovante_domicilio.pdf',
+    file_size: '2,1 MB',
+    rejection_reason: 'Documento com data superior a 3 meses. Envie um comprovante mais recente.',
+  },
+  {
+    id: 'doc-004',
+    name: 'Carteira de trabalho',
+    description: 'Páginas de identificação e contratos anteriores',
+    required: true,
+    status: 'pendente',
+  },
+  {
+    id: 'doc-005',
+    name: 'Dados bancários',
+    description: 'Comprovante de conta corrente ou poupança (titular)',
+    required: false,
+    status: 'pendente',
+  },
+];
