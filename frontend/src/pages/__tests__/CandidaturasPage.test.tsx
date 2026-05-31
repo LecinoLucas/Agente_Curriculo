@@ -295,7 +295,7 @@ describe("CandidaturasPage — core", () => {
 
     renderPage();
 
-    await waitFor(() => expect(listSummariesMock).toHaveBeenCalled());
+    await openMoreActions();
 
     expect(screen.queryByTestId("action-interview-cand-1")).not.toBeInTheDocument();
   });
@@ -330,10 +330,10 @@ describe("CandidaturasPage — Phase 7 UX", () => {
     renderPage();
 
     expect(await screen.findByTestId("operational-summary-primary")).toHaveTextContent(
-      "1 com alta aderência · 1 prontos para entrevista · 1 prontos para decisão",
+      "Nesta página: 1 com alta aderência · 1 prontos para entrevista · 1 prontos para decisão",
     );
     expect(screen.getByTestId("operational-summary-secondary")).toHaveTextContent(
-      "Atenção: 1 sem entrevista marcada · 1 aguardando ação",
+      "Atenção nesta página: 1 sem entrevista marcada · 1 aguardando ação",
     );
   });
 
@@ -406,11 +406,13 @@ describe("CandidaturasPage — Phase 7 UX", () => {
     expect(screen.getByTestId("drawer-next-action")).toHaveTextContent(/marcar entrevista/i);
   });
 
-  it("mantém ações rápidas principais na linha", async () => {
+  it("mantém ações rápidas principais no menu de ações", async () => {
     renderPage();
 
-    expect(await screen.findByTestId("action-open-profile-cand-1")).toBeInTheDocument();
-    expect(screen.getByTestId("action-open-pipeline-cand-1")).toBeInTheDocument();
+    await openMoreActions();
+
+    expect(screen.getByTestId("action-profile-cand-1")).toBeInTheDocument();
+    expect(screen.getByTestId("action-pipeline-cand-1")).toBeInTheDocument();
     expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument();
     expect(screen.getByTestId("action-more-cand-1")).toBeInTheDocument();
   });
@@ -476,7 +478,7 @@ describe("CandidaturasPage — Marcar entrevista", () => {
   it("botão Marcar entrevista abre modal", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
 
     fireEvent.click(screen.getByTestId("action-interview-cand-1"));
 
@@ -488,7 +490,7 @@ describe("CandidaturasPage — Marcar entrevista", () => {
   it("validação bloqueia salvar sem data — submit desabilitado", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-interview-cand-1"));
 
     // clear date → submit button must become disabled
@@ -503,7 +505,7 @@ describe("CandidaturasPage — Marcar entrevista", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     await user.click(screen.getByTestId("action-interview-cand-1"));
 
     // date is pre-filled with today, time with 09:00 — just submit
@@ -524,7 +526,7 @@ describe("CandidaturasPage — Marcar entrevista", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     await user.click(screen.getByTestId("action-interview-cand-1"));
     await user.click(screen.getByTestId("interview-submit"));
 
@@ -538,7 +540,7 @@ describe("CandidaturasPage — Marcar entrevista", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     await user.click(screen.getByTestId("action-interview-cand-1"));
     await user.click(screen.getByTestId("interview-submit"));
 
@@ -550,7 +552,7 @@ describe("CandidaturasPage — Marcar entrevista", () => {
   it("ESC fecha o modal de entrevista", async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-interview-cand-1"));
 
     expect(screen.getByTestId("schedule-interview-modal")).toBeInTheDocument();
@@ -566,7 +568,7 @@ describe("CandidaturasPage — Marcar entrevista", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
 
     // Candidate starts at 'screening'
     const row = screen.getByTestId("row-cand-1");
@@ -630,7 +632,7 @@ describe("CandidaturasPage — Copiar WhatsApp", () => {
     renderPage();
 
     // schedule interview — date/time already pre-filled with defaults, just submit
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-interview-cand-1"));
 
     // ensure date and time fields have values
@@ -1443,7 +1445,7 @@ describe("CandidaturasPage — next_interview do backend", () => {
     );
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("action-interview-cand-1")).toBeInTheDocument());
+    await openMoreActions();
     fireEvent.click(screen.getByTestId("action-interview-cand-1"));
 
     expect(screen.getByTestId("schedule-interview-modal")).toBeInTheDocument();
@@ -1467,6 +1469,7 @@ describe("CandidaturasPage — next_interview do backend", () => {
     await waitFor(() =>
       expect(screen.getByTestId("interview-badge-cand-1")).toBeInTheDocument(),
     );
+    await openMoreActions();
     expect(screen.queryByTestId("action-interview-cand-1")).not.toBeInTheDocument();
   });
 });

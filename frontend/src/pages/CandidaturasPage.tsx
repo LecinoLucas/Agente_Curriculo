@@ -39,7 +39,7 @@ import { Button } from "../components/ui/button";
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 30;
-const SCHEDULE_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const SCHEDULE_TIMEZONE = "America/Sao_Paulo";
 const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
 const DECISION_STAGES = new Set<PipelineStage>(["final", "offer"]);
 const CLOSED_STAGES = new Set<PipelineStage>(["rejected", "admitted"]);
@@ -269,32 +269,32 @@ function deriveOperationalPriority(
 function toneClasses(tone: NextAction["tone"]): string {
   switch (tone) {
     case "success":
-      return "border-border/70 bg-surface-muted/35 text-text";
+      return "border-[hsl(var(--success)/0.2)] bg-[hsl(var(--success)/0.08)] text-success";
     case "warning":
-      return "border-border/70 bg-surface-muted/35 text-text";
+      return "border-[hsl(var(--warning)/0.2)] bg-[hsl(var(--warning)/0.08)] text-warning";
     case "danger":
-      return "border-border/70 bg-surface-muted/35 text-text";
+      return "border-[hsl(var(--danger)/0.2)] bg-[hsl(var(--danger)/0.08)] text-danger";
     case "primary":
-      return "border-border/70 bg-surface-muted/35 text-text";
+      return "border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.08)] text-primary";
     case "muted":
     default:
-      return "border-border/70 bg-surface-muted/25 text-text-muted";
+      return "border-border/60 bg-surface-muted/30 text-text-muted";
   }
 }
 
 function toneDotClasses(tone: NextAction["tone"]): string {
   switch (tone) {
     case "success":
-      return "bg-[hsl(var(--success)/0.8)]";
+      return "bg-success shadow-[0_0_4px_hsl(var(--success)/0.4)]";
     case "warning":
-      return "bg-[hsl(var(--warning)/0.8)]";
+      return "bg-warning shadow-[0_0_4px_hsl(var(--warning)/0.4)]";
     case "danger":
-      return "bg-[hsl(var(--danger)/0.8)]";
+      return "bg-danger shadow-[0_0_4px_hsl(var(--danger)/0.4)]";
     case "primary":
-      return "bg-[hsl(var(--primary))]/80";
+      return "bg-primary shadow-[0_0_4px_hsl(var(--primary)/0.4)]";
     case "muted":
     default:
-      return "bg-[hsl(var(--text-muted)/0.6)]";
+      return "bg-text-muted/60";
   }
 }
 
@@ -306,7 +306,7 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
   if (s.primaryScore === null) {
     return (
       <span
-        className="inline-flex w-fit items-center rounded-md border border-border/70 bg-surface-muted/30 px-2 py-1 text-[11px] font-medium text-text-muted"
+        className="inline-flex w-fit items-center rounded-md border border-border/50 bg-surface-muted/30 px-2.5 py-1 text-[11px] font-medium text-text-muted"
         data-testid="score-awaiting"
       >
         Aguardando IA
@@ -328,13 +328,20 @@ function ScoreChip({ candidate }: { candidate: CandidateListSummary }) {
         ? "text-warning"
         : "text-danger";
 
+  const bgClass =
+    s.statusTone === "high"
+      ? "bg-[hsl(var(--success)/0.04)] border-[hsl(var(--success)/0.15)]"
+      : s.statusTone === "mid"
+        ? "bg-[hsl(var(--warning)/0.04)] border-[hsl(var(--warning)/0.15)]"
+        : "bg-[hsl(var(--danger)/0.04)] border-[hsl(var(--danger)/0.15)]";
+
   return (
     <div
-      className="inline-flex min-w-[5.5rem] flex-col rounded-lg border border-border/70 bg-surface-muted/30 px-2 py-1 leading-tight"
+      className={`inline-flex min-w-[5.5rem] flex-col rounded-lg border px-2.5 py-1.5 leading-none shadow-sm ${bgClass}`}
       data-testid="score-chip"
     >
-      <span className={`text-sm font-semibold tabular-nums ${colorClass}`}>{s.primaryDisplay}</span>
-      <span className="text-[10px] font-medium uppercase text-text-muted">
+      <span className={`text-[17px] font-extrabold tabular-nums tracking-tight ${colorClass}`}>{s.primaryDisplay}</span>
+      <span className={`mt-0.5 text-[9px] font-bold uppercase tracking-wider ${colorClass} opacity-80`}>
         {label}
       </span>
     </div>
@@ -347,14 +354,14 @@ function StageBadge({ stage }: { stage: string | null }) {
   const label = stage ? (STAGE_LABEL[stage as PipelineStage] ?? stage) : "—";
   const dotCls =
     stage === "rejected"
-      ? "bg-[hsl(var(--danger)/0.8)]"
+      ? "bg-danger"
       : stage === "admitted" || stage === "hired"
-        ? "bg-[hsl(var(--success)/0.8)]"
+        ? "bg-success"
         : stage === "pre_admission" || stage === "protheus"
-          ? "bg-[hsl(var(--primary))]/80"
-          : "bg-[hsl(var(--text-muted)/0.6)]";
+          ? "bg-primary"
+          : "bg-text-muted/60";
   return (
-    <span className="inline-flex w-fit items-center gap-1.5 rounded-md border border-border/70 bg-surface-muted/30 px-2 py-0.5 text-[11px] font-medium text-text">
+    <span className="inline-flex w-fit items-center gap-1.5 rounded-md border border-border/60 bg-surface-muted/20 px-2 py-0.5 text-[11px] font-medium text-text">
       <span className={`h-1.5 w-1.5 rounded-full ${dotCls}`} aria-hidden="true" />
       {label}
     </span>
@@ -364,12 +371,14 @@ function StageBadge({ stage }: { stage: string | null }) {
 function NextActionBadge({ action }: { action: NextAction }) {
   return (
     <span
-      className={`inline-flex w-fit max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneClasses(action.tone)}`}
+      className={`inline-flex w-fit max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] ${toneClasses(action.tone)}`}
       title={action.description}
       data-testid="next-action"
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${toneDotClasses(action.tone)}`} aria-hidden="true" />
-      <span className="truncate">{action.label}</span>
+      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${toneDotClasses(action.tone)}`} aria-hidden="true" />
+      <span className="truncate">
+        <span className="font-medium opacity-80">Sugestão:</span> <span className="font-bold">{action.label}</span>
+      </span>
     </span>
   );
 }
@@ -406,17 +415,21 @@ function MoreActionsMenu({
   candidate,
   isReadOnly,
   canCopyWhatsApp,
+  hasInterview,
   onOpenProfile,
   onCopyWhatsApp,
   onOpenPipeline,
+  onScheduleInterview,
   onReject,
 }: {
   candidate: CandidateListSummary;
   isReadOnly: boolean;
   canCopyWhatsApp: boolean;
+  hasInterview: boolean;
   onOpenProfile: () => void;
   onCopyWhatsApp: () => void;
   onOpenPipeline: () => void;
+  onScheduleInterview: () => void;
   onReject: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -498,7 +511,7 @@ function MoreActionsMenu({
                   <Copy className="h-4 w-4 text-text-muted" aria-hidden="true" />
                   Copiar WhatsApp
                 </button>
-                {candidate.active_job_id && (
+                {candidate.active_job_id ? (
                   <button
                     type="button"
                     className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-muted"
@@ -507,6 +520,28 @@ function MoreActionsMenu({
                   >
                     <ExternalLink className="h-4 w-4 text-text-muted" aria-hidden="true" />
                     Abrir Pipeline
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    title="Sem vaga ativa"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors text-text-muted opacity-45 cursor-not-allowed"
+                    data-testid={`action-pipeline-${candidate.id}`}
+                  >
+                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                    Sem vaga ativa
+                  </button>
+                )}
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-muted"
+                    onClick={() => run(onScheduleInterview)}
+                    data-testid={`action-interview-${candidate.id}`}
+                  >
+                    <Calendar className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                    {hasInterview ? "Reagendar entrevista" : "Marcar entrevista"}
                   </button>
                 )}
                 {!isReadOnly && (
@@ -993,7 +1028,7 @@ function CandidaturaDrawer({
             data-testid="drawer-next-action"
           >
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-75">Próxima ação</p>
-            <p className="text-sm font-semibold">{nextAction.label}</p>
+            <p className="text-sm font-semibold">Sugestão: {nextAction.label}</p>
             <p className="mt-1 text-xs opacity-85">{nextAction.description}</p>
           </section>
 
@@ -1059,10 +1094,12 @@ function CandidaturaDrawer({
             size="sm"
             className="w-full justify-start gap-2"
             onClick={onOpenPipeline}
+            disabled={!candidate.active_job_id}
+            title={!candidate.active_job_id ? "Sem vaga ativa" : undefined}
             data-testid="drawer-pipeline"
           >
             <Kanban className="h-3.5 w-3.5" aria-hidden="true" />
-            Abrir Pipeline
+            {!candidate.active_job_id ? "Sem vaga ativa" : "Abrir Pipeline"}
           </Button>
 
           {!isReadOnly && (
@@ -1229,13 +1266,20 @@ export function CandidaturasPage() {
 
   const anyModalOpen = Boolean(interviewTarget || rejectTarget || addModalOpen);
   const visibleCandidates = filtered;
-  const operationalSummary = useMemo(() => {
-    const highFitCount = visibleCandidates.filter((candidate) => {
+
+  const {
+    highFitCount,
+    readyForInterviewCount,
+    decisionPendingCount,
+    interviewMissingCount,
+    awaitingActionCount,
+  } = useMemo(() => {
+    const highFit = visibleCandidates.filter((candidate) => {
       const score = getPrimaryScore(candidate);
       return score != null && score >= 80;
     }).length;
 
-    const readyForInterviewCount = visibleCandidates.filter((candidate) => {
+    const readyForInterview = visibleCandidates.filter((candidate) => {
       const stage = candidate.active_job_stage;
       const score = getPrimaryScore(candidate);
       const hasInterview = Boolean(scheduledInterviews[candidate.id]);
@@ -1251,12 +1295,12 @@ export function CandidaturasPage() {
       );
     }).length;
 
-    const decisionPendingCount = visibleCandidates.filter((candidate) => {
+    const decisionPending = visibleCandidates.filter((candidate) => {
       const stage = candidate.active_job_stage;
       return Boolean(stage && DECISION_STAGES.has(stage as PipelineStage));
     }).length;
 
-    const interviewMissingCount = visibleCandidates.filter((candidate) => {
+    const interviewMissing = visibleCandidates.filter((candidate) => {
       const stage = candidate.active_job_stage;
       return Boolean(
         stage &&
@@ -1265,51 +1309,116 @@ export function CandidaturasPage() {
       );
     }).length;
 
-    const awaitingActionCount = visibleCandidates.filter((candidate) => {
+    const awaitingAction = visibleCandidates.filter((candidate) => {
       const action = deriveNextAction(candidate, scheduledInterviews[candidate.id] ?? null);
       return action.label === "Aguardar análise IA" || action.label === "Revisar aderência";
     }).length;
 
     return {
-      primary: `${highFitCount} com alta aderência · ${readyForInterviewCount} prontos para entrevista · ${decisionPendingCount} prontos para decisão`,
-      secondary: `Atenção: ${interviewMissingCount} sem entrevista marcada · ${awaitingActionCount} aguardando ação`,
+      highFitCount: highFit,
+      readyForInterviewCount: readyForInterview,
+      decisionPendingCount: decisionPending,
+      interviewMissingCount: interviewMissing,
+      awaitingActionCount: awaitingAction,
     };
   }, [scheduledInterviews, visibleCandidates]);
 
   return (
     <div className="flex flex-col gap-4 pt-8 sm:pt-10 lg:pt-0">
-      {/* Page header */}
-      <div className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight text-text">Candidaturas</h1>
-          {!loading && (
-            <span className="rounded-md border border-border/70 bg-surface-muted/30 px-2 py-0.5 text-[11px] font-medium text-text-muted" aria-live="polite">
-              {total} {total === 1 ? "candidatura" : "candidaturas"}
-            </span>
-          )}
+      {/* Header & Controls Section */}
+      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        {/* Top line: Title, counter, and actions */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-text">Candidaturas</h1>
+              {!loading && (
+                <span className="rounded-md border border-border/70 bg-surface-muted/30 px-2 py-0.5 text-[11px] font-medium text-text-muted" aria-live="polite">
+                  {total} {total === 1 ? "candidatura" : "candidaturas"}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-text-muted">Triagem diária de candidatos vinculados a vagas ativas.</p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 self-end md:self-auto">
+            <button
+              type="button"
+              onClick={() => void load(page, search)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-text-muted transition-colors hover:bg-surface-muted hover:text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20"
+              aria-label="Atualizar"
+              title="Atualizar"
+              data-testid="refresh-button"
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate("/pipeline")}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-text transition-colors hover:bg-surface-muted hover:text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20"
+              aria-label="Abrir Pipeline"
+              data-testid="pipeline-link"
+            >
+              <Kanban className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+              <span>Pipeline</span>
+            </button>
+
+            {!isReadOnly && (
+              <Button
+                type="button"
+                className="h-9 gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm shadow-none"
+                onClick={() => setAddModalOpen(true)}
+                data-testid="add-candidates-btn"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Adicionar</span>
+              </Button>
+            )}
+          </div>
         </div>
-        <p className="text-sm text-text-muted">Triagem diária de candidatos vinculados a vagas ativas.</p>
-      </div>
 
-      {!loading && visibleCandidates.length > 0 && (
-        <section
-          className="rounded-xl border border-border/70 bg-surface px-3 py-2.5 shadow-sm"
-          data-testid="operational-summary"
-        >
-          <p className="text-sm font-semibold text-text" data-testid="operational-summary-primary">
-            {operationalSummary.primary}
-          </p>
-          <p className="mt-1 text-xs text-text-muted" data-testid="operational-summary-secondary">
-            {operationalSummary.secondary}
-          </p>
-        </section>
-      )}
+        {/* Operational Summary */}
+        {!loading && visibleCandidates.length > 0 && (
+          <div
+            className="rounded-xl border border-border/40 bg-surface-muted/20 px-4 py-3 shadow-sm flex flex-col gap-2.5"
+            data-testid="operational-summary"
+          >
+            <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-3 text-sm text-text-muted" data-testid="operational-summary-primary">
+              <span className="font-medium">Nesta página: </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1.5 bg-surface-muted/60 border border-border/30 px-2 py-0.5 rounded-md text-[13px]">
+                  <span className="font-semibold text-text">{highFitCount}</span> com alta aderência
+                </span>
+                <span className="text-border/80 text-xs mx-0.5"> &middot; </span>
+                <span className="inline-flex items-center gap-1.5 bg-surface-muted/60 border border-border/30 px-2 py-0.5 rounded-md text-[13px]">
+                  <span className="font-semibold text-text">{readyForInterviewCount}</span> prontos para entrevista
+                </span>
+                <span className="text-border/80 text-xs mx-0.5"> &middot; </span>
+                <span className="inline-flex items-center gap-1.5 bg-surface-muted/60 border border-border/30 px-2 py-0.5 rounded-md text-[13px]">
+                  <span className="font-semibold text-text">{decisionPendingCount}</span> prontos para decisão
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-3 text-sm text-text-muted" data-testid="operational-summary-secondary">
+              <span className="font-medium text-warning">Atenção nesta página: </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1.5 bg-[hsl(var(--warning)/0.08)] border border-[hsl(var(--warning)/0.2)] text-warning px-2 py-0.5 rounded-md text-[13px]">
+                  <span className="font-bold">{interviewMissingCount}</span> sem entrevista marcada
+                </span>
+                <span className="text-border/80 text-xs mx-0.5"> &middot; </span>
+                <span className="inline-flex items-center gap-1.5 bg-[hsl(var(--primary)/0.08)] border border-[hsl(var(--primary)/0.2)] text-primary px-2 py-0.5 rounded-md text-[13px]">
+                  <span className="font-bold">{awaitingActionCount}</span> aguardando ação
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
-      {/* Unified Control Bar */}
-      <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-surface p-2 sm:flex-row sm:items-center sm:justify-between">
-        {/* Left: Search & Filters */}
-        <div className="flex w-full flex-1 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <div className="relative w-full sm:max-w-sm">
+        {/* Search & Filters */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center border-t border-border/40 pt-5 mt-1">
+          <div className="relative w-full md:max-w-sm">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted"
               aria-hidden="true"
@@ -1319,63 +1428,26 @@ export function CandidaturasPage() {
               placeholder="Buscar nome, e-mail ou telefone"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="h-10 w-full rounded-lg border border-transparent bg-surface pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:border-border/70 focus:bg-surface-muted/25 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20 transition-colors"
+              className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:bg-surface-muted/25 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20 transition-colors"
               aria-label="Buscar candidaturas"
               data-testid="search-input"
             />
           </div>
 
-          <div className="hidden h-6 w-px bg-border/70 sm:block" aria-hidden="true"></div>
+          <div className="hidden h-6 w-px bg-border md:block" aria-hidden="true"></div>
 
           <select
             value={jobFilter}
             onChange={(e) => setJobFilter(e.target.value)}
-            className="h-10 w-full rounded-lg border border-transparent bg-surface px-3 text-sm text-text focus:border-border/70 focus:bg-surface-muted/25 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20 transition-colors sm:w-56"
+            className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text focus:bg-surface-muted/25 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20 transition-colors md:w-56"
             aria-label="Filtrar por vaga"
             data-testid="job-filter"
           >
-            <option value="">Todas as vagas</option>
+            <option value="">Filtrar vagas carregadas</option>
             {uniqueJobs.map((j) => (
               <option key={j} value={j}>{j}</option>
             ))}
           </select>
-        </div>
-
-        {/* Right: Actions */}
-        <div className="flex w-full items-center justify-end gap-2 shrink-0 sm:w-auto">
-          <button
-            type="button"
-            onClick={() => void load(page, search)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20"
-            aria-label="Atualizar"
-            title="Atualizar"
-            data-testid="refresh-button"
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate("/pipeline")}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border/70 bg-surface px-3 text-sm font-medium text-text transition-colors hover:bg-surface-muted/40 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/20"
-            aria-label="Abrir Pipeline"
-            data-testid="pipeline-link"
-          >
-            <Kanban className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
-            <span>Pipeline</span>
-          </button>
-
-          {!isReadOnly && (
-            <Button
-              type="button"
-              className="h-9 gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm shadow-none"
-              onClick={() => setAddModalOpen(true)}
-              data-testid="add-candidates-btn"
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Adicionar</span>
-            </Button>
-          )}
         </div>
       </div>
 
@@ -1394,38 +1466,35 @@ export function CandidaturasPage() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
-        <table className="w-full min-w-full table-fixed text-sm md:min-w-[760px] lg:min-w-[1120px]" data-testid="candidaturas-table">
-          <thead>
-            <tr className="border-b border-border bg-surface-muted/45">
-              <th className="w-[72%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:w-[31%] lg:w-[24%]">
+      {/* Responsive Table / Card View */}
+      <div className="overflow-x-auto rounded-xl border border-border/60 bg-surface shadow-sm">
+        <table className="block lg:table w-full min-w-full table-fixed text-sm" data-testid="candidaturas-table">
+          <thead className="hidden lg:table-header-group">
+            <tr className="border-b border-border/60 bg-surface-muted/30">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[25%]">
                 Candidato
               </th>
-              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:table-cell sm:w-[23%] lg:w-[17%]">
-                Vaga
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[23%]">
+                Vaga &bull; Etapa
               </th>
-              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:table-cell md:w-[14%] lg:w-[11%]">
-                Status
-              </th>
-              <th className="w-[28%] px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:w-[18%] lg:w-[11%]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[13%]">
                 Score IA
               </th>
-              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:table-cell lg:w-[15%]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[15%]">
                 Entrevista
               </th>
-              <th className="hidden px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted md:table-cell md:w-[14%] lg:w-[12%]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[14%]">
                 Próxima ação
               </th>
-              <th className="hidden px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:table-cell lg:w-[10%]">
+              <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-text-muted lg:w-[10%]">
                 Ações
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="block lg:table-row-group space-y-4 lg:space-y-0 p-4 lg:p-0">
             {loading && (
-              <tr>
-                <td colSpan={7} className="py-16 text-center">
+              <tr className="block lg:table-row">
+                <td colSpan={6} className="block lg:table-cell py-16 text-center">
                   <div className="mx-auto flex max-w-xs flex-col items-center gap-2" data-testid="candidaturas-loading">
                     <Loader2 className="h-6 w-6 animate-spin text-text-muted" aria-hidden="true" />
                     <p className="text-sm font-medium text-text" role="status">Carregando lista</p>
@@ -1436,8 +1505,8 @@ export function CandidaturasPage() {
             )}
 
             {!loading && filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-16">
+              <tr className="block lg:table-row">
+                <td colSpan={6} className="block lg:table-cell py-16">
                   <div
                     className="mx-auto flex max-w-md flex-col items-center gap-2 px-6 text-center"
                     data-testid={search || jobFilter ? "filtered-empty-state" : "empty-state"}
@@ -1469,170 +1538,144 @@ export function CandidaturasPage() {
                 return (
                   <tr
                     key={c.id}
-                    className="cursor-pointer border-b border-border/70 last:border-0 hover:bg-surface-muted/25 transition-colors"
+                    className="block lg:table-row cursor-pointer rounded-2xl lg:rounded-none border border-border/60 lg:border-x-0 lg:border-t-0 lg:border-b lg:border-border/40 p-4 lg:p-0 bg-surface hover:bg-surface-muted/30 transition-all duration-200 mb-3 lg:mb-0 shadow-sm lg:shadow-none"
                     onClick={() => setSelectedId(c.id)}
                     data-testid={`row-${c.id}`}
                   >
                     {/* Candidate */}
-                    <td className="px-3 py-2 align-top">
+                    <td className="block lg:table-cell px-3 py-2 align-top">
                       <div className="flex items-start gap-2.5">
                         <span className={`mt-0.5 h-10 w-1 shrink-0 rounded-full ${priority.markerClass}`} aria-hidden="true" />
                         <Avatar name={c.full_name} />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-text">{c.full_name}</p>
-                          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted sm:hidden">
-                            <Briefcase className="h-3 w-3 shrink-0" aria-hidden="true" />
-                            <span className="truncate">{c.active_job_title ?? "Vaga não informada"}</span>
-                          </div>
-                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-semibold text-text leading-tight">{c.full_name}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
                             <PriorityBadge priority={priority} />
-                            <div className="min-w-0 md:hidden">
-                              <NextActionBadge action={nextAction} />
-                            </div>
                           </div>
-                          <div className="mt-1 hidden min-w-0 items-center gap-3 text-[11px] text-text-muted md:flex md:flex-wrap">
-                            <span className="flex min-w-0 items-center gap-1.5">
-                              <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
-                              <span className="truncate">{c.email ?? "E-mail não informado"}</span>
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                              <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
-                              {c.phone ?? "Telefone não informado"}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted md:hidden">
-                            {mobileContact ? (
-                              <>
-                                <span className="flex min-w-0 items-center gap-1.5">
-                                  {mobileContactIcon === Phone ? (
-                                    <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
-                                  ) : (
-                                    <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
-                                  )}
-                                  <span className="truncate">{mobileContact}</span>
-                                </span>
-                                <button
-                                  type="button"
-                                  aria-label={`Copiar contato de ${c.full_name}`}
-                                  title="Copiar contato"
-                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleCopyContact(c);
-                                  }}
-                                  data-testid={`action-copy-contact-${c.id}`}
-                                >
-                                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                                </button>
-                              </>
-                            ) : (
-                              <span>Contato não informado</span>
+                          {/* Desktop contacts */}
+                          <div className="mt-1.5 hidden lg:flex lg:flex-wrap items-center gap-3 text-[11px] text-text-muted">
+                            {c.email && (
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                <span className="truncate">{c.email}</span>
+                              </span>
+                            )}
+                            {c.phone && (
+                              <span className="flex items-center gap-1.5">
+                                <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                <span>{c.phone}</span>
+                              </span>
                             )}
                           </div>
+                          {/* Mobile contacts */}
+                          {mobileContact && (
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted lg:hidden">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                {mobileContactIcon === Phone ? (
+                                  <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                ) : (
+                                  <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                )}
+                                <span className="truncate">{mobileContact}</span>
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={`Copiar contato de ${c.full_name}`}
+                                title="Copiar contato"
+                                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleCopyContact(c);
+                                }}
+                                data-testid={`action-copy-contact-${c.id}`}
+                              >
+                                <Copy className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
 
-                    {/* Job */}
-                    <td className="hidden px-3 py-2 align-top sm:table-cell">
-                      <div className="flex min-w-0 items-start gap-2">
-                        <Briefcase className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-text">{c.active_job_title ?? "Vaga não informada"}</p>
-                          <p className="text-[11px] text-text-muted">
-                            {c.application_source === "manual" ? "Entrada manual" : "Candidatura recebida"}
-                          </p>
+                    {/* Vaga & Etapa */}
+                    <td className="block lg:table-cell px-3 py-2 align-top lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
+                      <div className="flex lg:flex-col items-center lg:items-start justify-between lg:justify-start gap-2">
+                        <span className="text-xs font-medium text-text-muted lg:hidden">Vaga / Etapa</span>
+                        <div className="text-right lg:text-left min-w-0">
+                          <p className="truncate font-semibold text-text text-sm lg:text-base">{c.active_job_title ?? "Vaga não informada"}</p>
+                          <div className="mt-1.5 flex items-center justify-end lg:justify-start gap-2">
+                            <StageBadge stage={c.active_job_stage} />
+                            <span className="text-[10px] text-text-muted hidden lg:inline">
+                              {c.application_source === "manual" ? "Manual" : "Candidatura"}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
 
-                    {/* Status */}
-                    <td className="hidden px-3 py-2 align-top md:table-cell">
-                      <StageBadge stage={c.active_job_stage} />
-                    </td>
-
-                    {/* Score */}
-                    <td className="px-3 py-2 align-top">
-                      <ScoreChip candidate={c} />
-                    </td>
-
-                    {/* Interview */}
-                    <td className="hidden px-3 py-2 align-top lg:table-cell">
-                      {hasInterview ? (
-                        <span
-                          className="inline-flex max-w-full flex-col rounded-lg border border-border/70 bg-surface-muted/30 px-2 py-1 text-text"
-                          data-testid={`interview-badge-${c.id}`}
-                        >
-                          <span className="flex items-center gap-1 text-[11px] font-medium">
-                            <CheckCircle2 className="h-3 w-3 text-success" aria-hidden="true" />
-                            Entrevista marcada
-                          </span>
-                          <span className="text-[10px] text-text-muted">
-                            {getScheduledInterviewLabel(scheduledInterview)}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-surface-muted/25 px-2 py-0.5 text-[11px] font-medium text-text-muted">
-                          <Clock className="h-3 w-3" aria-hidden="true" />
-                          Não marcada
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Next action */}
-                    <td className="hidden px-3 py-2 align-top md:table-cell">
-                      <div className="max-w-[10rem]">
-                        <NextActionBadge action={nextAction} />
+                    {/* Score IA */}
+                    <td className="block lg:table-cell px-3 py-2 align-top lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
+                      <div className="flex lg:block items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-text-muted lg:hidden">Score IA</span>
+                        <ScoreChip candidate={c} />
                       </div>
                     </td>
 
-                    {/* Actions */}
-                    <td className="hidden px-3 py-2 align-top lg:table-cell" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          title="Abrir candidato"
-                          aria-label={`Abrir candidato ${c.full_name}`}
-                          onClick={() => openProfile(c.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text"
-                          data-testid={`action-open-profile-${c.id}`}
-                        >
-                          <User className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
+                    {/* Entrevista */}
+                    <td className="block lg:table-cell px-3 py-2 align-top lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
+                      <div className="flex lg:block items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-text-muted lg:hidden">Entrevista</span>
+                        <div>
+                          {hasInterview ? (
+                            <span
+                              className="inline-flex max-w-full flex-col rounded-lg border border-border/70 bg-surface-muted/30 px-2 py-1 text-text"
+                              data-testid={`interview-badge-${c.id}`}
+                            >
+                              <span className="flex items-center gap-1 text-[11px] font-medium">
+                                <CheckCircle2 className="h-3 w-3 text-success" aria-hidden="true" />
+                                Entrevista marcada
+                              </span>
+                              <span className="text-[10px] text-text-muted leading-tight">
+                                {getScheduledInterviewLabel(scheduledInterview)}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-surface-muted/25 px-2 py-0.5 text-[11px] font-medium text-text-muted">
+                              <Clock className="h-3 w-3" aria-hidden="true" />
+                              Não marcada
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
 
-                        <button
-                          type="button"
-                          title="Abrir pipeline"
-                          aria-label={`Abrir pipeline de ${c.full_name}`}
-                          onClick={() => openPipeline(c)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-surface text-text-muted transition-colors hover:bg-surface-muted/40 hover:text-text"
-                          data-testid={`action-open-pipeline-${c.id}`}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
+                    {/* Próxima ação */}
+                    <td className="block lg:table-cell px-3 py-2 align-top lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0">
+                      <div className="flex lg:block items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-text-muted lg:hidden">Próxima Ação</span>
+                        <div className="max-w-[14rem] text-right lg:text-left">
+                          <NextActionBadge action={nextAction} />
+                        </div>
+                      </div>
+                    </td>
 
-                        {!isReadOnly && (
-                          <button
-                            type="button"
-                            title="Marcar entrevista"
-                            aria-label={`Marcar entrevista com ${c.full_name}`}
-                            onClick={() => setInterviewTarget(c)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-surface text-text transition-colors hover:bg-surface-muted/40"
-                            data-testid={`action-interview-${c.id}`}
-                          >
-                            <Calendar className="h-3.5 w-3.5 text-[hsl(var(--primary))]" aria-hidden="true" />
-                          </button>
-                        )}
-
-                        <MoreActionsMenu
-                          candidate={c}
-                          isReadOnly={isReadOnly}
-                          canCopyWhatsApp={Boolean(c.phone)}
-                          onOpenProfile={() => openProfile(c.id)}
-                          onCopyWhatsApp={() => handleCopyWhatsApp(c)}
-                          onOpenPipeline={() => openPipeline(c)}
-                          onReject={() => setRejectTarget(c)}
-                        />
+                    {/* Ações */}
+                    <td className="block lg:table-cell px-3 py-2 align-middle text-right lg:border-b lg:border-border/40 border-t border-border/40 lg:border-t-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex lg:block items-center justify-between lg:justify-end gap-2">
+                        <span className="text-xs font-medium text-text-muted lg:hidden">Ações</span>
+                        <div className="flex items-center gap-1.5">
+                          <MoreActionsMenu
+                            candidate={c}
+                            isReadOnly={isReadOnly}
+                            canCopyWhatsApp={Boolean(c.phone)}
+                            hasInterview={hasInterview}
+                            onOpenProfile={() => openProfile(c.id)}
+                            onCopyWhatsApp={() => handleCopyWhatsApp(c)}
+                            onOpenPipeline={() => openPipeline(c)}
+                            onScheduleInterview={() => setInterviewTarget(c)}
+                            onReject={() => setRejectTarget(c)}
+                          />
+                        </div>
                       </div>
                     </td>
                   </tr>
