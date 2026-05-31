@@ -32,6 +32,7 @@ import {
 import { CandidateProfileBehavioralAssessmentsTab } from "../features/candidates/profile/components/CandidateProfileBehavioralAssessmentsTab";
 import { CandidateProfileInterviewsTab } from "../features/candidates/profile/components/CandidateProfileInterviewsTab";
 import { CandidateProfileWorkflowTab } from "../features/candidates/profile/components/CandidateProfileWorkflowTab";
+import { CandidateProfilePreAdmissionTab } from "../features/candidates/profile/components/CandidateProfilePreAdmissionTab";
 import {
   ActionButton,
   Badge,
@@ -43,7 +44,6 @@ import {
 import { LinkCandidateJobModal } from "../features/candidates/components/LinkCandidateJobModal";
 import { CandidateCommunicationsPanel } from "../features/candidates/drawer/components/CandidateCommunicationsPanel";
 import { CandidateNotesTab } from "../features/candidates/drawer/components/CandidateNotesTab";
-import { CandidatePreAdmissionPanel } from "../features/candidates/drawer/components/CandidatePreAdmissionPanel";
 import {
   PreAdmissionStartDrawer,
   type PreAdmissionStartDrawerResult,
@@ -801,7 +801,7 @@ export function CandidateProfilePage() {
             />
           ) : null}
           {activeTab === "pre_admission" ? (
-            <CandidatePreAdmissionPanel
+            <CandidateProfilePreAdmissionTab
               caseId={preAdmissionEnvelope?.case?.id ?? null}
               jobId={profileJobId}
               candidateId={candidateId}
