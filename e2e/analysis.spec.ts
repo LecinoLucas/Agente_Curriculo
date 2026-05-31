@@ -38,7 +38,7 @@ test("Análises IA lista a análise gerada após upload de currículo", async ({
 
   // ── cria candidato manual pela Pipeline da vaga ──
   await page.goto(`/pipeline/${job.id}`);
-  await expect(page.locator("h2").filter({ hasText: job.title }).first()).toBeVisible();
+  await expect(page.getByText(job.title).first()).toBeVisible();
 
   const candidateId = await createManualCandidateFromPipeline(page, {
     name: candidateName,
