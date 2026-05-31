@@ -6,20 +6,8 @@ import {
   type CandidatePortalPreAdmissionChecklistItem,
   type CandidatePortalPreAdmissionEnvelope,
 } from "../../../services/candidatePortalService";
+import { PRE_ADMISSION_STATUS_LABELS } from "../../../shared/status/statusLabels";
 import { toast } from "../../../shared/utils/toast";
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Em preparação",
-  offer_preparing: "Oferta em preparação",
-  offer_sent: "Oferta enviada",
-  offer_accepted: "Oferta aceita",
-  offer_declined: "Oferta recusada",
-  documents_pending: "Documentos pendentes",
-  documents_received: "Documentos recebidos",
-  ready_for_admission: "Pronto para admissão",
-  admitted: "Admitido",
-  cancelled: "Cancelado",
-};
 
 const ITEM_STATUS_LABELS: Record<string, string> = {
   pending: "Pendente",
@@ -175,7 +163,7 @@ export function CandidatePortalPreAdmissionCard({
           data-testid="candidate-portal-pre-admission-status"
           className="w-fit rounded-full bg-[hsl(var(--primary)/0.08)] px-3 py-1 text-xs font-bold text-[hsl(var(--primary))]"
         >
-          {STATUS_LABELS[process.status] ?? process.status}
+          {PRE_ADMISSION_STATUS_LABELS[process.status] ?? process.status}
         </span>
       </div>
 

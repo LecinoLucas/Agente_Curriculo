@@ -5,12 +5,14 @@ import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../features/auth/useAuth";
+import { isCandidate } from "../shared/auth/roles";
 import { authService } from "../services/authService";
 import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
 import { toast } from "../shared/utils/toast";
+import type { UserRole } from "../types/auth";
 
-function postPasswordChangeRoute(role?: string | null): string {
-  if (role === "candidate") return "/candidato/portal";
+function postPasswordChangeRoute(role?: UserRole | null): string {
+  if (isCandidate(role)) return "/candidato/portal";
   return "/rh";
 }
 

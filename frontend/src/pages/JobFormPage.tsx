@@ -28,6 +28,9 @@ import { JobAssessmentPolicyStep } from "../features/jobs/components/JobAssessme
 import { JobFormReviewStep } from "../features/jobs/sections/JobFormReviewStep";
 import { JobAiDraftPanel } from "../features/jobs/components/JobAiDraftPanel";
 import { AiSkillSuggestionsBlock, type ApplicableSkill } from "../features/jobs/components/AiSkillSuggestionsBlock";
+import { SectionCard } from "../shared/components/layout/SectionCard";
+import { Field } from "../shared/components/forms/Field";
+import { StringListField } from "../features/jobs/components/StringListField";
 import {
   buildCreateJobPayload,
   buildUpdateJobPayload,
@@ -41,6 +44,7 @@ import { useJobConfigurationAlerts } from "../hooks/useJobConfigurationAlerts";
 import { useJobFormState } from "../features/jobs/hooks/useJobFormState";
 import { useJobSkills } from "../features/jobs/hooks/useJobSkills";
 import { useJobPublication } from "../features/jobs/hooks/useJobPublication";
+import { canManageJobs } from "../shared/auth/roles";
 import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
 import {
   getJob,
@@ -73,7 +77,7 @@ type StepId =
   | "assessment-policy"
   | "review";
 
-export type MacroStepId = "context" | "skills" | "evaluation" | "review";
+export type MacroStepId = "context" | "requirements" | "skills" | "screening" | "review";
 type AiSkillSuggestionsState = { mandatory: string[]; optional: string[] };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -91,10 +95,11 @@ export const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
 ];
 
 export const MACRO_STEPS: Array<{ id: MacroStepId; label: string; steps: StepId[] }> = [
-  { id: "context", label: "Contexto da vaga", steps: ["basic", "requirements"] },
-  { id: "skills", label: "Competências", steps: ["mandatory-skills", "differentials", "deal-breakers"] },
-  { id: "evaluation", label: "Avaliação", steps: ["assessment-policy", "behavioral"] },
-  { id: "review", label: "Revisão e publicação", steps: ["review"] },
+  { id: "context", label: "Contexto", steps: ["basic"] },
+  { id: "requirements", label: "Requisitos", steps: ["requirements"] },
+  { id: "skills", label: "Skills", steps: ["mandatory-skills", "differentials"] },
+  { id: "screening", label: "Triagem", steps: ["deal-breakers", "assessment-policy", "behavioral"] },
+  { id: "review", label: "Revisão", steps: ["review"] },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -119,7 +124,7 @@ export function JobFormPage() {
 
   const [activeMacroStep, setActiveMacroStep] = useState<MacroStepId>("context");
   const [showQualityDrawer, setShowQualityDrawer] = useState(false);
-  const [aiMode, setAiMode] = useState<"manual" | "ai">("manual");
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [aiSkillSuggestions, setAiSkillSuggestions] = useState<AiSkillSuggestionsState | null>(null);
   const [aiApplyNotice, setAiApplyNotice] = useState<string | null>(null);
   const [currentJob, setCurrentJob] = useState<Job | null>(null);
@@ -179,7 +184,7 @@ export function JobFormPage() {
     canTryPublishFrontend,
   } = useJobPublication({ form, currentJob, mandatorySkillsCount: mandatorySkills.length });
 
-  const canManage = user?.role === "admin" || user?.role === "recruiter";
+  const canManage = canManageJobs(user?.role);
   const { alerts } = useJobConfigurationAlerts(form);
 
   const currentMacroIndex = MACRO_STEPS.findIndex((s) => s.id === activeMacroStep);
@@ -364,10 +369,63 @@ export function JobFormPage() {
       case "context":
         return (
           <div className="space-y-6">
+            {!isAiPanelOpen ? (
+              <div className="flex flex-col gap-4 rounded-3xl border border-border bg-surface p-6 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-text">Criação assistida</h3>
+                  <p className="mt-1 text-sm text-text-muted">
+                    Use a IA para criar um rascunho. Você revisa antes de aplicar.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" onClick={() => setIsAiPanelOpen(true)}>
+                  <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Preencher com IA ✨
+                </Button>
+              </div>
+            ) : (
+              <JobAiDraftPanel
+                formHasData={Boolean(form.title || form.description)}
+                onApply={(updates, skillSuggestions) => {
+                  updateForm(updates);
+                  const hasSuggestions =
+                    skillSuggestions.mandatory.length > 0 || skillSuggestions.optional.length > 0;
+                  if (hasSuggestions) {
+                    setAiSkillSuggestions(skillSuggestions);
+                  }
+                  setAiApplyNotice("Rascunho aplicado. Revise antes de salvar.");
+                  setIsAiPanelOpen(false);
+                }}
+                onClose={() => setIsAiPanelOpen(false)}
+              />
+            )}
+            
             <JobFormBasicStep
               form={form}
               onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
             />
+
+            <SectionCard
+              title="Oferta e benefícios"
+              description="Atrativos e benefícios oferecidos pela empresa."
+            >
+              <Field label="Benefícios">
+                <StringListField
+                  values={form.benefits}
+                  onChange={(next) => setForm((c) => ({ ...c, benefits: next }))}
+                  placeholder="Ex: Vale refeição, Plano de saúde"
+                  addLabel="Adicionar"
+                  emptyLabel="Nenhum benefício adicionado."
+                  inputLabel="Novo benefício"
+                  testId="form-benefits"
+                />
+              </Field>
+            </SectionCard>
+          </div>
+        );
+
+      case "requirements":
+        return (
+          <div className="space-y-6">
             <JobFormRequirementsStep
               form={form}
               onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
@@ -378,6 +436,10 @@ export function JobFormPage() {
       case "skills":
         return (
           <div className="space-y-6">
+            <div className="rounded-2xl border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.04)] px-4 py-3 text-sm text-[hsl(var(--primary))]">
+              Skills do catálogo ajudam no matching. Textos livres enriquecem a descrição da vaga.
+            </div>
+
             {aiSkillSuggestions && (
               <AiSkillSuggestionsBlock
                 mandatory={aiSkillSuggestions.mandatory}
@@ -387,6 +449,24 @@ export function JobFormPage() {
                 onDismiss={() => setAiSkillSuggestions(null)}
               />
             )}
+
+            <SectionCard
+              title="Competências obrigatórias (Texto Livre)"
+              description="Itens que aparecerão apenas na descrição da vaga e não no matching de IA."
+            >
+              <Field label="Competências obrigatórias">
+                <StringListField
+                  values={form.mandatory_skills}
+                  onChange={(next) => setForm((c) => ({ ...c, mandatory_skills: next }))}
+                  placeholder="Ex: Atendimento ao cliente"
+                  addLabel="Adicionar"
+                  emptyLabel="Nenhuma competência obrigatória adicionada."
+                  inputLabel="Nova competência obrigatória"
+                  testId="form-mandatory-skills"
+                />
+              </Field>
+            </SectionCard>
+
             <JobFormMandatorySkillsStep
               mandatorySkills={mandatorySkills}
               availableSkills={availableSkills}
@@ -405,6 +485,24 @@ export function JobFormPage() {
               onSkillCreated={onSkillCreated}
               jobContext={{ title: form.title, jobArea: form.job_area }}
             />
+
+            <SectionCard
+              title="Diferenciais (Texto Livre)"
+              description="Diferenciais em texto que aparecerão na descrição da vaga."
+            >
+              <Field label="Diferenciais (desejáveis)">
+                <StringListField
+                  values={form.nice_to_have_skills}
+                  onChange={(next) => setForm((c) => ({ ...c, nice_to_have_skills: next }))}
+                  placeholder="Ex: Experiência anterior com caixa"
+                  addLabel="Adicionar"
+                  emptyLabel="Nenhum diferencial adicionado."
+                  inputLabel="Novo diferencial"
+                  testId="form-nice-to-have-skills"
+                />
+              </Field>
+            </SectionCard>
+
             <JobFormDifferentialsStep
               form={{
                 behavioral_requirements: form.behavioral_requirements,
@@ -429,6 +527,29 @@ export function JobFormPage() {
               onSkillCreated={onSkillCreated}
               jobContext={{ title: form.title, jobArea: form.job_area }}
             />
+          </div>
+        );
+
+      case "screening":
+        return (
+          <div className="space-y-6">
+            <SectionCard
+              title="Perguntas de triagem"
+              description="Perguntas obrigatórias que o candidato deve responder ao se aplicar."
+            >
+              <Field label="Perguntas de triagem">
+                <StringListField
+                  values={form.screening_questions}
+                  onChange={(next) => setForm((c) => ({ ...c, screening_questions: next }))}
+                  placeholder="Ex: Tem disponibilidade para turno integral?"
+                  addLabel="Adicionar"
+                  emptyLabel="Nenhuma pergunta de triagem adicionada."
+                  inputLabel="Nova pergunta de triagem"
+                  testId="form-screening-questions"
+                />
+              </Field>
+            </SectionCard>
+
             <JobFormDealBreakersStep
               form={form}
               eliminatorySkills={eliminatorySkills}
@@ -453,12 +574,7 @@ export function JobFormPage() {
               onAddDealBreaker={addDealBreaker}
               onSkillCreated={onSkillCreated}
             />
-          </div>
-        );
 
-      case "evaluation":
-        return (
-          <div className="space-y-6">
             <JobAssessmentPolicyStep
               form={form}
               onChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
@@ -486,52 +602,6 @@ export function JobFormPage() {
       case "review":
         return (
           <div className="space-y-6">
-            {/* Inline quality panel — only in review step */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-3xl border border-border bg-surface p-5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  Painel de qualidade
-                </p>
-                <div className="mt-4">
-                  {jobQuality ? (
-                    <JobQualityBadge quality={jobQuality} />
-                  ) : (
-                    <div className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-muted">
-                      Salve a vaga para calcular a qualidade.
-                    </div>
-                  )}
-                </div>
-                <div
-                  className={`mt-4 rounded-2xl border px-4 py-4 ${getPanelToneClasses(publicationState.tone)}`}
-                >
-                  <p className="text-xs font-semibold uppercase tracking-wide">
-                    Status de publicação
-                  </p>
-                  <p className="mt-2 text-base font-semibold">{publicationState.label}</p>
-                  <p className="mt-2 text-sm opacity-90">{publicationState.description}</p>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-border bg-surface p-5">
-                <p className="text-sm font-semibold text-text">Bloqueios obrigatórios</p>
-                <div className="mt-3 space-y-2">
-                  {frontendBlockers.map((blocker) => (
-                    <div
-                      key={blocker}
-                      className="rounded-2xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-3 py-3 text-sm text-danger"
-                    >
-                      {formatPublicationBlocker(blocker)}
-                    </div>
-                  ))}
-                  {frontendBlockers.length === 0 && (
-                    <div className="rounded-2xl border border-[hsl(var(--success))]/15 bg-success-soft px-3 py-3 text-sm text-success">
-                      Estrutura mínima preenchida no frontend.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
             <JobFormReviewStep
               form={form}
               mandatorySkills={mandatorySkills}
@@ -540,6 +610,9 @@ export function JobFormPage() {
               jobQuality={jobQuality}
               backendPublishErrors={backendPublishErrors}
               selectedTemplateStatus={selectedTemplateStatus}
+              frontendBlockers={frontendBlockers}
+              publicationState={publicationState}
+              onNavigateToStep={setActiveMacroStep}
             />
 
             {alerts.length > 0 && (
@@ -697,49 +770,7 @@ export function JobFormPage() {
         <MessageList tone="danger" title="Problemas no formulário" items={formErrors} />
       )}
 
-      {/* ── Modo de criação ── */}
-      <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
-        <button
-          type="button"
-          onClick={() => setAiMode("manual")}
-          className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-            aiMode === "manual"
-              ? "bg-[hsl(var(--primary))] text-white shadow-sm"
-              : "text-text-muted hover:text-text"
-          }`}
-        >
-          Cadastro manual
-        </button>
-        <button
-          type="button"
-          onClick={() => setAiMode("ai")}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-            aiMode === "ai"
-              ? "bg-[hsl(var(--primary))] text-white shadow-sm"
-              : "text-text-muted hover:text-text"
-          }`}
-        >
-          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-          Criar com IA
-        </button>
-      </div>
 
-      {/* ── AI Draft Panel ── */}
-      {aiMode === "ai" && (
-        <JobAiDraftPanel
-          formHasData={Boolean(form.title || form.description)}
-          onApply={(updates, skillSuggestions) => {
-            updateForm(updates);
-            const hasSuggestions =
-              skillSuggestions.mandatory.length > 0 || skillSuggestions.optional.length > 0;
-            if (hasSuggestions) {
-              setAiSkillSuggestions(skillSuggestions);
-            }
-            setAiApplyNotice("Rascunho aplicado. Revise antes de salvar.");
-            setAiMode("manual");
-          }}
-        />
-      )}
 
       {aiApplyNotice && (
         <div className="flex items-start gap-2 rounded-2xl border border-[hsl(var(--success))]/20 bg-success-soft px-4 py-3 text-sm text-success">

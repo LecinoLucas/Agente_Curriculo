@@ -5,6 +5,7 @@ import { formatDateTime } from "../profileFormatters";
 import { ActionButton, DefinitionList, EmptyBlock, SectionCard } from "./ProfileSharedUI";
 import { formatContextError } from "../../../../services/errorMessages";
 import { resumeService } from "../../../../services/resumeService";
+import { canDownloadCandidateResume } from "../../../../shared/auth/roles";
 import { toast } from "../../../../shared/utils/toast";
 import type { CandidateOverview, Resume, ResumeVersion } from "../../../../types/domain";
 
@@ -32,7 +33,7 @@ export function CandidateProfileDocumentsTab({
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
   const [previewFileName, setPreviewFileName] = useState<string | null>(null);
   const [previewContentType, setPreviewContentType] = useState<string | null>(null);
-  const canDownload = user?.role === "admin" || user?.role === "recruiter";
+  const canDownload = canDownloadCandidateResume(user?.role);
   const currentResumeSummary = useMemo(() => {
     if (resumes.length === 0) return null;
     return resumes.find((resume) => resume.status === "active") ?? resumes[0];

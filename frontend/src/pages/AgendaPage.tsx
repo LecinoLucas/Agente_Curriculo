@@ -41,6 +41,11 @@ import {
   scorecardActionLabel,
   scorecardStatusLabel,
 } from "../features/agenda/interviewDisplay";
+import {
+  INTERVIEW_FORMAT_BADGE_VARIANTS,
+  INTERVIEW_STATUS_BADGE_VARIANTS,
+} from "../shared/status/statusLabels";
+import { canMutateAgenda } from "../shared/auth/roles";
 
 type AgendaPeriod = "today" | "week" | "month" | "all";
 type AgendaSection = {
@@ -53,7 +58,6 @@ type AgendaSection = {
 };
 
 const TODAY = new Date();
-const MUTABLE_AGENDA_ROLES = new Set(["admin", "hr", "recruiter"]);
 const OPEN_STATUSES = new Set(["scheduled", "rescheduled", "awaiting_feedback"]);
 const CLOSED_STATUSES = new Set(["completed", "cancelled", "no_show"]);
 
@@ -63,21 +67,6 @@ const PERIOD_OPTIONS: Array<{ value: AgendaPeriod; label: string; shortLabel: st
   { value: "month", label: "Mês", shortLabel: "Mês" },
   { value: "all", label: "Todas", shortLabel: "Todas" },
 ];
-
-const STATUS_BADGE_VARIANTS: Record<string, "neutral" | "success" | "warning" | "danger" | "outline"> = {
-  scheduled: "neutral",
-  completed: "success",
-  awaiting_feedback: "warning",
-  cancelled: "danger",
-  rescheduled: "warning",
-  no_show: "warning",
-};
-
-const FORMAT_BADGE_VARIANTS: Record<string, "neutral" | "success" | "warning" | "outline"> = {
-  online: "success",
-  presencial: "outline",
-  telefone: "warning",
-};
 
 function dayStart(d: Date) {
   const c = new Date(d);
@@ -338,10 +327,10 @@ function InterviewRow({
           </div>
 
           <div className="flex flex-wrap gap-1.5 sm:justify-end">
-            <Badge variant={STATUS_BADGE_VARIANTS[iv.status] ?? "neutral"}>
+            <Badge variant={INTERVIEW_STATUS_BADGE_VARIANTS[iv.status] ?? "neutral"}>
               {interviewStatusLabel(iv.status)}
             </Badge>
-            <Badge variant={FORMAT_BADGE_VARIANTS[iv.interview_format] ?? "outline"}>
+            <Badge variant={INTERVIEW_FORMAT_BADGE_VARIANTS[iv.interview_format] ?? "outline"}>
               {interviewFormatLabel(iv.interview_format)}
             </Badge>
           </div>
@@ -542,7 +531,7 @@ export function AgendaPage() {
   const navigate = useNavigate();
   const auth = useContext(AuthContext);
   const userRole = auth?.user?.role ?? "admin";
-  const canMutateAgenda = MUTABLE_AGENDA_ROLES.has(userRole);
+  const canMutateAgendaActions = canMutateAgenda(userRole);
   const [selected, setSelected] = useState(dayStart(TODAY));
   const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
   const [kpis, setKpis] = useState<AgendaKpis | null>(null);
@@ -710,12 +699,12 @@ export function AgendaPage() {
     <InterviewRow
       key={iv.id}
       iv={iv}
-      canMutate={canMutateAgenda}
-      onEdit={canMutateAgenda ? handleEditClick : undefined}
-      onCancel={canMutateAgenda ? handleCancelClick : undefined}
-      onComplete={canMutateAgenda ? (interview) => void handleCompleteClick(interview) : undefined}
-      onNoShow={canMutateAgenda ? (interview) => void handleNoShowClick(interview) : undefined}
-      onScorecard={canMutateAgenda ? handleScorecardClick : undefined}
+      canMutate={canMutateAgendaActions}
+      onEdit={canMutateAgendaActions ? handleEditClick : undefined}
+      onCancel={canMutateAgendaActions ? handleCancelClick : undefined}
+      onComplete={canMutateAgendaActions ? (interview) => void handleCompleteClick(interview) : undefined}
+      onNoShow={canMutateAgendaActions ? (interview) => void handleNoShowClick(interview) : undefined}
+      onScorecard={canMutateAgendaActions ? handleScorecardClick : undefined}
       onOpenCandidate={handleOpenCandidate}
       onOpenPipeline={handleOpenPipeline}
     />
@@ -769,8 +758,8 @@ export function AgendaPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-extrabold tracking-normal text-text sm:text-3xl">Agenda</h1>
-              <Badge variant={canMutateAgenda ? "success" : "outline"}>
-                {canMutateAgenda ? "Operação" : "Somente leitura"}
+              <Badge variant={canMutateAgendaActions ? "success" : "outline"}>
+                {canMutateAgendaActions ? "Operação" : "Somente leitura"}
               </Badge>
             </div>
             <p className="mt-1 text-sm text-text-muted">
@@ -779,7 +768,7 @@ export function AgendaPage() {
           </div>
 
           <div className="flex flex-wrap gap-2 lg:justify-end">
-            {canMutateAgenda ? (
+            {canMutateAgendaActions ? (
               <Button type="button" onClick={() => setIsCreateModalOpen(true)}>
                 <Calendar className="mr-2 h-4 w-4" />
                 Nova entrevista
@@ -896,7 +885,7 @@ export function AgendaPage() {
               </p>
             </div>
           </div>
-          {canMutateAgenda ? (
+          {canMutateAgendaActions ? (
             <Button
               type="button"
               variant="outline"

@@ -6,6 +6,10 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCards } from "@/components/common/Skeleton";
 import { admissionWorkspaceService } from "../../../../services/admissionWorkspaceService";
 import { formatContextError } from "../../../../services/errorMessages";
+import {
+  PRE_ADMISSION_SUMMARY_TITLE_LABELS,
+  PRE_ADMISSION_WORKSPACE_STATUS_LABELS,
+} from "../../../../shared/status/statusLabels";
 import type {
   AdmissionCaseOverview,
   AdmissionWorkspaceCaseStatus,
@@ -20,40 +24,12 @@ type ProtheusSummary = {
   tone: "neutral" | "info" | "success" | "danger";
 };
 
-const TITLE_BY_STATUS: Record<string, string> = {
-  draft: "Pré-admissão pendente",
-  offer_preparing: "Pré-admissão em andamento",
-  offer_sent: "Pré-admissão em andamento",
-  offer_accepted: "Pré-admissão em andamento",
-  offer_declined: "Pré-admissão pendente",
-  documents_pending: "Pré-admissão em andamento",
-  documents_received: "Pré-admissão em andamento",
-  ready_for_admission: "Pré-admissão pronta para exportação",
-  admitted: "Pré-admissão concluída",
-  cancelled: "Pré-admissão cancelada",
-  in_progress: "Pré-admissão em andamento",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Rascunho",
-  offer_preparing: "Preparando oferta",
-  offer_sent: "Oferta enviada",
-  offer_accepted: "Oferta aceita",
-  offer_declined: "Oferta recusada",
-  documents_pending: "Documentos pendentes",
-  documents_received: "Documentos recebidos",
-  ready_for_admission: "Pronto para admissão",
-  admitted: "Admitido",
-  cancelled: "Cancelado",
-  in_progress: "Em andamento",
-};
-
 function resolveTitle(status: AdmissionWorkspaceCaseStatus): string {
-  return TITLE_BY_STATUS[status] ?? "Pré-admissão em andamento";
+  return PRE_ADMISSION_SUMMARY_TITLE_LABELS[status] ?? "Pré-admissão em andamento";
 }
 
 function resolveStatusLabel(status: AdmissionWorkspaceCaseStatus): string {
-  return STATUS_LABEL[status] ?? "Em andamento";
+  return PRE_ADMISSION_WORKSPACE_STATUS_LABELS[status] ?? "Em andamento";
 }
 
 function resolveProtheusSummary(overview: AdmissionCaseOverview): ProtheusSummary {

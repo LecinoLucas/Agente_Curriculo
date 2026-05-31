@@ -13,6 +13,7 @@ import { CandidateProfileContent } from "./CandidateProfileContent";
 import { getLinkCandidateCtaLabel } from "../../utils/jobLinking";
 import { CandidateAnalysisStatusCard } from "../components/CandidateAnalysisStatusCard";
 import { MoreActionsMenu } from "../components/MoreActionsMenu";
+import { canAccessCandidatePreAdmission } from "../../../../shared/auth/roles";
 import type { UserRole } from "../utils/getVisibleCandidateTabs";
 
 export type CandidateActionFeedback = {
@@ -302,7 +303,7 @@ export function CandidateProfileView({
             currentStage={currentStage}
             hasPreAdmission={hasPreAdmission}
             onOpenPreAdmission={
-              userRole === "admin" || userRole === "hr" || userRole === "recruiter"
+              canAccessCandidatePreAdmission(userRole)
                 ? () => onTabChange("pre_admission")
                 : undefined
             }
@@ -442,7 +443,7 @@ function AdmissionDocumentCallout({
   hasPreAdmission: boolean;
   onOpenPreAdmission?: () => void;
 }) {
-  const canAct = userRole === "admin" || userRole === "hr" || userRole === "recruiter";
+  const canAct = canAccessCandidatePreAdmission(userRole);
 
   let title: string;
   let body: string;

@@ -1,19 +1,7 @@
 import { CalendarDays, CircleDollarSign } from "lucide-react";
 
 import type { PreAdmissionCase, PreAdmissionStatus } from "../../../../types/domain";
-
-export const preAdmissionStatusLabels: Record<PreAdmissionStatus, string> = {
-  draft: "Rascunho",
-  offer_preparing: "Oferta em preparação",
-  offer_sent: "Oferta enviada",
-  offer_accepted: "Oferta aceita",
-  offer_declined: "Oferta recusada",
-  documents_pending: "Documentos pendentes",
-  documents_received: "Documentos recebidos",
-  ready_for_admission: "Pronto para admissão",
-  admitted: "Admitido",
-  cancelled: "Cancelado",
-};
+import { PRE_ADMISSION_STATUS_LABELS as preAdmissionStatusLabels } from "../../../../shared/status/statusLabels";
 
 function formatSalary(value: PreAdmissionCase["salary_offer"]): string {
   if (value == null || value === "") return "Não informado";

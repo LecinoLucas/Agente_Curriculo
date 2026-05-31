@@ -2,6 +2,7 @@ import { createContext, useState, useEffect, ReactNode, useCallback, useMemo } f
 import { useLocation } from "react-router-dom";
 
 import { HttpError } from "../../services/http";
+import { canAccessInternalNotifications } from "../../shared/auth/roles";
 import { useAuth } from "../auth/useAuth";
 import { tokenStorage } from "../../utils/storage";
 import { Notification } from "./types";
@@ -20,8 +21,6 @@ export interface NotificationsContextType {
 export const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
 const DISMISSED_KEY = "ats-notifications-dismissed-ids";
-const INTERNAL_NOTIFICATION_ROLES = new Set(["admin", "recruiter", "manager", "hr"]);
-
 function isPublicNotificationRoute(pathname: string, isAuthenticated: boolean): boolean {
   if (pathname === "/login" || pathname === "/candidato" || pathname === "/candidato/cadastro") {
     return true;
@@ -61,7 +60,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated || !user) return false;
     if (!tokenStorage.get()) return false;
     if (isPublicNotificationRoute(location.pathname, isAuthenticated)) return false;
-    return INTERNAL_NOTIFICATION_ROLES.has(user.role);
+    return canAccessInternalNotifications(user.role);
   }, [isAuthenticated, isLoading, isPollingStoppedByUnauthorized, location.pathname, user]);
 
   const fetchNotifications = useCallback(async () => {

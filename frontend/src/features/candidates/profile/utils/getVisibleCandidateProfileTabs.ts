@@ -1,5 +1,9 @@
 import type { UserRole } from "../../../../types/auth";
 import type { PipelineStage } from "../../../../types/domain";
+import {
+  canAccessPreAdmission as canAccessPreAdmissionArea,
+  isInternalStaffRole,
+} from "../../../../shared/auth/roles";
 
 export type CandidateProfileTabKey =
   | "overview"
@@ -45,15 +49,12 @@ export interface CandidateProfileTabsContext {
   explicitTab?: CandidateProfileTabKey | null;
 }
 
-const STAFF_ROLES = new Set<UserRole>(["admin", "recruiter", "manager", "hr"]);
-const PRE_ADMISSION_STAFF_ROLES = new Set<UserRole>(["admin", "hr"]);
-
 function canAccessPreAdmission(context: CandidateProfileTabsContext): boolean {
-  return PRE_ADMISSION_STAFF_ROLES.has(context.userRole);
+  return canAccessPreAdmissionArea(context.userRole);
 }
 
 function addStaffBaseTabs(visible: Set<CandidateProfileTabKey>, context: CandidateProfileTabsContext) {
-  if (!STAFF_ROLES.has(context.userRole)) return;
+  if (!isInternalStaffRole(context.userRole)) return;
   visible.add("communications");
   visible.add("notes");
   visible.add("history");

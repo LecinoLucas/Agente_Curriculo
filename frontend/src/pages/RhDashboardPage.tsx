@@ -21,6 +21,10 @@ import {
   type RhDashboardPendingAction,
   type RhDashboardResponse,
 } from "../services/rhDashboardService";
+import {
+  DASHBOARD_PENDING_ACTION_LABELS,
+  DASHBOARD_PENDING_ACTION_TONE_CLASSES,
+} from "../shared/status/statusLabels";
 
 type SummaryCard = {
   key: keyof RhDashboardResponse["summary"];
@@ -75,15 +79,6 @@ const QUICK_LINKS = [
   { label: "Abrir Pré-admissão", href: "/admitidos" },
 ];
 
-const PENDING_TYPE_LABELS: Record<string, string> = {
-  awaiting_ai: "Aguardando análise IA",
-  schedule_interview: "Marcar entrevista",
-  interview_today: "Entrevista hoje",
-  register_decision: "Registrar decisão",
-  start_pre_admission: "Iniciar pré-admissão",
-  document_pending: "Documento pendente",
-};
-
 function SummaryTile({
   label,
   value,
@@ -120,18 +115,11 @@ function SummaryTile({
 }
 
 function PendingBadge({ type }: { type: string }) {
-  const tone =
-    type === "interview_today"
-      ? "border-violet-200 bg-violet-50 text-violet-700"
-      : type === "register_decision"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
-        : type === "document_pending" || type === "start_pre_admission"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-sky-200 bg-sky-50 text-sky-700";
+  const tone = DASHBOARD_PENDING_ACTION_TONE_CLASSES[type] ?? "border-sky-200 bg-sky-50 text-sky-700";
 
   return (
     <span className={cn("inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold", tone)}>
-      {PENDING_TYPE_LABELS[type] ?? "Pendência"}
+      {DASHBOARD_PENDING_ACTION_LABELS[type] ?? "Pendência"}
     </span>
   );
 }

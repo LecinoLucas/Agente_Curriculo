@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { SkeletonRows } from "../../components/common/Skeleton";
 import { useAuth } from "../../features/auth/useAuth";
+import { canAccessCandidatePreAdmission } from "../../shared/auth/roles";
 import {
   CandidateProfileView,
   type CandidateActionFeedback,
@@ -265,8 +266,7 @@ export function CandidateDrawer({
     setVisitedTabs(new Set(["overview", "score"]));
   }, [selectedCandidateId]);
 
-  const canAccessPreAdmission =
-    user?.role === "admin" || user?.role === "hr" || user?.role === "recruiter";
+  const canAccessPreAdmission = canAccessCandidatePreAdmission(user?.role);
 
   // Reset envelope whenever the candidate or job context changes
   useEffect(() => {

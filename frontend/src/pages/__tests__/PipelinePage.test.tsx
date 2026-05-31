@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { PipelinePage } from "../PipelinePage";
 import { usePipeline } from "../../features/pipeline/PipelineContext";
+import { useAuth } from "../../features/auth/useAuth";
 import { pipelineService } from "../../services/pipelineService";
 import { getJobRanking } from "../../services/jobsService";
 import { HttpError } from "../../services/http";
@@ -33,6 +34,10 @@ function getExpectedDefaultPipelineDateRange() {
 // Mock the usePipeline hook
 vi.mock("../../features/pipeline/PipelineContext", () => ({
   usePipeline: vi.fn(),
+}));
+
+vi.mock("../../features/auth/useAuth", () => ({
+  useAuth: vi.fn(),
 }));
 
 // Mock services
@@ -232,6 +237,9 @@ describe("PipelinePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    (useAuth as any).mockReturnValue({
+      user: { id: "user-1", role: "admin" },
+    });
     (pipelineService.listPipelineJobs as any).mockResolvedValue(mockJobs);
     (getJobRanking as any).mockResolvedValue(mockRanking);
     mockMoveCandidateStage.mockResolvedValue({
@@ -320,6 +328,57 @@ describe("PipelinePage", () => {
       expect(screen.getByTestId("candidate-search-modal")).toHaveAttribute("data-ranking-job-id", "job-1");
     });
   });
+
+  it.each(["admin", "recruiter"] as const)(
+    "permite ações operacionais da Pipeline para %s",
+    async (role) => {
+      (useAuth as any).mockReturnValue({
+        user: { id: `user-${role}`, role },
+      });
+
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByRole("button", { name: /Vincular candidato/i })).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-card-c-1")).toHaveAttribute("draggable", "true");
+    },
+  );
+
+  it.each(["viewer", "hr", "manager"] as const)(
+    "bloqueia ações operacionais da Pipeline para %s, mantendo leitura",
+    async (role) => {
+      (useAuth as any).mockReturnValue({
+        user: { id: `user-${role}`, role },
+      });
+      const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+          <Routes>
+            <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await screen.findByText("Aline Santos");
+      expect(screen.queryByRole("button", { name: /Vincular candidato/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId("kanban-card-c-1")).not.toHaveAttribute("draggable", "true");
+
+      fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+      fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+      fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+
+      expect(mockMoveCandidateStage).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText("Aline Santos"));
+      expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1");
+    },
+  );
 
   it("3.1.1. Exibe labels de ordenação coerentes com score_desc", async () => {
     render(

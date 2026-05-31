@@ -1,4 +1,8 @@
 import type { TabKey } from "../v2/CandidateProfileNavigation";
+import {
+  canAccessCandidatePreAdmission,
+  isInternalStaffRole,
+} from "../../../../shared/auth/roles";
 import type { PipelineStage } from "../../../../types/domain";
 import type { UserRole as BackendUserRole } from "../../../../types/auth";
 
@@ -40,12 +44,8 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
   } = input;
 
   const visible: Set<TabKey> = new Set();
-  const canSeeInternalNotes =
-    userRole === "recruiter" ||
-    userRole === "admin" ||
-    userRole === "manager" ||
-    userRole === "hr";
-  const canSeePreAdmission = userRole === "admin" || userRole === "hr" || userRole === "recruiter";
+  const canSeeInternalNotes = isInternalStaffRole(userRole);
+  const canSeePreAdmission = canAccessCandidatePreAdmission(userRole);
 
   // Resume is always visible
   visible.add("overview");
@@ -85,7 +85,7 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
   // Documents should always appear for active job, but early in the process
   visible.add("documents");
 
-  const isStaff = userRole === "recruiter" || userRole === "admin" || userRole === "manager" || userRole === "hr";
+  const isStaff = isInternalStaffRole(userRole);
 
   // Determine stage and add relevant tabs
   if (pipelineStage === "entry" || pipelineStage === "screening") {

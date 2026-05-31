@@ -6,31 +6,12 @@ import type {
 } from "../../../types/domain";
 import { POST_HIRING_ACTIVE_STAGES as POST_HIRING_ACTIVE_STAGE_SET } from "../../../types/domain";
 import { SUCCESS_TERMINAL_STAGES as SUCCESS_TERMINAL_STAGE_SET } from "../../../types/domain";
+import {
+  ANALYSIS_STATUS_LABELS as ANALYSIS_STATUS_LABEL,
+  PIPELINE_STAGE_LABELS as STAGE_LABEL,
+} from "../../../shared/status/statusLabels";
 
-export const STAGE_LABEL: Record<PipelineStage, string> = {
-  entry: "Entrada",
-  screening: "Triagem",
-  hr_interview: "Entrevista RH",
-  technical_interview: "Entrevista técnica",
-  final: "Decisão",
-  offer: "Oferta",
-  hired: "Contratado / iniciar admissão",
-  pre_admission: "Pré-admissão",
-  protheus: "Integração ERP",
-  admitted: "Admitido",
-  rejected: "Encerrado",
-};
-
-export const ANALYSIS_STATUS_LABEL: Record<string, string> = {
-  waiting_extraction: "Aguardando extração",
-  pending: "Análise na fila",
-  processing: "Análise em processamento",
-  retry_scheduled: "Reprocessamento agendado",
-  completed: "Análise pronta",
-  failed: "Análise falhou",
-  cancelled: "Análise cancelada",
-  discarded: "Análise descartada",
-};
+export { ANALYSIS_STATUS_LABEL, STAGE_LABEL };
 
 export function isPostHiringActiveStage(stage: string | null | undefined): stage is PipelineStage {
   return typeof stage === "string" && POST_HIRING_ACTIVE_STAGE_SET.has(stage as PipelineStage);

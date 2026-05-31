@@ -100,6 +100,7 @@ import { listJobs } from "../services/jobsService";
 import { pipelineService } from "../services/pipelineService";
 import { createPreAdmission, getPreAdmission } from "../services/preAdmissionService";
 import { scoreExplanationService, type ScoreExplanationResponse } from "../services/scoreExplanationService";
+import { canAccessCandidatePreAdmission, isAdmin } from "../shared/auth/roles";
 import { toast } from "../shared/utils/toast";
 import type {
   AnalysisResult,
@@ -300,7 +301,7 @@ export function CandidateProfilePage() {
     () => PROFILE_TABS.filter((tab) => visibleProfileTabKeys.includes(tab.key as CandidateProfileTabKey)),
     [visibleProfileTabKeys],
   );
-  const canAccessPreAdmission = user?.role === "admin" || user?.role === "hr" || user?.role === "recruiter";
+  const canAccessPreAdmission = canAccessCandidatePreAdmission(user?.role);
   const loadPreAdmissionEnvelope = useCallback(async () => {
     if (!candidateId || !profileJobId || !canAccessPreAdmission) {
       setPreAdmissionEnvelope(null);
@@ -504,7 +505,7 @@ export function CandidateProfilePage() {
         // P0.2C: daily-limit-exceeded gets a distinct message; admins also see
         // a "Aumentar limite" CTA (the modal lives in Admin > Health > IA/Tokens).
         if (err instanceof HttpError && err.code === "ai_daily_limit_exceeded") {
-          if (user?.role === "admin") {
+          if (isAdmin(user?.role)) {
             void aiLimitsService
               .getUsage()
               .then((usage) => setDailyLimitUsage(usage))

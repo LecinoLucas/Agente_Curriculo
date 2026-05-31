@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "../features/auth/useAuth";
 import { ArchiveJobModal } from "../features/jobs/components/ArchiveJobModal";
 import { JobContextPanel } from "../features/jobs/components/JobContextPanel";
+import { canManageJobs } from "../shared/auth/roles";
 import {
   useJobsList,
   type JobAreaFilter,
@@ -53,7 +54,7 @@ export function VagasPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const canManage = user?.role === "admin" || user?.role === "recruiter";
+  const canManage = canManageJobs(user?.role);
   const {
     loading,
     error,

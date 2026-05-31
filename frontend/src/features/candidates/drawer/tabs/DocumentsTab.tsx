@@ -1,7 +1,10 @@
 import { useRef, useState } from "react";
+import type { UserRole } from "../../../../types/auth";
 import type { CandidateOverview } from "../../../../types/domain";
 import type { PanelTab } from "../../../pipeline/PipelineContext";
 import type { CandidateActionFeedback } from "../v2/CandidateProfileView";
+import { canDownloadCandidateResume } from "../../../../shared/auth/roles";
+import { ANALYSIS_STATUS_COMPACT_LABELS } from "../../../../shared/status/statusLabels";
 import { getExtractionStatusLabel } from "../../../../shared/utils/extractionStatus";
 import { Section, StatusCard, EmptyTab } from "../components/DrawerSectionHelpers";
 import { useDocumentHandlers } from "../hooks/useDocumentHandlers";
@@ -42,17 +45,7 @@ type DocumentsTabProps = {
   }) => Promise<void>;
   notifyCandidatesChanged: () => void;
   onActionFeedback?: (feedback: Omit<CandidateActionFeedback, "id">) => void;
-  userRole?: string;
-};
-
-const ANALYSIS_STATUS_LABEL: Record<AnalysisStatus, string> = {
-  waiting_extraction: "Aguardando extração",
-  pending: "Na fila",
-  processing: "Processando",
-  retry_scheduled: "Nova tentativa agendada",
-  completed: "Concluída",
-  failed: "Falhou",
-  cancelled: "Cancelada",
+  userRole?: UserRole;
 };
 
 export function DocumentsTab(props: DocumentsTabProps) {
@@ -84,7 +77,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
   const [analyzingResumeId, setAnalyzingResumeId] = useState<string | null>(null);
   const [downloadingResume, setDownloadingResume] = useState(false);
 
-  const canDownloadResume = userRole === "admin" || userRole === "recruiter";
+  const canDownloadResume = canDownloadCandidateResume(userRole);
 
   const handleDownloadResume = async () => {
     if (!overview.candidate?.id || downloadingResume) return;
@@ -144,7 +137,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
             label="Última análise"
             title={
               latest_analysis
-                ? ANALYSIS_STATUS_LABEL[latest_analysis.status as AnalysisStatus] ??
+                ? ANALYSIS_STATUS_COMPACT_LABELS[latest_analysis.status as AnalysisStatus] ??
                   latest_analysis.status
                 : "Ainda não solicitada"
             }

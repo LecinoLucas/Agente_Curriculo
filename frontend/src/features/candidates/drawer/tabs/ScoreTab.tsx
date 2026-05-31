@@ -12,6 +12,7 @@ import { SkeletonRows } from "../../../../components/common/Skeleton";
 import { fmtScore, fmtPercentValue, scoreColorClass, getCompatibilityGuidance } from "../hooks/useCandidateDecision";
 import { useAuth } from "../../../../features/auth/useAuth";
 import { scoreExplanationService, type ScoreExplanationResponse } from "../../../../services/scoreExplanationService";
+import { canWriteAnalysis } from "../../../../shared/auth/roles";
 import { formatErrorForToast, handleApiError } from "../../../../shared/utils/errorHandler";
 import { toast } from "../../../../shared/utils/toast";
 import { buildDealBreakerViolationDisplay, isDealBreakerReasonCode } from "../../../pipeline/dealBreakerDisplay";
@@ -116,7 +117,7 @@ export function ScoreTab({
   focusRequest?: ScoreTabFocusRequest | null;
 }) {
   const { user } = useAuth();
-  const canSendMatchingFeedback = user?.role === "admin" || user?.role === "recruiter";
+  const canSendMatchingFeedback = canWriteAnalysis(user?.role);
   const compatibilityScore = rankingEntry?.job_fit_score ?? null;
   const activeAnalysisId = overview.active_job_decision?.current_analysis_id ?? null;
   const activeAnalysisStatus = overview.active_job_decision?.analysis_status ?? null;

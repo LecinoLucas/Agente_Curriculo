@@ -285,42 +285,48 @@ describe("JobFormPage", () => {
   // ── New: MACRO_STEPS structure ────────────────────────────────────────────
 
   describe("MACRO_STEPS", () => {
-    it("has exactly 4 macro-steps", () => {
-      expect(MACRO_STEPS).toHaveLength(4);
+    it("has exactly 5 macro-steps", () => {
+      expect(MACRO_STEPS).toHaveLength(5);
     });
 
     it("macro-step IDs are correct and in order", () => {
       expect(MACRO_STEPS.map((s) => s.id)).toEqual([
         "context",
+        "requirements",
         "skills",
-        "evaluation",
+        "screening",
         "review",
       ]);
     });
 
-    it("Contexto da vaga contains basic and requirements", () => {
+    it("Contexto contains basic", () => {
       const context = MACRO_STEPS.find((s) => s.id === "context");
       expect(context?.steps).toContain("basic");
-      expect(context?.steps).toContain("requirements");
     });
 
-    it("Competências contains mandatory-skills, differentials and deal-breakers", () => {
+    it("Requisitos contains requirements", () => {
+      const req = MACRO_STEPS.find((s) => s.id === "requirements");
+      expect(req?.steps).toContain("requirements");
+    });
+
+    it("Skills contains mandatory-skills and differentials", () => {
       const skills = MACRO_STEPS.find((s) => s.id === "skills");
       expect(skills?.steps).toContain("mandatory-skills");
       expect(skills?.steps).toContain("differentials");
-      expect(skills?.steps).toContain("deal-breakers");
     });
 
-    it("Avaliação contains assessment-policy before behavioral", () => {
-      const evaluation = MACRO_STEPS.find((s) => s.id === "evaluation");
+    it("Triagem contains deal-breakers, assessment-policy and behavioral", () => {
+      const evaluation = MACRO_STEPS.find((s) => s.id === "screening");
+      const dbIdx = evaluation?.steps.indexOf("deal-breakers") ?? -1;
       const apIdx = evaluation?.steps.indexOf("assessment-policy") ?? -1;
       const bIdx = evaluation?.steps.indexOf("behavioral") ?? -1;
+      expect(dbIdx).toBeGreaterThanOrEqual(0);
       expect(apIdx).toBeGreaterThanOrEqual(0);
       expect(bIdx).toBeGreaterThanOrEqual(0);
       expect(apIdx).toBeLessThan(bIdx);
     });
 
-    it("Revisão e publicação is the last macro-step", () => {
+    it("Revisão is the last macro-step", () => {
       expect(MACRO_STEPS[MACRO_STEPS.length - 1].id).toBe("review");
     });
 
@@ -336,26 +342,27 @@ describe("JobFormPage", () => {
       expect(new Set(all).size).toBe(all.length);
     });
 
-    it("review is at index 3", () => {
-      expect(MACRO_STEPS.findIndex((s) => s.id === "review")).toBe(3);
+    it("review is at index 4", () => {
+      expect(MACRO_STEPS.findIndex((s) => s.id === "review")).toBe(4);
     });
 
-    it("3 non-review macro-steps show quality drawer (not review)", () => {
+    it("4 non-review macro-steps show quality drawer (not review)", () => {
       const nonReview = MACRO_STEPS.filter((s) => s.id !== "review");
-      expect(nonReview).toHaveLength(3);
+      expect(nonReview).toHaveLength(4);
     });
   });
 
   // ── New: Rendering — macro-step navigation ────────────────────────────────
 
   describe("renderização das macroetapas", () => {
-    it("renderiza as 4 macroetapas no stepper", () => {
+    it("renderiza as 5 macroetapas no stepper", () => {
       renderForm();
       const nav = screen.getByRole("navigation", { name: /Etapas do formulário/i });
-      expect(within(nav).getByText("Contexto da vaga")).toBeInTheDocument();
-      expect(within(nav).getByText("Competências")).toBeInTheDocument();
-      expect(within(nav).getByText("Avaliação")).toBeInTheDocument();
-      expect(within(nav).getByText("Revisão e publicação")).toBeInTheDocument();
+      expect(within(nav).getByText("Contexto")).toBeInTheDocument();
+      expect(within(nav).getByText("Requisitos")).toBeInTheDocument();
+      expect(within(nav).getByText("Skills")).toBeInTheDocument();
+      expect(within(nav).getByText("Triagem")).toBeInTheDocument();
+      expect(within(nav).getByText("Revisão")).toBeInTheDocument();
       expect(within(nav).queryByText("Outros")).not.toBeInTheDocument();
     });
 
@@ -369,25 +376,22 @@ describe("JobFormPage", () => {
     it("campos da macro-etapa Contexto estão presentes", () => {
       renderForm();
       expect(screen.getByTestId("step-basic")).toBeInTheDocument();
-      expect(screen.getByTestId("step-requirements")).toBeInTheDocument();
     });
 
-    it("navegação entre macroetapas funciona: Próxima etapa avança para Competências", () => {
+    it("navegação entre macroetapas funciona: Próxima etapa avança para Requisitos", () => {
       renderForm();
       expect(screen.getByTestId("step-basic")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
 
-      expect(screen.getByTestId("step-mandatory-skills")).toBeInTheDocument();
-      expect(screen.getByTestId("step-differentials")).toBeInTheDocument();
-      expect(screen.getByTestId("step-deal-breakers")).toBeInTheDocument();
+      expect(screen.getByTestId("step-requirements")).toBeInTheDocument();
       expect(screen.queryByTestId("step-basic")).not.toBeInTheDocument();
     });
 
     it("navegação entre macroetapas funciona: Etapa anterior volta para Contexto", () => {
       renderForm();
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
-      expect(screen.getByTestId("step-mandatory-skills")).toBeInTheDocument();
+      expect(screen.getByTestId("step-requirements")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /Etapa anterior/i }));
       expect(screen.getByTestId("step-basic")).toBeInTheDocument();
@@ -407,6 +411,7 @@ describe("JobFormPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
 
       expect(screen.getByRole("button", { name: /^Publicar$/i })).toBeInTheDocument();
       expect(
@@ -419,9 +424,9 @@ describe("JobFormPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
 
       expect(screen.getByTestId("step-review")).toBeInTheDocument();
-      expect(screen.getByText(/Painel de qualidade/i)).toBeInTheDocument();
     });
 
     it("salvar rascunho está disponível em todas as etapas", () => {
@@ -434,8 +439,9 @@ describe("JobFormPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
 
-      expect(screen.getByText(/Senioridade não definida/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^Publicar$/i })).toBeDisabled();
     });
 
     it("drawer 'Ver qualidade' abre e fecha", () => {
@@ -467,6 +473,7 @@ describe("JobFormPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
       fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
 
       expect(
         screen.queryByRole("button", { name: /Ver qualidade da vaga/i }),
@@ -479,7 +486,7 @@ describe("JobFormPage", () => {
   describe("IA Vaga Visual Mock", () => {
     async function openAiMode() {
       renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Preencher com IA/i }));
       expect(screen.getByTestId("ai-draft-panel")).toBeInTheDocument();
     }
 
@@ -492,14 +499,14 @@ describe("JobFormPage", () => {
       await screen.findByTestId("ai-draft-result");
     }
 
-    it("alterna entre 'Cadastro manual' e 'Criar com IA'", async () => {
+    it("abre e fecha o painel de IA pelo botão 'Preencher com IA' e 'Fechar'", async () => {
       renderForm();
       expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: /Criar com IA/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Preencher com IA/i }));
       expect(screen.getByTestId("ai-draft-panel")).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: /Cadastro manual/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Fechar/i }));
       expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
     });
 
@@ -578,7 +585,6 @@ describe("JobFormPage", () => {
 
       expect(screen.queryByRole("button", { name: /^Publicar$/i })).not.toBeInTheDocument();
       expect(screen.getByTestId("step-basic")).toBeInTheDocument();
-      expect(screen.getByTestId("step-requirements")).toBeInTheDocument();
     });
   });
 });

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCards } from "@/components/common/Skeleton";
+import { canAccessCandidatePreAdmission } from "../../../../shared/auth/roles";
 import { formatContextError } from "../../../../services/errorMessages";
 import { HttpError } from "../../../../services/http";
 import {
@@ -10,6 +11,7 @@ import {
   getPreAdmission,
 } from "../../../../services/preAdmissionService";
 import { toast } from "../../../../shared/utils/toast";
+import type { UserRole } from "../../../../types/auth";
 import type { PreAdmissionEnvelope } from "../../../../types/domain";
 import { PreAdmissionProfileSummaryCard } from "./PreAdmissionProfileSummaryCard";
 import {
@@ -21,7 +23,7 @@ interface CandidatePreAdmissionPanelProps {
   caseId?: string | null;
   jobId: string | null;
   candidateId: string | null;
-  userRole?: string | null;
+  userRole?: UserRole | null;
   candidateName?: string | null;
   jobTitle?: string | null;
   currentStage?: string | null;
@@ -63,7 +65,7 @@ export function CandidatePreAdmissionPanel({
   initialEnvelope = null,
   onCaseCreated,
 }: CandidatePreAdmissionPanelProps) {
-  const canAccessPreAdmission = userRole === "admin" || userRole === "hr" || userRole === "recruiter";
+  const canAccessPreAdmission = canAccessCandidatePreAdmission(userRole);
   const [resolvedCaseId, setResolvedCaseId] = useState<string | null>(caseId);
   const [envelope, setEnvelope] = useState<PreAdmissionEnvelope | null>(initialEnvelope);
   const [loading, setLoading] = useState(!caseId && canAccessPreAdmission);

@@ -157,7 +157,7 @@ describe("getVisibleCandidateTabs", () => {
     expect(result).not.toContain("pre_admission");
   });
 
-  it("should show pre_admission for recruiter in admission stages when package is pending", () => {
+  it("should not show pre_admission for recruiter in admission stages when package is pending", () => {
     const input = {
       ...defaultInput,
       pipelineStage: "pre_admission",
@@ -165,7 +165,7 @@ describe("getVisibleCandidateTabs", () => {
       userRole: "recruiter",
     };
     const result = getVisibleCandidateTabs(input);
-    expect(result).toContain("pre_admission");
+    expect(result).not.toContain("pre_admission");
   });
 
   it("should prioritize important tabs when exceeding max", () => {

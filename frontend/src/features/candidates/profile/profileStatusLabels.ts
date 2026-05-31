@@ -2,19 +2,25 @@ import type { PipelineStage } from "../../../types/domain";
 import type {
   BehavioralAssignmentDetailResponse,
 } from "../../../types/domain";
+import {
+  DECISION_OUTCOME_LABELS,
+  HISTORY_STATUS_LABELS,
+  INTERVIEW_TYPE_FULL_LABELS,
+  PIPELINE_STAGE_LABELS,
+} from "../../../shared/status/statusLabels";
 
 export const STAGE_OPTIONS: Array<{ value: PipelineStage; label: string }> = [
-  { value: "entry", label: "Entrada" },
-  { value: "screening", label: "Triagem" },
-  { value: "hr_interview", label: "Entrevista RH" },
-  { value: "technical_interview", label: "Entrevista técnica" },
-  { value: "final", label: "Decisão" },
-  { value: "offer", label: "Oferta" },
-  { value: "hired", label: "Contratado / iniciar admissão" },
-  { value: "pre_admission", label: "Pré-admissão" },
-  { value: "protheus", label: "Integração ERP" },
-  { value: "admitted", label: "Admitido" },
-  { value: "rejected", label: "Encerrado" },
+  { value: "entry", label: PIPELINE_STAGE_LABELS.entry },
+  { value: "screening", label: PIPELINE_STAGE_LABELS.screening },
+  { value: "hr_interview", label: PIPELINE_STAGE_LABELS.hr_interview },
+  { value: "technical_interview", label: PIPELINE_STAGE_LABELS.technical_interview },
+  { value: "final", label: PIPELINE_STAGE_LABELS.final },
+  { value: "offer", label: PIPELINE_STAGE_LABELS.offer },
+  { value: "hired", label: PIPELINE_STAGE_LABELS.hired },
+  { value: "pre_admission", label: PIPELINE_STAGE_LABELS.pre_admission },
+  { value: "protheus", label: PIPELINE_STAGE_LABELS.protheus },
+  { value: "admitted", label: PIPELINE_STAGE_LABELS.admitted },
+  { value: "rejected", label: PIPELINE_STAGE_LABELS.rejected },
 ];
 
 export const BEHAVIORAL_STATUS_LABEL: Record<
@@ -28,38 +34,11 @@ export const BEHAVIORAL_STATUS_LABEL: Record<
   cancelled: "Cancelado",
 };
 
-export const INTERVIEW_TYPE_LABEL: Record<string, string> = {
-  hr: "Entrevista RH",
-  technical: "Entrevista técnica",
-  manager: "Entrevista gestor",
-  final: "Entrevista final",
-  other: "Entrevista",
-};
+export const INTERVIEW_TYPE_LABEL: Record<string, string> = INTERVIEW_TYPE_FULL_LABELS;
 
-export const SIMPLE_STATUS_LABEL: Record<string, string> = {
-  scheduled: "agendada",
-  rescheduled: "reagendada",
-  awaiting_feedback: "aguardando feedback",
-  completed: "concluída",
-  cancelled: "cancelada",
-  no_show: "não compareceu",
-  draft: "rascunho",
-  submitted: "enviado",
-  pending: "pendente",
-  in_progress: "em andamento",
-  expired: "expirado",
-  failed: "falhou",
-  processing: "processando",
-};
+export const SIMPLE_STATUS_LABEL: Record<string, string> = HISTORY_STATUS_LABELS;
 
-export const DECISION_OUTCOME_LABEL: Record<string, string> = {
-  advance: "avançar",
-  hold: "manter em análise",
-  reject: "rejeitar",
-  hire: "contratar",
-  request_another_interview: "solicitar nova entrevista",
-  keep_under_review: "manter em observação",
-};
+export const DECISION_OUTCOME_LABEL: Record<string, string> = DECISION_OUTCOME_LABELS;
 
 export function behavioralStatusTone(
   status: BehavioralAssignmentDetailResponse["status"],

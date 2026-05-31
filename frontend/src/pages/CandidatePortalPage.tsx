@@ -32,6 +32,7 @@ import { BehavioralAssessmentForm } from "../features/candidate-portal/component
 import { CandidateMessagesCard } from "../features/candidate-portal/components/CandidateMessagesCard";
 import { CandidatePortalPreAdmissionSummaryCard } from "../features/candidate-portal/components/CandidatePortalPreAdmissionSummaryCard";
 import { deriveAssessmentState } from "../features/candidate-portal/utils/assessmentState";
+import { PUBLIC_PIPELINE_STAGE_LABELS } from "../shared/status/statusLabels";
 import { toast } from "../shared/utils/toast";
 import { communicationService } from "../services/communicationService";
 import {
@@ -67,20 +68,6 @@ const EMPTY_CONTACT_FORM: ContactFormState = {
   phone: "",
   city: "",
   state: "",
-};
-
-const PUBLIC_STAGE_LABELS: Record<string, string> = {
-  entry: "Entrada",
-  screening: "Triagem",
-  hr_interview: "Entrevista",
-  technical_interview: "Entrevista",
-  final: "Decisão",
-  offer: "Oferta",
-  hired: "Contratado",
-  pre_admission: "Pré-admissão",
-  protheus: "Integração admissional",
-  admitted: "Admitido",
-  rejected: "Processo encerrado",
 };
 
 function formatDate(value: string): string {
@@ -127,7 +114,8 @@ function candidateSafeLabel(value: string | null | undefined): string {
 
 function candidateSafeStageLabel(value: string | null | undefined): string {
   if (!value) return "Aguardando atualização";
-  return PUBLIC_STAGE_LABELS[value] ?? (candidateSafeLabel(value) || "Aguardando atualização");
+  return PUBLIC_PIPELINE_STAGE_LABELS[value as keyof typeof PUBLIC_PIPELINE_STAGE_LABELS]
+    ?? (candidateSafeLabel(value) || "Aguardando atualização");
 }
 
 function buildContactForm(overview: CandidatePortalOverview): ContactFormState {

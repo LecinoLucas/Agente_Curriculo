@@ -458,11 +458,10 @@ describe("CandidatePreAdmissionPanel.summaryCard", () => {
     expect(screen.queryByTestId("pre-admission-start-drawer")).not.toBeInTheDocument();
   });
 
-  it("recruiter acessa o painel sem mensagem de restrição", () => {
+  it("recruiter não acessa o painel de pré-admissão", () => {
     renderPanel({ userRole: "recruiter" });
 
-    expect(screen.queryByText("Pré-admissão sem permissão de acesso.")).not.toBeInTheDocument();
-    // caseId fornecido → não chama getPreAdmission para descoberta
+    expect(screen.getByText("Pré-admissão sem permissão de acesso.")).toBeInTheDocument();
     expect(getPreAdmission).not.toHaveBeenCalled();
   });
 

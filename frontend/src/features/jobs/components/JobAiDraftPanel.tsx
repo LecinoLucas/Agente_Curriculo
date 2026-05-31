@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, Sparkles, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Sparkles, Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ interface JobAiDraftPanelProps {
     updates: Partial<JobFormValues>,
     skillSuggestions: { mandatory: string[]; optional: string[] },
   ) => void;
+  onClose?: () => void;
 }
 
 type AiStatus = "idle" | "loading" | "ready" | "error";
@@ -81,7 +82,7 @@ function EditableList({
               value={item}
               onChange={(e) => onUpdate(idx, e.target.value)}
               onBlur={onBlur}
-              className="h-8 text-sm"
+              className="h-8 text-sm flex-1"
               aria-label={`Editar item de ${title}`}
             />
             <Button
@@ -111,7 +112,7 @@ function EditableList({
   );
 }
 
-export function JobAiDraftPanel({ formHasData, onApply }: JobAiDraftPanelProps) {
+export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPanelProps) {
   const [prompt, setPrompt] = useState("");
   const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
   const [draft, setDraft] = useState<JobAiDraft | null>(null);
@@ -226,13 +227,18 @@ export function JobAiDraftPanel({ formHasData, onApply }: JobAiDraftPanelProps) 
               Simulação visual. A vaga só será salva quando você revisar e clicar em salvar.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="rounded-md px-2 py-1 text-[11px]">
               Sem backend
             </Badge>
             <Badge variant="secondary" className="rounded-md px-2 py-1 text-[11px]">
               Sem publicação automática
             </Badge>
+            {onClose && (
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 ml-1 text-text-muted hover:text-text" onClick={onClose} aria-label="Fechar painel">
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
 

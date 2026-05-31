@@ -1,28 +1,11 @@
 import type { InterviewFormat, InterviewSchedule, InterviewStatus, InterviewType } from "../../types/agenda";
+import {
+  INTERVIEW_FORMAT_LABELS,
+  INTERVIEW_STATUS_LABELS,
+  INTERVIEW_TYPE_LABELS,
+} from "../../shared/status/statusLabels";
 
-export const INTERVIEW_STATUS_LABELS: Record<InterviewStatus, string> = {
-  scheduled: "Agendada",
-  completed: "Concluída",
-  awaiting_feedback: "Aguardando feedback",
-  cancelled: "Cancelada",
-  rescheduled: "Reagendada",
-  no_show: "Não compareceu",
-};
-
-export const INTERVIEW_TYPE_LABELS: Record<InterviewType, string> = {
-  screening: "Triagem",
-  technical: "Técnica",
-  manager: "Gestor",
-  hr: "RH",
-  final: "Final",
-  other: "Outra",
-};
-
-export const INTERVIEW_FORMAT_LABELS: Record<InterviewFormat, string> = {
-  online: "Online",
-  presencial: "Presencial",
-  telefone: "Telefone",
-};
+export { INTERVIEW_FORMAT_LABELS, INTERVIEW_STATUS_LABELS, INTERVIEW_TYPE_LABELS };
 
 export function interviewStatusLabel(status: InterviewStatus | string): string {
   return INTERVIEW_STATUS_LABELS[status as InterviewStatus] ?? status;

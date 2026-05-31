@@ -3,6 +3,7 @@ import type {
   AdmissionWorkspaceChecklistItemStatus,
   AdmissionWorkspaceDocumentStatus,
 } from "../../types/domain";
+import { PRE_ADMISSION_WORKSPACE_STATUS_LABELS } from "../../shared/status/statusLabels";
 
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
@@ -36,20 +37,7 @@ export function stageLabel(stage: string): string {
 }
 
 export function caseStatusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    draft: "Rascunho",
-    offer_preparing: "Oferta em preparação",
-    offer_sent: "Oferta enviada",
-    offer_accepted: "Oferta aceita",
-    offer_declined: "Oferta recusada",
-    documents_pending: "Documentos pendentes",
-    documents_received: "Documentos recebidos",
-    ready_for_admission: "Pronto para exportação",
-    admitted: "Admitido",
-    cancelled: "Cancelado",
-    in_progress: "Em andamento",
-  };
-  return labels[status] ?? status.replace(/_/g, " ");
+  return PRE_ADMISSION_WORKSPACE_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
 }
 
 export function checklistItemStatusLabel(status: AdmissionWorkspaceChecklistItemStatus): string {

@@ -11,6 +11,7 @@ import { usePipeline } from "../features/pipeline/PipelineContext";
 import { PipelineRejectionReasonModal } from "../features/pipeline/PipelineRejectionReasonModal";
 import { PipelineTransitionBlockedModal } from "../features/pipeline/PipelineTransitionBlockedModal";
 import { PipelineRankingPanel } from "../features/pipeline/components/PipelineRankingPanel";
+import { useAuth } from "../features/auth/useAuth";
 import {
   resolvePreAdmissionNavigationPath,
   usePipelineGateActionResolver,
@@ -22,6 +23,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { formatContextError } from "../services/errorMessages";
 import { feedback } from "../services/feedback";
 import { toast } from "../shared/utils/toast";
+import { canMutatePipeline } from "../shared/auth/roles";
 
 const MOVE_CANDIDATE_TOAST_KEY = "feedback-move-candidate";
 import { getJobRanking } from "../services/jobsService";
@@ -50,6 +52,7 @@ export function PipelinePage() {
   const { jobId: jobIdParam } = useParams<{ jobId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [showNewCandidate, setShowNewCandidate] = useState(false);
   const [showSourceCandidates, setShowSourceCandidates] = useState(false);
@@ -511,7 +514,9 @@ export function PipelinePage() {
 
   // Status flags
   const isDraft = selectedJob?.status === "draft";
-  const canUse = canUsePipeline(selectedJob?.status);
+  const canUseByStatus = canUsePipeline(selectedJob?.status);
+  const canMutate = canMutatePipeline(user?.role);
+  const canUse = canMutate && canUseByStatus;
 
   const activeJobAcceptsCandidates =
     selectedJob?.status === "published" || selectedJob?.status === "paused";
@@ -621,6 +626,7 @@ export function PipelinePage() {
 
   const moveCandidateOnBoard = useCallback(
     async (candidateId: string, toStage: PipelineStage, candidateName?: string | null) => {
+      if (!canUse) return;
       feedback.moveCandidate.processing();
       setIsStageMoveSaving(true);
       try {
@@ -647,7 +653,7 @@ export function PipelinePage() {
         setIsStageMoveSaving(false);
       }
     },
-    [handleBlockedError, moveCandidateStage, navigate, syncAfterStageMutation],
+    [canUse, handleBlockedError, moveCandidateStage, navigate, syncAfterStageMutation],
   );
 
   const handleCardDragStart = useCallback(
@@ -735,7 +741,7 @@ export function PipelinePage() {
       meeting_url: string | null;
       public_notes: string | null;
     }) => {
-      if (!activeJobId || !interviewCandidate) return;
+      if (!canUse || !activeJobId || !interviewCandidate) return;
 
       const affectedId = interviewCandidate.candidateId;
       feedback.moveCandidate.processing();
@@ -766,7 +772,7 @@ export function PipelinePage() {
         setIsStageMoveSaving(false);
       }
     },
-    [activeJobId, handleBlockedError, interviewCandidate, syncAfterStageMutation],
+    [activeJobId, canUse, handleBlockedError, interviewCandidate, syncAfterStageMutation],
   );
 
   const handleCloseInterviewModal = useCallback(() => {
@@ -785,7 +791,7 @@ export function PipelinePage() {
 
   const handleRejectionConfirm = useCallback(
     async (reason: string) => {
-      if (!rejectionCandidate || !activeJobId) return;
+      if (!canUse || !rejectionCandidate || !activeJobId) return;
       const affectedId = rejectionCandidate.candidateId;
       setRejectionSubmitting(true);
       feedback.moveCandidate.processing();
@@ -803,7 +809,7 @@ export function PipelinePage() {
         setRejectionSubmitting(false);
       }
     },
-    [activeJobId, rejectionCandidate, syncAfterStageMutation],
+    [activeJobId, canUse, rejectionCandidate, syncAfterStageMutation],
   );
 
   const activeFiltersCount =
@@ -907,19 +913,21 @@ export function PipelinePage() {
 
           {/* Action Controls */}
           <div className="flex flex-wrap gap-2 rounded-[18px] border border-slate-200/80 bg-white/95 p-2 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.42)] backdrop-blur sm:flex-nowrap sm:items-center">
-            <button
-              type="button"
-              onClick={handleOpenSourceCandidates}
-              disabled={!canUse}
-              className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-bold transition-all ${
-                canUse
-                  ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e]"
-                  : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-              }`}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Vincular candidato
-            </button>
+            {canMutate && (
+              <button
+                type="button"
+                onClick={handleOpenSourceCandidates}
+                disabled={!canUse}
+                className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-bold transition-all ${
+                  canUse
+                    ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e]"
+                    : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                }`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Vincular candidato
+              </button>
+            )}
             
             {activeJobId && (
               <button
@@ -1222,7 +1230,7 @@ export function PipelinePage() {
                         column={col}
                         colIndex={idx}
                         onCardClick={handleOpenCandidate}
-                        disabled={!canUse}
+                        disabled={!canUseByStatus}
                         showTopMatchHighlight={sortOrder === "score_desc"}
                         draggableCards={canUse && !isStageMoveSaving}
                         draggingCandidateId={draggingCandidate?.candidateId ?? null}
@@ -1250,15 +1258,17 @@ export function PipelinePage() {
                     <p className="mt-2 text-xs font-medium leading-relaxed text-slate-400">
                       Aguardando perfis para iniciar a triagem desta vaga.
                     </p>
-                    <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
-                      <button
-                        onClick={() => canUse && setShowNewCandidate(true)}
-                        disabled={!canUse}
-                        className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 text-xs font-bold text-slate-500 dark:text-slate-400 shadow-sm transition hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-250 disabled:opacity-50"
-                      >
-                        Criar Manualmente
-                      </button>
-                    </div>
+                    {canMutate && (
+                      <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
+                        <button
+                          onClick={() => canUse && setShowNewCandidate(true)}
+                          disabled={!canUse}
+                          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 text-xs font-bold text-slate-500 dark:text-slate-400 shadow-sm transition hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-250 disabled:opacity-50"
+                        >
+                          Criar Manualmente
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1374,7 +1384,7 @@ export function PipelinePage() {
         forceSubmitting={forceSubmitting}
         forceError={forceError}
         onForceSubmit={async ({ candidateId, targetStage, forceReason }) => {
-          if (!activeJobId) return;
+          if (!canUse || !activeJobId) return;
           const result = await submitForce({
             candidateId,
             jobId: activeJobId,

@@ -5,6 +5,7 @@ import { skillsService, type SkillCatalog } from "@/services/skillsService";
 import type { JobSkill } from "@/types/domain";
 import type { PendingJobSkill } from "../jobFormConfig";
 import { useAuth } from "@/features/auth/useAuth";
+import { canManageJobs } from "@/shared/auth/roles";
 import { CreateSkillModal } from "./CreateSkillModal";
 import { toast } from "@/shared/utils/toast";
 
@@ -135,7 +136,7 @@ export function AiSkillSuggestionsBlock({
   const [resolving, setResolving] = useState(false);
 
   const { user } = useAuth();
-  const canCreateSkill = user?.role === "admin" || user?.role === "recruiter";
+  const canCreateSkill = canManageJobs(user?.role);
   const [creatingSkillItem, setCreatingSkillItem] = useState<SkillItem | null>(null);
 
   useEffect(() => {

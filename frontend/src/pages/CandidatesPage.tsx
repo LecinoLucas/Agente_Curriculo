@@ -17,6 +17,7 @@ import { CandidatesFilters } from "../features/candidates/components/CandidatesF
 import { LinkCandidateJobModal } from "../features/candidates/components/LinkCandidateJobModal";
 import { formatCandidateDate } from "../features/candidates/utils/candidateFormatters";
 import { STAGE_LABEL, isPostHiringActiveStage, isSuccessTerminalStage } from "../features/candidates/utils/profile";
+import { isAdmin } from "../shared/auth/roles";
 import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
 import { candidatesService } from "../services/candidatesService";
@@ -169,7 +170,7 @@ export function CandidatesPage() {
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
   const canArchiveCandidates = Boolean(user);
-  const canDeleteCandidates = user?.role === "admin";
+  const canDeleteCandidates = isAdmin(user?.role);
   const showActionsColumn = canArchiveCandidates || canDeleteCandidates;
   const isRefreshing = loading && candidates.length > 0;
   const showInitialLoading = loading && candidates.length === 0 && !error;
