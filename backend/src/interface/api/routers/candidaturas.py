@@ -237,6 +237,7 @@ async def create_manual_candidate(
 @router.post(
     "/import",
     response_model=ImportCandidatesResponse,
+    response_model_exclude_unset=True,
     status_code=status.HTTP_200_OK,
 )
 async def import_candidates(

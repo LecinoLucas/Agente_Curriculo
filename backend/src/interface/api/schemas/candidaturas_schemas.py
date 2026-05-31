@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class ManualCandidateRequest(BaseModel):
@@ -13,7 +13,7 @@ class ManualCandidateRequest(BaseModel):
     resume_summary: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
-    def _require_email_or_phone(self) -> "ManualCandidateRequest":
+    def _require_email_or_phone(self) -> ManualCandidateRequest:
         if not self.email and not self.phone:
             raise ValueError("Informe pelo menos e-mail ou telefone.")
         return self
@@ -29,14 +29,47 @@ class ManualCandidateResponse(BaseModel):
     duplicate_warning: str | None = None
 
 
+class ImportCandidateErrorItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    row: int
+    message: str
+
+
+class ImportRowError(ImportCandidateErrorItem):
+    pass
+
+
+class ImportCandidateAnalysisStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: UUID | None = None
+    status: str | None = None
+    created: bool | None = None
+    blocked: bool | None = None
+    reused: bool | None = None
+    stuck: bool | None = None
+    reason: str | None = None
+    stage: str | None = None
+    trigger_source: str | None = None
+
+
+class ImportCandidatePreviewItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    row: int | None = None
+    nome: str | None = None
+    email: str | None = None
+    telefone: str | None = None
+    status: str | None = None
+    job_linked: bool | None = None
+    job_link_error: str | None = None
+    analysis: ImportCandidateAnalysisStatus | None = None
+
+
 class ImportCandidatesResponse(BaseModel):
     created: int
     linked: int
     duplicates: int
-    errors: list[ImportRowError]
-    preview: list[dict]
-
-
-class ImportRowError(BaseModel):
-    row: int
-    message: str
+    errors: list[ImportCandidateErrorItem]
+    preview: list[ImportCandidatePreviewItem]

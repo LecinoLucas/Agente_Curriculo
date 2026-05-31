@@ -215,6 +215,66 @@ async def _count_analyses(db_session: AsyncSession) -> int:
     return int(await db_session.scalar(sa.select(sa.func.count()).select_from(AnalysisModel)) or 0)
 
 
+_IMPORT_RESPONSE_KEYS = {"created", "linked", "duplicates", "errors", "preview"}
+_IMPORT_PREVIEW_KEYS = {
+    "row",
+    "nome",
+    "email",
+    "telefone",
+    "status",
+    "job_linked",
+    "job_link_error",
+    "analysis",
+}
+_IMPORT_ANALYSIS_KEYS = {
+    "analysis_id",
+    "status",
+    "created",
+    "blocked",
+    "reused",
+    "stuck",
+    "reason",
+    "stage",
+    "trigger_source",
+}
+
+
+def _assert_import_response_shape(body: dict) -> None:
+    assert set(body) == _IMPORT_RESPONSE_KEYS
+    assert isinstance(body["created"], int)
+    assert isinstance(body["linked"], int)
+    assert isinstance(body["duplicates"], int)
+    assert isinstance(body["errors"], list)
+    assert isinstance(body["preview"], list)
+
+
+def _assert_error_item_shape(item: dict) -> None:
+    assert set(item) == {"row", "message"}
+    assert isinstance(item["row"], int)
+    assert isinstance(item["message"], str)
+
+
+def _assert_preview_item_shape(item: dict) -> None:
+    assert set(item).issubset(_IMPORT_PREVIEW_KEYS)
+    if "row" in item:
+        assert isinstance(item["row"], int)
+    if "nome" in item:
+        assert isinstance(item["nome"], str)
+    if "email" in item:
+        assert item["email"] is None or isinstance(item["email"], str)
+    if "telefone" in item:
+        assert item["telefone"] is None or isinstance(item["telefone"], str)
+    if "status" in item:
+        assert isinstance(item["status"], str)
+    if "job_linked" in item:
+        assert isinstance(item["job_linked"], bool)
+    if "job_link_error" in item:
+        assert isinstance(item["job_link_error"], str)
+    if "analysis" in item:
+        assert isinstance(item["analysis"], dict)
+        assert set(item["analysis"]).issubset(_IMPORT_ANALYSIS_KEYS)
+
+
 # ── Manual endpoint ───────────────────────────────────────────────────────────
 
 
@@ -367,9 +427,15 @@ async def test_import_valid_csv_creates_candidates(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["created"] == 2
     assert body["duplicates"] == 0
     assert body["errors"] == []
+    assert len(body["preview"]) == 2
+    for item in body["preview"]:
+        _assert_preview_item_shape(item)
+        assert "analysis" not in item
+        assert set(item) == {"row", "nome", "email", "telefone", "status"}
 
 
 async def test_import_viewer_gets_403(
@@ -421,8 +487,10 @@ async def test_import_csv_with_invalid_email_reports_per_row_error(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["created"] == 1
     assert len(body["errors"]) == 1
+    _assert_error_item_shape(body["errors"][0])
     assert body["errors"][0]["row"] == 3
 
 
@@ -460,8 +528,10 @@ async def test_import_row_without_contact_reports_error(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["created"] == 0
     assert len(body["errors"]) == 1
+    _assert_error_item_shape(body["errors"][0])
 
 
 async def test_import_missing_required_column_returns_422(
@@ -494,8 +564,11 @@ async def test_import_with_valid_job_links_candidates(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["created"] == 1
     assert body["linked"] == 1
+    assert body["preview"][0]["job_linked"] is True
+    assert body["preview"][0]["analysis"]["reason"] == "request_analysis_false"
 
 
 async def test_import_rejects_more_than_200_rows(
@@ -600,13 +673,20 @@ async def test_import_reports_link_error_when_candidate_active_in_other_job(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["created"] == 0
     assert body["duplicates"] == 1
     assert body["linked"] == 0
     assert len(body["errors"]) == 1
+    _assert_error_item_shape(body["errors"][0])
     assert body["errors"][0]["row"] == 2
     assert "não vinculado" in body["errors"][0]["message"]
     assert "outra vaga" in body["errors"][0]["message"]
+    assert len(body["preview"]) == 1
+    _assert_preview_item_shape(body["preview"][0])
+    assert body["preview"][0]["status"] == "duplicate"
+    assert body["preview"][0]["job_linked"] is False
+    assert "outra vaga" in body["preview"][0]["job_link_error"]
 
 
 async def test_import_does_not_request_analysis_by_default_for_existing_resume(
@@ -628,9 +708,11 @@ async def test_import_does_not_request_analysis_by_default_for_existing_resume(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["linked"] == 1
     assert body["errors"] == []
     assert await _count_analyses(db_session) == 0
+    _assert_preview_item_shape(body["preview"][0])
     assert body["preview"][0]["analysis"]["reason"] == "request_analysis_false"
 
 
@@ -652,9 +734,11 @@ async def test_import_request_analysis_skips_missing_resume_without_token(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["created"] == 1
     assert body["linked"] == 1
     assert await _count_analyses(db_session) == 0
+    _assert_preview_item_shape(body["preview"][0])
     assert body["preview"][0]["analysis"]["reason"] == "analysis_skipped_no_resume"
 
 
@@ -681,8 +765,10 @@ async def test_import_request_analysis_respects_daily_limit(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["linked"] == 1
     assert await _count_analyses(db_session) == before_count
+    _assert_preview_item_shape(body["preview"][0])
     assert body["preview"][0]["analysis"]["blocked"] is True
     assert body["preview"][0]["analysis"]["reason"] == "auto_analysis_blocked_daily_limit"
 
@@ -760,8 +846,10 @@ async def test_import_enqueue_failure_does_not_fail_import(
     )
     assert resp.status_code == 200
     body = resp.json()
+    _assert_import_response_shape(body)
     assert body["linked"] == 1
     assert body["errors"] == []
+    _assert_preview_item_shape(body["preview"][0])
     assert body["preview"][0]["analysis"]["reason"] == "analysis_enqueue_failed"
     failed = await db_session.scalar(
         sa.select(AnalysisModel)

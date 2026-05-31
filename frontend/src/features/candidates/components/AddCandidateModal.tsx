@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileText, Loader2, Upload, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { candidaturasService, type ImportCandidatesResult } from "../../../services/candidaturasService";
+import {
+  candidaturasService,
+  type ImportCandidatesResult,
+  type ImportPreviewAnalysis,
+  type ImportPreviewRow,
+} from "../../../services/candidaturasService";
 import { listJobs } from "../../../services/jobsService";
 import type { Job } from "../../../types/domain";
 import { toast } from "../../../shared/utils/toast";
@@ -24,6 +29,25 @@ export type CsvPreview = {
   columnWarning: string | null;
 };
 
+type ParsedImportAnalysis = {
+  analysisId: string | null;
+  status: string | null;
+  created: boolean;
+  blocked: boolean;
+  reason: string | null;
+};
+
+type ParsedImportPreviewRow = {
+  row: number | null;
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  status: string | null;
+  jobLinked: boolean | null;
+  jobLinkError: string | null;
+  analysis: ParsedImportAnalysis | null;
+};
+
 function splitCSVLine(line: string): string[] {
   const values: string[] = [];
   let cur = "";
@@ -44,6 +68,68 @@ function _readFileText(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
     reader.readAsText(file, "utf-8");
   });
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function getNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function parseImportAnalysis(value: ImportPreviewAnalysis | null | undefined): ParsedImportAnalysis | null {
+  if (!isObject(value)) return null;
+  return {
+    analysisId: getString(value.analysis_id),
+    status: getString(value.status),
+    created: value.created === true,
+    blocked: value.blocked === true,
+    reason: getString(value.reason),
+  };
+}
+
+function parsePreviewRow(row: ImportPreviewRow): ParsedImportPreviewRow {
+  return {
+    row: getNumber(row.row),
+    nome: getString(row.nome),
+    email: getString(row.email),
+    telefone: getString(row.telefone),
+    status: getString(row.status),
+    jobLinked: getBoolean(row.job_linked),
+    jobLinkError: getString(row.job_link_error),
+    analysis: parseImportAnalysis(row.analysis),
+  };
+}
+
+function isLinkErrorMessage(message: string): boolean {
+  return message.toLowerCase().includes("não vinculado à vaga");
+}
+
+function formatAnalysisStatus(row: ParsedImportPreviewRow): string | null {
+  const analysis = row.analysis;
+  if (!analysis) return null;
+  if (analysis.reason === "analysis_enqueue_failed") {
+    return "Falha ao solicitar análise.";
+  }
+  if (analysis.reason === "analysis_skipped_no_resume") {
+    return "Análise não solicitada por falta de currículo processável.";
+  }
+  if (analysis.reason === "auto_analysis_blocked_daily_limit") {
+    return "Análise bloqueada pelo limite diário.";
+  }
+  if (analysis.created && (analysis.analysisId || analysis.status)) {
+    return "Análise enfileirada.";
+  }
+  return null;
 }
 
 export async function parseCSVForPreview(file: File): Promise<CsvPreview> {
@@ -418,6 +504,16 @@ function ImportTab({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
   // ── Result view ──────────────────────────────────────────────────────────────
 
   if (result) {
+    const previewRows = result.preview.map(parsePreviewRow);
+    const linkErrorRows = result.errors
+      .filter((entry) => isLinkErrorMessage(entry.message))
+      .map((entry) => ({ row: entry.row, message: entry.message }));
+    const unlinkedPreviewRows = previewRows.filter((row) => row.jobLinked === false || row.jobLinkError);
+    const createdButNotLinkedRows = unlinkedPreviewRows.filter((row) => row.status === "created");
+    const analysisRows = previewRows
+      .map((row) => ({ row, label: formatAnalysisStatus(row) }))
+      .filter((entry): entry is { row: ParsedImportPreviewRow; label: string } => Boolean(entry.label));
+    const shouldShowNeutralAnalysisMessage = analysisRows.length === 0;
     const validCount = result.created + result.linked;
     const hasNoValidCandidates = validCount === 0;
 
@@ -468,6 +564,25 @@ function ImportTab({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
           </div>
         </div>
 
+        {createdButNotLinkedRows.length > 0 && (
+          <div
+            className="rounded-xl border border-[hsl(var(--warning)/0.3)] bg-[hsl(var(--warning)/0.08)] px-4 py-3"
+            data-testid="import-unlinked-warning"
+          >
+            <p className="text-sm font-semibold text-warning">
+              Alguns candidatos foram criados, mas não foram vinculados à vaga.
+            </p>
+            <ul className="mt-2 space-y-1 text-xs text-warning/90" data-testid="import-unlinked-rows">
+              {createdButNotLinkedRows.map((row, index) => (
+                <li key={`${row.row ?? "unknown"}-${index}`}>
+                  Linha {row.row ?? "?"} {row.nome ? `- ${row.nome}` : ""}
+                  {row.jobLinkError ? `: ${row.jobLinkError}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Duplicate warning */}
         {result.duplicates > 0 && (
           <div
@@ -476,6 +591,32 @@ function ImportTab({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
           >
             <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning mt-0.5" aria-hidden="true" />
             <p className="text-xs text-warning">Candidatos duplicados não foram recriados.</p>
+          </div>
+        )}
+
+        {shouldShowNeutralAnalysisMessage ? (
+          <div
+            className="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3"
+            data-testid="import-analysis-neutral"
+          >
+            <p className="text-xs text-text-muted">
+              A importação não solicita análise automática por padrão.
+            </p>
+          </div>
+        ) : (
+          <div
+            className="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3"
+            data-testid="import-analysis-status"
+          >
+            <p className="mb-2 text-xs font-semibold text-text">Status de análise</p>
+            <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-text-muted">
+              {analysisRows.map(({ row, label }, index) => (
+                <li key={`${row.row ?? "analysis"}-${index}`}>
+                  Linha {row.row ?? "?"} {row.nome ? `- ${row.nome}: ` : "— "}
+                  {label}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -492,6 +633,17 @@ function ImportTab({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {linkErrorRows.length > 0 && createdButNotLinkedRows.length === 0 && (
+          <div
+            className="rounded-xl border border-[hsl(var(--warning)/0.24)] bg-[hsl(var(--warning)/0.06)] px-4 py-3"
+            data-testid="import-link-errors-summary"
+          >
+            <p className="text-xs text-warning">
+              Houve falhas de vínculo em algumas linhas. Revise os erros antes de tentar novamente.
+            </p>
           </div>
         )}
 

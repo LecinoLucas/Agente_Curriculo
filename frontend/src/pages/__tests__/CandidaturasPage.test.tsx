@@ -1052,6 +1052,115 @@ describe("CandidaturasPage — Adicionar candidatos", () => {
     expect(screen.getByText(/linha 3/i)).toBeInTheDocument();
     expect(screen.getByText(/e-mail inválido/i)).toBeInTheDocument();
   });
+
+  it("mostra aviso quando há candidatos criados mas não vinculados", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 1,
+      linked: 0,
+      duplicates: 0,
+      errors: [{ row: 2, message: "Candidato não vinculado à vaga: Candidato já possui vínculo ativo com outra vaga." }],
+      preview: [
+        {
+          row: 2,
+          nome: "Ana Silva",
+          email: "ana@test.com",
+          status: "created",
+          job_linked: false,
+          job_link_error: "Candidato já possui vínculo ativo com outra vaga.",
+        },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+    await user.upload(
+      screen.getByTestId("import-file-input"),
+      new File(["nome,email\nAna,ana@test.com"], "test.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("import-unlinked-warning")).toBeInTheDocument());
+    expect(screen.getByText(/criados, mas não foram vinculados à vaga/i)).toBeInTheDocument();
+    expect(screen.getByTestId("import-unlinked-rows").textContent).toMatch(/linha 2/i);
+    expect(screen.getByTestId("import-unlinked-rows").textContent).toMatch(/Ana Silva/i);
+  });
+
+  it("mostra mensagem neutra de análise quando o backend não retorna status real", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 2,
+      linked: 1,
+      duplicates: 0,
+      errors: [],
+      preview: [
+        {
+          row: 2,
+          nome: "Bruno Costa",
+          status: "created",
+          job_linked: true,
+        },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+    await user.upload(
+      screen.getByTestId("import-file-input"),
+      new File(["nome,email\nBruno,bruno@test.com"], "test.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("import-analysis-neutral")).toBeInTheDocument());
+    expect(screen.getByText(/não solicita análise automática por padrão/i)).toBeInTheDocument();
+    expect(screen.queryByText(/análise enfileirada/i)).not.toBeInTheDocument();
+  });
+
+  it("só mostra análise enfileirada quando o backend retorna campo real de analysis", async () => {
+    vi.mocked(candidaturasService.importCSV).mockResolvedValue({
+      created: 1,
+      linked: 1,
+      duplicates: 0,
+      errors: [],
+      preview: [
+        {
+          row: 2,
+          nome: "Clara Lima",
+          status: "created",
+          job_linked: true,
+          analysis: {
+            analysis_id: "analysis-1",
+            status: "pending",
+            created: true,
+            blocked: false,
+            reason: "auto_analysis_allowed_entry",
+          },
+        },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("add-candidates-btn")).toBeInTheDocument());
+    await user.click(screen.getByTestId("add-candidates-btn"));
+    await user.click(screen.getByTestId("tab-import"));
+    await user.upload(
+      screen.getByTestId("import-file-input"),
+      new File(["nome,email\nClara,clara@test.com"], "test.csv", { type: "text/csv" }),
+    );
+    await user.click(screen.getByTestId("import-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("import-analysis-status")).toBeInTheDocument());
+    expect(screen.getByText(/linha 2 - Clara Lima: Análise enfileirada\./i)).toBeInTheDocument();
+    expect(screen.queryByTestId("import-analysis-neutral")).not.toBeInTheDocument();
+  });
 });
 
 // ── Phase 6 — Polimento da importação ────────────────────────────────────────
@@ -1228,8 +1337,16 @@ describe("CandidaturasPage — Phase 6 polimento importação", () => {
       created: 1,
       linked: 0,
       duplicates: 0,
-      errors: [],
-      preview: [],
+      errors: [{ row: 2, message: "Candidato não vinculado à vaga: vínculo já ativo." }],
+      preview: [
+        {
+          row: 2,
+          nome: "Teste",
+          status: "created",
+          job_linked: false,
+          job_link_error: "vínculo já ativo.",
+        },
+      ],
     });
 
     const user = userEvent.setup();
@@ -1251,6 +1368,8 @@ describe("CandidaturasPage — Phase 6 polimento importação", () => {
       expect(screen.queryByTestId("import-result")).not.toBeInTheDocument(),
     );
     expect(screen.getByTestId("file-drop-zone")).toBeInTheDocument();
+    expect(screen.queryByTestId("import-unlinked-warning")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("import-analysis-neutral")).not.toBeInTheDocument();
   });
 
   it("botão Fechar no resultado fecha o modal", async () => {

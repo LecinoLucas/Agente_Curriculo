@@ -23,12 +23,36 @@ export type ImportRowError = {
   message: string;
 };
 
+export type ImportPreviewAnalysis = {
+  analysis_id?: string | null;
+  status?: string | null;
+  created?: boolean;
+  blocked?: boolean;
+  reused?: boolean;
+  stuck?: boolean;
+  reason?: string | null;
+  stage?: string | null;
+  trigger_source?: string | null;
+};
+
+export type ImportPreviewRow = {
+  row?: number;
+  nome?: string;
+  email?: string | null;
+  telefone?: string | null;
+  status?: string;
+  job_linked?: boolean;
+  job_link_error?: string;
+  analysis?: ImportPreviewAnalysis | null;
+  [key: string]: unknown;
+};
+
 export type ImportCandidatesResult = {
   created: number;
   linked: number;
   duplicates: number;
   errors: ImportRowError[];
-  preview: Record<string, unknown>[];
+  preview: ImportPreviewRow[];
 };
 
 export const candidaturasService = {
