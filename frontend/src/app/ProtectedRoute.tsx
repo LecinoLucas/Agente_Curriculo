@@ -2,6 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { ReactNode } from "react";
 
 import { useAuth } from "../features/auth/useAuth";
+import { isAdmin } from "../shared/auth/roles";
 import { UserRole } from "../types/auth";
 
 type ProtectedRouteProps = {
@@ -88,7 +89,7 @@ export function ProtectedRoute({
 
       if (matchedScreen) {
         // Administrador sempre tem bypass global para evitar auto-bloqueio acidental
-        if (user.role === "admin") {
+        if (isAdmin(user.role)) {
           // Permite acesso
         } else if (!matchedScreen.roles.includes(user.role)) {
           return <AccessDenied />;

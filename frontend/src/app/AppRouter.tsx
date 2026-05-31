@@ -3,6 +3,17 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "../components/layout/AppShell";
 import { PipelineProvider } from "../features/pipeline/PipelineContext";
+import {
+  ADMIN_ONLY_ROLES,
+  AGENDA_ACCESS_ROLES,
+  ALL_AUTH_ROLES,
+  ANALYSIS_ROLES,
+  JOB_MANAGEMENT_ROLES,
+  MANAGER_AREA_ROLES,
+  PRE_ADMISSION_AREA_ROLES,
+  STAFF_ROLES,
+} from "../shared/auth/roles";
+import type { UserRole } from "../types/auth";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { PublicRouteThemeGuard } from "./PublicRouteThemeGuard";
 import { CandidateThemeGuard } from "./CandidateThemeGuard";
@@ -170,17 +181,6 @@ const ManagerReviewPage = lazy(() =>
   }))
 );
 
-type UserRole = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr";
-
-const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
-const RH_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
-const AGENDA_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "hr"];
-const ADMIN_ROLES: UserRole[] = ["admin"];
-const DEMO_RH_ROLES: UserRole[] = ["admin", "recruiter"];
-const PRE_ADMISSION_ROLES: UserRole[] = ["admin", "hr"];
-const MANAGER_ROLES: UserRole[] = ["admin", "manager"];
-const ALL_AUTH_ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer", "manager", "hr"];
-
 function PageLoader() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-500">
@@ -249,12 +249,12 @@ export function AppRouter() {
 
         <Route
           path="rh"
-          element={protectedPage(<RhDashboardPage />, RH_ROLES)}
+          element={protectedPage(<RhDashboardPage />, STAFF_ROLES)}
         />
 
         <Route
           path="agenda"
-          element={protectedPage(<AgendaPage />, AGENDA_ROLES)}
+          element={protectedPage(<AgendaPage />, AGENDA_ACCESS_ROLES)}
         />
 
         <Route
@@ -284,32 +284,32 @@ export function AppRouter() {
 
         <Route
           path="admission/cases/:caseId"
-          element={protectedPage(<AdmissionCasePage />, PRE_ADMISSION_ROLES)}
+          element={protectedPage(<AdmissionCasePage />, PRE_ADMISSION_AREA_ROLES)}
         />
 
         <Route
           path="admission/cases/:caseId/integration"
-          element={protectedPage(<AdmissionIntegrationPlaceholderPage />, PRE_ADMISSION_ROLES)}
+          element={protectedPage(<AdmissionIntegrationPlaceholderPage />, PRE_ADMISSION_AREA_ROLES)}
         />
 
         <Route
           path="admissao/:caseId"
-          element={protectedPage(<AdmissionCasePage />, PRE_ADMISSION_ROLES)}
+          element={protectedPage(<AdmissionCasePage />, PRE_ADMISSION_AREA_ROLES)}
         />
 
         <Route
           path="admissao/:caseId/integracao"
-          element={protectedPage(<AdmissionIntegrationPlaceholderPage />, PRE_ADMISSION_ROLES)}
+          element={protectedPage(<AdmissionIntegrationPlaceholderPage />, PRE_ADMISSION_AREA_ROLES)}
         />
 
         <Route
           path="admissao/checklists"
-          element={protectedPage(<PreAdmissionChecklistsPage />, PRE_ADMISSION_ROLES)}
+          element={protectedPage(<PreAdmissionChecklistsPage />, PRE_ADMISSION_AREA_ROLES)}
         />
 
         <Route
           path="admitidos"
-          element={protectedPage(<AdmitidosPage />, PRE_ADMISSION_ROLES)}
+          element={protectedPage(<AdmitidosPage />, PRE_ADMISSION_AREA_ROLES)}
         />
 
         <Route
@@ -319,12 +319,12 @@ export function AppRouter() {
 
         <Route
           path="importar"
-          element={protectedPage(<ImportPage />, ["admin", "recruiter"])}
+          element={protectedPage(<ImportPage />, JOB_MANAGEMENT_ROLES)}
         />
 
         <Route
           path="importar-formulario"
-          element={protectedPage(<GoogleImportPage />, ["admin", "recruiter"])}
+          element={protectedPage(<GoogleImportPage />, JOB_MANAGEMENT_ROLES)}
         />
 
         <Route
@@ -339,17 +339,17 @@ export function AppRouter() {
 
         <Route
           path="analises-ia"
-          element={protectedPage(<AnalisesIaPage />, ["admin", "recruiter"])}
+          element={protectedPage(<AnalisesIaPage />, ANALYSIS_ROLES)}
         />
 
         <Route
           path="analises-ia/comportamental"
-          element={protectedPage(<AnalisesIaComportamentalPage />, ["admin", "recruiter"])}
+          element={protectedPage(<AnalisesIaComportamentalPage />, ANALYSIS_ROLES)}
         />
 
         <Route
           path="manager"
-          element={protectedPage(<ManagerReviewPage />, MANAGER_ROLES)}
+          element={protectedPage(<ManagerReviewPage />, MANAGER_AREA_ROLES)}
         />
 
         <Route
@@ -364,12 +364,12 @@ export function AppRouter() {
 
         <Route
           path="admin"
-          element={protectedPage(<AdminPage />, ADMIN_ROLES)}
+          element={protectedPage(<AdminPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route
           path="admin/usuarios"
-          element={protectedPage(<UsersPage />, ADMIN_ROLES)}
+          element={protectedPage(<UsersPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route
@@ -379,42 +379,42 @@ export function AppRouter() {
 
         <Route
           path="admin/cadastros"
-          element={protectedPage(<CadastrosPage />, ADMIN_ROLES)}
+          element={protectedPage(<CadastrosPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route
           path="admin/auditoria"
-          element={protectedPage(<AuditLogsPage />, ADMIN_ROLES)}
+          element={protectedPage(<AuditLogsPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route
           path="admin/health"
-          element={protectedPage(<SystemHealthPage />, ADMIN_ROLES)}
+          element={protectedPage(<SystemHealthPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route
           path="admin/ai-provider-credentials"
-          element={protectedPage(<AdminAiProviderCredentialsPage />, ADMIN_ROLES)}
+          element={protectedPage(<AdminAiProviderCredentialsPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route
           path="admin/bi"
-          element={protectedPage(<AdminBiPage />, ADMIN_ROLES)}
+          element={protectedPage(<AdminBiPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route
           path="admin/behavioral-templates"
-          element={protectedPage(<BehavioralTemplatesPage />, ["admin", "recruiter"])}
+          element={protectedPage(<BehavioralTemplatesPage />, JOB_MANAGEMENT_ROLES)}
         />
 
         <Route
           path="admin/behavioral-templates/:templateId/edit"
-          element={protectedPage(<BehavioralTemplateEditorPage />, ["admin", "recruiter"])}
+          element={protectedPage(<BehavioralTemplateEditorPage />, JOB_MANAGEMENT_ROLES)}
         />
 
         <Route
           path="demo-rh"
-          element={protectedPage(<DemoRhPage />, DEMO_RH_ROLES)}
+          element={protectedPage(<DemoRhPage />, JOB_MANAGEMENT_ROLES)}
         />
       </Route>
 

@@ -26,6 +26,17 @@ import {
 import { useAuth } from "../../features/auth/useAuth";
 import { usePipeline } from "../../features/pipeline/PipelineContext";
 import { useTheme } from "../../hooks/useTheme";
+import {
+  ADMIN_ONLY_ROLES,
+  AGENDA_ACCESS_ROLES,
+  ANALYSIS_ROLES,
+  CANDIDATE_PORTAL_ROLES,
+  JOB_MANAGEMENT_ROLES,
+  MANAGER_AREA_ROLES,
+  PRE_ADMISSION_AREA_ROLES,
+  STAFF_ROLES,
+  isAdmin,
+} from "../../shared/auth/roles";
 import { UserRole } from "../../types/auth";
 import { TopNavbar } from "./TopNavbar";
 import { Sidebar } from "./Sidebar";
@@ -49,89 +60,89 @@ const NAVIGATION_CONFIG: NavGroup[] = [
   {
     label: "Central RH",
     caption: "Pendências do dia",
-    roles: ["admin", "recruiter", "viewer", "manager", "hr"],
+    roles: STAFF_ROLES,
     isDropdown: false,
     items: [
-      { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: ["admin", "recruiter", "viewer", "manager", "hr"] }
+      { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: STAFF_ROLES }
     ],
   },
 
   {
     label: "Recrutamento",
     caption: "Processo Seletivo",
-    roles: ["admin", "recruiter", "viewer", "manager", "hr"],
+    roles: STAFF_ROLES,
     isDropdown: true,
     items: [
-      { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
-      { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
-      { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
-      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
-      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer", "hr"] },
+      { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: STAFF_ROLES },
+      { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: STAFF_ROLES },
+      { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: STAFF_ROLES },
+      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: STAFF_ROLES },
+      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: AGENDA_ACCESS_ROLES },
     ],
   },
   {
     label: "Avaliações",
     caption: "Gestão Comportamental e IA",
-    roles: ["admin", "recruiter"],
+    roles: ANALYSIS_ROLES,
     isDropdown: true,
     items: [
-      { to: "/analises-ia", label: "Análises IA", caption: "Currículos e matching", roles: ["admin", "recruiter"] },
-      { to: "/analises-ia/comportamental", label: "Avaliação comportamental", caption: "Fila e avaliações", roles: ["admin", "recruiter"] },
-      { to: "/admin/behavioral-templates", label: "Templates comportamentais", caption: "Templates de testes", roles: ["admin", "recruiter"] },
+      { to: "/analises-ia", label: "Análises IA", caption: "Currículos e matching", roles: ANALYSIS_ROLES },
+      { to: "/analises-ia/comportamental", label: "Avaliação comportamental", caption: "Fila e avaliações", roles: ANALYSIS_ROLES },
+      { to: "/admin/behavioral-templates", label: "Templates comportamentais", caption: "Templates de testes", roles: ANALYSIS_ROLES },
     ],
   },
   {
     label: "Admissão",
     caption: "Checklists e casos",
-    roles: ["admin", "hr"],
+    roles: PRE_ADMISSION_AREA_ROLES,
     isDropdown: true,
     items: [
-      { to: "/admitidos", label: "Admitidos", caption: "Casos de pré-admissão", roles: ["admin", "hr"] },
-      { to: "/admissao/checklists", label: "Checklists admissionais", caption: "Templates de documentos", roles: ["admin", "hr"] },
+      { to: "/admitidos", label: "Admitidos", caption: "Casos de pré-admissão", roles: PRE_ADMISSION_AREA_ROLES },
+      { to: "/admissao/checklists", label: "Checklists admissionais", caption: "Templates de documentos", roles: PRE_ADMISSION_AREA_ROLES },
     ],
   },
   {
     label: "Gestores",
     caption: "Revisão e Decisão",
-    roles: ["admin", "manager"],
+    roles: MANAGER_AREA_ROLES,
     isDropdown: true,
     items: [
-      { to: "/manager", label: "Painel do gestor", caption: "Revisões pendentes", roles: ["admin", "manager"] },
+      { to: "/manager", label: "Painel do gestor", caption: "Revisões pendentes", roles: MANAGER_AREA_ROLES },
     ],
   },
   {
     label: "Administração",
     caption: "Configurações Gerais",
-    roles: ["admin", "recruiter"],
+    roles: JOB_MANAGEMENT_ROLES,
     isDropdown: true,
     items: [
-      { to: "/admin/usuarios", label: "Usuários", caption: "Equipe e acessos", roles: ["admin"] },
-      { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ["admin"] },
-      { to: "/admin/ai-provider-credentials", label: "Credenciais IA", caption: "Chaves Gemini e Claude", roles: ["admin"] },
-      { to: "/admin/bi", label: "BI", caption: "Indicadores e gráficos", roles: ["admin"] },
-      { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ["admin"] },
-      { to: "/admin/health", label: "Saúde do sistema", caption: "Diagnósticos e Logs", roles: ["admin"] },
-      { to: "/importar", label: "Importação de CVs", caption: "Carga de arquivos", roles: ["admin", "recruiter"] },
-      { to: "/importar-formulario", label: "Importação por form", caption: "Google Forms / Drive", roles: ["admin", "recruiter"] },
+      { to: "/admin/usuarios", label: "Usuários", caption: "Equipe e acessos", roles: ADMIN_ONLY_ROLES },
+      { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ADMIN_ONLY_ROLES },
+      { to: "/admin/ai-provider-credentials", label: "Credenciais IA", caption: "Chaves Gemini e Claude", roles: ADMIN_ONLY_ROLES },
+      { to: "/admin/bi", label: "BI", caption: "Indicadores e gráficos", roles: ADMIN_ONLY_ROLES },
+      { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ADMIN_ONLY_ROLES },
+      { to: "/admin/health", label: "Saúde do sistema", caption: "Diagnósticos e Logs", roles: ADMIN_ONLY_ROLES },
+      { to: "/importar", label: "Importação de CVs", caption: "Carga de arquivos", roles: JOB_MANAGEMENT_ROLES },
+      { to: "/importar-formulario", label: "Importação por form", caption: "Google Forms / Drive", roles: JOB_MANAGEMENT_ROLES },
     ],
   },
   {
     label: "Portal do Candidato",
     caption: "Sua candidatura",
-    roles: ["candidate"],
+    roles: CANDIDATE_PORTAL_ROLES,
     isDropdown: false,
     items: [
-      { to: "/candidato/portal", label: "Portal do Candidato", caption: "Sua candidatura", roles: ["candidate"] }
+      { to: "/candidato/portal", label: "Portal do Candidato", caption: "Sua candidatura", roles: CANDIDATE_PORTAL_ROLES }
     ],
   },
   {
     label: "Outros",
     caption: "Ferramentas extras",
-    roles: ["admin", "recruiter"],
+    roles: JOB_MANAGEMENT_ROLES,
     isDropdown: true,
     items: [
-      { to: "/candidato/portal", label: "Portal do Candidato (Preview)", caption: "Visualização do candidato", roles: ["admin"] },
-      { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: ["admin", "recruiter"] },
+      { to: "/candidato/portal", label: "Portal do Candidato (Preview)", caption: "Visualização do candidato", roles: ADMIN_ONLY_ROLES },
+      { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: JOB_MANAGEMENT_ROLES },
     ],
   },
 ];
@@ -186,7 +197,7 @@ function usePathAllowed() {
   }, []);
 
   const isAllowed = (path: string, userRole: string) => {
-    if (userRole === "admin") return true;
+    if (isAdmin(userRole as UserRole)) return true;
 
     let saved = null;
     try {
