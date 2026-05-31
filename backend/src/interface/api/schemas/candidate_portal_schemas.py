@@ -31,6 +31,15 @@ class CandidatePasswordSetupResponse(BaseModel):
     message: str
 
 
+class CandidateSessionResponse(BaseModel):
+    """Probe silenciosa de sessão — nunca retorna 401.
+    Retorna apenas se o cookie é válido e o nome público do candidato.
+    Não expõe e-mail, CPF, telefone ou dados de candidatura.
+    """
+    authenticated: bool
+    candidate_name: str | None = None
+
+
 class CandidateAuthGoogleRequest(BaseModel):
     id_token: str = Field(min_length=1, max_length=4096)
 

@@ -950,3 +950,130 @@ async def test_check_candidate_exists_endpoint(
     }
     assert "exists@example.com" not in response.text
     assert "11122233344" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_apply_with_job_and_ai_config_sets_real_analysis_status(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    published_job: JobModel,
+    valid_pdf_bytes: bytes,
+) -> None:
+    """Candidatura com vaga e AI config retorna analysis_status real, nunca 'completed'."""
+    await _create_ai_config(db_session)
+
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Fernanda Analise",
+            "cpf": "46513888008",
+            "email": "fernanda.analise@example.com",
+            "phone": "11987654321",
+            "city": "Campinas",
+            "state": "SP",
+            "salary_expectation": "6000",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["analysis_auto_requested"] is True
+    assert data["analysis_id"] is not None
+    # Status real inicial: aguarda extração ou enfileirado — nunca completed sem worker
+    assert data["analysis_status"] in ("waiting_extraction", "pending")
+    assert data["analysis_status"] != "completed"
+    assert data["pipeline_id"] is not None
+    assert data["status"] == "entered_pipeline"
+
+    # Pipeline entry criada com analysis_id vinculado
+    rows = await _list_pipeline_rows(
+        db_session,
+        candidate_id=UUID(data["candidate_id"]),
+        job_id=published_job.id,
+    )
+    assert len(rows) == 1
+    assert rows[0]["relationship_status"] == "active"
+    assert rows[0]["pipeline_stage"] == "entry"
+    assert rows[0]["current_analysis_id"] == data["analysis_id"]
+
+
+@pytest.mark.asyncio
+async def test_apply_talent_pool_sets_not_requested_analysis_status(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    valid_pdf_bytes: bytes,
+) -> None:
+    """Candidatura sem vaga (talent pool) retorna analysis_status='not_requested'."""
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Paulo Talento",
+            "cpf": "06647872003",
+            "email": "paulo.talento@example.com",
+            "phone": "11987654321",
+            "city": "Porto Alegre",
+            "state": "RS",
+            "salary_expectation": "4500",
+            "desired_contract_type": "Indiferente",
+            "works_at_marajo_group": False,
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["analysis_auto_requested"] is False
+    assert data["analysis_id"] is None
+    assert data["analysis_status"] == "not_requested"
+    assert data["talent_pool"] is True
+    assert data["status"] == "awaiting_job"
+    assert data["pipeline_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_apply_analysis_status_never_completed_without_worker(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    published_job: JobModel,
+    valid_pdf_bytes: bytes,
+) -> None:
+    """Status de análise nunca é 'completed' imediatamente após candidatura — requer worker real."""
+    await _create_ai_config(db_session)
+
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Carlos Nao Completo",
+            "cpf": "70011568096",
+            "email": "carlos.nao.completo@example.com",
+            "phone": "11987654321",
+            "city": "Brasilia",
+            "state": "DF",
+            "salary_expectation": "7500",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    # Garantia: sistema não marca completed sem processamento real
+    assert data["analysis_status"] != "completed"
+    assert data["analysis_status"] != "not_requested"
+    # Deve estar em estágio inicial real
+    assert data["analysis_status"] in ("waiting_extraction", "pending")

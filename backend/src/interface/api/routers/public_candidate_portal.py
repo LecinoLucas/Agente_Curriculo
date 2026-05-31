@@ -32,6 +32,7 @@ from src.application.services.pre_admission_service import (
     PreAdmissionService,
 )
 from src.domain.exceptions import ConflictException, NotFoundException, ValidationException
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
     SQLAlchemyBehavioralAssignmentRepository,
@@ -63,6 +64,7 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidatePasswordSetupConfirmRequest,
     CandidatePasswordSetupRequest,
     CandidatePasswordSetupResponse,
+    CandidateSessionResponse,
 )
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionDocumentUploadResponse,
@@ -262,6 +264,45 @@ async def auth_confirm_password_setup(
     db: AsyncSession = Depends(get_db),
 ) -> CandidatePasswordSetupResponse:
     return await confirm_password_setup_response(body, db)
+
+
+@router.get(
+    "/auth/session",
+    response_model=CandidateSessionResponse,
+    summary="Probe silenciosa de sessão — nunca retorna 401",
+)
+async def get_candidate_session(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateSessionResponse:
+    """
+    Verifica silenciosamente se o cookie de sessão do candidato é válido.
+
+    - Sem cookie ou cookie inválido/expirado: HTTP 200 authenticated=false.
+    - Cookie válido: HTTP 200 authenticated=true + nome público do candidato.
+
+    Nunca retorna 401. Não expõe e-mail, CPF, telefone nem dados de candidatura.
+    Usado pelo App.tsx para hidratar candidateName sem gerar erros no console.
+    """
+    token = request.cookies.get(CANDIDATE_PORTAL_COOKIE_NAME)
+    if not token:
+        return CandidateSessionResponse(authenticated=False, candidate_name=None)
+
+    try:
+        session = await CandidatePortalAuthService(db).authenticate(token)
+        row = await db.execute(
+            sa.select(CandidateModel.full_name)
+            .where(CandidateModel.id == session.candidate_id)
+            .limit(1)
+        )
+        candidate_name = row.scalar_one_or_none()
+        return CandidateSessionResponse(
+            authenticated=True,
+            candidate_name=candidate_name,
+        )
+    except Exception:
+        # Session invalid, expired, or DB error — always return unauthenticated.
+        return CandidateSessionResponse(authenticated=False, candidate_name=None)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

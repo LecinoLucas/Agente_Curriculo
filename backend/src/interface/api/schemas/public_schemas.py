@@ -45,7 +45,7 @@ class PublicApplyResponse(BaseModel):
     pipeline_id: UUID | None = None
     analysis_auto_requested: bool = False
     analysis_id: UUID | None = None
-    analysis_status: str | None = None
+    analysis_status: str = "not_requested"
     talent_pool: bool = False
     talent_pool_profile_status: str | None = None
     portal_access_hint: str | None = None

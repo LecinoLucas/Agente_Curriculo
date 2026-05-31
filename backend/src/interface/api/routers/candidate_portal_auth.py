@@ -41,6 +41,7 @@ async def request_password_setup_response(
     request: Request,
     db: AsyncSession,
 ) -> CandidatePasswordSetupResponse:
+    # Phase 1: DB operations — rollback only makes sense here.
     try:
         setup_token = await CandidatePortalAuthService(db).request_password_setup(
             email=str(body.email),
@@ -48,10 +49,6 @@ async def request_password_setup_response(
             user_agent=request.headers.get("user-agent", ""),
         )
         await db.commit()
-        if setup_token is not None:
-            await send_candidate_password_setup_email(setup_token)
-    except (EmailDeliveryConfigurationError, EmailDeliveryError):
-        logger.warning("candidate_portal.password_setup_delivery_failed")
     except Exception as exc:
         await db.rollback()
         logger.exception("candidate_portal.password_setup_request_failed")
@@ -59,6 +56,19 @@ async def request_password_setup_response(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível processar a solicitação.",
         ) from exc
+
+    # Phase 2: e-mail delivery — non-fatal in all cases.
+    # Any failure (known or unexpected) is logged and swallowed so the
+    # endpoint always returns the generic 200 response, never leaking
+    # candidate existence and never causing an unhandled 500.
+    if setup_token is not None:
+        try:
+            await send_candidate_password_setup_email(setup_token)
+        except (EmailDeliveryConfigurationError, EmailDeliveryError):
+            logger.warning("candidate_portal.password_setup_delivery_failed")
+        except Exception:
+            logger.warning("candidate_portal.password_setup_unexpected_delivery_error")
+
     return CandidatePasswordSetupResponse(message=PASSWORD_SETUP_REQUEST_MESSAGE)
 
 

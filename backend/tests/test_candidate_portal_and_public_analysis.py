@@ -252,6 +252,88 @@ async def _create_interview_schedule(
 
 
 @pytest.mark.asyncio
+async def test_session_endpoint_without_cookie_returns_200_unauthenticated(
+    client: AsyncClient,
+) -> None:
+    """GET /auth/session sem cookie retorna 200 authenticated=false — sem 401."""
+    response = await client.get("/api/v1/public/auth/session")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["authenticated"] is False
+    assert data["candidate_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_session_endpoint_with_invalid_cookie_returns_200_unauthenticated(
+    client: AsyncClient,
+) -> None:
+    """GET /auth/session com cookie inválido retorna 200 authenticated=false — sem 401."""
+    response = await client.get(
+        "/api/v1/public/auth/session",
+        cookies={"candidate_portal_token": "invalid-token-that-does-not-exist"},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["authenticated"] is False
+    assert data["candidate_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_session_endpoint_with_valid_cookie_returns_authenticated(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    valid_pdf_bytes: bytes,
+    published_job: "JobModel",
+) -> None:
+    """GET /auth/session com cookie válido retorna 200 authenticated=true e nome do candidato."""
+    # Cria candidato via candidatura pública (que cria sessão via cookie)
+    from src.infrastructure.database.models.analysis_model import AIModelModel, PromptTemplateModel
+    from decimal import Decimal
+
+    db_session.add_all([
+        AIModelModel(id=uuid4(), provider="google", model_id=f"gemini-{uuid4().hex[:8]}", model_name="Test", is_active=True),
+        PromptTemplateModel(id=uuid4(), name=f"pt-{uuid4().hex[:8]}", version=1, template_type="full_analysis",
+                           user_prompt_template="test", temperature=Decimal("0.1"), max_tokens=1024,
+                           is_active=True, activated_at=datetime.now(UTC), created_by=SYSTEM_USER_ID),
+    ])
+    await db_session.commit()
+
+    import io
+    apply_resp = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={"full_name": "Sessao Teste", "cpf": "33311122200", "email": "sessao.teste@example.com",
+              "phone": "11999999999", "city": "SP", "state": "SP", "salary_expectation": "5000",
+              "desired_contract_type": "CLT", "works_at_marajo_group": False,
+              "job_id": str(published_job.id), "lgpd_consent": True,
+              "password": "SenhaSegura123", "confirm_password": "SenhaSegura123"},
+        files={"resume_file": ("cv.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+    assert apply_resp.status_code == status.HTTP_201_CREATED
+
+    # Pega o cookie de sessão da resposta de apply
+    session_cookie = apply_resp.cookies.get("candidate_portal_token")
+    assert session_cookie is not None
+
+    response = await client.get(
+        "/api/v1/public/auth/session",
+        cookies={"candidate_portal_token": session_cookie},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["authenticated"] is True
+    assert data["candidate_name"] == "Sessao Teste"
+
+
+@pytest.mark.asyncio
+async def test_overview_without_cookie_still_returns_401(
+    client: AsyncClient,
+) -> None:
+    """GET /candidate-portal/overview sem cookie continua retornando 401 — proteção intacta."""
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.asyncio
 async def test_password_setup_request_is_generic_for_existing_and_unknown_candidates(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -380,6 +462,63 @@ async def test_password_setup_email_failure_keeps_generic_response(
     assert existing_response.status_code == status.HTTP_200_OK
     assert unknown_response.status_code == status.HTTP_200_OK
     assert existing_response.json() == unknown_response.json()
+
+
+@pytest.mark.asyncio
+async def test_password_setup_unexpected_exception_never_returns_500(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exceção inesperada no envio de e-mail não deve retornar 500 — CP-C5 regression guard."""
+    await _create_candidate(
+        db_session,
+        full_name="Excecao Inesperada",
+        email="excecao.inesperada@example.com",
+        cpf="12345678099",
+    )
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-unexpected-err",
+    )
+
+    async def raise_unexpected(setup_token: CandidatePasswordSetupToken) -> None:
+        # Simulates an unexpected error (e.g. AttributeError from misconfigured settings)
+        raise AttributeError("unexpected configuration error")
+
+    monkeypatch.setattr(
+        "src.interface.api.routers.candidate_portal_auth.send_candidate_password_setup_email",
+        raise_unexpected,
+    )
+
+    response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "excecao.inesperada@example.com"},
+    )
+
+    # Must never return 500 — email failure is always non-fatal
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["message"] == "Se houver um cadastro com este e-mail, enviaremos as instruções de acesso."
+
+
+@pytest.mark.asyncio
+async def test_password_setup_invalid_payload_returns_422(
+    client: AsyncClient,
+) -> None:
+    """Payload inválido retorna 422 de validação, nunca 500."""
+    for payload in [
+        {},
+        {"email": ""},
+        {"email": "notanemail"},
+        {"wrong_field": "test@example.com"},
+    ]:
+        response = await client.post(
+            "/api/v1/public/auth/request-password-setup",
+            json=payload,
+        )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, (
+            f"Expected 422 for payload {payload!r}, got {response.status_code}"
+        )
 
 
 @pytest.mark.asyncio
@@ -2177,3 +2316,166 @@ async def test_closed_process_does_not_show_old_scheduled_interview_as_active(
 
     assert payload["application_status"] == "rejected"
     assert payload["public_interview"] is None
+
+
+# ── CP-C8B: Session invalidation on password change ───────────────────────────
+
+@pytest.mark.asyncio
+async def test_confirm_password_setup_invalidates_existing_sessions(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sessões portal_session ativas são invalidadas ao confirmar password setup."""
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Invalida Sessao",
+        email="invalida.sessao@example.com",
+        cpf="88811122299",
+    )
+
+    # Create an active portal_session before password setup
+    await _create_portal_session(db_session, candidate.id, "old-session-token-abc123")
+
+    # Verify old session works
+    client.cookies.set("candidate_portal_token", "old-session-token-abc123")
+    overview_before = await client.get("/api/v1/public/candidate-portal/overview")
+    assert overview_before.status_code == status.HTTP_200_OK
+
+    # Request + confirm password setup
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-c8b-000000",
+    )
+    monkeypatch.setattr(
+        "src.interface.api.routers.candidate_portal_auth.send_candidate_password_setup_email",
+        lambda _: None,
+    )
+    await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "invalida.sessao@example.com"},
+    )
+    confirm_response = await client.post(
+        "/api/v1/public/auth/confirm-password-setup",
+        json={"token": "setup-token-c8b-000000", "password": "NovaSenha@123"},
+    )
+    assert confirm_response.status_code == status.HTTP_200_OK
+
+    # Old session cookie must now return 401
+    client.cookies.set("candidate_portal_token", "old-session-token-abc123")
+    overview_after = await client.get("/api/v1/public/candidate-portal/overview")
+    assert overview_after.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_new_login_after_password_setup_creates_valid_session(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Após invalidação, login com nova senha cria sessão válida."""
+    await _create_candidate(
+        db_session,
+        full_name="Nova Senha Login",
+        email="nova.senha.login@example.com",
+        cpf="88811122288",
+    )
+
+    # Each call to token_urlsafe returns a unique value so setup and session
+    # tokens don't collide on the unique token_hash index.
+    from itertools import count as _count
+    _call = _count()
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: f"c8b-login-token-{next(_call):04d}",
+    )
+    monkeypatch.setattr(
+        "src.interface.api.routers.candidate_portal_auth.send_candidate_password_setup_email",
+        lambda _: None,
+    )
+
+    # The first token_urlsafe call → "c8b-login-token-0000" (password setup token)
+    await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "nova.senha.login@example.com"},
+    )
+    confirm = await client.post(
+        "/api/v1/public/auth/confirm-password-setup",
+        json={"token": "c8b-login-token-0000", "password": "SenhaNova@456"},
+    )
+    assert confirm.status_code == status.HTTP_200_OK
+
+    # Login with the new password should succeed — token_urlsafe returns "c8b-login-token-0001"
+    login_response = await client.post(
+        "/api/v1/public/auth/login",
+        json={"email": "nova.senha.login@example.com", "password": "SenhaNova@456"},
+    )
+    assert login_response.status_code == status.HTTP_200_OK
+    assert "candidate_portal_token=" in login_response.headers.get("set-cookie", "")
+
+
+@pytest.mark.asyncio
+async def test_confirm_password_setup_token_cannot_be_reused(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Token de password_setup só pode ser usado uma vez."""
+    await _create_candidate(
+        db_session,
+        full_name="Token Unico",
+        email="token.unico@example.com",
+        cpf="88811122277",
+    )
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-c8b-once",
+    )
+    monkeypatch.setattr(
+        "src.interface.api.routers.candidate_portal_auth.send_candidate_password_setup_email",
+        lambda _: None,
+    )
+    await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "token.unico@example.com"},
+    )
+
+    first = await client.post(
+        "/api/v1/public/auth/confirm-password-setup",
+        json={"token": "setup-token-c8b-once", "password": "Senha@First123"},
+    )
+    assert first.status_code == status.HTTP_200_OK
+
+    # Second use of same token must fail
+    second = await client.post(
+        "/api/v1/public/auth/confirm-password-setup",
+        json={"token": "setup-token-c8b-once", "password": "Senha@Second456"},
+    )
+    assert second.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_invalid_token_does_not_invalidate_sessions(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Tentativa com token inválido não afeta sessões ativas do candidato."""
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Sessao Preservada",
+        email="sessao.preservada@example.com",
+        cpf="88811122266",
+    )
+    await _create_portal_session(db_session, candidate.id, "preserved-session-token")
+
+    # Attempt to confirm with a token that does not exist
+    bad_confirm = await client.post(
+        "/api/v1/public/auth/confirm-password-setup",
+        json={"token": "completely-invalid-token-xyz", "password": "SenhaAlguma123"},
+    )
+    assert bad_confirm.status_code == status.HTTP_400_BAD_REQUEST
+
+    # Session must still be valid
+    client.cookies.set("candidate_portal_token", "preserved-session-token")
+    overview = await client.get("/api/v1/public/candidate-portal/overview")
+    assert overview.status_code == status.HTTP_200_OK

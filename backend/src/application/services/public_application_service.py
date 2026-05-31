@@ -365,7 +365,7 @@ class PublicApplicationService:
         pipeline_id: UUID | None = None
         analysis_auto_requested = False
         analysis_id: UUID | None = None
-        analysis_status: str | None = None
+        analysis_status: str = "not_requested"
         if job_model:
             now = datetime.now(UTC)
             existing_entry = await self._pipeline_repo.find_any_entry(candidate.id, job_id)

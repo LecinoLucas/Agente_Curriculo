@@ -235,6 +235,21 @@ class CandidatePortalAuthService:
         candidate.password_hash = hash_password(password)
         candidate.password_created_at = now
         auth_token.used_at = now
+
+        # Invalidate every active portal_session for this candidate so that
+        # old cookies stop working immediately after a password change/setup.
+        # This only affects portal_session tokens — never password_setup tokens
+        # of other candidates, and only for the candidate whose password was just set.
+        await self._db.execute(
+            sa.update(CandidateAuthTokenModel)
+            .where(
+                CandidateAuthTokenModel.candidate_id == candidate.id,
+                CandidateAuthTokenModel.purpose == PORTAL_SESSION_PURPOSE,
+                CandidateAuthTokenModel.used_at.is_(None),
+            )
+            .values(used_at=now)
+        )
+
         await self._db.flush()
         return candidate.id
 
