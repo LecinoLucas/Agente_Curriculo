@@ -328,7 +328,7 @@ export function JobAiDraftPanel({ formHasData, onApply }: JobAiDraftPanelProps) 
                 ))}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <div>
                   <SectionTitle>Senioridade</SectionTitle>
                   <Input
@@ -347,16 +347,41 @@ export function JobAiDraftPanel({ formHasData, onApply }: JobAiDraftPanelProps) 
                     aria-label="Jornada"
                   />
                 </div>
+                <div>
+                  <SectionTitle>Anos de exp.</SectionTitle>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={draft.minimum_years_experience ?? ""}
+                    onChange={(e) => updateDraftField("minimum_years_experience", e.target.value ? Number(e.target.value) : null as any)}
+                    className="mt-1 h-8 text-sm"
+                    aria-label="Anos mínimos de experiência"
+                    data-testid="draft-min-years"
+                  />
+                </div>
               </div>
 
-              <div className="rounded-xl border border-border bg-surface px-3 py-3">
-                <SectionTitle>Resumo</SectionTitle>
-                <Textarea
-                  value={draft.description}
-                  onChange={(e) => updateDraftField("description", e.target.value)}
-                  className="mt-2 min-h-[100px] text-sm leading-6"
-                  aria-label="Resumo da vaga"
-                />
+              <div className="grid gap-4 xl:grid-cols-2 mt-4">
+                <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                  <SectionTitle>Resumo</SectionTitle>
+                  <Textarea
+                    value={draft.description}
+                    onChange={(e) => updateDraftField("description", e.target.value)}
+                    className="mt-2 min-h-[100px] text-sm leading-6"
+                    aria-label="Resumo da vaga"
+                  />
+                </div>
+                <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                  <SectionTitle>Contexto de experiência</SectionTitle>
+                  <Textarea
+                    value={draft.experience_context}
+                    onChange={(e) => updateDraftField("experience_context", e.target.value)}
+                    className="mt-2 min-h-[100px] text-sm leading-6"
+                    aria-label="Contexto de experiência"
+                    data-testid="draft-experience-context"
+                  />
+                </div>
               </div>
             </div>
 
@@ -420,12 +445,7 @@ export function JobAiDraftPanel({ formHasData, onApply }: JobAiDraftPanelProps) 
               />
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-1">
-              <div className="space-y-3 rounded-xl border border-border bg-surface p-4">
-                <SectionTitle>Etapas sugeridas</SectionTitle>
-                <OrderedList items={draft.pipeline_steps} />
-              </div>
-            </div>
+
 
             <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-muted/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-2 text-sm text-text-muted">

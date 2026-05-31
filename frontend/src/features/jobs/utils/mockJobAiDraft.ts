@@ -11,10 +11,11 @@ export type JobAiDraft = {
   mandatory_skills: string[];
   nice_to_have_skills: string[];
   screening_questions: string[];
-  pipeline_steps: string[];
   benefits: string[];
   working_hours: string;
   seniority: string;
+  experience_context: string;
+  minimum_years_experience: number | null;
   requires_manager_review: boolean;
   requires_behavioral_assessment: boolean;
 };
@@ -54,8 +55,9 @@ export const MOCK_JOB_AI_DRAFT: JobAiDraft = {
     "Já atuou com atendimento ao cliente em rotina operacional?",
     "Tem experiência com caixa ou recebimentos?",
   ],
-  pipeline_steps: ["Triagem inicial", "Entrevista RH", "Entrevista com gestor", "Decisão final"],
   benefits: ["Vale-transporte", "Vale-alimentação", "Seguro de vida", "Plano odontológico"],
+  experience_context: "Atuação em ambiente externo (pista), com ritmo dinâmico e contato direto e contínuo com o público.",
+  minimum_years_experience: 1,
   requires_manager_review: true,
   requires_behavioral_assessment: false,
 };
@@ -113,8 +115,10 @@ export function applyDraftToForm(draft: JobAiDraft): Partial<JobFormValues> {
     responsibilities:
       draft.responsibilities.length > 0 ? draft.responsibilities.join("\n") : undefined,
     requirements: draft.requirements.length > 0 ? draft.requirements.join("\n") : undefined,
+    experience_context: draft.experience_context,
     job_area: draft.area,
     seniority_level: draft.seniority,
+    minimum_years_experience: draft.minimum_years_experience ?? undefined,
     work_model: draft.work_model,
     working_hours: draft.working_hours,
     location: draft.location,

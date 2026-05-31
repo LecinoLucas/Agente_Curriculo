@@ -535,6 +535,10 @@ describe("JobFormPage", () => {
       expect(
         within(screen.getByTestId("draft-screening-questions")).getByDisplayValue(/Você tem disponibilidade para trabalhar em escala\?/i)
       ).toBeInTheDocument();
+      
+      expect(screen.queryByText(/Etapas sugeridas/i)).not.toBeInTheDocument();
+      expect(screen.getByTestId("draft-experience-context")).toBeInTheDocument();
+      expect(screen.getByTestId("draft-min-years")).toBeInTheDocument();
     });
 
     it("botão 'Aplicar ao formulário' preenche os campos reais e fecha o painel", async () => {
@@ -547,6 +551,8 @@ describe("JobFormPage", () => {
           title: "Frentista",
           job_area: "Operação de pista",
           work_model: "onsite",
+          experience_context: expect.any(String),
+          minimum_years_experience: 1,
           mandatory_skills: expect.arrayContaining(MOCK_MANDATORY_SKILLS),
           screening_questions: expect.arrayContaining([
             "Você tem disponibilidade para trabalhar em escala?",

@@ -15,6 +15,8 @@ describe("draftToFormUpdates", () => {
         job_area: "Operação de pista",
         work_model: "onsite",
         location: "Unidade a definir",
+        experience_context: MOCK_JOB_AI_DRAFT.experience_context,
+        minimum_years_experience: MOCK_JOB_AI_DRAFT.minimum_years_experience,
         requires_manager_review: true,
         requires_behavioral_assessment: false,
       }),
@@ -46,7 +48,8 @@ describe("draftToFormUpdates", () => {
     const result = draftToFormUpdates(MOCK_JOB_AI_DRAFT);
 
     expect(result.behavioral_requirements).toBeUndefined();
-    expect(result.experience_context).toBeUndefined();
+    // pipeline_steps was removed and never mapped
+    expect((result as any).pipeline_steps).toBeUndefined();
   });
 });
 
@@ -101,6 +104,8 @@ describe("JobAiDraftPanel", () => {
       expect.objectContaining({
         title: "Frentista",
         job_area: "Operação de pista",
+        experience_context: expect.any(String),
+        minimum_years_experience: 1,
         screening_questions: expect.arrayContaining([
           "Você tem disponibilidade para trabalhar em escala?",
         ]),
