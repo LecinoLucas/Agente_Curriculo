@@ -1,4 +1,5 @@
 import { publicApiClient } from './publicApiClient';
+import { normalizeSalaryExpectationForApi } from '../utils/salaryExpectation';
 
 export interface ApplyPayload {
   full_name: string;
@@ -47,7 +48,8 @@ export const publicApplicationService = {
     fd.append('phone', payload.phone.trim());
     fd.append('city', payload.city.trim());
     fd.append('state', payload.state.trim().toUpperCase());
-    fd.append('salary_expectation', payload.salary_expectation.trim());
+    // The field is masked as BRL in the UI, but the API contract receives a plain decimal string.
+    fd.append('salary_expectation', normalizeSalaryExpectationForApi(payload.salary_expectation));
     fd.append('desired_contract_type', payload.desired_contract_type);
     fd.append('works_at_marajo_group', payload.works_at_marajo_group ? 'true' : 'false');
     if (payload.job_id) fd.append('job_id', payload.job_id);

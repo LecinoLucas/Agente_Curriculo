@@ -34,7 +34,7 @@ function InstitutionalPage({
           <p className="mt-3 text-base leading-7 text-gray-600">{description}</p>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
+        <div className="grid gap-8 lg:grid-cols-[1fr_280px] lg:gap-12">
           <div className="space-y-5">{children}</div>
           <aside className="lg:sticky lg:top-24 lg:self-start">
             <Card padding="md">
@@ -42,7 +42,7 @@ function InstitutionalPage({
               <p className="mt-1 text-sm text-gray-500">
                 Consulte vagas abertas ou acompanhe uma candidatura já enviada.
               </p>
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 flex flex-col gap-2.5">
                 <Link to="/">
                   <Button fullWidth variant="outline" size="sm">
                     Ver vagas
@@ -113,24 +113,29 @@ export function UnitsPage() {
 export function FaqPage() {
   const items = [
     {
-      question: 'Como envio uma candidatura?',
+      question: 'Como envio minha candidatura?',
       answer:
-        'Acesse a vaga desejada, revise as informações e use o botão de candidatura. O formulário envia os dados e o currículo para a API pública do portal.',
+        'Acesse a vaga desejada na listagem, clique em "Ver vaga" e em seguida no botão de candidatura. Preencha seus dados, envie o currículo em PDF e defina uma senha para acompanhar o processo. A candidatura é enviada e processada em tempo real.',
     },
     {
-      question: 'Como acompanho meu processo?',
+      question: 'Como acompanho minha candidatura?',
       answer:
-        'Depois de enviar uma candidatura com senha, entre pela Área do candidato para consultar o andamento disponível para o seu perfil.',
+        'Acesse a Área do candidato com o e-mail e senha que você criou ao se candidatar. Lá você vê o status atual, a etapa do processo e o resultado da análise de currículo quando disponível.',
+    },
+    {
+      question: 'O que significa "análise em andamento"?',
+      answer:
+        'Quando há uma vaga vinculada à candidatura, o sistema solicita automaticamente a análise do currículo pela IA. O status evolui de "Análise na fila" para "Análise em andamento" e depois para "Análise concluída". A Área do candidato atualiza automaticamente enquanto o processo está em curso — você pode sair e voltar depois para ver o resultado.',
     },
     {
       question: 'Posso me candidatar novamente?',
       answer:
-        'A regra de novas candidaturas depende do estado do seu processo atual. Quando houver restrição, o backend retorna a mensagem correspondente no envio.',
+        'Sim, desde que o processo anterior esteja encerrado (aprovado, reprovado ou retirado). Se ainda houver uma candidatura ativa, o portal informará e oferecerá um link para acompanhar pela Área do candidato. Candidaturas em vagas diferentes são permitidas de forma sequencial.',
     },
     {
-      question: 'O que faço se não conseguir entrar?',
+      question: 'Esqueci minha senha ou não consigo acessar.',
       answer:
-        'Verifique se o e-mail e a senha estão corretos. Se o problema continuar, aguarde o canal institucional de contato ser confirmado pela equipe de RH.',
+        'Na tela de login, clique em "Primeiro acesso ou esqueci minha senha" e informe seu e-mail. Se houver um cadastro, você receberá as instruções para definir uma nova senha. A resposta é sempre genérica por segurança — verifique sua caixa de entrada e o spam.',
     },
   ];
 

@@ -6,6 +6,8 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 export function Input({ label, error, helper, id, className = '', ...props }: InputProps) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
+  const errorId = error ? `${inputId}-error` : undefined;
+  const helperId = helper && !error ? `${inputId}-helper` : undefined;
   return (
     <div className="w-full">
       {label && (
@@ -16,6 +18,8 @@ export function Input({ label, error, helper, id, className = '', ...props }: In
       )}
       <input
         id={inputId}
+        aria-describedby={errorId ?? helperId}
+        aria-invalid={error ? 'true' : undefined}
         className={[
           'w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-gray-900',
           'placeholder:text-gray-400 transition-colors',
@@ -29,8 +33,8 @@ export function Input({ label, error, helper, id, className = '', ...props }: In
           .join(' ')}
         {...props}
       />
-      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
-      {helper && !error && <p className="mt-1.5 text-xs text-gray-500">{helper}</p>}
+      {error && <p id={errorId} className="mt-1.5 text-xs text-red-600">{error}</p>}
+      {helper && !error && <p id={helperId} className="mt-1.5 text-xs text-gray-500">{helper}</p>}
     </div>
   );
 }

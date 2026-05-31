@@ -9,6 +9,7 @@ import { LoadingState } from '../components/shared/LoadingState';
 import { publicJobsService } from '../services/publicJobsService';
 import type { PublicJob, JobArea } from '../types/candidatePortal';
 import { JOB_AREA_LABELS } from '../types/candidatePortal';
+import { useCandidateSession } from '../App';
 
 const AREAS: Array<{ value: JobArea | 'all'; label: string }> = [
   { value: 'all', label: 'Todas as áreas' },
@@ -20,6 +21,7 @@ const AREAS: Array<{ value: JobArea | 'all'; label: string }> = [
 ];
 
 export function PublicJobsPage() {
+  const { candidateName } = useCandidateSession();
   const [jobs, setJobs] = useState<PublicJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,12 +48,41 @@ export function PublicJobsPage() {
   return (
     <CandidatePortalLayout maxWidth="page">
       {/* Page header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-extrabold text-gray-900">Vagas disponíveis</h1>
         <p className="mt-1.5 text-base text-gray-500">
           Encontre a oportunidade certa para você na Rede Marajó.
         </p>
       </div>
+
+      {/* Session-aware entry banner */}
+      {candidateName ? (
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3">
+          <p className="text-sm text-primary-800">
+            Você está conectado.{' '}
+            <Link to="/minha-area" className="font-semibold underline hover:text-primary-900">
+              Acompanhe sua candidatura
+            </Link>
+            {' '}ou candidate-se a uma nova vaga abaixo.
+          </p>
+          <Link to="/minha-area" className="text-xs font-medium text-primary-700 hover:underline whitespace-nowrap flex-shrink-0">
+            Minha área →
+          </Link>
+        </div>
+      ) : (
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3">
+          <p className="text-sm text-primary-800">
+            <span className="font-semibold">Já tem cadastro?</span>{' '}
+            <Link to="/login" className="underline hover:text-primary-900">
+              Acesse sua área
+            </Link>
+            {' '}para acompanhar sua candidatura.
+          </p>
+          <Link to="/duvidas-frequentes" className="text-xs font-medium text-primary-700 hover:underline whitespace-nowrap flex-shrink-0">
+            Dúvidas sobre o processo →
+          </Link>
+        </div>
+      )}
 
       {/* Search + filters */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">

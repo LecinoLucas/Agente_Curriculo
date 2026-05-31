@@ -1,5 +1,73 @@
 import { publicApiClient } from './publicApiClient';
 
+// ── Analysis status display helper ───────────────────────────────────────────
+
+export interface AnalysisStatusInfo {
+  label: string;
+  description: string | null;
+  variant: 'progress' | 'done' | 'muted';
+}
+
+const _ANALYSIS_INFO_MAP: Record<string, AnalysisStatusInfo> = {
+  waiting_extraction: {
+    label: 'Extraindo currículo',
+    description: 'O texto do seu PDF está sendo preparado para análise.',
+    variant: 'progress',
+  },
+  pending: {
+    label: 'Análise na fila',
+    description: 'Seu currículo aguarda a fila de análise pela IA.',
+    variant: 'progress',
+  },
+  processing: {
+    label: 'Análise em andamento',
+    description: 'A IA está avaliando seu currículo para esta vaga.',
+    variant: 'progress',
+  },
+  retry_scheduled: {
+    label: 'Reprocessando análise',
+    description: 'A análise será tentada novamente em breve.',
+    variant: 'progress',
+  },
+  completed: {
+    label: 'Análise concluída',
+    description: null,
+    variant: 'done',
+  },
+  failed: {
+    label: 'Em revisão pela equipe',
+    description: 'Sua candidatura segue para avaliação pela equipe de RH.',
+    variant: 'muted',
+  },
+  cancelled: {
+    label: 'Em revisão pela equipe',
+    description: null,
+    variant: 'muted',
+  },
+};
+
+/** Returns display info for a given analysis status, or null when nothing should be shown. */
+export function getAnalysisStatusInfo(status: string | null | undefined): AnalysisStatusInfo | null {
+  if (!status || status === 'not_requested') return null;
+  return _ANALYSIS_INFO_MAP[status] ?? null;
+}
+
+// ── Polling guard ─────────────────────────────────────────────────────────────
+
+// Statuses that indicate analysis is still running — page should poll for updates.
+export const IN_PROGRESS_ANALYSIS_STATUSES = new Set<string>([
+  'waiting_extraction',
+  'pending',
+  'processing',
+  'retry_scheduled',
+]);
+
+/** Returns true only when the analysis is actively running and a status update is expected. */
+export function shouldPollAnalysis(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return IN_PROGRESS_ANALYSIS_STATUSES.has(status);
+}
+
 // ── Raw API shapes (snake_case from backend) ──────────────────────────────────
 
 interface ApiCandidate {
@@ -24,6 +92,8 @@ interface ApiActiveApplication {
   submitted_at: string;
   is_talent_pool: boolean;
   resume_filename: string | null;
+  analysis_status: string | null;
+  current_analysis_id: string | null;
 }
 
 interface ApiTimelineStep {
@@ -103,6 +173,7 @@ export interface CandidateOverview {
     statusPublic: string;
     isTalentPool: boolean;
     resumeFilename: string | null;
+    analysisStatus: string | null;
   } | null;
   timelineCurrentStep: string | null;
   timelineCurrentLabel: string | null;
@@ -130,6 +201,7 @@ function mapOverview(api: ApiOverviewResponse): CandidateOverview {
           statusPublic: api.active_application.status_public,
           isTalentPool: api.active_application.is_talent_pool,
           resumeFilename: api.active_application.resume_filename,
+          analysisStatus: api.active_application.analysis_status ?? null,
         }
       : null,
     timelineCurrentStep: api.public_timeline?.current_step_key ?? null,
@@ -162,9 +234,38 @@ function mapOverview(api: ApiOverviewResponse): CandidateOverview {
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
+// In-flight deduplicator: when App hydration and CandidateHomePage both call
+// getOverview() in the same render cycle (e.g. opening /minha-area directly),
+// they share a single HTTP request. Cleared after resolve OR reject so polling
+// always fires a fresh request rather than replaying a cached one.
+let _overviewInflight: Promise<CandidateOverview> | null = null;
+
+export interface SessionResult {
+  authenticated: boolean;
+  candidateName: string | null;
+}
+
 export const candidatePortalService = {
-  async getOverview(): Promise<CandidateOverview> {
-    const raw = await publicApiClient.get<ApiOverviewResponse>('/candidate-portal/overview');
-    return mapOverview(raw);
+  // Not `async` so both concurrent callers receive the exact same Promise
+  // instance (identity equality), making deduplication verifiable in tests.
+  getOverview(): Promise<CandidateOverview> {
+    if (_overviewInflight) return _overviewInflight;
+    _overviewInflight = publicApiClient
+      .get<ApiOverviewResponse>('/candidate-portal/overview')
+      .then(mapOverview)
+      .finally(() => { _overviewInflight = null; });
+    return _overviewInflight;
+  },
+
+  // Silent session probe — always resolves (never rejects with 401).
+  // Used by App.tsx to hydrate candidateName without polluting the console.
+  async getSession(): Promise<SessionResult> {
+    const raw = await publicApiClient.get<{ authenticated: boolean; candidate_name: string | null }>(
+      '/auth/session',
+    );
+    return {
+      authenticated: raw.authenticated,
+      candidateName: raw.candidate_name,
+    };
   },
 };

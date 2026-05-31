@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ChevronRight, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ChevronRight, Upload, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { CandidatePortalLayout } from '../components/layout/CandidatePortalLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -12,6 +12,12 @@ import { publicApplicationService } from '../services/publicApplicationService';
 import { HttpError } from '../services/publicApiClient';
 import type { PublicJob } from '../types/candidatePortal';
 import { JOB_AREA_LABELS, WORK_MODEL_LABELS } from '../types/candidatePortal';
+import {
+  formatSalaryExpectationInput,
+  getSalaryExpectationError,
+  SALARY_INVALID_MESSAGE,
+  SALARY_REQUIRED_MESSAGE,
+} from '../utils/salaryExpectation';
 
 // All 27 Brazilian federation units
 const UF_LIST = [
@@ -67,6 +73,9 @@ function validateStep1(f: FormState): string | null {
   if (!f.phone.trim()) return 'Telefone é obrigatório.';
   if (!f.address_city.trim()) return 'Cidade é obrigatória.';
   if (!f.address_state) return 'Estado é obrigatório.';
+  const salaryError = getSalaryExpectationError(f.salary_expectation);
+  if (salaryError) return salaryError;
+
   if (!f.desired_contract_type) return 'Regime de contratação é obrigatório.';
   if (!f.password) return 'Senha é obrigatória para concluir o cadastro.';
   if (f.password.length < 8) return 'A senha deve ter no mínimo 8 caracteres.';
@@ -96,6 +105,12 @@ export function ApplicationFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [existingAccountConflict, setExistingAccountConflict] = useState(false);
+  const [duplicateJobConflict, setDuplicateJobConflict] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const salaryExpectationError =
+    step === 1 && (stepError === SALARY_REQUIRED_MESSAGE || stepError === SALARY_INVALID_MESSAGE)
+      ? stepError
+      : undefined;
 
   useEffect(() => {
     if (!identifier) { setLoadingJob(false); return; }
@@ -110,6 +125,7 @@ export function ApplicationFormPage() {
     setForm((prev) => ({ ...prev, ...updates }));
     setStepError(null);
     setExistingAccountConflict(false);
+    setDuplicateJobConflict(false);
   }
 
   function advance(nextStep: FormStep, validate: (f: FormState) => string | null) {
@@ -120,15 +136,20 @@ export function ApplicationFormPage() {
   }
 
   async function handleSubmit() {
-    const err = validateStep3(form);
-    if (err) { setStepError(err); return; }
+    const step1Error = validateStep1(form);
+    if (step1Error) { setStep(1); setStepError(step1Error); return; }
+    const step2Error = validateStep2(form);
+    if (step2Error) { setStep(2); setStepError(step2Error); return; }
+    const step3Error = validateStep3(form);
+    if (step3Error) { setStepError(step3Error); return; }
     if (!form.resume_file) return;
 
     setSubmitting(true);
     setApiError(null);
     setExistingAccountConflict(false);
+    setDuplicateJobConflict(false);
     try {
-      await publicApplicationService.apply({
+      const result = await publicApplicationService.apply({
         full_name: form.full_name,
         cpf: form.cpf,
         email: form.email,
@@ -144,17 +165,24 @@ export function ApplicationFormPage() {
         password: form.password,
         confirm_password: form.confirm_password,
       });
-      navigate('/sucesso');
+      navigate('/sucesso', {
+        state: {
+          analysisAutoRequested: result.analysis_auto_requested,
+          applicationStatus: result.status,
+        },
+      });
     } catch (err) {
-      if (
-        err instanceof HttpError &&
-        err.status === 409 &&
-        !err.message.toLowerCase().includes('candidatura em andamento')
-      ) {
-        setExistingAccountConflict(true);
-        setApiError(
-          'Já existe um cadastro com estes dados. Acesse sua área do candidato ou use primeiro acesso/esqueci minha senha.',
-        );
+      if (err instanceof HttpError && err.status === 409) {
+        const msg = err.message.toLowerCase();
+        if (msg.includes('candidatura em andamento')) {
+          setDuplicateJobConflict(true);
+          setApiError('Você já possui uma candidatura em andamento para esta vaga.');
+        } else {
+          setExistingAccountConflict(true);
+          setApiError(
+            'Já existe um cadastro com estes dados. Acesse sua área do candidato ou use primeiro acesso/esqueci minha senha.',
+          );
+        }
       } else {
         setApiError(
           err instanceof Error
@@ -239,7 +267,7 @@ export function ApplicationFormPage() {
                   Candidatar-se{job ? ` para ${job.title}` : ''}
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Preencha seus dados pessoais para iniciar a candidatura.
+                  Preencha seus dados pessoais para iniciar a candidatura. Ao final, você criará uma senha para acompanhar o processo na Minha Área.
                 </p>
               </div>
 
@@ -303,18 +331,46 @@ export function ApplicationFormPage() {
                   <Input
                     label="Pretensão salarial"
                     value={form.salary_expectation}
-                    onChange={(e) => update({ salary_expectation: e.target.value })}
+                    onChange={(e) => update({ salary_expectation: formatSalaryExpectationInput(e.target.value) })}
                     placeholder="Ex: R$ 2.500,00"
+                    inputMode="numeric"
+                    error={salaryExpectationError}
+                    required
                   />
                 </div>
-                <Input
-                  label="Senha para o Portal"
-                  type="password"
-                  value={form.password || ''}
-                  onChange={(e) => update({ password: e.target.value })}
-                  placeholder="Mínimo 8 caracteres"
-                  required
-                />
+                <div>
+                  <label htmlFor="candidate-password" className="block text-sm font-medium text-gray-700 mb-0.5">
+                    Crie sua senha de acesso <span className="ml-1 text-primary-700">*</span>
+                  </label>
+                  <p className="text-xs text-gray-400 mb-1.5">
+                    Você usará essa senha para acompanhar sua candidatura na Minha Área.
+                  </p>
+                  <div className="relative">
+                    <input
+                      id="candidate-password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={form.password || ''}
+                      onChange={(e) => update({ password: e.target.value })}
+                      placeholder="Mínimo 8 caracteres"
+                      required
+                      autoComplete="new-password"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 pr-12 text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-700/20"
+                    />
+                    <button
+                      type="button"
+                      aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                      aria-pressed={showPassword}
+                      onClick={() => setShowPassword((visible) => !visible)}
+                      className="absolute inset-y-0 right-0 flex min-h-11 w-11 items-center justify-center rounded-r-lg text-gray-500 transition-colors hover:text-primary-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-700/30"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-5 w-5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                </div>
                 <Input
                   label="Confirme a senha"
                   type="password"
@@ -368,7 +424,7 @@ export function ApplicationFormPage() {
                 </span>
               </label>
 
-              {stepError && (
+              {stepError && !salaryExpectationError && (
                 <p className="flex items-center gap-1.5 text-sm text-red-600">
                   <AlertCircle className="h-4 w-4 flex-shrink-0" />
                   {stepError}
@@ -481,7 +537,12 @@ export function ApplicationFormPage() {
                 />
                 <span className="text-sm text-gray-700 leading-relaxed">
                   Autorizo o uso dos meus dados para fins de recrutamento conforme a{' '}
-                  <Link to="/privacidade" className="text-primary-700 hover:underline">
+                  <Link
+                    to="/privacidade"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary-700 hover:underline"
+                  >
                     Política de Privacidade
                   </Link>
                   .
@@ -506,7 +567,17 @@ export function ApplicationFormPage() {
                         to="/login?firstAccess=1"
                         className="inline-flex h-9 items-center justify-center rounded-lg bg-red-700 px-3 text-sm font-semibold text-white hover:bg-red-800"
                       >
-                        Primeiro acesso ou esqueci minha senha
+                        Recuperar ou criar senha de acesso
+                      </Link>
+                    </div>
+                  )}
+                  {duplicateJobConflict && (
+                    <div className="mt-3">
+                      <Link
+                        to="/minha-area"
+                        className="inline-flex h-9 items-center justify-center rounded-lg bg-red-700 px-3 text-sm font-semibold text-white hover:bg-red-800"
+                      >
+                        Acompanhar minha candidatura
                       </Link>
                     </div>
                   )}

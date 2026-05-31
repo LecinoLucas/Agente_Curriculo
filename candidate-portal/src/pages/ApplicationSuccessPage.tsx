@@ -1,11 +1,21 @@
-import { Link } from 'react-router-dom';
-import { CheckCircle2, ArrowRight, Clock } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { CheckCircle2, ArrowRight, Clock, Brain } from 'lucide-react';
 import { CandidatePortalLayout } from '../components/layout/CandidatePortalLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { PROCESS_STEPS } from '../types/candidatePortal';
 
+interface SuccessState {
+  analysisAutoRequested?: boolean;
+  applicationStatus?: string;
+}
+
 export function ApplicationSuccessPage() {
+  const location = useLocation();
+  const state = location.state as SuccessState | null;
+  const analysisAutoRequested = state?.analysisAutoRequested ?? false;
+  const isTalentPool = state?.applicationStatus === 'awaiting_job';
+
   return (
     <CandidatePortalLayout maxWidth="content">
       <div className="py-8">
@@ -15,12 +25,23 @@ export function ApplicationSuccessPage() {
               <CheckCircle2 className="h-9 w-9 text-green-600" />
             </div>
             <h1 className="mt-4 text-2xl font-extrabold text-gray-900">
-              Candidatura enviada!
+              {isTalentPool ? 'Cadastro realizado!' : 'Candidatura enviada!'}
             </h1>
             <p className="mt-2 text-base text-gray-500">
-              Recebemos sua candidatura com sucesso. Nossa equipe de RH vai analisá-la em breve.
+              {isTalentPool
+                ? 'Você está no banco de talentos. Entraremos em contato quando surgir uma vaga compatível.'
+                : 'Recebemos sua candidatura com sucesso. Nossa equipe de RH vai analisá-la em breve.'}
             </p>
           </div>
+
+          {analysisAutoRequested && (
+            <div className="mt-5 flex items-start gap-3 rounded-xl border border-primary-100 bg-primary-50 p-4">
+              <Brain className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary-700" />
+              <p className="text-sm text-primary-800">
+                Seu currículo será analisado automaticamente pela IA. Acompanhe o resultado na sua área do candidato.
+              </p>
+            </div>
+          )}
 
           <div className="mt-8 rounded-xl bg-gray-50 border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
