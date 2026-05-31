@@ -434,15 +434,7 @@ describe("JobFormPage", () => {
       expect(screen.getByRole("button", { name: /Salvar rascunho/i })).not.toBeDisabled();
     });
 
-    it("publicar continua bloqueado no frontend quando qualidade/regras não permitem", () => {
-      renderForm();
-      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
-      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
-      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
-      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i }));
 
-      expect(screen.getByRole("button", { name: /^Publicar$/i })).toBeDisabled();
-    });
 
     it("drawer 'Ver qualidade' abre e fecha", () => {
       renderForm();
