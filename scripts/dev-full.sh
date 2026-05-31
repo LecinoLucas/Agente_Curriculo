@@ -5,9 +5,11 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_DIR="$ROOT_DIR/backend"
+CANDIDATE_PORTAL_DIR="$ROOT_DIR/candidate-portal"
 ROOT_DEPS_STAMP="$ROOT_DIR/node_modules/.deps-stamp"
 FRONTEND_DEPS_STAMP="$FRONTEND_DIR/node_modules/.deps-stamp"
 BACKEND_DEPS_STAMP="$BACKEND_DIR/.venv/.deps-stamp"
+CANDIDATE_PORTAL_DEPS_STAMP="$CANDIDATE_PORTAL_DIR/node_modules/.deps-stamp"
 
 # Comandos manuais (rodar apenas quando necessario):
 # Migrations:  cd backend && alembic upgrade head
@@ -89,7 +91,7 @@ ensure_frontend_dependencies() {
 }
 
 ensure_backend_dependencies() {
-  if [ ! -d "$BACKEND_DIR/.venv" ]; then
+   if [ ! -d "$BACKEND_DIR/.venv" ]; then
     print_info "Criando ambiente virtual do backend"
     cd "$BACKEND_DIR"
     python3 -m venv .venv
@@ -110,6 +112,20 @@ ensure_backend_dependencies() {
   fi
 
   print_ok "Dependencias do backend prontas"
+}
+
+ensure_candidate_portal_dependencies() {
+  if [ ! -d "$CANDIDATE_PORTAL_DIR/node_modules" ] || needs_install "$CANDIDATE_PORTAL_DEPS_STAMP" "$CANDIDATE_PORTAL_DIR/package.json" "$CANDIDATE_PORTAL_DIR/package-lock.json"; then
+    print_info "Instalando dependencias do candidate-portal"
+    cd "$CANDIDATE_PORTAL_DIR"
+    npm ci --prefer-offline --no-audit
+    mkdir -p "$CANDIDATE_PORTAL_DIR/node_modules"
+    touch "$CANDIDATE_PORTAL_DEPS_STAMP"
+    print_ok "Dependencias do candidate-portal instaladas"
+    return 0
+  fi
+
+  print_ok "Dependencias do candidate-portal prontas"
 }
 
 read_frontend_api_url() {
@@ -149,6 +165,21 @@ read_frontend_port() {
   fi
 
   printf '%s\n' "5173"
+}
+
+read_candidate_portal_port() {
+  if [ -n "${CANDIDATE_PORTAL_PORT:-}" ]; then
+    printf '%s\n' "$CANDIDATE_PORTAL_PORT"
+    return 0
+  fi
+
+  port=$(grep "port:[[:space:]]*[0-9]" "$CANDIDATE_PORTAL_DIR/vite.config.ts" 2>/dev/null | sed -E 's/.*port:[[:space:]]*([0-9]+).*/\1/' | head -n 1)
+  if [ -n "$port" ]; then
+    printf '%s\n' "$port"
+    return 0
+  fi
+
+  printf '%s\n' "5174"
 }
 
 extract_port() {
@@ -329,8 +360,8 @@ cleanup() {
   done
 
   # 4) Garantir portas do projeto livres como rede de segurança restrita.
-  #    Só age sobre BACKEND_PORT/FRONTEND_PORT — nunca toca em processos
-  #    do dev "normal" do usuário em 8000/5173. Pattern matching amplo
+  #    Só age sobre BACKEND_PORT/FRONTEND_PORT/CANDIDATE_PORTAL_PORT — nunca toca em processos
+  #    do dev "normal" do usuário em 8000/5173/5174. Pattern matching amplo
   #    (pkill -f celery/uvicorn) ficaria perigoso porque casaria com
   #    instâncias do projeto rodando em outras portas.
   if [ -n "${BACKEND_PORT:-}" ]; then
@@ -338,6 +369,9 @@ cleanup() {
   fi
   if [ -n "${FRONTEND_PORT:-}" ]; then
     kill_port_range "$FRONTEND_PORT" "$((FRONTEND_PORT + 4))"
+  fi
+  if [ -n "${CANDIDATE_PORTAL_PORT:-}" ]; then
+    kill_port_range "$CANDIDATE_PORTAL_PORT" "$((CANDIDATE_PORTAL_PORT + 4))"
   fi
 
   print_ok "Shutdown concluido."
@@ -356,21 +390,25 @@ fi
 RAW_API_URL=$(read_frontend_api_url)
 BACKEND_PORT=$(extract_port "$RAW_API_URL")
 FRONTEND_PORT=$(read_frontend_port)
+CANDIDATE_PORTAL_PORT=$(read_candidate_portal_port)
 LOCAL_IP=$(get_local_ip)
 
 EXPECTED_API_URL="http://$LOCAL_IP:$BACKEND_PORT"
 
 print_section "Ambiente"
-printf 'frontend local : http://localhost:%s\n' "$FRONTEND_PORT"
-printf 'frontend rede  : http://%s:%s\n' "$LOCAL_IP" "$FRONTEND_PORT"
-printf 'backend local  : http://127.0.0.1:%s\n' "$BACKEND_PORT"
-printf 'backend rede   : http://%s:%s\n' "$LOCAL_IP" "$BACKEND_PORT"
-printf 'api url        : %s\n' "$EXPECTED_API_URL"
+printf 'frontend local       : http://localhost:%s\n' "$FRONTEND_PORT"
+printf 'frontend rede        : http://%s:%s\n' "$LOCAL_IP" "$FRONTEND_PORT"
+printf 'candidate portal local : http://localhost:%s\n' "$CANDIDATE_PORTAL_PORT"
+printf 'candidate portal rede  : http://%s:%s\n' "$LOCAL_IP" "$CANDIDATE_PORTAL_PORT"
+printf 'backend local        : http://127.0.0.1:%s\n' "$BACKEND_PORT"
+printf 'backend rede         : http://%s:%s\n' "$LOCAL_IP" "$BACKEND_PORT"
+printf 'api url              : %s\n' "$EXPECTED_API_URL"
 
 print_section "Dependencias"
 (
   ensure_root_dependencies &
   ensure_frontend_dependencies &
+  ensure_candidate_portal_dependencies &
   wait
 )
 
@@ -389,15 +427,19 @@ kill_matching_processes "src.interface.api.main:app"
 kill_matching_processes "celery -A src.infrastructure.queue.celery_app"
 kill_matching_processes "vite --host 0.0.0.0"
 kill_port_range "$FRONTEND_PORT" "$((FRONTEND_PORT + 4))"
+kill_port_range "$CANDIDATE_PORTAL_PORT" "$((CANDIDATE_PORTAL_PORT + 4))"
 kill_port "$BACKEND_PORT" &
 wait
 wait_for_port_free "$FRONTEND_PORT"
+wait_for_port_free "$CANDIDATE_PORTAL_PORT"
 wait_for_port_free "$BACKEND_PORT"
 
 export FRONTEND_PORT
 export BACKEND_PORT
+export CANDIDATE_PORTAL_PORT
 export HOST="0.0.0.0"
 export VITE_API_BASE_URL="${VITE_API_BASE_URL:-$EXPECTED_API_URL}"
+export VITE_PUBLIC_API_BASE_URL="${VITE_PUBLIC_API_BASE_URL:-$EXPECTED_API_URL/api/v1/public}"
 DEV_FULL_FAIL_ON_WORKER_EXIT="${DEV_FULL_FAIL_ON_WORKER_EXIT:-false}"
 export DEV_FULL_FAIL_ON_WORKER_EXIT
 
@@ -407,7 +449,7 @@ export DEV_FULL_FAIL_ON_WORKER_EXIT
 trap cleanup EXIT INT TERM HUP
 
 print_section "Servicos"
-print_info "Subindo frontend, backend e worker Celery"
+print_info "Subindo frontend, candidate-portal, backend e worker Celery"
 if [ "$DEV_FULL_FAIL_ON_WORKER_EXIT" = "true" ]; then
   print_info "Worker Celery esta configurado como CRITICO (falha no worker derruba o ambiente)."
 else
@@ -428,6 +470,12 @@ npm run --silent dev &
 NPM_PID=$!
 CHILD_PIDS="$CHILD_PIDS $NPM_PID"
 print_ok "Frontend e backend iniciados (PID $NPM_PID)"
+
+cd "$CANDIDATE_PORTAL_DIR"
+npm run --silent dev &
+CANDIDATE_PORTAL_PID=$!
+CHILD_PIDS="$CHILD_PIDS $CANDIDATE_PORTAL_PID"
+print_ok "Candidate portal iniciado (PID $CANDIDATE_PORTAL_PID)"
 
 # Loop de monitoramento: frontend/backend são críticos; Celery é auxiliar por
 # padrão para que falhas operacionais da fila de IA não derrubem o dev-full.
