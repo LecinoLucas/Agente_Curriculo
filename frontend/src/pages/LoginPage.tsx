@@ -99,34 +99,33 @@ export function LoginPage() {
   return (
     <div className="min-h-screen w-full relative overflow-x-hidden font-sans text-foreground selection:bg-[#8a1c31]/10 selection:text-[#8a1c31] flex flex-col bg-[#FDFBF7]">
       
-      {/* Institutional wave corner */}
-      <div className="absolute left-0 top-0 z-0 hidden h-[92px] w-[170px] overflow-hidden pointer-events-none lg:block">
-        <svg viewBox="0 0 170 92" className="h-full w-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M0 0H170C158 21 150 34 132 43C110 54 88 48 67 62C45 77 24 84 0 88V0Z"
-            fill="#4A0E1A"
-          />
-          <path
-            d="M0 0H148C135 22 126 34 108 43C86 54 65 51 45 65C29 76 14 80 0 83V0Z"
-            fill="#751227"
-            opacity="0.58"
-          />
-          <path
-            d="M0 0H122C111 20 101 31 84 38C66 46 49 46 31 57C18 65 8 69 0 70V0Z"
-            fill="#8a1c31"
-            opacity="0.34"
-          />
-        </svg>
-      </div>
-
       {/* Main Container - Locked height on desktop to prevent scrollbars */}
       <main className="w-full max-w-[1440px] mx-auto flex-1 flex flex-col lg:flex-row relative z-10">
         
         {/* Left Column - Hero */}
         <div className="hidden lg:flex w-full lg:w-[50%] flex-col justify-between py-8 px-10 xl:pl-16 xl:pr-8 relative h-full shrink-0 z-10 overflow-hidden">
           
+          {/* Institutional corner detail - Simple, clean corner curve */}
+          <div className="absolute left-0 top-0 z-0 h-[60px] w-[120px] overflow-hidden pointer-events-none">
+            {/* Outer curve */}
+            <div 
+              className="absolute -left-6 -top-6 w-[150px] h-[80px] bg-[#8a1c31]/30"
+              style={{ borderRadius: '0 0 100% 0' }}
+            />
+            {/* Middle curve */}
+            <div 
+              className="absolute -left-6 -top-6 w-[120px] h-[65px] bg-[#751227]/60"
+              style={{ borderRadius: '0 0 100% 0' }}
+            />
+            {/* Inner curve */}
+            <div 
+              className="absolute -left-6 -top-6 w-[90px] h-[50px] bg-[#4A0E1A]"
+              style={{ borderRadius: '0 0 100% 0' }}
+            />
+          </div>
+
           {/* Header Logo - Nested elegantly inside the SVG wave */}
-          <div className="relative pl-0 pt-2">
+          <div className="relative z-10 pl-0 pt-2">
             <div className="flex items-center gap-3.5 text-[#1a0509]">
               <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-xl bg-[#751227] text-xl font-bold shadow-md border border-white/10">
                 RA
