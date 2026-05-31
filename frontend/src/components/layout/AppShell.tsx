@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard,
   Kanban,
   Briefcase,
   Users,
@@ -139,7 +138,6 @@ const NAVIGATION_CONFIG: NavGroup[] = [
 
 const ICON_MAP: Record<string, any> = {
   "/rh": ClipboardList,
-  "/dashboard": LayoutDashboard,
   "/pipeline": Kanban,
   "/vagas": Briefcase,
   "/candidaturas": FileSpreadsheet,
@@ -163,7 +161,6 @@ const ICON_MAP: Record<string, any> = {
   "/candidato/portal": User,
   "/demo-rh": FlaskConical,
   "Central RH": ClipboardList,
-  "Visão geral": LayoutDashboard,
   "Recrutamento": Briefcase,
   "Avaliações": GraduationCap,
   "Gestores": UserRound,

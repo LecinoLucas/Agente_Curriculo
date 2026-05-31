@@ -122,10 +122,6 @@ const RhDashboardPage = lazy(() =>
   import("../pages/RhDashboardPage").then((m) => ({ default: m.RhDashboardPage }))
 );
 
-const DashboardPage = lazy(() =>
-  import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
-);
-
 const AgendaPage = lazy(() =>
   import("../pages/AgendaPage").then((m) => ({ default: m.AgendaPage }))
 );

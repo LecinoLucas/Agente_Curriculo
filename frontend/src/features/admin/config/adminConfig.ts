@@ -11,7 +11,6 @@ export const ROLES: { key: Role; label: string; description: string }[] = [
 
 export const SCREENS: { label: string; path: string; roles: Role[] }[] = [
   { label: "Central RH",      path: "/rh",            roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
-  { label: "Dashboard",       path: "/dashboard",     roles: ["admin", "recruiter", "viewer", "manager"] },
   { label: "Pipeline",        path: "/pipeline",      roles: ["admin", "recruiter", "viewer", "manager"] },
   { label: "Candidatos",      path: "/candidatos",    roles: ["admin", "recruiter", "viewer", "manager"] },
   { label: "Vagas",           path: "/vagas",         roles: ["admin", "recruiter", "viewer", "manager"] },

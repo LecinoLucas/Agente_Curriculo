@@ -87,7 +87,7 @@ export function PermissionsMatrix() {
 
   const handleDeleteScreen = (screenPath: string) => {
     // Prevent deleting essential pages
-    const essentialPaths = ["/admin", "/perfil", "/dashboard", "/rh"];
+    const essentialPaths = ["/admin", "/perfil", "/rh"];
     if (essentialPaths.includes(screenPath)) {
       alert("Esta é uma tela essencial do sistema e não pode ser excluída.");
       return;
