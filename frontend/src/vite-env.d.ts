@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
   readonly VITE_GOOGLE_CLIENT_ID?: string;
+  /** URL base do novo candidate-portal standalone (sem barra final). */
+  readonly VITE_CANDIDATE_PORTAL_URL?: string;
 }
 
 interface ImportMeta {

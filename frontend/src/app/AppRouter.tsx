@@ -18,7 +18,6 @@ import {
 import type { UserRole } from "../types/auth";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { PublicRouteThemeGuard } from "./PublicRouteThemeGuard";
-import { CandidateThemeGuard } from "./CandidateThemeGuard";
 
 const LoginPage = lazy(() =>
   import("../pages/LoginPage").then((m) => ({ default: m.LoginPage }))
@@ -153,33 +152,15 @@ const ChangePasswordPage = lazy(() =>
   }))
 );
 
-const CandidatePortalPage = lazy(() =>
-  import("../pages/CandidatePortalPage").then((m) => ({
-    default: m.CandidatePortalPage,
-  }))
-);
-
-const CandidatePreAdmissionPage = lazy(() =>
-  import("../pages/CandidatePreAdmissionPage").then((m) => ({
-    default: m.CandidatePreAdmissionPage,
-  }))
-);
-
-const CandidateEntryPage = lazy(() =>
-  import("../pages/CandidateEntryPage").then((m) => ({
-    default: m.CandidateEntryPage,
-  }))
-);
-
-const PublicApplicationPage = lazy(() =>
-  import("../pages/PublicApplicationPage").then((m) => ({
-    default: m.PublicApplicationPage,
-  }))
-);
-
 const ManagerReviewPage = lazy(() =>
   import("../pages/ManagerReviewPage").then((m) => ({
     default: m.ManagerReviewPage,
+  }))
+);
+
+const CandidatePortalRedirectPage = lazy(() =>
+  import("../pages/CandidatePortalRedirectPage").then((m) => ({
+    default: m.CandidatePortalRedirectPage,
   }))
 );
 
@@ -211,24 +192,17 @@ function publicPage(element: ReactNode) {
   );
 }
 
-function candidatePage(element: ReactNode) {
-  return (
-    <CandidateThemeGuard>
-      {withSuspense(element)}
-    </CandidateThemeGuard>
-  );
-}
-
 export function AppRouter() {
   return (
     <Routes>
-      <Route path="/candidato" element={publicPage(<CandidateEntryPage />)} />
-      <Route path="/candidato/cadastro" element={publicPage(<PublicApplicationPage />)} />
-      <Route path="/candidato/login" element={publicPage(<CandidateEntryPage />)} />
-      <Route path="/candidato/portal" element={candidatePage(<CandidatePortalPage />)} />
+      {/* /candidato/* → transition screen pointing to the new standalone portal */}
+      <Route path="/candidato" element={publicPage(<CandidatePortalRedirectPage />)} />
+      <Route path="/candidato/cadastro" element={publicPage(<CandidatePortalRedirectPage />)} />
+      <Route path="/candidato/login" element={publicPage(<CandidatePortalRedirectPage />)} />
+      <Route path="/candidato/portal" element={publicPage(<CandidatePortalRedirectPage />)} />
       <Route
         path="/candidato/pre-admissao"
-        element={candidatePage(<CandidatePreAdmissionPage />)}
+        element={publicPage(<CandidatePortalRedirectPage />)}
       />
       <Route path="/login" element={publicPage(<LoginPage />)} />
 
