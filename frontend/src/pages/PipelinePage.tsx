@@ -27,78 +27,22 @@ const MOVE_CANDIDATE_TOAST_KEY = "feedback-move-candidate";
 import { getJobRanking } from "../services/jobsService";
 import { pipelineService, type PipelineJobSummary } from "../services/pipelineService";
 import type { JobCandidate, JobRanking, PipelineBoardFilters, PipelineStage } from "../types/domain";
-import {
-  formatJobStatus,
-  formatSeniority,
-  formatWorkModel,
-} from "../utils/jobFormatters";
-import { isPipelineOperationalJob } from "../utils/jobStatusRules";
+import { formatJobStatus, formatWorkModel } from "../utils/jobFormatters";
 import { sortCandidatesByScore } from "../utils/pipelineSort";
 import { groupCandidatesByMacroColumn } from "../features/pipeline/utils/pipelineKanbanColumns";
-
-const PIPELINE_SHOW_RANKING_STORAGE_KEY = "pipeline:showRanking";
-const PIPELINE_LAST_SELECTED_JOB_KEY = "pipeline:lastSelectedJobId";
-const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
-const SCHEDULE_TIMEZONE = "America/Sao_Paulo";
-
-function interviewTypeForStage(stage: PipelineStage) {
-  return stage === "technical_interview" ? "technical" : "hr";
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-function canUsePipeline(status: string | undefined) {
-  return isPipelineOperationalJob(status);
-}
-
-function resolveInitialShowRanking() {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(PIPELINE_SHOW_RANKING_STORAGE_KEY) === "true";
-}
-
-function getLastSelectedJobId() {
-  if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(PIPELINE_LAST_SELECTED_JOB_KEY);
-}
-
-function formatDateInputValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getDefaultPipelineDateRange() {
-  const to = new Date();
-  const from = new Date(to);
-  from.setDate(from.getDate() - 7);
-  return {
-    entered_from: formatDateInputValue(from),
-    entered_to: formatDateInputValue(to),
-  };
-}
-
-function hasAnyPipelineDateFilter(searchParams: URLSearchParams) {
-  return (
-    searchParams.has("entered_from") ||
-    searchParams.has("entered_to") ||
-    searchParams.has("updated_from") ||
-    searchParams.has("updated_to")
-  );
-}
-
-function readPipelineBoardFilters(searchParams: URLSearchParams): PipelineBoardFilters {
-  const read = (key: keyof PipelineBoardFilters) => {
-    const value = searchParams.get(key);
-    return value?.trim() ? value : undefined;
-  };
-
-  return {
-    entered_from: read("entered_from"),
-    entered_to: read("entered_to"),
-    updated_from: read("updated_from"),
-    updated_to: read("updated_to"),
-  };
-}
+import {
+  PIPELINE_SHOW_RANKING_STORAGE_KEY,
+  PIPELINE_LAST_SELECTED_JOB_KEY,
+  INTERVIEW_STAGES,
+  SCHEDULE_TIMEZONE,
+  interviewTypeForStage,
+  canUsePipeline,
+  resolveInitialShowRanking,
+  getLastSelectedJobId,
+  getDefaultPipelineDateRange,
+  hasAnyPipelineDateFilter,
+  readPipelineBoardFilters,
+} from "../features/pipeline/pipelinePageUtils";
 
 // ── PipelinePage ───────────────────────────────────────────────────────────────
 
