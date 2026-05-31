@@ -4,14 +4,12 @@ import { Mail, Lock, AlertCircle } from 'lucide-react';
 import { CandidatePortalLayout } from '../components/layout/CandidatePortalLayout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { loginMockCandidate } from '../services/mockCandidatePortalService';
-import { useMockAuth } from '../App';
+import { candidateAuthService } from '../services/candidateAuthService';
 
 export function CandidateLoginPage() {
   const navigate = useNavigate();
-  const { login } = useMockAuth();
-  const [email, setEmail] = useState('lucas.ferreira@email.com');
-  const [password, setPassword] = useState('senha123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -19,13 +17,19 @@ export function CandidateLoginPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const candidate = await loginMockCandidate(email, password);
-    setLoading(false);
-    if (candidate) {
-      login(candidate);
+    try {
+      await candidateAuthService.login(email, password);
+      // The backend sets an HttpOnly session cookie on success.
+      // CandidateHomePage will read the candidate name from the overview endpoint.
       navigate('/minha-area');
-    } else {
-      setError('E-mail ou senha incorretos. Use qualquer e-mail válido para entrar.');
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'E-mail ou senha incorretos. Tente novamente.',
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -35,7 +39,7 @@ export function CandidateLoginPage() {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-extrabold text-gray-900">Acesse sua área</h1>
           <p className="mt-1.5 text-sm text-gray-500">
-            Entre com seu e-mail para acompanhar suas candidaturas.
+            Entre com seu e-mail e senha para acompanhar suas candidaturas.
           </p>
         </div>
 
@@ -53,6 +57,7 @@ export function CandidateLoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu@email.com"
                   required
+                  autoComplete="email"
                   className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-700/20"
                 />
               </div>
@@ -70,6 +75,7 @@ export function CandidateLoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Sua senha"
                   required
+                  autoComplete="current-password"
                   className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-700/20"
                 />
               </div>
@@ -88,13 +94,6 @@ export function CandidateLoginPage() {
               </Button>
             </div>
           </form>
-
-          <div className="mt-4 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5">
-            <p className="text-xs text-blue-700">
-              <strong>Modo demo:</strong> Use qualquer e-mail com @ para entrar. O candidato pré-carregado é{' '}
-              <code className="font-mono">lucas.ferreira@email.com</code>.
-            </p>
-          </div>
         </Card>
       </div>
     </CandidatePortalLayout>
