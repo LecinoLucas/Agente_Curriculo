@@ -99,6 +99,11 @@ from src.infrastructure.database.models.candidate_note_model import (
     CandidateNoteModel,
 )
 from src.infrastructure.database.models.job_area_model import JobAreaModel
+from src.infrastructure.database.models.operational_master_model import (
+    LocationGroupModel,
+    OperationalGroupModel,
+    OperationalUnitModel,
+)
 from src.infrastructure.database.models.candidate_pipeline_model import (
     CandidatePipelineModel,
     PipelineStageTransitionModel,
@@ -168,6 +173,9 @@ __all__ = [
     "CollaborationCommentModel",
     "CandidateNoteModel",
     "JobAreaModel",
+    "OperationalGroupModel",
+    "LocationGroupModel",
+    "OperationalUnitModel",
     "CandidatePipelineModel",
     "PipelineStageTransitionModel",
 ]

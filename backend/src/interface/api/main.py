@@ -59,6 +59,7 @@ from src.interface.api.routers import (
     jobs,
     manager,
     observability,
+    operational_master,
     pipeline,
     pre_admission,
     public,
@@ -142,6 +143,7 @@ app.include_router(pipeline.router, prefix=_PREFIX)
 app.include_router(skill_equivalences.router, prefix=_PREFIX)
 app.include_router(skills.router, prefix=_PREFIX)
 app.include_router(job_areas.router, prefix=_PREFIX)
+app.include_router(operational_master.router, prefix=_PREFIX)
 app.include_router(interview_schedules.router, prefix=_PREFIX)
 app.include_router(interview_schedules.operational_router, prefix=_PREFIX)
 app.include_router(interview_scorecards.router, prefix=_PREFIX)
