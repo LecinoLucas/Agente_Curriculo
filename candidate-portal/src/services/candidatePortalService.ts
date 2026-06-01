@@ -129,6 +129,82 @@ interface ApiPublicInterview {
   is_online: boolean | null;
 }
 
+interface ApiCandidateMe {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  application_source: string | null;
+  application_source_label: string;
+  created_at: string;
+}
+
+interface ApiCandidateApplication {
+  application_id: string;
+  job_id: string;
+  job_title: string;
+  company_unit: string | null;
+  location: string | null;
+  submitted_at: string;
+  current_stage: string;
+  current_stage_label: string;
+  status: string;
+  status_label: string;
+  analysis_status: string | null;
+  next_action: string | null;
+  updated_at: string;
+}
+
+interface ApiApplicationTimelineEvent {
+  id: string;
+  event_type: string;
+  from_stage: string | null;
+  to_stage: string | null;
+  created_at: string;
+}
+
+interface ApiApplicationMessage {
+  id: string;
+  subject: string | null;
+  body: string;
+  sent_at: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+interface ApiApplicationDocument {
+  id: string;
+  title: string;
+  status: string | null;
+  uploaded_at: string | null;
+}
+
+interface ApiApplicationJob {
+  id: string;
+  title: string;
+  description: string | null;
+  requirements: string | null;
+  responsibilities: string | null;
+  location: string | null;
+  job_area: string | null;
+  work_model: string | null;
+  seniority_level: string | null;
+  benefits: string[];
+  working_hours: string | null;
+}
+
+interface ApiApplicationDetail {
+  application: ApiCandidateApplication;
+  job: ApiApplicationJob;
+  timeline: ApiTimeline | null;
+  timeline_events: ApiApplicationTimelineEvent[];
+  interview: ApiPublicInterview | null;
+  messages: ApiApplicationMessage[];
+  documents: ApiApplicationDocument[];
+}
+
 interface ApiOverviewResponse {
   candidate: ApiCandidate;
   active_application: ApiActiveApplication | null;
@@ -150,7 +226,7 @@ interface ApiOverviewResponse {
 export interface TimelineStep {
   key: string;
   label: string;
-  status: 'completed' | 'current' | 'pending';
+  status: 'completed' | 'current' | 'pending' | 'upcoming' | 'closed';
 }
 
 export interface ScheduledInterview {
@@ -187,6 +263,82 @@ export interface CandidateOverview {
   publicInterview: ScheduledInterview | null;
 }
 
+export interface CandidateProfile {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  applicationSource: string | null;
+  applicationSourceLabel: string;
+  createdAt: string;
+}
+
+export interface CandidateApplication {
+  applicationId: string;
+  jobId: string;
+  jobTitle: string;
+  companyUnit: string | null;
+  location: string | null;
+  submittedAt: string;
+  currentStage: string;
+  currentStageLabel: string;
+  status: string;
+  statusLabel: string;
+  analysisStatus: string | null;
+  nextAction: string | null;
+  updatedAt: string;
+}
+
+export interface ApplicationTimelineEvent {
+  id: string;
+  eventType: string;
+  fromStage: string | null;
+  toStage: string | null;
+  createdAt: string;
+}
+
+export interface ApplicationMessage {
+  id: string;
+  subject: string | null;
+  body: string;
+  sentAt: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface ApplicationDocument {
+  id: string;
+  title: string;
+  status: string | null;
+  uploadedAt: string | null;
+}
+
+export interface ApplicationJob {
+  id: string;
+  title: string;
+  description: string | null;
+  requirements: string | null;
+  responsibilities: string | null;
+  location: string | null;
+  jobArea: string | null;
+  workModel: string | null;
+  seniorityLevel: string | null;
+  benefits: string[];
+  workingHours: string | null;
+}
+
+export interface CandidateApplicationDetail {
+  application: CandidateApplication;
+  job: ApplicationJob;
+  timelineSteps: TimelineStep[];
+  timelineEvents: ApplicationTimelineEvent[];
+  interview: ScheduledInterview | null;
+  messages: ApplicationMessage[];
+  documents: ApplicationDocument[];
+}
+
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
 function mapOverview(api: ApiOverviewResponse): CandidateOverview {
@@ -209,7 +361,7 @@ function mapOverview(api: ApiOverviewResponse): CandidateOverview {
     timelineSteps: (api.public_timeline?.steps ?? []).map((s) => ({
       key: s.key,
       label: s.label,
-      status: s.status as 'completed' | 'current' | 'pending',
+      status: s.status as TimelineStep['status'],
     })),
     applicationHistoryCount: api.application_history.length,
     statusLabel: api.current_process_status_label,
@@ -229,6 +381,98 @@ function mapOverview(api: ApiOverviewResponse): CandidateOverview {
           isOnline: api.public_interview.is_online,
         }
       : null,
+  };
+}
+
+function mapProfile(api: ApiCandidateMe): CandidateProfile {
+  return {
+    id: api.id,
+    fullName: api.full_name,
+    email: api.email,
+    phone: api.phone,
+    city: api.city,
+    state: api.state,
+    applicationSource: api.application_source,
+    applicationSourceLabel: api.application_source_label,
+    createdAt: api.created_at,
+  };
+}
+
+function mapApplication(api: ApiCandidateApplication): CandidateApplication {
+  return {
+    applicationId: api.application_id,
+    jobId: api.job_id,
+    jobTitle: api.job_title,
+    companyUnit: api.company_unit,
+    location: api.location,
+    submittedAt: api.submitted_at,
+    currentStage: api.current_stage,
+    currentStageLabel: api.current_stage_label,
+    status: api.status,
+    statusLabel: api.status_label,
+    analysisStatus: api.analysis_status,
+    nextAction: api.next_action,
+    updatedAt: api.updated_at,
+  };
+}
+
+function mapInterview(api: ApiPublicInterview | null): ScheduledInterview | null {
+  if (!api) return null;
+  return {
+    statusLabel: api.status_label,
+    scheduledAt: api.scheduled_at,
+    typeLabel: api.interview_type_label,
+    formatLabel: api.interview_format_label,
+    location: api.location,
+    meetingUrl: api.meeting_url,
+    notes: api.public_notes,
+    isOnline: api.is_online,
+  };
+}
+
+function mapDetail(api: ApiApplicationDetail): CandidateApplicationDetail {
+  return {
+    application: mapApplication(api.application),
+    job: {
+      id: api.job.id,
+      title: api.job.title,
+      description: api.job.description,
+      requirements: api.job.requirements,
+      responsibilities: api.job.responsibilities,
+      location: api.job.location,
+      jobArea: api.job.job_area,
+      workModel: api.job.work_model,
+      seniorityLevel: api.job.seniority_level,
+      benefits: api.job.benefits,
+      workingHours: api.job.working_hours,
+    },
+    timelineSteps: (api.timeline?.steps ?? []).map((step) => ({
+      key: step.key,
+      label: step.label,
+      status: step.status as TimelineStep['status'],
+    })),
+    timelineEvents: api.timeline_events.map((event) => ({
+      id: event.id,
+      eventType: event.event_type,
+      fromStage: event.from_stage,
+      toStage: event.to_stage,
+      createdAt: event.created_at,
+    })),
+    interview: mapInterview(api.interview),
+    messages: api.messages.map((message) => ({
+      id: message.id,
+      subject: message.subject,
+      body: message.body,
+      sentAt: message.sent_at,
+      readAt: message.read_at,
+      createdAt: message.created_at,
+    })),
+    documents: api.documents.map((document) => ({
+      id: document.id,
+      title: document.title,
+      status: document.status,
+      uploadedAt: document.uploaded_at,
+    })),
   };
 }
 
@@ -255,6 +499,24 @@ export const candidatePortalService = {
       .then(mapOverview)
       .finally(() => { _overviewInflight = null; });
     return _overviewInflight;
+  },
+
+  async getMe(): Promise<CandidateProfile> {
+    return mapProfile(await publicApiClient.get<ApiCandidateMe>('/candidate-portal/me'));
+  },
+
+  async getApplications(): Promise<CandidateApplication[]> {
+    const raw = await publicApiClient.get<ApiCandidateApplication[]>(
+      '/candidate-portal/me/applications',
+    );
+    return raw.map(mapApplication);
+  },
+
+  async getApplicationDetail(applicationId: string): Promise<CandidateApplicationDetail> {
+    const raw = await publicApiClient.get<ApiApplicationDetail>(
+      `/candidate-portal/me/applications/${applicationId}`,
+    );
+    return mapDetail(raw);
   },
 
   // Silent session probe — always resolves (never rejects with 401).

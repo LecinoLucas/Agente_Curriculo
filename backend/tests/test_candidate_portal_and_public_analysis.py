@@ -252,6 +252,252 @@ async def _create_interview_schedule(
 
 
 @pytest.mark.asyncio
+async def test_candidate_portal_me_returns_authenticated_candidate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Perfil Real",
+        email="perfil.real@example.com",
+        cpf="12345678110",
+        phone="11988887777",
+    )
+    await _create_portal_session(db_session, candidate.id, "portal-token-me")
+    client.cookies.set("candidate_portal_token", "portal-token-me")
+
+    response = await client.get("/api/v1/candidate-portal/me")
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["id"] == str(candidate.id)
+    assert payload["full_name"] == "Perfil Real"
+    assert payload["email"] == "perfil.real@example.com"
+    assert payload["phone"] == "11988887777"
+    assert "cpf" not in payload
+    assert "internal_notes" not in payload
+
+
+@pytest.mark.asyncio
+async def test_candidate_portal_applications_list_only_authenticated_candidate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Dono Candidatura",
+        email="dono.candidatura@example.com",
+        cpf="12345678111",
+    )
+    other_candidate = await _create_candidate(
+        db_session,
+        full_name="Outro Candidato",
+        email="outro.candidato@example.com",
+        cpf="12345678112",
+    )
+    own_job = await _create_published_job(db_session, title="Vaga do Dono")
+    other_job = await _create_published_job(db_session, title="Vaga de Outro")
+    own_pipeline_id = uuid4()
+    other_pipeline_id = uuid4()
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=own_job.id,
+        pipeline_id=own_pipeline_id,
+    )
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=other_candidate.id,
+        job_id=other_job.id,
+        pipeline_id=other_pipeline_id,
+    )
+    await _create_portal_session(db_session, candidate.id, "portal-token-own-apps")
+    client.cookies.set("candidate_portal_token", "portal-token-own-apps")
+
+    response = await client.get("/api/v1/public/candidate-portal/me/applications")
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert [item["application_id"] for item in payload] == [str(own_pipeline_id)]
+    assert payload[0]["job_id"] == str(own_job.id)
+    assert payload[0]["job_title"] == "Vaga do Dono"
+    assert "Vaga de Outro" not in repr(payload)
+    assert str(other_pipeline_id) not in repr(payload)
+
+
+@pytest.mark.asyncio
+async def test_candidate_portal_applications_list_returns_multiple_real_applications(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Multiplas Candidaturas",
+        email="multiplas.candidaturas@example.com",
+        cpf="12345678113",
+    )
+    active_job = await _create_published_job(db_session, title="Vaga Ativa Real")
+    closed_job = await _create_published_job(db_session, title="Vaga Encerrada Real")
+    active_pipeline_id = uuid4()
+    closed_pipeline_id = uuid4()
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=active_job.id,
+        pipeline_id=active_pipeline_id,
+        stage="screening",
+    )
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=closed_job.id,
+        pipeline_id=closed_pipeline_id,
+        stage="rejected",
+        relationship_status="rejected",
+        link_status="rejected",
+        pipeline_status="terminal",
+        is_terminal=True,
+        terminated_at=datetime.now(UTC),
+    )
+    await _create_portal_session(db_session, candidate.id, "portal-token-many-apps")
+    client.cookies.set("candidate_portal_token", "portal-token-many-apps")
+
+    response = await client.get("/api/v1/public/candidate-portal/me/applications")
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert {item["application_id"] for item in payload} == {
+        str(active_pipeline_id),
+        str(closed_pipeline_id),
+    }
+    assert {item["job_title"] for item in payload} == {
+        "Vaga Ativa Real",
+        "Vaga Encerrada Real",
+    }
+
+
+@pytest.mark.asyncio
+async def test_candidate_portal_applications_list_empty_when_candidate_has_no_applications(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Sem Candidaturas",
+        email="sem.candidaturas@example.com",
+        cpf="12345678114",
+    )
+    await _create_portal_session(db_session, candidate.id, "portal-token-no-apps")
+    client.cookies.set("candidate_portal_token", "portal-token-no-apps")
+
+    response = await client.get("/api/v1/public/candidate-portal/me/applications")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_candidate_portal_application_detail_does_not_allow_other_candidate_application(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Candidato Logado",
+        email="candidato.logado@example.com",
+        cpf="12345678115",
+    )
+    other_candidate = await _create_candidate(
+        db_session,
+        full_name="Candidato Dono",
+        email="candidato.dono@example.com",
+        cpf="12345678116",
+    )
+    job = await _create_published_job(db_session, title="Vaga Restrita")
+    other_pipeline_id = uuid4()
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=other_candidate.id,
+        job_id=job.id,
+        pipeline_id=other_pipeline_id,
+    )
+    await _create_portal_session(db_session, candidate.id, "portal-token-forbidden-app")
+    client.cookies.set("candidate_portal_token", "portal-token-forbidden-app")
+
+    response = await client.get(
+        f"/api/v1/public/candidate-portal/me/applications/{other_pipeline_id}"
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_candidate_portal_application_detail_omits_internal_rh_data(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Sem Dados Internos",
+        email="sem.dados.internos@example.com",
+        cpf="12345678117",
+    )
+    await db_session.execute(
+        sa.update(CandidateModel)
+        .where(CandidateModel.id == candidate.id)
+        .values(internal_notes="NAO_EXPOR_NOTA_INTERNA_RH")
+    )
+    job = await _create_published_job(db_session, title="Vaga Segura")
+    pipeline_id = uuid4()
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        pipeline_id=pipeline_id,
+        stage="hr_interview",
+    )
+    db_session.add_all(
+        [
+            CandidateCommunicationModel(
+                candidate_id=candidate.id,
+                job_id=job.id,
+                channel="internal",
+                audience="recruiter",
+                subject="Interno",
+                body="NAO_EXPOR_MENSAGEM_INTERNA_RH",
+                status="sent",
+            ),
+            CandidateCommunicationModel(
+                candidate_id=candidate.id,
+                job_id=job.id,
+                channel="email",
+                audience="candidate",
+                subject="Mensagem ao candidato",
+                body="Mensagem pública real ao candidato.",
+                status="sent",
+                sent_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    await db_session.commit()
+    await _create_portal_session(db_session, candidate.id, "portal-token-safe-detail")
+    client.cookies.set("candidate_portal_token", "portal-token-safe-detail")
+
+    response = await client.get(f"/api/v1/public/candidate-portal/me/applications/{pipeline_id}")
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    payload_dump = repr(payload)
+    assert payload["application"]["application_id"] == str(pipeline_id)
+    assert payload["job"]["title"] == "Vaga Segura"
+    assert payload["messages"][0]["body"] == "Mensagem pública real ao candidato."
+    assert "NAO_EXPOR_NOTA_INTERNA_RH" not in payload_dump
+    assert "NAO_EXPOR_MENSAGEM_INTERNA_RH" not in payload_dump
+    assert "review_notes" not in payload_dump
+    assert "score" not in payload_dump.lower()
+
+
+@pytest.mark.asyncio
 async def test_session_endpoint_without_cookie_returns_200_unauthenticated(
     client: AsyncClient,
 ) -> None:
@@ -287,25 +533,54 @@ async def test_session_endpoint_with_valid_cookie_returns_authenticated(
 ) -> None:
     """GET /auth/session com cookie válido retorna 200 authenticated=true e nome do candidato."""
     # Cria candidato via candidatura pública (que cria sessão via cookie)
-    from src.infrastructure.database.models.analysis_model import AIModelModel, PromptTemplateModel
     from decimal import Decimal
 
-    db_session.add_all([
-        AIModelModel(id=uuid4(), provider="google", model_id=f"gemini-{uuid4().hex[:8]}", model_name="Test", is_active=True),
-        PromptTemplateModel(id=uuid4(), name=f"pt-{uuid4().hex[:8]}", version=1, template_type="full_analysis",
-                           user_prompt_template="test", temperature=Decimal("0.1"), max_tokens=1024,
-                           is_active=True, activated_at=datetime.now(UTC), created_by=SYSTEM_USER_ID),
-    ])
+    from src.infrastructure.database.models.analysis_model import AIModelModel, PromptTemplateModel
+
+    db_session.add_all(
+        [
+            AIModelModel(
+                id=uuid4(),
+                provider="google",
+                model_id=f"gemini-{uuid4().hex[:8]}",
+                model_name="Test",
+                is_active=True,
+            ),
+            PromptTemplateModel(
+                id=uuid4(),
+                name=f"pt-{uuid4().hex[:8]}",
+                version=1,
+                template_type="full_analysis",
+                user_prompt_template="test",
+                temperature=Decimal("0.1"),
+                max_tokens=1024,
+                is_active=True,
+                activated_at=datetime.now(UTC),
+                created_by=SYSTEM_USER_ID,
+            ),
+        ]
+    )
     await db_session.commit()
 
     import io
+
     apply_resp = await client.post(
         "/api/v1/public/candidates/apply",
-        data={"full_name": "Sessao Teste", "cpf": "33311122200", "email": "sessao.teste@example.com",
-              "phone": "11999999999", "city": "SP", "state": "SP", "salary_expectation": "5000",
-              "desired_contract_type": "CLT", "works_at_marajo_group": False,
-              "job_id": str(published_job.id), "lgpd_consent": True,
-              "password": "SenhaSegura123", "confirm_password": "SenhaSegura123"},
+        data={
+            "full_name": "Sessao Teste",
+            "cpf": "33311122200",
+            "email": "sessao.teste@example.com",
+            "phone": "11999999999",
+            "city": "SP",
+            "state": "SP",
+            "salary_expectation": "5000",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
         files={"resume_file": ("cv.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
     )
     assert apply_resp.status_code == status.HTTP_201_CREATED
@@ -372,6 +647,74 @@ async def test_password_setup_request_is_generic_for_existing_and_unknown_candid
         )
     )
     assert token_count == 1
+
+
+@pytest.mark.asyncio
+async def test_password_setup_request_creates_password_setup_token_when_candidate_exists(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Token Criado",
+        email="token.criado@example.com",
+        cpf="12345678041",
+    )
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-created-000000",
+    )
+
+    response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "token.criado@example.com"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "message": "Se houver um cadastro com este e-mail, enviaremos as instruções de acesso."
+    }
+    token_row = await db_session.scalar(
+        sa.select(CandidateAuthTokenModel).where(
+            CandidateAuthTokenModel.candidate_id == candidate.id,
+            CandidateAuthTokenModel.purpose == PASSWORD_SETUP_PURPOSE,
+        )
+    )
+    assert token_row is not None
+    assert token_row.used_at is None
+    assert token_row.token_hash == sha256(b"setup-token-created-000000").hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_password_setup_request_for_unknown_candidate_returns_200_without_token(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_called(_: int) -> str:
+        pytest.fail("unknown candidate must not create a setup token")
+
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        fail_if_called,
+    )
+
+    response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "inexistente@example.com"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "message": "Se houver um cadastro com este e-mail, enviaremos as instruções de acesso."
+    }
+    token_count = await db_session.scalar(
+        sa.select(sa.func.count(CandidateAuthTokenModel.id)).where(
+            CandidateAuthTokenModel.purpose == PASSWORD_SETUP_PURPOSE,
+        )
+    )
+    assert token_count == 0
 
 
 @pytest.mark.asyncio
@@ -465,6 +808,38 @@ async def test_password_setup_email_failure_keeps_generic_response(
 
 
 @pytest.mark.asyncio
+async def test_password_setup_missing_smtp_configuration_returns_200(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _create_candidate(
+        db_session,
+        full_name="SMTP Ausente",
+        email="smtp.ausente@example.com",
+        cpf="12345678042",
+    )
+    monkeypatch.setattr(settings, "APP_ENV", "development")
+    monkeypatch.setattr(settings, "SMTP_HOST", "")
+    monkeypatch.setattr(settings, "SMTP_FROM_EMAIL", "")
+    monkeypatch.setattr(settings, "CANDIDATE_PORTAL_PUBLIC_URL", "http://127.0.0.1:5174")
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-no-smtp-000000",
+    )
+
+    response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "smtp.ausente@example.com"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "message": "Se houver um cadastro com este e-mail, enviaremos as instruções de acesso."
+    }
+
+
+@pytest.mark.asyncio
 async def test_password_setup_unexpected_exception_never_returns_500(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -498,7 +873,106 @@ async def test_password_setup_unexpected_exception_never_returns_500(
 
     # Must never return 500 — email failure is always non-fatal
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["message"] == "Se houver um cadastro com este e-mail, enviaremos as instruções de acesso."
+    assert (
+        response.json()["message"]
+        == "Se houver um cadastro com este e-mail, enviaremos as instruções de acesso."
+    )
+
+
+def test_password_setup_dev_fallback_logs_link_only_in_dev_and_test(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.interface.api.routers import candidate_portal_auth
+
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_warning(event: str, **kwargs: object) -> None:
+        events.append((event, kwargs))
+
+    monkeypatch.setattr(
+        candidate_portal_auth,
+        "logger",
+        SimpleNamespace(warning=capture_warning),
+    )
+    monkeypatch.setattr(settings, "CANDIDATE_PORTAL_PUBLIC_URL", "http://portal.local")
+    setup_token = CandidatePasswordSetupToken(
+        candidate_id=uuid4(),
+        email="fallback.dev@example.com",
+        full_name="Fallback Dev",
+        token="setup-token-dev-fallback",
+        expires_at=datetime.now(UTC) + timedelta(hours=2),
+    )
+
+    for app_env in ("development", "test"):
+        events.clear()
+        monkeypatch.setattr(settings, "APP_ENV", app_env)
+        candidate_portal_auth.log_candidate_password_setup_dev_fallback(
+            setup_token,
+            reason="EmailDeliveryConfigurationError",
+        )
+
+        assert len(events) == 1
+        assert events[0][0] == "candidate_portal.password_setup_dev_fallback_link"
+        assert (
+            events[0][1]["setup_url"]
+            == "http://portal.local/definir-senha?token=setup-token-dev-fallback"
+        )
+
+    for app_env in ("staging", "production"):
+        events.clear()
+        monkeypatch.setattr(settings, "APP_ENV", app_env)
+        candidate_portal_auth.log_candidate_password_setup_dev_fallback(
+            setup_token,
+            reason="EmailDeliveryConfigurationError",
+        )
+
+        assert events == []
+
+
+@pytest.mark.asyncio
+async def test_password_setup_production_does_not_log_setup_token_when_smtp_fails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.interface.api.routers import candidate_portal_auth
+
+    await _create_candidate(
+        db_session,
+        full_name="Producao Sem Log",
+        email="producao.sem.log@example.com",
+        cpf="12345678043",
+    )
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def capture_warning(event: str, **kwargs: object) -> None:
+        events.append((event, kwargs))
+
+    monkeypatch.setattr(
+        candidate_portal_auth,
+        "logger",
+        SimpleNamespace(warning=capture_warning, exception=lambda *args, **kwargs: None),
+    )
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "CANDIDATE_PORTAL_PUBLIC_URL", "https://portal.example.com")
+    monkeypatch.setattr(settings, "SMTP_HOST", "")
+    monkeypatch.setattr(settings, "SMTP_FROM_EMAIL", "")
+    monkeypatch.setattr(
+        "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",
+        lambda _: "setup-token-prod-never-log",
+    )
+
+    response = await client.post(
+        "/api/v1/public/auth/request-password-setup",
+        json={"email": "producao.sem.log@example.com"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert any(event == "candidate_portal.password_setup_delivery_failed" for event, _ in events)
+    log_dump = repr(events)
+    assert "setup-token-prod-never-log" not in log_dump
+    assert "https://portal.example.com/definir-senha" not in log_dump
+    assert "candidate_portal.password_setup_dev_fallback_link" not in log_dump
 
 
 @pytest.mark.asyncio
@@ -516,9 +990,9 @@ async def test_password_setup_invalid_payload_returns_422(
             "/api/v1/public/auth/request-password-setup",
             json=payload,
         )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, (
-            f"Expected 422 for payload {payload!r}, got {response.status_code}"
-        )
+        assert (
+            response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        ), f"Expected 422 for payload {payload!r}, got {response.status_code}"
 
 
 @pytest.mark.asyncio
@@ -555,13 +1029,11 @@ async def test_password_setup_email_uses_candidate_portal_public_url(
 
     assert sent_payload["to_email"] == "link.portal@example.com"
     assert sent_payload["subject"] == "Acesso ao Portal do Candidato - Marajó RH"
-    assert (
-        "https://vagas.marajo.test/definir-senha?token=setup-token-url-000000"
-        in str(sent_payload["text_body"])
+    assert "https://vagas.marajo.test/definir-senha?token=setup-token-url-000000" in str(
+        sent_payload["text_body"]
     )
-    assert (
-        "https://vagas.marajo.test/definir-senha?token=setup-token-url-000000"
-        in str(sent_payload["html_body"])
+    assert "https://vagas.marajo.test/definir-senha?token=setup-token-url-000000" in str(
+        sent_payload["html_body"]
     )
 
 
@@ -712,6 +1184,124 @@ async def test_login_sets_portal_cookie_and_allows_access(
 
 
 @pytest.mark.asyncio
+async def test_dev_login_creates_candidate_sets_cookie_and_allows_portal_access(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "development")
+    monkeypatch.setattr(settings, "ENABLE_DEV_CANDIDATE_LOGIN", True)
+
+    response = await client.post(
+        "/api/v1/public/auth/dev-login",
+        json={"email": "dev-candidato@local.test", "name": "Candidato Teste"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["redirect_to"] == "/candidato/portal"
+    assert "candidate_portal_token=" in response.headers.get("set-cookie", "")
+
+    candidate = await db_session.scalar(
+        sa.select(CandidateModel).where(CandidateModel.email == "dev-candidato@local.test")
+    )
+    assert candidate is not None
+    assert candidate.full_name == "Candidato Teste"
+    assert candidate.application_source == "dev_test"
+    assert candidate.password_hash is None
+    assert candidate.cpf is None
+
+    assert await db_session.scalar(sa.select(sa.func.count(ResumeModel.id))) == 0
+    assert (
+        await db_session.scalar(
+            sa.select(sa.func.count(CandidateJobPipelineModel.candidate_job_pipeline_id))
+        )
+        == 0
+    )
+
+    me_response = await client.get("/api/v1/public/candidate-portal/me")
+    applications_response = await client.get("/api/v1/public/candidate-portal/me/applications")
+
+    assert me_response.status_code == status.HTTP_200_OK
+    assert me_response.json()["id"] == str(candidate.id)
+    assert applications_response.status_code == status.HTTP_200_OK
+    assert applications_response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_dev_login_reuses_existing_candidate_without_creating_pipeline(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "test")
+    monkeypatch.setattr(settings, "ENABLE_DEV_CANDIDATE_LOGIN", True)
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Candidato Existente",
+        email="existente.dev@example.com",
+        cpf="12345678004",
+        create_resume=False,
+    )
+
+    response = await client.post(
+        "/api/v1/public/auth/dev-login",
+        json={"email": "EXISTENTE.DEV@example.com"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    candidates_count = await db_session.scalar(
+        sa.select(sa.func.count(CandidateModel.id)).where(
+            sa.func.lower(CandidateModel.email) == "existente.dev@example.com"
+        )
+    )
+    assert candidates_count == 1
+    assert (
+        await db_session.scalar(
+            sa.select(sa.func.count(CandidateJobPipelineModel.candidate_job_pipeline_id))
+        )
+        == 0
+    )
+
+    me_response = await client.get("/api/v1/public/candidate-portal/me")
+    assert me_response.status_code == status.HTTP_200_OK
+    assert me_response.json()["id"] == str(candidate.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("app_env", ["production", "staging"])
+async def test_dev_login_is_not_exposed_in_production_or_staging(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    app_env: str,
+) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", app_env)
+    monkeypatch.setattr(settings, "ENABLE_DEV_CANDIDATE_LOGIN", True)
+
+    response = await client.post(
+        "/api/v1/public/auth/dev-login",
+        json={"email": "dev-candidato@local.test", "name": "Candidato Teste"},
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_dev_login_is_not_exposed_when_flag_is_disabled(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "development")
+    monkeypatch.setattr(settings, "ENABLE_DEV_CANDIDATE_LOGIN", False)
+
+    response = await client.post(
+        "/api/v1/public/auth/dev-login",
+        json={"email": "dev-candidato@local.test", "name": "Candidato Teste"},
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
 async def test_login_rejects_unknown_candidate(
     client: AsyncClient,
 ) -> None:
@@ -730,7 +1320,7 @@ async def test_legacy_candidate_portal_endpoints_are_removed(
     me_response = await client.get("/api/v1/public/candidate-portal/me")
     applications_response = await client.get("/api/v1/public/candidate-portal/applications")
 
-    assert me_response.status_code == status.HTTP_404_NOT_FOUND
+    assert me_response.status_code == status.HTTP_401_UNAUTHORIZED
     assert applications_response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -924,8 +1514,8 @@ async def test_public_application_does_not_duplicate_analysis_on_duplicate_submi
         "works_at_marajo_group": False,
         "job_id": str(published_job.id),
         "lgpd_consent": True,
-            "password": "SenhaSegura123",
-            "confirm_password": "SenhaSegura123",
+        "password": "SenhaSegura123",
+        "confirm_password": "SenhaSegura123",
     }
 
     first = await client.post(
@@ -1361,8 +1951,7 @@ async def test_portal_overview_uses_active_pipeline_instead_of_latest_updated_pi
     assert overview_payload["active_application"]["job_id"] == str(published_job.id)
     assert overview_payload["active_application"]["status_public"] == "Aguardando extração"
     assert any(
-        item["job_id"] == str(closed_job.id)
-        for item in overview_payload["application_history"]
+        item["job_id"] == str(closed_job.id) for item in overview_payload["application_history"]
     )
 
 
@@ -1514,8 +2103,7 @@ async def test_portal_overview_shows_transferred_active_job_only(
     assert overview_payload["active_application"]["job_id"] == str(destination_job.id)
     assert overview_payload["active_application"]["job_title"] == "Nova Vaga"
     assert any(
-        item["job_id"] == str(published_job.id)
-        for item in overview_payload["application_history"]
+        item["job_id"] == str(published_job.id) for item in overview_payload["application_history"]
     )
 
 
@@ -1784,29 +2372,31 @@ async def test_portal_overview_uses_admitted_pre_admission_case_as_success_state
     )
     db_session.add(decision)
     await db_session.flush()
-    db_session.add_all([
-        CandidateJobPipelineModel(
-            candidate_id=candidate.id,
-            job_id=job.id,
-            resume_version_id=resume_version_id,
-            link_status="hired",
-            pipeline_stage="protheus",
-            pipeline_status="active",
-            relationship_status="active",
-            is_terminal=False,
-            entered_at=now,
-            updated_at=now,
-        ),
-        PreAdmissionCaseModel(
-            candidate_id=candidate.id,
-            job_id=job.id,
-            hiring_decision_id=decision.id,
-            status="admitted",
-            created_at=now,
-            updated_at=now,
-            closed_at=now,
-        ),
-    ])
+    db_session.add_all(
+        [
+            CandidateJobPipelineModel(
+                candidate_id=candidate.id,
+                job_id=job.id,
+                resume_version_id=resume_version_id,
+                link_status="hired",
+                pipeline_stage="protheus",
+                pipeline_status="active",
+                relationship_status="active",
+                is_terminal=False,
+                entered_at=now,
+                updated_at=now,
+            ),
+            PreAdmissionCaseModel(
+                candidate_id=candidate.id,
+                job_id=job.id,
+                hiring_decision_id=decision.id,
+                status="admitted",
+                created_at=now,
+                updated_at=now,
+                closed_at=now,
+            ),
+        ]
+    )
     await db_session.commit()
 
     await _create_portal_session(db_session, candidate.id, "portal-token-case-admitted")
@@ -1854,32 +2444,34 @@ async def test_portal_overview_uses_dismissed_pre_admission_case_without_talent_
     )
     db_session.add(decision)
     await db_session.flush()
-    db_session.add_all([
-        CandidateJobPipelineModel(
-            candidate_id=candidate.id,
-            job_id=job.id,
-            resume_version_id=resume_version_id,
-            link_status="hired",
-            pipeline_stage="admitted",
-            pipeline_status="terminal",
-            relationship_status="hired",
-            is_terminal=True,
-            terminated_at=now,
-            entered_at=now,
-            updated_at=now,
-        ),
-        PreAdmissionCaseModel(
-            candidate_id=candidate.id,
-            job_id=job.id,
-            hiring_decision_id=decision.id,
-            status="dismissed",
-            created_at=now,
-            updated_at=now,
-            closed_at=now - timedelta(days=10),
-            dismissed_at=now,
-            dismissal_reason="Motivo interno sigiloso",
-        ),
-    ])
+    db_session.add_all(
+        [
+            CandidateJobPipelineModel(
+                candidate_id=candidate.id,
+                job_id=job.id,
+                resume_version_id=resume_version_id,
+                link_status="hired",
+                pipeline_stage="admitted",
+                pipeline_status="terminal",
+                relationship_status="hired",
+                is_terminal=True,
+                terminated_at=now,
+                entered_at=now,
+                updated_at=now,
+            ),
+            PreAdmissionCaseModel(
+                candidate_id=candidate.id,
+                job_id=job.id,
+                hiring_decision_id=decision.id,
+                status="dismissed",
+                created_at=now,
+                updated_at=now,
+                closed_at=now - timedelta(days=10),
+                dismissed_at=now,
+                dismissal_reason="Motivo interno sigiloso",
+            ),
+        ]
+    )
     await db_session.commit()
 
     await _create_portal_session(db_session, candidate.id, "portal-token-case-dismissed")
@@ -2320,6 +2912,7 @@ async def test_closed_process_does_not_show_old_scheduled_interview_as_active(
 
 # ── CP-C8B: Session invalidation on password change ───────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_confirm_password_setup_invalidates_existing_sessions(
     client: AsyncClient,
@@ -2384,6 +2977,7 @@ async def test_new_login_after_password_setup_creates_valid_session(
     # Each call to token_urlsafe returns a unique value so setup and session
     # tokens don't collide on the unique token_hash index.
     from itertools import count as _count
+
     _call = _count()
     monkeypatch.setattr(
         "src.application.services.candidate_portal_auth_service.secrets.token_urlsafe",

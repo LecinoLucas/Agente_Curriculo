@@ -34,6 +34,7 @@ PASSWORD_SETUP_REQUEST_MESSAGE = (
 PASSWORD_SETUP_CONFIRM_MESSAGE = "Senha definida com sucesso. Acesse sua área do candidato."
 INVALID_PASSWORD_SETUP_TOKEN_MESSAGE = "Link inválido ou expirado."
 PASSWORD_SETUP_EMAIL_SUBJECT = "Acesso ao Portal do Candidato - Marajó RH"
+PASSWORD_SETUP_DEV_FALLBACK_ENVS = {"development", "test"}
 
 
 async def request_password_setup_response(
@@ -64,10 +65,24 @@ async def request_password_setup_response(
     if setup_token is not None:
         try:
             await send_candidate_password_setup_email(setup_token)
-        except (EmailDeliveryConfigurationError, EmailDeliveryError):
-            logger.warning("candidate_portal.password_setup_delivery_failed")
-        except Exception:
-            logger.warning("candidate_portal.password_setup_unexpected_delivery_error")
+        except (EmailDeliveryConfigurationError, EmailDeliveryError) as exc:
+            logger.warning(
+                "candidate_portal.password_setup_delivery_failed",
+                error_type=exc.__class__.__name__,
+            )
+            log_candidate_password_setup_dev_fallback(
+                setup_token,
+                reason=exc.__class__.__name__,
+            )
+        except Exception as exc:
+            logger.warning(
+                "candidate_portal.password_setup_unexpected_delivery_error",
+                error_type=exc.__class__.__name__,
+            )
+            log_candidate_password_setup_dev_fallback(
+                setup_token,
+                reason=exc.__class__.__name__,
+            )
 
     return CandidatePasswordSetupResponse(message=PASSWORD_SETUP_REQUEST_MESSAGE)
 
@@ -105,6 +120,28 @@ def build_candidate_password_setup_url(token: str) -> str:
     if not base_url:
         raise EmailDeliveryConfigurationError("Candidate portal public URL is required")
     return f"{base_url}/definir-senha?{urlencode({'token': token})}"
+
+
+def log_candidate_password_setup_dev_fallback(
+    setup_token: CandidatePasswordSetupToken,
+    *,
+    reason: str,
+) -> None:
+    if settings.APP_ENV not in PASSWORD_SETUP_DEV_FALLBACK_ENVS:
+        return
+
+    setup_url = build_candidate_password_setup_url(setup_token.token)
+    logger.warning(
+        "candidate_portal.password_setup_dev_fallback_link",
+        message=(
+            "DEV/TEST ONLY: SMTP failed for candidate password setup. "
+            "Open setup_url locally to continue first access."
+        ),
+        setup_url=setup_url,
+        candidate_email=setup_token.email,
+        expires_at=setup_token.expires_at.isoformat(),
+        reason=reason,
+    )
 
 
 async def confirm_password_setup_response(

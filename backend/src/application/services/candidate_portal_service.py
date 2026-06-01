@@ -9,6 +9,10 @@ import sqlalchemy as sa
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.candidate_profile_completion_service import (
+    CandidateProfileCompletionService,
+)
+from src.application.services.pre_admission_service import PreAdmissionService
 from src.application.services.upload_validation_service import (
     UploadValidationError,
     ValidatedUpload,
@@ -21,12 +25,23 @@ from src.core.pipeline_stages import (
     is_success_terminal_stage,
 )
 from src.core.settings import settings
+from src.infrastructure.database.models.behavioral_assignment_model import (
+    BehavioralAssessmentAssignmentModel,
+)
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineEventModel,
+    CandidateJobPipelineModel,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.communication_model import CandidateCommunicationModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import (
+    SQLAlchemyPreAdmissionRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import (
     SQLAlchemyResumeRepository,
@@ -34,8 +49,14 @@ from src.infrastructure.repositories.sqlalchemy_resume_repository import (
 from src.infrastructure.storage.resume_files import write_resume_file
 from src.interface.api.schemas.candidate_portal_schemas import (
     CandidatePortalActiveApplicationResponse,
+    CandidatePortalApplicationDetailResponse,
+    CandidatePortalApplicationListItemResponse,
+    CandidatePortalApplicationMessageResponse,
+    CandidatePortalApplicationTimelineEventResponse,
     CandidatePortalApplicationResponse,
     CandidatePortalCandidateSummaryResponse,
+    CandidatePortalJobSummaryResponse,
+    CandidatePortalMeResponse,
     CandidatePortalOverviewResponse,
     CandidatePortalPublicInterviewResponse,
     CandidatePortalResumeResponse,
@@ -45,11 +66,6 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidatePortalUpdateProfileRequest,
 )
 from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
-from src.application.services.candidate_profile_completion_service import CandidateProfileCompletionService
-from src.application.services.pre_admission_service import PreAdmissionService
-from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import (
-    SQLAlchemyPreAdmissionRepository,
-)
 
 logger = structlog.get_logger(__name__)
 
@@ -73,6 +89,10 @@ class CandidatePortalIncompleteProfileError(Exception):
     def __init__(self, missing_fields: list[str]) -> None:
         self.missing_fields = missing_fields
         super().__init__("Cadastro do candidato incompleto")
+
+
+class CandidatePortalApplicationNotFoundError(Exception):
+    pass
 
 
 class CandidatePortalService:
@@ -218,6 +238,88 @@ class CandidatePortalService:
             requires_behavioral_assessment=job_requires_behavioral_assessment,
         )
 
+    async def get_me(self, candidate_id: UUID) -> CandidatePortalMeResponse:
+        candidate = await self._get_candidate_row(candidate_id)
+        if candidate is None:
+            raise CandidatePortalProfileConflictError
+
+        source_value = candidate["application_source"]
+        return CandidatePortalMeResponse(
+            id=candidate["id"],
+            full_name=candidate["full_name"],
+            email=candidate["email"],
+            phone=candidate["phone"],
+            city=candidate["location_city"],
+            state=candidate["location_state"],
+            application_source=source_value,
+            application_source_label=self._source_label(source_value),
+            created_at=candidate["created_at"],
+        )
+
+    async def list_applications(
+        self,
+        candidate_id: UUID,
+    ) -> list[CandidatePortalApplicationListItemResponse]:
+        rows = await self._list_application_rows(candidate_id)
+        items: list[CandidatePortalApplicationListItemResponse] = []
+        for row in rows:
+            items.append(await self._build_application_list_item(row))
+        return items
+
+    async def get_application_detail(
+        self,
+        *,
+        candidate_id: UUID,
+        application_id: UUID,
+    ) -> CandidatePortalApplicationDetailResponse:
+        row = await self._get_application_row(
+            candidate_id=candidate_id,
+            application_id=application_id,
+        )
+        if row is None:
+            raise CandidatePortalApplicationNotFoundError
+
+        item = await self._build_application_list_item(row)
+        current_key = self._current_timeline_key(
+            stage=row["stage"],
+            relationship_status=row["relationship_status"],
+            analysis_status=item.analysis_status,
+        )
+        interview = await self._find_public_interview(row, current_key=current_key)
+        timeline = await self._build_public_timeline(
+            active_pipeline_row=row,
+            analysis_status=item.analysis_status,
+            interview=interview,
+        )
+
+        return CandidatePortalApplicationDetailResponse(
+            application=item,
+            job=CandidatePortalJobSummaryResponse(
+                id=row["job_id"],
+                title=row["job_title"],
+                description=row.get("job_description"),
+                requirements=row.get("job_requirements"),
+                responsibilities=row.get("job_responsibilities"),
+                location=row.get("location"),
+                job_area=row.get("job_area"),
+                work_model=row.get("work_model"),
+                seniority_level=row.get("seniority_level"),
+                benefits=row.get("benefits") or [],
+                working_hours=row.get("working_hours"),
+            ),
+            timeline=timeline,
+            timeline_events=await self._list_application_timeline_events(
+                candidate_id=candidate_id,
+                job_id=row["job_id"],
+            ),
+            interview=interview,
+            messages=await self._list_application_messages(
+                candidate_id=candidate_id,
+                job_id=row["job_id"],
+            ),
+            documents=[],
+        )
+
     async def update_profile(
         self,
         candidate_id: UUID,
@@ -314,6 +416,197 @@ class CandidatePortalService:
             extraction_status="pending",
             message="Novo currículo enviado. A extração foi iniciada.",
         )
+
+    async def _list_application_rows(self, candidate_id: UUID) -> list[dict]:
+        result = await self._db.execute(
+            self._application_select().where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.relationship_status.in_(
+                    ("active", "hired", "rejected", "archived", "withdrawn")
+                ),
+                CandidateJobPipelineModel.candidate_job_pipeline_id.is_not(None),
+                JobModel.deleted_at.is_(None),
+            )
+            .order_by(CandidateJobPipelineModel.updated_at.desc())
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    async def _get_application_row(
+        self,
+        *,
+        candidate_id: UUID,
+        application_id: UUID,
+    ) -> dict | None:
+        row = await self._db.execute(
+            self._application_select().where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.candidate_job_pipeline_id == application_id,
+                JobModel.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        mapping = row.mappings().first()
+        return dict(mapping) if mapping is not None else None
+
+    @staticmethod
+    def _application_select() -> sa.Select:
+        return (
+            sa.select(
+                CandidateJobPipelineModel.candidate_job_pipeline_id.label("pipeline_id"),
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                JobModel.title.label("job_title"),
+                JobModel.description.label("job_description"),
+                JobModel.requirements.label("job_requirements"),
+                JobModel.responsibilities.label("job_responsibilities"),
+                JobModel.location,
+                JobModel.job_area,
+                JobModel.work_model,
+                JobModel.seniority_level,
+                JobModel.benefits,
+                JobModel.working_hours,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status,
+                CandidateJobPipelineModel.relationship_status,
+                CandidateJobPipelineModel.pipeline_status,
+                CandidateJobPipelineModel.current_analysis_id,
+                CandidateJobPipelineModel.resume_version_id,
+                CandidateJobPipelineModel.is_terminal,
+                CandidateJobPipelineModel.terminated_at,
+                CandidateJobPipelineModel.termination_reason,
+                CandidateJobPipelineModel.entered_at,
+                CandidateJobPipelineModel.updated_at,
+            )
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+        )
+
+    async def _build_application_list_item(
+        self,
+        row: dict,
+    ) -> CandidatePortalApplicationListItemResponse:
+        analysis_status = await self._find_application_analysis_status(
+            candidate_id=row["candidate_id"],
+            analysis_id=row.get("current_analysis_id"),
+        )
+        status_label = self._map_public_status(
+            stage=row["stage"],
+            relationship_status=row["relationship_status"],
+            analysis_status=analysis_status,
+        )
+        current_key = self._current_timeline_key(
+            stage=row["stage"],
+            relationship_status=row["relationship_status"],
+            analysis_status=analysis_status,
+        )
+        interview = await self._find_public_interview(row, current_key=current_key)
+        next_action = await self._next_action(row=row, interview=interview)
+        return CandidatePortalApplicationListItemResponse(
+            application_id=row["pipeline_id"],
+            job_id=row["job_id"],
+            job_title=row["job_title"],
+            company_unit=None,
+            location=row.get("location"),
+            submitted_at=row.get("entered_at") or row["updated_at"],
+            current_stage=row["stage"],
+            current_stage_label=status_label,
+            status=self._status_code_from_public_label(status_label),
+            status_label=status_label,
+            analysis_status=analysis_status,
+            next_action=next_action,
+            updated_at=row["updated_at"],
+        )
+
+    async def _find_application_analysis_status(
+        self,
+        *,
+        candidate_id: UUID,
+        analysis_id: UUID | None,
+    ) -> str | None:
+        if analysis_id is None:
+            return None
+        analysis_summary = await self._candidate_repo.find_analysis_summary_by_id_for_candidate(
+            candidate_id=candidate_id,
+            analysis_id=analysis_id,
+        )
+        return analysis_summary.get("status") if analysis_summary is not None else None
+
+    async def _next_action(
+        self,
+        *,
+        row: dict,
+        interview: CandidatePortalPublicInterviewResponse | None,
+    ) -> str | None:
+        if interview is not None and interview.status in {"scheduled", "rescheduled"}:
+            return "Comparecer à entrevista agendada"
+
+        assignment_status = await self._db.scalar(
+            sa.select(BehavioralAssessmentAssignmentModel.status)
+            .where(
+                BehavioralAssessmentAssignmentModel.candidate_id == row["candidate_id"],
+                BehavioralAssessmentAssignmentModel.job_id == row["job_id"],
+                BehavioralAssessmentAssignmentModel.pipeline_id == row["pipeline_id"],
+                BehavioralAssessmentAssignmentModel.status.in_(("pending", "in_progress")),
+            )
+            .order_by(BehavioralAssessmentAssignmentModel.created_at.desc())
+            .limit(1)
+        )
+        if assignment_status in {"pending", "in_progress"}:
+            return "Responder avaliação comportamental"
+        return None
+
+    async def _list_application_timeline_events(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> list[CandidatePortalApplicationTimelineEventResponse]:
+        result = await self._db.execute(
+            sa.select(
+                CandidateJobPipelineEventModel.id,
+                CandidateJobPipelineEventModel.event_type,
+                CandidateJobPipelineEventModel.from_stage,
+                CandidateJobPipelineEventModel.to_stage,
+                CandidateJobPipelineEventModel.created_at,
+            )
+            .where(
+                CandidateJobPipelineEventModel.candidate_id == candidate_id,
+                CandidateJobPipelineEventModel.job_id == job_id,
+            )
+            .order_by(CandidateJobPipelineEventModel.created_at.asc())
+        )
+        return [
+            CandidatePortalApplicationTimelineEventResponse(**dict(row))
+            for row in result.mappings().all()
+        ]
+
+    async def _list_application_messages(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> list[CandidatePortalApplicationMessageResponse]:
+        result = await self._db.execute(
+            sa.select(
+                CandidateCommunicationModel.id,
+                CandidateCommunicationModel.subject,
+                CandidateCommunicationModel.body,
+                CandidateCommunicationModel.sent_at,
+                CandidateCommunicationModel.read_at,
+                CandidateCommunicationModel.created_at,
+            )
+            .where(
+                CandidateCommunicationModel.candidate_id == candidate_id,
+                CandidateCommunicationModel.job_id == job_id,
+                CandidateCommunicationModel.audience == "candidate",
+                CandidateCommunicationModel.status.in_(("sent", "read")),
+            )
+            .order_by(CandidateCommunicationModel.created_at.desc())
+        )
+        return [
+            CandidatePortalApplicationMessageResponse(**dict(row))
+            for row in result.mappings().all()
+        ]
 
     async def _build_latest_resume(
         self,

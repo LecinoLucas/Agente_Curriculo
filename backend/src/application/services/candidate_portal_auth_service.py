@@ -138,6 +138,51 @@ class CandidatePortalAuthService:
         await self._db.flush()
         return session_token, session_expires_at
 
+    async def dev_login(
+        self,
+        *,
+        email: str,
+        name: str | None,
+        ip_address: str,
+        user_agent: str,
+    ) -> tuple[CandidateModel, str, datetime]:
+        clean_email = self._normalize_email(email)
+        if clean_email is None:
+            raise CandidatePortalInvalidCredentialsError
+
+        row = await self._db.execute(
+            sa.select(CandidateModel)
+            .where(
+                sa.func.lower(CandidateModel.email) == clean_email,
+                CandidateModel.deleted_at.is_(None),
+                CandidateModel.archived_at.is_(None),
+            )
+            .limit(1)
+        )
+        candidate = row.scalar_one_or_none()
+        now = datetime.now(UTC)
+
+        if candidate is None:
+            candidate = CandidateModel(
+                full_name=(name or "Candidato Teste").strip() or "Candidato Teste",
+                email=clean_email,
+                application_source="dev_test",
+                data_quality_status="unknown",
+                created_by=None,
+                last_login_at=now,
+            )
+            self._db.add(candidate)
+            await self._db.flush()
+        else:
+            candidate.last_login_at = now
+
+        session_token, session_expires_at = await self.create_session(
+            candidate_id=candidate.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return candidate, session_token, session_expires_at
+
     async def request_password_setup(
         self,
         *,

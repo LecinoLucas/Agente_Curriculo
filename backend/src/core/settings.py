@@ -66,11 +66,16 @@ class Settings(BaseSettings):
     FRONTEND_BASE_URL: str = ""
     CANDIDATE_PORTAL_PUBLIC_URL: str = ""
     GOOGLE_REDIRECT_URI: str = ""
-    GOOGLE_CALENDAR_SCOPES: str = "openid email profile https://www.googleapis.com/auth/calendar.events"
+    GOOGLE_CALENDAR_SCOPES: str = (
+        "openid email profile https://www.googleapis.com/auth/calendar.events"
+    )
     ALLOW_AI_TOKEN_SPEND: bool = True
     # Set to true ONLY in local dev to bypass real AI calls with synthetic scores.
     # Must never be true in staging or production.
     ENABLE_DEV_MOCK: bool = False
+    # DEV/TEST ONLY: enables manual candidate login for local candidate-portal QA.
+    # Must never be true in staging or production.
+    ENABLE_DEV_CANDIDATE_LOGIN: bool = False
     # AI Provider configuration
     AI_PROVIDER_TIMEOUT_SECONDS: float = 90.0
     AI_MAX_TOKENS: int = 4000
@@ -233,6 +238,11 @@ class Settings(BaseSettings):
     def model_post_init(self, __context: object) -> None:
         if self.ENABLE_DEV_MOCK and self.APP_ENV == "production":
             raise ValueError("ENABLE_DEV_MOCK must not be enabled in production")
+
+        if self.ENABLE_DEV_CANDIDATE_LOGIN and self.APP_ENV in {"staging", "production"}:
+            raise ValueError(
+                "ENABLE_DEV_CANDIDATE_LOGIN must not be enabled in staging or production"
+            )
 
         if self.APP_ENV == "production" and not self.FIELD_ENCRYPTION_KEY:
             raise ValueError("FIELD_ENCRYPTION_KEY must be set in production")

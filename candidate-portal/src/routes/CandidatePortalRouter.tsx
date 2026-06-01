@@ -4,8 +4,11 @@ import { PublicJobPage } from '../pages/PublicJobPage';
 import { ApplicationFormPage } from '../pages/ApplicationFormPage';
 import { ApplicationSuccessPage } from '../pages/ApplicationSuccessPage';
 import { CandidateLoginPage } from '../pages/CandidateLoginPage';
+import { RecoverAccessPage } from '../pages/RecoverAccessPage';
 import { PasswordSetupPage } from '../pages/PasswordSetupPage';
+import { GoogleCompletionPage } from '../pages/GoogleCompletionPage';
 import { CandidateHomePage } from '../pages/CandidateHomePage';
+import { CandidateApplicationDetailPage } from '../pages/CandidateApplicationDetailPage';
 import { CandidateAssessmentPage } from '../pages/CandidateAssessmentPage';
 import { CandidatePreAdmissionPage } from '../pages/CandidatePreAdmissionPage';
 import {
@@ -40,10 +43,13 @@ export function CandidatePortalRouter() {
 
         {/* Auth */}
         <Route path="/login" element={<CandidateLoginPage />} />
+        <Route path="/recuperar-acesso" element={<RecoverAccessPage />} />
         <Route path="/definir-senha" element={<PasswordSetupPage />} />
+        <Route path="/completar-cadastro" element={<GoogleCompletionPage />} />
 
         {/* Candidate area */}
         <Route path="/minha-area" element={<CandidateHomePage />} />
+        <Route path="/minha-area/candidaturas/:applicationId" element={<CandidateApplicationDetailPage />} />
         <Route path="/avaliacao" element={<CandidateAssessmentPage />} />
         <Route path="/pre-admissao" element={<CandidatePreAdmissionPage />} />
 

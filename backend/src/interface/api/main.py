@@ -44,6 +44,7 @@ from src.interface.api.routers import (
     auth,
     behavioral_templates,
     candidate_behavioral_assessments,
+    candidate_portal_area,
     candidate_portal_auth,
     candidaturas,
     candidates,
@@ -112,6 +113,8 @@ _PREFIX = "/api/v1"
 
 app.include_router(public.router, prefix=_PREFIX)
 app.include_router(public_candidate_portal.router, prefix=_PREFIX)
+app.include_router(candidate_portal_area.router, prefix=_PREFIX)
+app.include_router(candidate_portal_area.public_router, prefix=_PREFIX)
 app.include_router(candidate_portal_auth.router, prefix=_PREFIX)
 app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(users.router, prefix=_PREFIX)

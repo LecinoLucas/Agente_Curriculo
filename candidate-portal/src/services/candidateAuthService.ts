@@ -6,6 +6,11 @@ interface LoginResponse {
   session_expires_at: string;
 }
 
+interface DevLoginRequest {
+  email: string;
+  name?: string;
+}
+
 interface PasswordSetupResponse {
   message: string;
 }
@@ -29,6 +34,10 @@ export interface GoogleAuthResponse {
 export const candidateAuthService = {
   async login(email: string, password: string): Promise<LoginResponse> {
     return publicApiClient.post<LoginResponse>('/auth/login', { email, password });
+  },
+
+  async devLoginCandidate(payload: DevLoginRequest): Promise<LoginResponse> {
+    return publicApiClient.post<LoginResponse>('/auth/dev-login', payload);
   },
 
   async requestPasswordSetup(email: string): Promise<PasswordSetupResponse> {

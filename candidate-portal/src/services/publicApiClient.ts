@@ -1,6 +1,36 @@
+// Resolve the public API base URL.
+// Priority: VITE_PUBLIC_API_BASE_URL > VITE_API_URL+/public > hardcoded default.
+const { VITE_PUBLIC_API_BASE_URL, VITE_API_URL } =
+  (import.meta as ImportMeta & {
+    env?: { VITE_PUBLIC_API_BASE_URL?: string; VITE_API_URL?: string };
+  }).env ?? {};
 const BASE_URL =
-  (import.meta as ImportMeta & { env?: { VITE_PUBLIC_API_BASE_URL?: string } }).env
-    ?.VITE_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/api/v1/public';
+  VITE_PUBLIC_API_BASE_URL ??
+  (VITE_API_URL ? `${VITE_API_URL}/public` : 'http://localhost:8000/api/v1/public');
+
+// Dev-only guard: the session cookie (candidate_portal_token) is SameSite=Lax and
+// host-only. If the portal page and the API are served from different hosts
+// (e.g. page on 192.168.1.88 but API on localhost), the browser sets the cookie
+// but never re-sends it on fetch() — every /me call then returns 401.
+// We warn loudly in development so this environment trap is caught early.
+// No token, cookie, or secret is ever logged here — only hostnames.
+(() => {
+  const env = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env;
+  if (!env?.DEV || typeof window === 'undefined') return;
+  try {
+    const apiHost = new URL(BASE_URL).hostname;
+    const pageHost = window.location.hostname;
+    if (apiHost && pageHost && apiHost !== pageHost) {
+      console.warn(
+        `[candidate-portal] Host inconsistente: página em "${pageHost}" mas API em "${apiHost}". ` +
+          'O cookie de sessão (SameSite=Lax) NÃO será enviado para a API e /me retornará 401. ' +
+          'Use o MESMO host para o portal e a API (ex.: ambos em localhost).',
+      );
+    }
+  } catch {
+    /* URL inválida — ignorar; não bloquear a aplicação */
+  }
+})();
 
 export class HttpError extends Error {
   constructor(

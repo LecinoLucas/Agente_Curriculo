@@ -5,16 +5,33 @@ Cria aliases/fachadas sob /api/v1/public/* para endpoints que existiam apenas
 em /api/v1/candidate-portal/*. Não remove nem altera os routers antigos.
 Toda a lógica de negócio é delegada aos mesmos services dos routers originais.
 """
+
 from __future__ import annotations
 
+from contextlib import suppress
 from uuid import UUID
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, File, Request, Response, UploadFile, status, HTTPException
+import structlog
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
+from src.application.services.candidate_google_auth_service import (
+    CandidateGoogleAuthConflictError,
+    CandidateGoogleAuthEmailNotVerifiedError,
+    CandidateGoogleAuthService,
+)
 from src.application.services.candidate_portal_auth_service import (
     CANDIDATE_PORTAL_COOKIE_NAME,
     PORTAL_SESSION_TTL_HOURS,
@@ -22,15 +39,11 @@ from src.application.services.candidate_portal_auth_service import (
     CandidatePortalInvalidCredentialsError,
     CandidatePortalLockedError,
 )
-from src.application.services.candidate_google_auth_service import (
-    CandidateGoogleAuthConflictError,
-    CandidateGoogleAuthEmailNotVerifiedError,
-    CandidateGoogleAuthService,
-)
 from src.application.services.pre_admission_service import (
     MAX_PRE_ADMISSION_DOCUMENT_BYTES,
     PreAdmissionService,
 )
+from src.core.settings import settings
 from src.domain.exceptions import ConflictException, NotFoundException, ValidationException
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
@@ -44,12 +57,16 @@ from src.infrastructure.security.google_identity_verifier import (
     GoogleIdentityConfigurationError,
     GoogleIdentityVerificationError,
 )
-from src.interface.api.dependencies import CurrentCandidateSession, CurrentCompleteCandidateSession, get_db
-from src.interface.api.routers.communication_events import notify_candidate_event_safely
+from src.interface.api.dependencies import (
+    CurrentCandidateSession,
+    CurrentCompleteCandidateSession,
+    get_db,
+)
 from src.interface.api.routers.candidate_portal_auth import (
     confirm_password_setup_response,
     request_password_setup_response,
 )
+from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.behavioral_assignment_schemas import (
     BehavioralAssignmentAnswersRequest,
     BehavioralAssignmentDetailResponse,
@@ -61,6 +78,7 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidateAuthGoogleResponse,
     CandidateAuthLoginRequest,
     CandidateAuthLoginResponse,
+    CandidateDevLoginRequest,
     CandidatePasswordSetupConfirmRequest,
     CandidatePasswordSetupRequest,
     CandidatePasswordSetupResponse,
@@ -71,15 +89,16 @@ from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionEnvelopeResponse,
 )
 from src.interface.api.schemas.public_schemas import PublicJobDetailResponse
-import structlog
 
 router = APIRouter(prefix="/public", tags=["public"])
 logger = structlog.get_logger(__name__)
+DEV_CANDIDATE_LOGIN_ALLOWED_ENVS = {"development", "test"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. Job detail
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/jobs/{job_id}",
@@ -126,6 +145,7 @@ async def get_public_job_detail(
 # 2. Auth aliases (/public/auth/* → mesma lógica de /public/candidate-auth/*)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @router.post(
     "/auth/google",
     response_model=CandidateAuthGoogleResponse,
@@ -155,19 +175,31 @@ async def auth_google(
             path="/",
         )
         return result
-    except GoogleIdentityConfigurationError:
+    except GoogleIdentityConfigurationError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Login com Google não está configurado.")
-    except (GoogleIdentityVerificationError, CandidateGoogleAuthEmailNotVerifiedError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Login com Google não está configurado.",
+        ) from exc
+    except (GoogleIdentityVerificationError, CandidateGoogleAuthEmailNotVerifiedError) as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Não foi possível validar sua conta Google.")
-    except CandidateGoogleAuthConflictError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Não foi possível validar sua conta Google.",
+        ) from exc
+    except CandidateGoogleAuthConflictError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Não foi possível vincular esta conta Google com segurança.")
-    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Não foi possível vincular esta conta Google com segurança.",
+        ) from exc
+    except Exception as exc:
         await db.rollback()
         logger.exception("public_auth.google_failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Não foi possível concluir o login com Google.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível concluir o login com Google.",
+        ) from exc
 
 
 @router.post(
@@ -204,16 +236,83 @@ async def auth_login(
             redirect_to="/candidato/portal",
             session_expires_at=session_expires_at,
         )
-    except CandidatePortalLockedError:
+    except CandidatePortalLockedError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Conta temporariamente bloqueada.")
-    except CandidatePortalInvalidCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Conta temporariamente bloqueada."
+        ) from exc
+    except CandidatePortalInvalidCredentialsError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-mail ou senha inválidos.")
-    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="E-mail ou senha inválidos."
+        ) from exc
+    except Exception as exc:
         await db.rollback()
         logger.exception("public_auth.login_failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Não foi possível concluir o login.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível concluir o login.",
+        ) from exc
+
+
+@router.post(
+    "/auth/dev-login",
+    response_model=CandidateAuthLoginResponse,
+    include_in_schema=False,
+)
+async def auth_dev_login(
+    body: CandidateDevLoginRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateAuthLoginResponse:
+    """
+    DEV/TEST ONLY. Manual candidate login for local candidate-portal QA.
+
+    This endpoint must remain disabled in staging and production.
+    """
+    if (
+        settings.APP_ENV not in DEV_CANDIDATE_LOGIN_ALLOWED_ENVS
+        or not settings.ENABLE_DEV_CANDIDATE_LOGIN
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    try:
+        candidate, session_token, session_expires_at = await CandidatePortalAuthService(
+            db
+        ).dev_login(
+            email=str(body.email),
+            name=body.name,
+            ip_address=request.client.host if request.client else "unknown",
+            user_agent=request.headers.get("user-agent", ""),
+        )
+        await db.commit()
+        response.set_cookie(
+            key=CANDIDATE_PORTAL_COOKIE_NAME,
+            value=session_token,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            max_age=PORTAL_SESSION_TTL_HOURS * 3600,
+            path="/",
+        )
+        logger.info(
+            "candidate_portal.dev_login_used",
+            candidate_id=str(candidate.id),
+            app_env=settings.APP_ENV,
+        )
+        return CandidateAuthLoginResponse(
+            message="Login de desenvolvimento realizado com sucesso.",
+            redirect_to="/candidato/portal",
+            session_expires_at=session_expires_at,
+        )
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("candidate_portal.dev_login_failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível concluir o login de desenvolvimento.",
+        ) from exc
 
 
 @router.post(
@@ -231,10 +330,8 @@ async def auth_logout(
         await CandidatePortalAuthService(db).logout(token)
         await db.commit()
     except Exception:
-        try:
+        with suppress(Exception):
             await db.rollback()
-        except Exception:
-            pass
         logger.exception("public_auth.logout_failed")
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(CANDIDATE_PORTAL_COOKIE_NAME, path="/")
@@ -309,6 +406,7 @@ async def get_candidate_session(
 # 3. Avaliação comportamental — aliases sob /public/candidate-portal/behavioral-assessments
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _ba_service(db: AsyncSession) -> BehavioralAssignmentService:
     return BehavioralAssignmentService(SQLAlchemyBehavioralAssignmentRepository(db))
 
@@ -343,7 +441,7 @@ async def get_behavioral_assessment(
             candidate_id=candidate_session.candidate_id,
         )
     except NotFoundException as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
 
 
 @router.post(
@@ -366,10 +464,10 @@ async def start_behavioral_assessment(
         return result
     except NotFoundException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
     except ConflictException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message) from exc
 
 
 @router.put(
@@ -394,13 +492,16 @@ async def save_behavioral_answers(
         return result
     except NotFoundException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
     except ConflictException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message) from exc
     except ValidationException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.message,
+        ) from exc
 
 
 @router.post(
@@ -435,18 +536,22 @@ async def submit_behavioral_assessment(
         return result
     except NotFoundException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
     except ConflictException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message) from exc
     except ValidationException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.message,
+        ) from exc
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 4. Pré-admissão — aliases sob /public/candidate-portal/pre-admission
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _pa_service(db: AsyncSession) -> PreAdmissionService:
     return PreAdmissionService(SQLAlchemyPreAdmissionRepository(db))
@@ -496,7 +601,7 @@ async def upload_pre_admission_document(
     db: AsyncSession = Depends(get_db),
 ) -> CandidatePortalPreAdmissionDocumentUploadResponse:
     """
-    Alias oficial para POST /candidate-portal/pre-admission/{case_id}/checklist-items/{item_id}/documents.
+    Alias oficial para upload de documento de pré-admissão do candidato.
 
     Ownership obrigatório: candidato só pode fazer upload no próprio caso.
     """

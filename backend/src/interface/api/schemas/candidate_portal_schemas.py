@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionSummary,
@@ -16,6 +16,22 @@ class CandidateAuthRegisterRequest(BaseModel):
 class CandidateAuthLoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+
+
+class CandidateDevLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    name: str | None = Field(default=None, max_length=255)
+
+    @field_validator("email")
+    @classmethod
+    def validate_dev_email(cls, value: str) -> str:
+        clean = value.strip().lower()
+        if "@" not in clean or clean.startswith("@") or clean.endswith("@"):
+            raise ValueError("email must be a valid email address")
+        local_part, domain = clean.rsplit("@", 1)
+        if not local_part or "." not in domain:
+            raise ValueError("email must be a valid email address")
+        return clean
 
 
 class CandidatePasswordSetupRequest(BaseModel):
@@ -36,6 +52,7 @@ class CandidateSessionResponse(BaseModel):
     Retorna apenas se o cookie é válido e o nome público do candidato.
     Não expõe e-mail, CPF, telefone ou dados de candidatura.
     """
+
     authenticated: bool
     candidate_name: str | None = None
 
@@ -170,6 +187,82 @@ class CandidatePortalApplicationResponse(BaseModel):
     talent_pool_profile_status: str | None = None
 
 
+class CandidatePortalMeResponse(BaseModel):
+    id: UUID
+    full_name: str
+    email: str | None = None
+    phone: str | None = None
+    city: str | None = None
+    state: str | None = None
+    application_source: str | None = None
+    application_source_label: str
+    created_at: datetime
+
+
+class CandidatePortalApplicationListItemResponse(BaseModel):
+    application_id: UUID
+    job_id: UUID
+    job_title: str
+    company_unit: str | None = None
+    location: str | None = None
+    submitted_at: datetime
+    current_stage: str
+    current_stage_label: str
+    status: str
+    status_label: str
+    analysis_status: str | None = None
+    next_action: str | None = None
+    updated_at: datetime
+
+
+class CandidatePortalJobSummaryResponse(BaseModel):
+    id: UUID
+    title: str
+    description: str | None = None
+    requirements: str | None = None
+    responsibilities: str | None = None
+    location: str | None = None
+    job_area: str | None = None
+    work_model: str | None = None
+    seniority_level: str | None = None
+    benefits: list[str] = []
+    working_hours: str | None = None
+
+
+class CandidatePortalApplicationTimelineEventResponse(BaseModel):
+    id: UUID
+    event_type: str
+    from_stage: str | None = None
+    to_stage: str | None = None
+    created_at: datetime
+
+
+class CandidatePortalApplicationMessageResponse(BaseModel):
+    id: UUID
+    subject: str | None = None
+    body: str
+    sent_at: datetime | None = None
+    read_at: datetime | None = None
+    created_at: datetime
+
+
+class CandidatePortalApplicationDocumentResponse(BaseModel):
+    id: UUID
+    title: str
+    status: str | None = None
+    uploaded_at: datetime | None = None
+
+
+class CandidatePortalApplicationDetailResponse(BaseModel):
+    application: CandidatePortalApplicationListItemResponse
+    job: CandidatePortalJobSummaryResponse
+    timeline: CandidatePortalTimelineResponse | None = None
+    timeline_events: list[CandidatePortalApplicationTimelineEventResponse] = []
+    interview: CandidatePortalPublicInterviewResponse | None = None
+    messages: list[CandidatePortalApplicationMessageResponse] = []
+    documents: list[CandidatePortalApplicationDocumentResponse] = []
+
+
 class CandidatePortalUpdateProfileRequest(BaseModel):
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=50)
@@ -189,6 +282,7 @@ CandidatePortalOverviewResponse.model_rebuild()
 __all__ = [
     "CandidateAuthRegisterRequest",
     "CandidateAuthLoginRequest",
+    "CandidateDevLoginRequest",
     "CandidateAuthLoginResponse",
     "CandidatePasswordSetupRequest",
     "CandidatePasswordSetupConfirmRequest",
@@ -204,6 +298,13 @@ __all__ = [
     "CandidatePortalTimelineResponse",
     "CandidatePortalOverviewResponse",
     "CandidatePortalApplicationResponse",
+    "CandidatePortalMeResponse",
+    "CandidatePortalApplicationListItemResponse",
+    "CandidatePortalJobSummaryResponse",
+    "CandidatePortalApplicationTimelineEventResponse",
+    "CandidatePortalApplicationMessageResponse",
+    "CandidatePortalApplicationDocumentResponse",
+    "CandidatePortalApplicationDetailResponse",
     "CandidatePortalUpdateProfileRequest",
     "CandidatePortalResumeUploadResponse",
     "CandidatePortalPreAdmissionSummary",
