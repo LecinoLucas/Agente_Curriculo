@@ -24,6 +24,7 @@ export const PIPELINE_MUTATION_ROLES: UserRole[] = ["admin", "recruiter"];
 export const CANDIDATURAS_WRITE_ROLES: UserRole[] = ["admin", "hr", "recruiter"];
 export const MANAGER_AREA_ROLES: UserRole[] = ["admin", "manager"];
 export const CANDIDATE_PORTAL_ROLES: UserRole[] = ["candidate"];
+export const OPERATIONAL_MASTER_ROLES: UserRole[] = ["admin", "hr", "recruiter"];
 
 export function hasRole(
   role: UserRole | null | undefined,

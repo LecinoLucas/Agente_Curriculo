@@ -11,6 +11,7 @@ import {
   CANDIDATES_ACCESS_ROLES,
   JOB_MANAGEMENT_ROLES,
   MANAGER_AREA_ROLES,
+  OPERATIONAL_MASTER_ROLES,
   PRE_ADMISSION_AREA_ROLES,
   RH_DASHBOARD_ROLES,
   STAFF_ROLES,
@@ -69,6 +70,12 @@ const JobFormPage = lazy(() =>
 
 const AdminPage = lazy(() =>
   import("../pages/AdminPage").then((m) => ({ default: m.AdminPage }))
+);
+
+const EstruturaOperacionalPage = lazy(() =>
+  import("../pages/EstruturaOperacionalPage").then((m) => ({
+    default: m.EstruturaOperacionalPage,
+  }))
 );
 
 const UsersPage = lazy(() =>
@@ -341,6 +348,11 @@ export function AppRouter() {
         <Route
           path="admin"
           element={protectedPage(<AdminPage />, ADMIN_ONLY_ROLES)}
+        />
+
+        <Route
+          path="admin/estrutura-operacional"
+          element={protectedPage(<EstruturaOperacionalPage />, OPERATIONAL_MASTER_ROLES)}
         />
 
         <Route

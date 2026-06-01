@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, BarChart3, CheckCircle2, ClipboardList, FileSearch, HeartPulse, KeyRound, ShieldCheck, Tags, Users } from "lucide-react";
+import { Activity, BarChart3, CheckCircle2, ClipboardList, FileSearch, HeartPulse, KeyRound, MapPinned, ShieldCheck, Tags, Users } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { usersService, UserStats } from "../services/usersService";
@@ -91,6 +91,15 @@ export function AdminPage() {
               description="Skills, áreas e outros catálogos do sistema."
               buttonLabel="Acessar cadastros"
               onButtonClick={() => navigate("/admin/cadastros")}
+              variant="default"
+            />
+
+            <AdminQuickAction
+              icon={<MapPinned className="h-4 w-4 text-cyan-700" />}
+              title="Estrutura operacional"
+              description="Grupos, localidades e filiais/postos usados pelo RH e pelo Protheus."
+              buttonLabel="Abrir estrutura operacional"
+              onButtonClick={() => navigate("/admin/estrutura-operacional")}
               variant="default"
             />
 
