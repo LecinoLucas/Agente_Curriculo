@@ -129,6 +129,11 @@ ensure_candidate_portal_dependencies() {
 }
 
 read_frontend_api_url() {
+  if [ -n "${VITE_API_URL:-}" ]; then
+    printf '%s\n' "$VITE_API_URL"
+    return 0
+  fi
+
   if [ -n "${VITE_API_BASE_URL:-}" ]; then
     printf '%s\n' "$VITE_API_BASE_URL"
     return 0
@@ -141,6 +146,12 @@ read_frontend_api_url() {
     "$FRONTEND_DIR/.env"
   do
     if [ -f "$file" ]; then
+      value=$(grep "^VITE_API_URL=" "$file" 2>/dev/null | tail -n 1 | cut -d'=' -f2)
+      if [ -n "$value" ]; then
+        printf '%s\n' "$value"
+        return 0
+      fi
+
       value=$(grep "^VITE_API_BASE_URL=" "$file" 2>/dev/null | tail -n 1 | cut -d'=' -f2)
       if [ -n "$value" ]; then
         printf '%s\n' "$value"
@@ -188,79 +199,53 @@ extract_port() {
   [ "$port" != "$url" ] && printf '%s\n' "$port" || printf '%s\n' "8000"
 }
 
-kill_port() {
+port_is_free() {
   port=$1
 
   if command -v lsof >/dev/null 2>&1; then
-    pids=$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)
-    if [ -n "$pids" ]; then
-      kill $pids 2>/dev/null || true
-      sleep 1
-
-      remaining=$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)
-      if [ -n "$remaining" ]; then
-        kill -9 $remaining 2>/dev/null || true
-      fi
-    fi
-  elif [ "$(uname)" != "Darwin" ] && command -v fuser >/dev/null 2>&1; then
-    fuser -k "$port/tcp" 2>/dev/null || true
+    [ -z "$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)" ]
+    return $?
   fi
+
+  if [ "$(uname)" != "Darwin" ] && command -v fuser >/dev/null 2>&1; then
+    ! fuser "$port/tcp" >/dev/null 2>&1
+    return $?
+  fi
+
+  return 0
 }
 
-kill_matching_processes() {
-  pattern=$1
-
-  if ! command -v pgrep >/dev/null 2>&1; then
-    return 0
-  fi
-
-  pids=$(pgrep -f "$pattern" 2>/dev/null || true)
-  if [ -n "$pids" ]; then
-    target_pids=""
-    for pid in $pids; do
-      if command -v lsof >/dev/null 2>&1; then
-        if lsof -a -d cwd -p "$pid" 2>/dev/null | grep -q "$ROOT_DIR"; then
-          target_pids="$target_pids $pid"
-        fi
-      else
-        target_pids="$target_pids $pid"
-      fi
-    done
-
-    if [ -n "$target_pids" ]; then
-      kill $target_pids 2>/dev/null || true
-      sleep 1
-
-      remaining=""
-      for pid in $target_pids; do
-        if kill -0 "$pid" 2>/dev/null; then
-          remaining="$remaining $pid"
-        fi
-      done
-
-      if [ -n "$remaining" ]; then
-        kill -9 $remaining 2>/dev/null || true
-      fi
-    fi
-  fi
-}
-
-wait_for_port_free() {
+print_port_owner() {
   port=$1
-  timeout=${2:-10}
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+  elif [ "$(uname)" != "Darwin" ] && command -v fuser >/dev/null 2>&1; then
+    fuser -v "$port/tcp" 2>/dev/null || true
+  else
+    printf 'Instale lsof ou fuser para diagnosticar a porta %s.\n' "$port"
+  fi
+}
+
+require_port_free() {
+  port=$1
+  label=$2
+
+  if ! port_is_free "$port"; then
+    print_error "$label precisa da porta $port, mas ela ja esta em uso."
+    print_port_owner "$port" >&2
+    print_error "Pare esse processo explicitamente ou use: npm run dev:ports"
+    exit 1
+  fi
+}
+
+wait_for_port_listening() {
+  port=$1
+  timeout=${2:-30}
   elapsed=0
 
   while [ "$elapsed" -lt "$timeout" ]; do
-    if command -v lsof >/dev/null 2>&1; then
-      if [ -z "$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)" ]; then
-        return 0
-      fi
-    elif [ "$(uname)" != "Darwin" ] && command -v fuser >/dev/null 2>&1; then
-      if ! fuser "$port/tcp" >/dev/null 2>&1; then
-        return 0
-      fi
-    else
-      sleep 1
+    if ! port_is_free "$port"; then
       return 0
     fi
 
@@ -268,19 +253,8 @@ wait_for_port_free() {
     elapsed=$((elapsed + 1))
   done
 
-  print_error "Porta $port continua ocupada apos limpeza"
+  print_error "Porta $port nao abriu dentro de ${timeout}s"
   exit 1
-}
-
-kill_port_range() {
-  start_port=$1
-  end_port=$2
-
-  for port in $(seq "$start_port" "$end_port"); do
-    kill_port "$port" &
-  done
-
-  wait
 }
 
 check_redis() {
@@ -359,21 +333,6 @@ cleanup() {
     fi
   done
 
-  # 4) Garantir portas do projeto livres como rede de segurança restrita.
-  #    Só age sobre BACKEND_PORT/FRONTEND_PORT/CANDIDATE_PORTAL_PORT — nunca toca em processos
-  #    do dev "normal" do usuário em 8000/5173/5174. Pattern matching amplo
-  #    (pkill -f celery/uvicorn) ficaria perigoso porque casaria com
-  #    instâncias do projeto rodando em outras portas.
-  if [ -n "${BACKEND_PORT:-}" ]; then
-    kill_port "$BACKEND_PORT"
-  fi
-  if [ -n "${FRONTEND_PORT:-}" ]; then
-    kill_port_range "$FRONTEND_PORT" "$((FRONTEND_PORT + 4))"
-  fi
-  if [ -n "${CANDIDATE_PORTAL_PORT:-}" ]; then
-    kill_port_range "$CANDIDATE_PORTAL_PORT" "$((CANDIDATE_PORTAL_PORT + 4))"
-  fi
-
   print_ok "Shutdown concluido."
 }
 
@@ -393,7 +352,7 @@ FRONTEND_PORT=$(read_frontend_port)
 CANDIDATE_PORTAL_PORT=$(read_candidate_portal_port)
 LOCAL_IP=$(get_local_ip)
 
-EXPECTED_API_URL="http://$LOCAL_IP:$BACKEND_PORT"
+EXPECTED_API_URL="http://localhost:$BACKEND_PORT"
 
 print_section "Ambiente"
 printf 'frontend local       : http://localhost:%s\n' "$FRONTEND_PORT"
@@ -423,22 +382,17 @@ print_section "Redis"
 check_redis
 
 print_section "Portas"
-kill_matching_processes "src.interface.api.main:app"
-kill_matching_processes "celery -A src.infrastructure.queue.celery_app"
-kill_matching_processes "vite --host 0.0.0.0"
-kill_port_range "$FRONTEND_PORT" "$((FRONTEND_PORT + 4))"
-kill_port_range "$CANDIDATE_PORTAL_PORT" "$((CANDIDATE_PORTAL_PORT + 4))"
-kill_port "$BACKEND_PORT" &
-wait
-wait_for_port_free "$FRONTEND_PORT"
-wait_for_port_free "$CANDIDATE_PORTAL_PORT"
-wait_for_port_free "$BACKEND_PORT"
+require_port_free "$BACKEND_PORT" "Backend"
+require_port_free "$FRONTEND_PORT" "Frontend staff/admin"
+require_port_free "$CANDIDATE_PORTAL_PORT" "Candidate portal"
+print_ok "Portas 8000/5173/5174 verificadas sem encerrar processos existentes"
 
 export FRONTEND_PORT
 export BACKEND_PORT
 export CANDIDATE_PORTAL_PORT
 export HOST="0.0.0.0"
 export VITE_API_BASE_URL="${VITE_API_BASE_URL:-$EXPECTED_API_URL}"
+export VITE_API_URL="${VITE_API_URL:-$EXPECTED_API_URL/api/v1}"
 export VITE_PUBLIC_API_BASE_URL="${VITE_PUBLIC_API_BASE_URL:-$EXPECTED_API_URL/api/v1/public}"
 DEV_FULL_FAIL_ON_WORKER_EXIT="${DEV_FULL_FAIL_ON_WORKER_EXIT:-false}"
 export DEV_FULL_FAIL_ON_WORKER_EXIT
@@ -466,16 +420,26 @@ CHILD_PIDS="$CHILD_PIDS $CELERY_PID"
 print_ok "Worker Celery iniciado (PID $CELERY_PID)"
 
 cd "$ROOT_DIR"
-npm run --silent dev &
-NPM_PID=$!
-CHILD_PIDS="$CHILD_PIDS $NPM_PID"
-print_ok "Frontend e backend iniciados (PID $NPM_PID)"
+npm run --silent dev:backend &
+BACKEND_PID=$!
+CHILD_PIDS="$CHILD_PIDS $BACKEND_PID"
+print_ok "Backend iniciado (PID $BACKEND_PID)"
 
-cd "$CANDIDATE_PORTAL_DIR"
-npm run --silent dev &
+npm run --silent dev:staff &
+STAFF_PID=$!
+CHILD_PIDS="$CHILD_PIDS $STAFF_PID"
+print_ok "Frontend staff iniciado (PID $STAFF_PID)"
+
+cd "$ROOT_DIR"
+npm run --silent dev:candidate &
 CANDIDATE_PORTAL_PID=$!
 CHILD_PIDS="$CHILD_PIDS $CANDIDATE_PORTAL_PID"
 print_ok "Candidate portal iniciado (PID $CANDIDATE_PORTAL_PID)"
+
+wait_for_port_listening "$BACKEND_PORT" 30
+wait_for_port_listening "$FRONTEND_PORT" 30
+wait_for_port_listening "$CANDIDATE_PORTAL_PORT" 30
+print_ok "Servicos respondendo nas portas configuradas"
 
 # Loop de monitoramento: frontend/backend são críticos; Celery é auxiliar por
 # padrão para que falhas operacionais da fila de IA não derrubem o dev-full.
