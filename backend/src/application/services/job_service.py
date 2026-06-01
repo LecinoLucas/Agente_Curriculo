@@ -104,6 +104,11 @@ class JobService:
             operational_group_id=body.operational_group_id,
             location_group_id=body.location_group_id,
         )
+        await self._ensure_job_units_match_operational_scope(
+            self._job_unit_ids_from_body(body) or set(),
+            operational_group_id=body.operational_group_id,
+            location_group_id=body.location_group_id,
+        )
         title = self._clean_required_text(body.title)
         description = self._clean_required_text(body.description)
         deal_breakers = (
@@ -210,17 +215,30 @@ class JobService:
         salary_max = body.salary_max if "salary_max" in provided_fields else job.salary_max
         self._validate_salary_range(salary_min, salary_max)
         target_job_area = body.job_area if "job_area" in provided_fields else job.job_area
+        target_operational_group_id = (
+            body.operational_group_id
+            if "operational_group_id" in provided_fields
+            else job.operational_group_id
+        )
+        target_location_group_id = (
+            body.location_group_id
+            if "location_group_id" in provided_fields
+            else job.location_group_id
+        )
         await self._ensure_operational_scope_exists(
-            operational_group_id=(
-                body.operational_group_id
-                if "operational_group_id" in provided_fields
-                else job.operational_group_id
-            ),
-            location_group_id=(
-                body.location_group_id
-                if "location_group_id" in provided_fields
-                else job.location_group_id
-            ),
+            operational_group_id=target_operational_group_id,
+            location_group_id=target_location_group_id,
+        )
+        provided_unit_ids = self._job_unit_ids_from_body(body)
+        target_unit_ids = (
+            provided_unit_ids
+            if provided_unit_ids is not None
+            else {unit.operational_unit_id for unit in job.job_units if unit.is_active}
+        )
+        await self._ensure_job_units_match_operational_scope(
+            target_unit_ids,
+            operational_group_id=target_operational_group_id,
+            location_group_id=target_location_group_id,
         )
         validated_skill_requirements = (
             self._validate_skill_requirements_payload(
@@ -672,17 +690,50 @@ class JobService:
         if unit_rows is None:
             return
 
-        requested_unit_ids = {unit_row["operational_unit_id"] for unit_row in unit_rows}
-        existing_unit_ids = await self._repository.find_active_operational_unit_ids(
-            requested_unit_ids
-        )
-        missing_unit_ids = requested_unit_ids - existing_unit_ids
-        if missing_unit_ids:
+        await self._repository.replace_job_units(job_id, unit_rows)
+
+    async def _ensure_job_units_match_operational_scope(
+        self,
+        unit_ids: set[UUID],
+        *,
+        operational_group_id: UUID | None,
+        location_group_id: UUID | None,
+    ) -> None:
+        if not unit_ids:
+            return
+
+        units = await self._repository.find_active_operational_units_by_ids(unit_ids)
+        units_by_id = {unit.id: unit for unit in units}
+        if set(units_by_id) != unit_ids:
             raise ValidationException(
                 "Uma ou mais filiais operacionais não foram encontradas ou estão inativas."
             )
 
-        await self._repository.replace_job_units(job_id, unit_rows)
+        if operational_group_id is not None and any(
+            unit.group_id != operational_group_id for unit in units
+        ):
+            raise ValidationException(
+                "Uma ou mais filiais operacionais não pertencem ao grupo operacional da vaga."
+            )
+
+        if location_group_id is not None and any(
+            unit.location_group_id != location_group_id for unit in units
+        ):
+            raise ValidationException(
+                "Uma ou mais filiais operacionais não pertencem à localidade da vaga."
+            )
+
+    @staticmethod
+    def _job_unit_ids_from_body(
+        body: CreateJobRequest | UpdateJobRequest,
+    ) -> set[UUID] | None:
+        if body.job_units is not None:
+            return {unit.operational_unit_id for unit in body.job_units}
+
+        if body.operational_unit_ids is not None:
+            return set(body.operational_unit_ids)
+
+        return None
 
     @staticmethod
     def _job_unit_rows_from_body(

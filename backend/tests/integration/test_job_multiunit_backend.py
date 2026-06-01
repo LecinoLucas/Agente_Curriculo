@@ -113,6 +113,30 @@ async def _create_operational_scope(
     return group, location, unit
 
 
+async def _create_operational_unit(
+    db_session: AsyncSession,
+    *,
+    group: OperationalGroupModel,
+    location: LocationGroupModel,
+    suffix: str | None = None,
+) -> OperationalUnitModel:
+    suffix = suffix or uuid4().hex[:8]
+    unit = OperationalUnitModel(
+        group_id=group.id,
+        location_group_id=location.id,
+        code=f"UNIT-{suffix}",
+        name=f"Unidade {suffix}",
+        normalized_name=f"unidade-{suffix}".lower(),
+        type="gas_station",
+        city=location.city,
+        state=location.state,
+        is_active=True,
+    )
+    db_session.add(unit)
+    await db_session.commit()
+    return unit
+
+
 async def _add_publishable_skills(
     client: AsyncClient, headers: dict[str, str], job_id: str
 ) -> None:
@@ -219,8 +243,10 @@ async def test_create_operational_job_with_multiple_units(
     group, location, unit_a = await _create_operational_scope(
         db_session, suffix=f"a{uuid4().hex[:6]}"
     )
-    _group_b, _location_b, unit_b = await _create_operational_scope(
+    unit_b = await _create_operational_unit(
         db_session,
+        group=group,
+        location=location,
         suffix=f"b{uuid4().hex[:6]}",
     )
 
@@ -246,6 +272,34 @@ async def test_create_operational_job_with_multiple_units(
 
 
 @pytest.mark.asyncio
+async def test_create_operational_job_rejects_unit_outside_declared_scope(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    recruiter_headers: dict[str, str],
+):
+    group, location, unit_a = await _create_operational_scope(
+        db_session, suffix=f"a{uuid4().hex[:6]}"
+    )
+    _other_group, _other_location, unit_b = await _create_operational_scope(
+        db_session,
+        suffix=f"b{uuid4().hex[:6]}",
+    )
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(
+            operational_group_id=str(group.id),
+            location_group_id=str(location.id),
+            allocation_mode="operational",
+            operational_unit_ids=[str(unit_a.id), str(unit_b.id)],
+        ),
+        headers=recruiter_headers,
+    )
+    assert create.status_code == 409
+    assert "não pertencem ao grupo operacional" in create.text
+
+
+@pytest.mark.asyncio
 async def test_update_job_units_replaces_previous_links(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -254,8 +308,10 @@ async def test_update_job_units_replaces_previous_links(
     group, location, unit_a = await _create_operational_scope(
         db_session, suffix=f"a{uuid4().hex[:6]}"
     )
-    _group_b, _location_b, unit_b = await _create_operational_scope(
+    unit_b = await _create_operational_unit(
         db_session,
+        group=group,
+        location=location,
         suffix=f"b{uuid4().hex[:6]}",
     )
     create = await client.post(

@@ -260,6 +260,20 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
         )
         return set(result.scalars().all())
 
+    async def find_active_operational_units_by_ids(
+        self,
+        unit_ids: set[UUID],
+    ) -> list[OperationalUnitModel]:
+        if not unit_ids:
+            return []
+        result = await self._session.execute(
+            sa.select(OperationalUnitModel).where(
+                OperationalUnitModel.id.in_(unit_ids),
+                OperationalUnitModel.is_active.is_(True),
+            )
+        )
+        return list(result.scalars().all())
+
     async def replace_job_units(self, job_id: UUID, unit_rows: list[dict]) -> None:
         await self._session.execute(sa.delete(JobUnitModel).where(JobUnitModel.job_id == job_id))
         created_units: list[JobUnitModel] = []
