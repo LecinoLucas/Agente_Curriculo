@@ -180,7 +180,7 @@ export function ApplicationFormPage() {
         } else {
           setExistingAccountConflict(true);
           setApiError(
-            'Já existe um cadastro com estes dados. Acesse sua área do candidato ou use primeiro acesso/esqueci minha senha.',
+            'Já existe um cadastro ou candidatura com estes dados. Para acompanhar seu processo, entre na área do candidato. Se ainda não tem senha, use recuperar ou criar senha de acesso.',
           );
         }
       } else {
@@ -556,18 +556,24 @@ export function ApplicationFormPage() {
                     <p className="text-sm text-red-700">{stepError ?? apiError}</p>
                   </div>
                   {existingAccountConflict && (
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Link
                         to="/login"
                         className="inline-flex h-9 items-center justify-center rounded-lg bg-white px-3 text-sm font-semibold text-red-700 ring-1 ring-red-200 hover:bg-red-50"
                       >
-                        Acessar área do candidato
+                        Entrar na área do candidato
                       </Link>
                       <Link
-                        to="/login?firstAccess=1"
+                        to="/recuperar-acesso"
                         className="inline-flex h-9 items-center justify-center rounded-lg bg-red-700 px-3 text-sm font-semibold text-white hover:bg-red-800"
                       >
-                        Recuperar ou criar senha de acesso
+                        Recuperar ou criar senha
+                      </Link>
+                      <Link
+                        to="/"
+                        className="inline-flex h-9 items-center justify-center rounded-lg bg-white px-3 text-sm font-semibold text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50"
+                      >
+                        Ver vagas abertas
                       </Link>
                     </div>
                   )}

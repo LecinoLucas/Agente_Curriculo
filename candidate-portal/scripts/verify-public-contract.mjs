@@ -10,6 +10,7 @@ const header = read('src/components/layout/PublicHeader.tsx');
 const footer = read('src/components/layout/PublicFooter.tsx');
 const applicationForm = read('src/pages/ApplicationFormPage.tsx');
 const login = read('src/pages/CandidateLoginPage.tsx');
+const recoverAccess = read('src/pages/RecoverAccessPage.tsx');
 const passwordSetup = read('src/pages/PasswordSetupPage.tsx');
 const institutional = read('src/pages/InstitutionalPages.tsx');
 const faqPage = read('src/pages/InstitutionalPages.tsx');
@@ -26,7 +27,9 @@ const expectedRoutes = [
   'path="/vagas"',
   'path="/vagas/:identifier"',
   'path="/login"',
+  'path="/recuperar-acesso"',
   'path="/definir-senha"',
+  'path="/completar-cadastro"',
   'path="/sobre-nos"',
   'path="/unidades"',
   'path="/duvidas-frequentes"',
@@ -71,20 +74,20 @@ assert.ok(
   'Login recovery CTA must clarify it is for existing candidates, not new registration',
 );
 assert.ok(
-  login.includes('candidateAuthService.requestPasswordSetup'),
-  'Login must call real password setup request service',
+  recoverAccess.includes('candidateAuthService.requestPasswordSetup'),
+  'RecoverAccessPage must call real password setup request service',
 );
 assert.ok(
   passwordSetup.includes('candidateAuthService.confirmPasswordSetup'),
   'Password setup page must call real password setup confirm service',
 );
 assert.ok(
-  applicationForm.includes('Já existe um cadastro com estes dados'),
+  applicationForm.includes('Já existe um cadastro ou candidatura com estes dados'),
   'Application 409 guidance missing',
 );
 assert.ok(
-  applicationForm.includes('to="/login?firstAccess=1"'),
-  'Application 409 first access link missing',
+  applicationForm.includes('to="/recuperar-acesso"'),
+  'Application 409 must link to /recuperar-acesso for first access / password recovery',
 );
 
 // ── CP-C8A: Google Login integration ─────────────────────────────────────────
@@ -164,7 +167,7 @@ assert.ok(
 );
 assert.ok(
   candidateHome.includes('analysisStatus'),
-  'CandidateHomePage must display analysisStatus from overview',
+  'CandidateHomePage must display analysisStatus from real application data',
 );
 assert.ok(
   candidatePortalService.includes('getAnalysisStatusInfo') ||
@@ -363,11 +366,11 @@ assert.ok(
 );
 assert.ok(
   candidatePortalService.includes('getOverview'),
-  'getOverview() must still exist in candidatePortalService for CandidateHomePage',
+  'getOverview() must still exist in candidatePortalService for compatibility',
 );
 assert.ok(
-  candidateHome.includes('getOverview'),
-  'CandidateHomePage must still use getOverview() for full data',
+  candidateHome.includes('getMe') && candidateHome.includes('getApplications'),
+  'CandidateHomePage must use getMe() and getApplications() for real logged-in data',
 );
 
 // ── CP-C3: Session hydration deduplication ───────────────────────────────────
