@@ -13,12 +13,12 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     PromptTemplateModel,
 )
-from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.behavioral_template_model import (
     BehavioralAssessmentTemplateModel,
     BehavioralTemplateCompetencyModel,
     BehavioralTemplateQuestionModel,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
@@ -111,7 +111,11 @@ async def test_recruiter_can_crud_job_and_soft_delete(
     )
     headers = await _auth_headers(client, "recruiter-job@test.com", "password123")
 
-    create = await client.post("/api/v1/jobs", json=_job_payload(), headers=headers)
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(selection_flow_type="simple"),
+        headers=headers,
+    )
     assert create.status_code == 201
     created = create.json()
     assert created["title"] == "Backend Engineer"
@@ -460,20 +464,22 @@ async def test_match_endpoint_persists_candidate_job_match(
         "password123",
         UserRole.RECRUITER,
     )
-    candidate_headers = await _auth_headers(client, "candidate-ranking@test.com", "password123")
     recruiter_headers = await _auth_headers(client, "recruiter-ranking@test.com", "password123")
 
-    db_session.add(
-        CandidateModel(
-            user_id=candidate.id,
-            full_name="Candidate Ranking",
-            email="candidate-ranking@test.com",
-            created_by=candidate.id,
-        )
+    candidate_profile = CandidateModel(
+        user_id=candidate.id,
+        full_name="Candidate Ranking",
+        email="candidate-ranking@test.com",
+        created_by=candidate.id,
     )
+    db_session.add(candidate_profile)
     await db_session.commit()
 
-    resume_upload = await client.post("/api/v1/resumes", headers=candidate_headers)
+    resume_upload = await client.post(
+        "/api/v1/resumes",
+        headers=recruiter_headers,
+        json={"candidate_id": str(candidate_profile.id)},
+    )
     assert resume_upload.status_code == 202
     resume_version_id = UUID(resume_upload.json()["version_id"])
 
@@ -527,7 +533,7 @@ async def test_match_endpoint_persists_candidate_job_match(
 
     job = await client.post(
         "/api/v1/jobs",
-        json=_job_payload(),
+        json=_job_payload(selection_flow_type="simple"),
         headers=recruiter_headers,
     )
     assert job.status_code == 201
@@ -593,7 +599,7 @@ async def test_updating_job_does_not_mix_pipeline_candidates_between_jobs(
 
     job_a_response = await client.post(
         "/api/v1/jobs",
-        json=_job_payload(title="Job A"),
+        json=_job_payload(title="Job A", selection_flow_type="simple"),
         headers=headers,
     )
     assert job_a_response.status_code == 201
@@ -601,7 +607,7 @@ async def test_updating_job_does_not_mix_pipeline_candidates_between_jobs(
 
     job_b_response = await client.post(
         "/api/v1/jobs",
-        json=_job_payload(title="Job B"),
+        json=_job_payload(title="Job B", selection_flow_type="simple"),
         headers=headers,
     )
     assert job_b_response.status_code == 201
