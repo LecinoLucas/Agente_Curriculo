@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
 
+from src.application.services.audit_service import AuditService
 from src.application.services.skill_text_normalizer import normalize_skill_text
+from src.domain.entities.user import User
+from src.domain.exceptions import ValidationException
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
@@ -15,9 +18,6 @@ from src.interface.api.schemas.skill_schemas import (
     JobRequiredSkillResponse,
     UpdateJobSkillRequest,
 )
-from src.application.services.audit_service import AuditService
-from src.domain.entities.user import User
-from src.domain.exceptions import ValidationException
 
 if TYPE_CHECKING:
     from src.application.services.job_profiler_service import JobProfilerService
@@ -25,7 +25,6 @@ if TYPE_CHECKING:
         JobQualityResult,
         JobQualityValidatorService,
     )
-from src.interface.workers.matching_dispatcher import enqueue_job_match_recompute
 from src.application.services.job_profiler_service import (
     JobProfilerService,
     build_job_profile_hash,
@@ -37,6 +36,7 @@ from src.application.services.job_skill_priority_service import (
 from src.application.services.skill_requirements_service import (
     validate_skill_requirements_product_rules,
 )
+from src.interface.workers.matching_dispatcher import enqueue_job_match_recompute
 
 logger = structlog.get_logger(__name__)
 
@@ -89,8 +89,8 @@ class JobService:
     def __init__(
         self,
         repository: SQLAlchemyJobRepository,
-        job_profiler_service: "JobProfilerService | None" = None,
-        job_quality_validator_service: "JobQualityValidatorService | None" = None,
+        job_profiler_service: JobProfilerService | None = None,
+        job_quality_validator_service: JobQualityValidatorService | None = None,
         audit_service: AuditService | None = None,
     ) -> None:
         self._repository = repository
@@ -100,9 +100,17 @@ class JobService:
 
     async def create(self, body: CreateJobRequest, created_by: UUID) -> JobModel:
         self._validate_salary_range(body.salary_min, body.salary_max)
+        await self._ensure_operational_scope_exists(
+            operational_group_id=body.operational_group_id,
+            location_group_id=body.location_group_id,
+        )
         title = self._clean_required_text(body.title)
         description = self._clean_required_text(body.description)
-        deal_breakers = [db.model_dump(exclude_none=True) for db in body.deal_breakers] if body.deal_breakers else []
+        deal_breakers = (
+            [db.model_dump(exclude_none=True) for db in body.deal_breakers]
+            if body.deal_breakers
+            else []
+        )
         validated_skill_requirements = self._validate_skill_requirements_payload(
             body.skill_requirements,
             job_area=body.job_area,
@@ -133,15 +141,29 @@ class JobService:
             behavioral_template_id=body.behavioral_template_id,
             priority=body.priority,
             skill_requirements=validated_skill_requirements,
+            operational_group_id=body.operational_group_id,
+            location_group_id=body.location_group_id,
+            allocation_mode=body.allocation_mode,
             created_by=created_by,
             selection_flow_type=body.selection_flow_type or "standard",
-            requires_behavioral_assessment=body.requires_behavioral_assessment if body.requires_behavioral_assessment is not None else True,
-            requires_behavioral_ai_evaluation=body.requires_behavioral_ai_evaluation if body.requires_behavioral_ai_evaluation is not None else True,
-            requires_interview=body.requires_interview if body.requires_interview is not None else True,
-            requires_scorecard=body.requires_scorecard if body.requires_scorecard is not None else True,
-            requires_manager_review=body.requires_manager_review if body.requires_manager_review is not None else False,
+            requires_behavioral_assessment=body.requires_behavioral_assessment
+            if body.requires_behavioral_assessment is not None
+            else True,
+            requires_behavioral_ai_evaluation=body.requires_behavioral_ai_evaluation
+            if body.requires_behavioral_ai_evaluation is not None
+            else True,
+            requires_interview=body.requires_interview
+            if body.requires_interview is not None
+            else True,
+            requires_scorecard=body.requires_scorecard
+            if body.requires_scorecard is not None
+            else True,
+            requires_manager_review=body.requires_manager_review
+            if body.requires_manager_review is not None
+            else False,
         )
         saved_job = await self._repository.create(job)
+        await self._replace_job_units_if_provided(saved_job.id, body)
         await self._maybe_generate_job_profile(saved_job)
         await self._maybe_refresh_quality(saved_job.id)
         return saved_job
@@ -155,6 +177,10 @@ class JobService:
         status: str | None = None,
         job_area: str | None = None,
         work_model: str | None = None,
+        operational_group_id: UUID | None = None,
+        location_group_id: UUID | None = None,
+        operational_unit_id: UUID | None = None,
+        allocation_mode: str | None = None,
     ) -> tuple[list[JobModel], int, dict[str, int]]:
         return await self._repository.list_active(
             page,
@@ -163,6 +189,10 @@ class JobService:
             status=status,
             job_area=job_area,
             work_model=work_model,
+            operational_group_id=operational_group_id,
+            location_group_id=location_group_id,
+            operational_unit_id=operational_unit_id,
+            allocation_mode=allocation_mode,
         )
 
     async def get(self, job_id: UUID) -> JobModel:
@@ -174,13 +204,24 @@ class JobService:
     async def update(self, job_id: UUID, body: UpdateJobRequest) -> JobModel:
         job = await self.get(job_id)
         provided_fields = body.model_fields_set
-        skills_configuration_changed = "skill_requirements" in provided_fields
         if "status" in provided_fields and body.status == "archived":
             raise ValidationException("Use a ação específica de arquivar vaga.")
         salary_min = body.salary_min if "salary_min" in provided_fields else job.salary_min
         salary_max = body.salary_max if "salary_max" in provided_fields else job.salary_max
         self._validate_salary_range(salary_min, salary_max)
         target_job_area = body.job_area if "job_area" in provided_fields else job.job_area
+        await self._ensure_operational_scope_exists(
+            operational_group_id=(
+                body.operational_group_id
+                if "operational_group_id" in provided_fields
+                else job.operational_group_id
+            ),
+            location_group_id=(
+                body.location_group_id
+                if "location_group_id" in provided_fields
+                else job.location_group_id
+            ),
+        )
         validated_skill_requirements = (
             self._validate_skill_requirements_payload(
                 body.skill_requirements,
@@ -216,6 +257,9 @@ class JobService:
             "behavioral_template_id",
             "priority",
             "skill_requirements",
+            "operational_group_id",
+            "location_group_id",
+            "allocation_mode",
             "selection_flow_type",
             "requires_behavioral_assessment",
             "requires_behavioral_ai_evaluation",
@@ -258,28 +302,31 @@ class JobService:
         if "status" in provided_fields and body.status is not None:
             self._set_status(job, body.status)
 
-        job.updated_at = datetime.now(timezone.utc)
+        job.updated_at = datetime.now(UTC)
         saved_job = await self._repository.save(job)
+        await self._replace_job_units_if_provided(job_id, body, provided_fields=provided_fields)
 
         # Invalidate stale scores/matches if structural fields changed, then
         # enqueue background recompute — no LLM, uses persisted profiles.
-        if provided_fields.intersection({
-            "title",
-            "description",
-            "requirements",
-            "seniority_level",
-            "job_area",
-            "responsibilities",
-            "experience_context",
-            "behavioral_requirements",
-            "behavioral_template_id",
-            "minimum_years_experience",
-            "minimum_education_level",
-            "priority",
-            "deal_breakers",
-            "skill_requirements",
-            "job_profile_json",
-        }):
+        if provided_fields.intersection(
+            {
+                "title",
+                "description",
+                "requirements",
+                "seniority_level",
+                "job_area",
+                "responsibilities",
+                "experience_context",
+                "behavioral_requirements",
+                "behavioral_template_id",
+                "minimum_years_experience",
+                "minimum_education_level",
+                "priority",
+                "deal_breakers",
+                "skill_requirements",
+                "job_profile_json",
+            }
+        ):
             await self._invalidate_job_scores_and_matches(job_id)
             await self._maybe_generate_job_profile(saved_job)
             await enqueue_job_match_recompute(job_id)
@@ -293,11 +340,12 @@ class JobService:
         if not hasattr(self._repository, "_session"):
             return
         import sqlalchemy as sa
-        from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
+
         from src.infrastructure.database.models.profile_analysis_model import (
             CandidateJobMatchModel,
             JobProfileAnalysisModel,
         )
+        from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
 
         await self._repository._session.execute(
             sa.delete(CandidateJobScoreModel).where(CandidateJobScoreModel.job_id == job_id)
@@ -313,7 +361,7 @@ class JobService:
             )
             .values(
                 is_active=False,
-                superseded_at=datetime.now(timezone.utc),
+                superseded_at=datetime.now(UTC),
             )
         )
 
@@ -339,7 +387,7 @@ class JobService:
             raise ValidationException("A vaga já está arquivada.")
 
         previous_status = str(job.status)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job.archived_previous_status = previous_status
         job.status = "archived"
         job.archived_at = now
@@ -365,7 +413,7 @@ class JobService:
             raise ValidationException("A vaga não está arquivada.")
 
         previous_status = str(job.archived_previous_status or "paused")
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if previous_status == "published":
             await self.ensure_publishable(job.id)
 
@@ -390,7 +438,7 @@ class JobService:
 
     async def soft_delete(self, job_id: UUID) -> None:
         job = await self.get(job_id)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job.status = "cancelled"
         job.deleted_at = now
         job.updated_at = now
@@ -399,9 +447,13 @@ class JobService:
     async def list_required_skills(self, job_id: UUID) -> list[JobRequiredSkillResponse]:
         await self.get(job_id)
         rows = await self._repository.list_required_skill_rows(job_id)
-        return [self._required_skill_response(row.JobRequiredSkillModel, row.skill_name) for row in rows]
+        return [
+            self._required_skill_response(row.JobRequiredSkillModel, row.skill_name) for row in rows
+        ]
 
-    async def add_required_skill(self, job_id: UUID, body: AddJobSkillRequest) -> JobRequiredSkillResponse:
+    async def add_required_skill(
+        self, job_id: UUID, body: AddJobSkillRequest
+    ) -> JobRequiredSkillResponse:
         await self.get(job_id)
 
         skill_name = body.skill_name.strip()
@@ -488,7 +540,7 @@ class JobService:
         job = await self.get(job_id)
         rows = await self._repository.list_required_skill_rows(job_id)
         job.skill_requirements = self._skill_requirements_from_required_skill_rows(rows)
-        job.updated_at = datetime.now(timezone.utc)
+        job.updated_at = datetime.now(UTC)
         return await self._repository.save(job)
 
     @staticmethod
@@ -571,7 +623,7 @@ class JobService:
 
     @staticmethod
     def _set_status(job: JobModel, next_status: str) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job.status = next_status
         job.updated_at = now
 
@@ -586,8 +638,76 @@ class JobService:
             job.archive_reason_note = None
             job.archived_previous_status = None
 
+    async def _ensure_operational_scope_exists(
+        self,
+        *,
+        operational_group_id: UUID | None,
+        location_group_id: UUID | None,
+    ) -> None:
+        if operational_group_id is not None:
+            group = await self._repository.find_active_operational_group_by_id(operational_group_id)
+            if group is None:
+                raise ValidationException("Grupo operacional não encontrado ou inativo.")
+
+        if location_group_id is not None:
+            location_group = await self._repository.find_active_location_group_by_id(
+                location_group_id
+            )
+            if location_group is None:
+                raise ValidationException("Localidade operacional não encontrada ou inativa.")
+
+    async def _replace_job_units_if_provided(
+        self,
+        job_id: UUID,
+        body: CreateJobRequest | UpdateJobRequest,
+        *,
+        provided_fields: set[str] | None = None,
+    ) -> None:
+        if provided_fields is not None and not provided_fields.intersection(
+            {"operational_unit_ids", "job_units"}
+        ):
+            return
+
+        unit_rows = self._job_unit_rows_from_body(body)
+        if unit_rows is None:
+            return
+
+        requested_unit_ids = {unit_row["operational_unit_id"] for unit_row in unit_rows}
+        existing_unit_ids = await self._repository.find_active_operational_unit_ids(
+            requested_unit_ids
+        )
+        missing_unit_ids = requested_unit_ids - existing_unit_ids
+        if missing_unit_ids:
+            raise ValidationException(
+                "Uma ou mais filiais operacionais não foram encontradas ou estão inativas."
+            )
+
+        await self._repository.replace_job_units(job_id, unit_rows)
+
     @staticmethod
-    def _required_skill_response(link: JobRequiredSkillModel, skill_name: str) -> JobRequiredSkillResponse:
+    def _job_unit_rows_from_body(
+        body: CreateJobRequest | UpdateJobRequest,
+    ) -> list[dict] | None:
+        if body.job_units is not None:
+            return [unit.model_dump() for unit in body.job_units]
+
+        if body.operational_unit_ids is not None:
+            return [
+                {
+                    "operational_unit_id": unit_id,
+                    "openings_count": None,
+                    "priority": None,
+                    "is_active": True,
+                }
+                for unit_id in body.operational_unit_ids
+            ]
+
+        return None
+
+    @staticmethod
+    def _required_skill_response(
+        link: JobRequiredSkillModel, skill_name: str
+    ) -> JobRequiredSkillResponse:
         return JobRequiredSkillResponse(
             id=link.id,
             job_id=link.job_id,
@@ -612,7 +732,9 @@ class JobService:
                 title=job.title,
                 requirements=job.requirements,
                 seniority_level=job.seniority_level,
-                minimum_years_experience=float(job.minimum_years_experience) if job.minimum_years_experience is not None else None,
+                minimum_years_experience=float(job.minimum_years_experience)
+                if job.minimum_years_experience is not None
+                else None,
                 minimum_education_level=job.minimum_education_level,
                 job_area=job.job_area,
                 responsibilities=job.responsibilities,
@@ -628,7 +750,9 @@ class JobService:
                 description=job.description,
                 requirements=job.requirements,
                 seniority_level=job.seniority_level,
-                minimum_years_experience=float(job.minimum_years_experience) if job.minimum_years_experience is not None else None,
+                minimum_years_experience=float(job.minimum_years_experience)
+                if job.minimum_years_experience is not None
+                else None,
                 minimum_education_level=job.minimum_education_level,
                 job_area=job.job_area,
                 responsibilities=job.responsibilities,
@@ -654,8 +778,10 @@ class JobService:
                 error=str(exc),
             )
 
-    async def refresh_quality(self, job_id: UUID) -> "JobQualityResult":
-        from src.application.services.job_quality_validator_service import JobQualityValidatorService
+    async def refresh_quality(self, job_id: UUID) -> JobQualityResult:
+        from src.application.services.job_quality_validator_service import (
+            JobQualityValidatorService,
+        )
 
         validator = self._quality_validator or JobQualityValidatorService(self._repository)
         result = await validator.validate(job_id)
@@ -665,7 +791,7 @@ class JobService:
         await self._repository.save(job)
         return result
 
-    async def ensure_publishable(self, job_id: UUID) -> "JobQualityResult":
+    async def ensure_publishable(self, job_id: UUID) -> JobQualityResult:
         result = await self.refresh_quality(job_id)
         if result.can_publish:
             return result
@@ -706,7 +832,7 @@ class JobService:
                         "entityId": str(job.id),
                         "reason": reason,
                         "note": note,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                     before_state=before_state,
                     after_state=after_state,
@@ -724,7 +850,7 @@ class JobService:
                         "entityId": str(job.id),
                         "reason": reason,
                         "note": note,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                     before_state=before_state,
                     after_state=after_state,

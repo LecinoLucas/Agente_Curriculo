@@ -6,8 +6,6 @@ import structlog
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = structlog.get_logger(__name__)
-
 from src.application.services.analysis_dispatch_service import CandidateJobAnalysisDispatcher
 from src.application.services.analysis_service import (
     AnalysisNotCompletedError,
@@ -106,9 +104,7 @@ from src.interface.api.schemas.job_schemas import (
     AiDraftSourceResponse,
     AiDraftUsageResponse,
     ArchiveJobRequest,
-    BulkImportJobsRequest,
     BulkImportJobsResponse,
-    BulkUpdateJobsRequest,
     BulkUpdateJobsResponse,
     CandidateScoreExplanationResponse,
     CreateJobRequest,
@@ -143,6 +139,8 @@ from src.interface.api.schemas.skill_schemas import (
     JobRequiredSkillResponse,
     UpdateJobSkillRequest,
 )
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -257,15 +255,22 @@ def _handle_job_service_error(exc: Exception) -> None:
     if isinstance(exc, JobNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
     if isinstance(exc, InvalidJobSalaryRangeError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Faixa salarial inválida")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Faixa salarial inválida"
+        )
     if isinstance(exc, InvalidJobTextError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Título e descrição não podem estar em branco")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Título e descrição não podem estar em branco",
+        )
     if isinstance(exc, ValidationException):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     if isinstance(exc, SkillNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill não encontrada")
     if isinstance(exc, JobSkillConflictError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Skill já vinculada a esta vaga")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Skill já vinculada a esta vaga"
+        )
     if isinstance(exc, JobSkillLinkNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vínculo não encontrado")
     if isinstance(exc, PipelineJobNotFoundError):
@@ -273,7 +278,10 @@ def _handle_job_service_error(exc: Exception) -> None:
     if isinstance(exc, PipelineCandidateAlreadyActiveInAnotherJobError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Candidato já possui vínculo ativo com outra vaga. Use transferência para mover o candidato.",
+            detail=(
+                "Candidato já possui vínculo ativo com outra vaga. "
+                "Use transferência para mover o candidato."
+            ),
         )
     if isinstance(exc, PipelineCandidateAlreadyActiveInSameJobError):
         raise HTTPException(
@@ -323,7 +331,13 @@ def _handle_job_service_error(exc: Exception) -> None:
             },
         )
     if isinstance(exc, CandidateNotLinkedToJobError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Candidato não está vinculado a esta vaga. Adicione o candidato à vaga antes de visualizar o score.")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Candidato não está vinculado a esta vaga. "
+                "Adicione o candidato à vaga antes de visualizar o score."
+            ),
+        )
     if isinstance(exc, CandidateScoreExplanationNotReadyError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -344,15 +358,16 @@ async def create_job(
         if job.status == "published":
             await service.ensure_publishable(job.id)
         await db.commit()
-        await db.refresh(job)
-        return JobResponse.model_validate(job)
+        return JobResponse.model_validate(await service.get(job.id))
     except Exception as exc:
         await db.rollback()
         _handle_job_service_error(exc)
         raise
 
 
-@router.post("/bulk-import", response_model=BulkImportJobsResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/bulk-import", response_model=BulkImportJobsResponse, status_code=status.HTTP_201_CREATED
+)
 async def bulk_import_jobs(
     current_user: RecruiterOrAdmin,
     body: Any = Body(...),
@@ -373,7 +388,9 @@ async def bulk_import_jobs(
         return result
     except BulkJobPayloadNormalizationError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     except Exception:
         await db.rollback()
         raise
@@ -392,7 +409,9 @@ async def bulk_update_jobs(
         return result
     except BulkJobPayloadNormalizationError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     except Exception:
         await db.rollback()
         raise
@@ -588,9 +607,15 @@ async def list_jobs(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None),
-    status_filter: str | None = Query(default=None, pattern="^(draft|published|paused|closed|cancelled|archived)$"),
+    status_filter: str | None = Query(
+        default=None, pattern="^(draft|published|paused|closed|cancelled|archived)$"
+    ),
     job_area: str | None = Query(default=None),
     work_model: str | None = Query(default=None),
+    operational_group_id: UUID | None = Query(default=None),
+    location_group_id: UUID | None = Query(default=None),
+    operational_unit_id: UUID | None = Query(default=None),
+    allocation_mode: str | None = Query(default=None, pattern="^(corporate|operational)$"),
     db: AsyncSession = Depends(get_db),
 ) -> JobListResponse:
     jobs, total_items, summary = await _job_service(db).list(
@@ -600,6 +625,10 @@ async def list_jobs(
         status=status_filter,
         job_area=job_area,
         work_model=work_model,
+        operational_group_id=operational_group_id,
+        location_group_id=location_group_id,
+        operational_unit_id=operational_unit_id,
+        allocation_mode=allocation_mode,
     )
 
     return JobListResponse(
@@ -665,8 +694,7 @@ async def update_job(
         if is_publish_request and previous_status != "published":
             await service.ensure_publishable(job.id)
         await db.commit()
-        await db.refresh(job)
-        return JobResponse.model_validate(job)
+        return JobResponse.model_validate(await service.get(job.id))
     except Exception as exc:
         await db.rollback()
         _handle_job_service_error(exc)
@@ -801,7 +829,9 @@ async def list_job_skills(
         raise
 
 
-@router.post("/{job_id}/skills", response_model=JobRequiredSkillResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{job_id}/skills", response_model=JobRequiredSkillResponse, status_code=status.HTTP_201_CREATED
+)
 async def add_job_skill(
     job_id: UUID,
     body: AddJobSkillRequest,
@@ -852,7 +882,11 @@ async def remove_job_skill(
         raise
 
 
-@router.post("/{job_id}/candidates", response_model=PipelineAddCandidateToJobResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{job_id}/candidates",
+    response_model=PipelineAddCandidateToJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def link_candidate_to_job(
     job_id: UUID,
     body: AddCandidateToJobRequest,
@@ -999,9 +1033,15 @@ async def trigger_behavioral_assessment_evaluation(
     except ValidationException as exc:
         await db.rollback()
         detail = str(exc)
-        code = "behavioral_assessment_not_found" if "not found" in detail.lower() else "behavioral_assessment_not_submitted"
+        code = (
+            "behavioral_assessment_not_found"
+            if "not found" in detail.lower()
+            else "behavioral_assessment_not_submitted"
+        )
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND if code == "behavioral_assessment_not_found" else status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_404_NOT_FOUND
+            if code == "behavioral_assessment_not_found"
+            else status.HTTP_400_BAD_REQUEST,
             detail=behavioral_ai_safe_detail(
                 code,
                 message=(
@@ -1089,16 +1129,19 @@ async def get_behavioral_assessment_evaluation(
         }
 
         if evaluation.status == "completed":
-            result.update({
-                "confidence": evaluation.confidence,
-                "summary": evaluation.summary,
-                "strengths": evaluation.strengths_json or [],
-                "concerns": evaluation.concerns_json or [],
-                "competency_signals": evaluation.competency_signals_json or [],
-                "suggested_interview_questions": evaluation.suggested_interview_questions_json or [],
-                "risk_flags": evaluation.risk_flags_json or [],
-                "completed_at": evaluation.completed_at,
-            })
+            result.update(
+                {
+                    "confidence": evaluation.confidence,
+                    "summary": evaluation.summary,
+                    "strengths": evaluation.strengths_json or [],
+                    "concerns": evaluation.concerns_json or [],
+                    "competency_signals": evaluation.competency_signals_json or [],
+                    "suggested_interview_questions": evaluation.suggested_interview_questions_json
+                    or [],
+                    "risk_flags": evaluation.risk_flags_json or [],
+                    "completed_at": evaluation.completed_at,
+                }
+            )
         elif evaluation.status in {"failed", "retry_scheduled"}:
             result["error_message"] = evaluation.error_message
 
@@ -1107,7 +1150,10 @@ async def get_behavioral_assessment_evaluation(
         raise
     except Exception as exc:
         logger.error(f"Error retrieving behavioral evaluation: {exc}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve evaluation")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve evaluation",
+        ) from exc
 
 
 @router.post(
@@ -1132,6 +1178,7 @@ async def compute_job_scoring(
         version = await svc._load_active_version()
         await db.commit()
         from datetime import UTC, datetime
+
         return ScoringComputeResponse(
             job_id=job_id,
             candidates_scored=len(score_deltas),
@@ -1157,26 +1204,26 @@ async def compute_single_candidate_scoring(
     db: AsyncSession = Depends(get_db),
 ) -> SingleCandidateScoringResponse:
     """Compute and persist score for a single candidate with an active pipeline.
-    
+
     This endpoint explicitly requires the candidate to be actively in the job's pipeline.
     It does not alter the candidate's active job and does not trigger new AI analysis.
     """
     try:
         svc = CandidateRankingService(db)
         await svc.assert_candidate_active_in_job(candidate_id, job_id)
-        
+
         result = await svc.compute_single_candidate(
             job_id=job_id,
             candidate_id=candidate_id,
             recompute_reason="manual_rescore",
-            actor_id=str(current_user.id)
+            actor_id=str(current_user.id),
         )
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Não foi possível calcular o score (faltam evidências ou análise inválida)."
+                detail="Não foi possível calcular o score (faltam evidências ou análise inválida).",
             )
-            
+
         await db.commit()
         return SingleCandidateScoringResponse(**result)
     except Exception as exc:
@@ -1299,7 +1346,7 @@ async def get_candidate_ranking_entry(
             candidate_id=candidate_id,
         )
         return CandidateRankingEntry(**result)
-    except CandidateNotInActivePipelineError:
+    except CandidateNotInActivePipelineError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -1307,7 +1354,7 @@ async def get_candidate_ranking_entry(
                 "message": "Score ainda não disponível para este candidato nesta vaga.",
                 "action": "request_analysis",
             },
-        )
+        ) from exc
     except Exception as exc:
         _handle_job_service_error(exc)
         raise

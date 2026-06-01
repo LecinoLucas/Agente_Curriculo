@@ -2,17 +2,30 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
 )
-from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
-from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.database.models.behavioral_template_model import (
     BehavioralAssessmentTemplateModel,
     BehavioralTemplateCompetencyModel,
     BehavioralTemplateQuestionModel,
+)
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+)
+from src.infrastructure.database.models.job_model import (
+    JobModel,
+    JobRequiredSkillModel,
+    JobUnitModel,
+    SkillModel,
+)
+from src.infrastructure.database.models.operational_master_model import (
+    LocationGroupModel,
+    OperationalGroupModel,
+    OperationalUnitModel,
 )
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -30,6 +43,9 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
         status: str | None = None,
         job_area: str | None = None,
         work_model: str | None = None,
+        operational_group_id: UUID | None = None,
+        location_group_id: UUID | None = None,
+        allocation_mode: str | None = None,
         include_status: bool = True,
     ) -> list:
         filters: list = [JobModel.deleted_at.is_(None)]
@@ -52,6 +68,15 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
         if work_model:
             filters.append(JobModel.work_model == work_model)
 
+        if operational_group_id is not None:
+            filters.append(JobModel.operational_group_id == operational_group_id)
+
+        if location_group_id is not None:
+            filters.append(JobModel.location_group_id == location_group_id)
+
+        if allocation_mode:
+            filters.append(JobModel.allocation_mode == allocation_mode)
+
         if include_status:
             if status:
                 filters.append(JobModel.status == status)
@@ -68,7 +93,9 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
 
     async def find_active_by_id(self, job_id: UUID) -> JobModel | None:
         return await self._session.scalar(
-            sa.select(JobModel).where(JobModel.id == job_id, JobModel.deleted_at.is_(None))
+            sa.select(JobModel)
+            .options(selectinload(JobModel.job_units))
+            .where(JobModel.id == job_id, JobModel.deleted_at.is_(None))
         )
 
     async def find_active_by_identity(
@@ -85,8 +112,10 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
             sa.select(JobModel).where(
                 JobModel.deleted_at.is_(None),
                 sa.func.lower(sa.func.trim(JobModel.title)) == normalized_title,
-                sa.func.lower(sa.func.trim(sa.func.coalesce(JobModel.job_area, ""))) == normalized_job_area,
-                sa.func.lower(sa.func.trim(sa.func.coalesce(JobModel.location, ""))) == normalized_location,
+                sa.func.lower(sa.func.trim(sa.func.coalesce(JobModel.job_area, "")))
+                == normalized_job_area,
+                sa.func.lower(sa.func.trim(sa.func.coalesce(JobModel.location, "")))
+                == normalized_location,
             )
         )
 
@@ -99,25 +128,36 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
         status: str | None = None,
         job_area: str | None = None,
         work_model: str | None = None,
+        operational_group_id: UUID | None = None,
+        location_group_id: UUID | None = None,
+        operational_unit_id: UUID | None = None,
+        allocation_mode: str | None = None,
     ) -> tuple[list[JobModel], int, dict[str, int]]:
         filters = self._build_filters(
             search=search,
             status=status,
             job_area=job_area,
             work_model=work_model,
+            operational_group_id=operational_group_id,
+            location_group_id=location_group_id,
+            allocation_mode=allocation_mode,
         )
-        total = int(
-            (
-                await self._session.scalar(
-                    sa.select(sa.func.count()).select_from(JobModel).where(*filters)
+        count_stmt = sa.select(sa.func.count(sa.distinct(JobModel.id))).select_from(JobModel)
+        if operational_unit_id is not None:
+            count_stmt = count_stmt.join(JobUnitModel, JobUnitModel.job_id == JobModel.id)
+            filters.append(
+                sa.and_(
+                    JobUnitModel.operational_unit_id == operational_unit_id,
+                    JobUnitModel.is_active.is_(True),
                 )
             )
-            or 0
-        )
+        total = int((await self._session.scalar(count_stmt.where(*filters))) or 0)
         offset = (page - 1) * page_size
+        list_stmt = sa.select(JobModel).options(selectinload(JobModel.job_units))
+        if operational_unit_id is not None:
+            list_stmt = list_stmt.join(JobUnitModel, JobUnitModel.job_id == JobModel.id)
         result = await self._session.execute(
-            sa.select(JobModel)
-            .where(*filters)
+            list_stmt.where(*filters)
             .order_by(JobModel.created_at.desc())
             .offset(offset)
             .limit(page_size)
@@ -126,24 +166,48 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
             search=search,
             job_area=job_area,
             work_model=work_model,
+            operational_group_id=operational_group_id,
+            location_group_id=location_group_id,
+            allocation_mode=allocation_mode,
             include_status=False,
         )
-        summary_row = (
-            await self._session.execute(
-                sa.select(
-                    sa.func.count(JobModel.id).label("all"),
-                    sa.func.sum(sa.case((JobModel.status == "published", 1), else_=0)).label("published"),
-                    sa.func.sum(sa.case((JobModel.status == "draft", 1), else_=0)).label("draft"),
-                    sa.func.sum(sa.case((JobModel.status == "paused", 1), else_=0)).label("paused"),
-                    sa.func.sum(sa.case((JobModel.status == "closed", 1), else_=0)).label("closed"),
-                    sa.func.sum(sa.case((JobModel.status == "cancelled", 1), else_=0)).label("cancelled"),
-                    sa.func.sum(sa.case((JobModel.status == "archived", 1), else_=0)).label("archived"),
-                    sa.func.sum(
-                        sa.case((JobModel.quality_status.in_(["weak", "acceptable"]), 1), else_=0)
-                    ).label("attention"),
-                ).where(*summary_filters)
+        summary_stmt = sa.select(
+            sa.func.count(sa.distinct(JobModel.id)).label("all"),
+            sa.func.count(
+                sa.distinct(sa.case((JobModel.status == "published", JobModel.id)))
+            ).label("published"),
+            sa.func.count(sa.distinct(sa.case((JobModel.status == "draft", JobModel.id)))).label(
+                "draft"
+            ),
+            sa.func.count(sa.distinct(sa.case((JobModel.status == "paused", JobModel.id)))).label(
+                "paused"
+            ),
+            sa.func.count(sa.distinct(sa.case((JobModel.status == "closed", JobModel.id)))).label(
+                "closed"
+            ),
+            sa.func.count(
+                sa.distinct(sa.case((JobModel.status == "cancelled", JobModel.id)))
+            ).label("cancelled"),
+            sa.func.count(sa.distinct(sa.case((JobModel.status == "archived", JobModel.id)))).label(
+                "archived"
+            ),
+            sa.func.count(
+                sa.distinct(
+                    sa.case((JobModel.quality_status.in_(["weak", "acceptable"]), JobModel.id))
+                )
+            ).label("attention"),
+        ).select_from(JobModel)
+        if operational_unit_id is not None:
+            summary_stmt = summary_stmt.join(JobUnitModel, JobUnitModel.job_id == JobModel.id)
+            summary_filters.append(
+                sa.and_(
+                    JobUnitModel.operational_unit_id == operational_unit_id,
+                    JobUnitModel.is_active.is_(True),
+                )
             )
-        ).mappings().one()
+        summary_row = (
+            (await self._session.execute(summary_stmt.where(*summary_filters))).mappings().one()
+        )
 
         summary = {
             "all": int(summary_row["all"] or 0),
@@ -156,12 +220,57 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
             "attention": int(summary_row["attention"] or 0),
         }
 
-        return list(result.scalars().all()), total, summary
+        return list(result.scalars().unique().all()), total, summary
 
     async def save(self, job: JobModel) -> JobModel:
         await self._session.flush()
         await self._session.refresh(job)
         return job
+
+    async def find_active_operational_group_by_id(
+        self,
+        group_id: UUID,
+    ) -> OperationalGroupModel | None:
+        return await self._session.scalar(
+            sa.select(OperationalGroupModel).where(
+                OperationalGroupModel.id == group_id,
+                OperationalGroupModel.is_active.is_(True),
+            )
+        )
+
+    async def find_active_location_group_by_id(
+        self,
+        location_group_id: UUID,
+    ) -> LocationGroupModel | None:
+        return await self._session.scalar(
+            sa.select(LocationGroupModel).where(
+                LocationGroupModel.id == location_group_id,
+                LocationGroupModel.is_active.is_(True),
+            )
+        )
+
+    async def find_active_operational_unit_ids(self, unit_ids: set[UUID]) -> set[UUID]:
+        if not unit_ids:
+            return set()
+        result = await self._session.execute(
+            sa.select(OperationalUnitModel.id).where(
+                OperationalUnitModel.id.in_(unit_ids),
+                OperationalUnitModel.is_active.is_(True),
+            )
+        )
+        return set(result.scalars().all())
+
+    async def replace_job_units(self, job_id: UUID, unit_rows: list[dict]) -> None:
+        await self._session.execute(sa.delete(JobUnitModel).where(JobUnitModel.job_id == job_id))
+        created_units: list[JobUnitModel] = []
+        for unit_row in unit_rows:
+            job_unit = JobUnitModel(job_id=job_id, **unit_row)
+            self._session.add(job_unit)
+            created_units.append(job_unit)
+        await self._session.flush()
+        job = await self._session.get(JobModel, job_id)
+        if job is not None:
+            set_committed_value(job, "job_units", created_units)
 
     async def find_active_skill_by_id(self, skill_id: UUID) -> SkillModel | None:
         return await self._session.scalar(
@@ -287,7 +396,8 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
     async def list_published(self) -> list[JobModel]:
         """Lista todas as vagas com status='published' e não deletadas."""
         result = await self._session.execute(
-            sa.select(JobModel).where(
+            sa.select(JobModel)
+            .where(
                 JobModel.status == "published",
                 JobModel.deleted_at.is_(None),
             )
@@ -301,19 +411,27 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
             sa.select(
                 BehavioralAssessmentTemplateModel.id.label("id"),
                 BehavioralAssessmentTemplateModel.status.label("status"),
-                sa.func.count(sa.distinct(BehavioralTemplateCompetencyModel.id)).label("competency_count"),
-                sa.func.count(sa.distinct(BehavioralTemplateQuestionModel.id)).label("question_count"),
+                sa.func.count(sa.distinct(BehavioralTemplateCompetencyModel.id)).label(
+                    "competency_count"
+                ),
+                sa.func.count(sa.distinct(BehavioralTemplateQuestionModel.id)).label(
+                    "question_count"
+                ),
             )
             .outerjoin(
                 BehavioralTemplateCompetencyModel,
-                BehavioralTemplateCompetencyModel.template_id == BehavioralAssessmentTemplateModel.id,
+                BehavioralTemplateCompetencyModel.template_id
+                == BehavioralAssessmentTemplateModel.id,
             )
             .outerjoin(
                 BehavioralTemplateQuestionModel,
-                BehavioralTemplateQuestionModel.competency_id == BehavioralTemplateCompetencyModel.id,
+                BehavioralTemplateQuestionModel.competency_id
+                == BehavioralTemplateCompetencyModel.id,
             )
             .where(BehavioralAssessmentTemplateModel.id == template_id)
-            .group_by(BehavioralAssessmentTemplateModel.id, BehavioralAssessmentTemplateModel.status)
+            .group_by(
+                BehavioralAssessmentTemplateModel.id, BehavioralAssessmentTemplateModel.status
+            )
         )
         result = await self._session.execute(stmt)
         row = result.mappings().first()

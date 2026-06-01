@@ -9,6 +9,7 @@ from src.interface.api.schemas.common import APISchemaModel, ORMAPISchemaModel
 
 JOB_PRIORITY = Literal["low", "normal", "high", "urgent"]
 SELECTION_FLOW_TYPE = Literal["simple", "standard", "technical", "leadership"]
+JOB_ALLOCATION_MODE = Literal["corporate", "operational"]
 
 SELECTION_FLOW_DEFAULTS: dict[str, dict[str, bool]] = {
     "simple": {
@@ -52,6 +53,7 @@ DEAL_BREAKER_FIELDS = Literal[
     "custom_text",
 ]
 
+
 def normalize_job_area_value(value: str | None) -> str | None:
     if value is None:
         return None
@@ -65,8 +67,12 @@ def normalize_job_area_value(value: str | None) -> str | None:
 
 class DealBreaker(BaseModel):
     field: DEAL_BREAKER_FIELDS = Field(description="Type of field to evaluate")
-    operator: Literal["equals", "not_equals", "contains", "not_contains", "in", ">=", "<="] = "equals"
-    value: str | None = Field(default=None, description="Single value for operators like equals, contains, >=, <=")
+    operator: Literal["equals", "not_equals", "contains", "not_contains", "in", ">=", "<="] = (
+        "equals"
+    )
+    value: str | None = Field(
+        default=None, description="Single value for operators like equals, contains, >=, <="
+    )
     values: list[str] | None = Field(default=None, description="Multiple values for 'in' operator")
     reason: str = Field(min_length=1, max_length=500, description="Why this is a deal-breaker")
     is_active: bool = True
@@ -111,6 +117,24 @@ class DealBreaker(BaseModel):
         return value
 
 
+class JobUnitRequest(APISchemaModel):
+    operational_unit_id: UUID
+    openings_count: int | None = Field(default=None, ge=0)
+    priority: int | None = Field(default=None, ge=0)
+    is_active: bool = True
+
+
+class JobUnitResponse(ORMAPISchemaModel):
+    id: UUID
+    job_id: UUID
+    operational_unit_id: UUID
+    openings_count: int | None = None
+    priority: int | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class JobResponse(ORMAPISchemaModel):
     id: UUID
     title: str
@@ -139,6 +163,11 @@ class JobResponse(ORMAPISchemaModel):
     quality_score: int | None = None
     quality_status: Literal["weak", "acceptable", "good"] | None = None
     skill_requirements: dict[str, list[str]] | None = None
+    operational_group_id: UUID | None = None
+    location_group_id: UUID | None = None
+    allocation_mode: JOB_ALLOCATION_MODE | None = None
+    operational_unit_ids: list[UUID] = Field(default_factory=list)
+    job_units: list[JobUnitResponse] = Field(default_factory=list)
     behavioral_template_id: UUID | None = None
     selection_flow_type: SELECTION_FLOW_TYPE
     requires_behavioral_assessment: bool
@@ -198,8 +227,13 @@ class CreateJobRequest(APISchemaModel):
     description: str = Field(min_length=10)
     requirements: str | None = None
     status: Literal["draft", "published", "paused", "closed", "cancelled", "archived"] = "draft"
-    seniority_level: Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None = None
-    minimum_education_level: Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"] | None = None
+    seniority_level: (
+        Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None
+    ) = None
+    minimum_education_level: (
+        Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"]
+        | None
+    ) = None
     minimum_years_experience: Decimal | None = None
     deal_breakers: list[DealBreaker] = Field(default_factory=list)
     work_model: Literal["remote", "hybrid", "onsite"] | None = None
@@ -218,6 +252,11 @@ class CreateJobRequest(APISchemaModel):
     working_hours: str | None = Field(default=None, max_length=200)
     priority: JOB_PRIORITY = "normal"
     skill_requirements: dict[str, list[str]] | None = None
+    operational_group_id: UUID | None = None
+    location_group_id: UUID | None = None
+    allocation_mode: JOB_ALLOCATION_MODE | None = None
+    operational_unit_ids: list[UUID] | None = None
+    job_units: list[JobUnitRequest] | None = None
     behavioral_template_id: UUID | None = None
     selection_flow_type: SELECTION_FLOW_TYPE | None = None
     requires_behavioral_assessment: bool | None = None
@@ -235,6 +274,24 @@ class CreateJobRequest(APISchemaModel):
             if getattr(self, field) is None:
                 setattr(self, field, default)
         return self
+
+    @model_validator(mode="after")
+    def validate_unit_payload(self) -> Self:
+        if self.operational_unit_ids is not None and self.job_units is not None:
+            raise ValueError("Use operational_unit_ids ou job_units, não ambos.")
+        self._validate_unique_operational_units()
+        return self
+
+    def _validate_unique_operational_units(self) -> None:
+        if (
+            self.operational_unit_ids is not None
+            and len(set(self.operational_unit_ids)) != len(self.operational_unit_ids)
+        ):
+            raise ValueError("operational_unit_ids não pode conter unidades duplicadas.")
+        if self.job_units is not None:
+            unit_ids = [unit.operational_unit_id for unit in self.job_units]
+            if len(set(unit_ids)) != len(unit_ids):
+                raise ValueError("job_units não pode conter unidades duplicadas.")
 
     @field_validator("job_area", mode="before")
     @classmethod
@@ -293,8 +350,13 @@ class UpdateJobRequest(APISchemaModel):
     description: str | None = Field(default=None, min_length=10)
     requirements: str | None = None
     status: Literal["draft", "published", "paused", "closed", "cancelled", "archived"] | None = None
-    seniority_level: Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None = None
-    minimum_education_level: Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"] | None = None
+    seniority_level: (
+        Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None
+    ) = None
+    minimum_education_level: (
+        Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"]
+        | None
+    ) = None
     minimum_years_experience: Decimal | None = None
     deal_breakers: list[DealBreaker] | None = None
     work_model: Literal["remote", "hybrid", "onsite"] | None = None
@@ -313,6 +375,11 @@ class UpdateJobRequest(APISchemaModel):
     working_hours: str | None = Field(default=None, max_length=200)
     priority: JOB_PRIORITY | None = None
     skill_requirements: dict[str, list[str]] | None = None
+    operational_group_id: UUID | None = None
+    location_group_id: UUID | None = None
+    allocation_mode: JOB_ALLOCATION_MODE | None = None
+    operational_unit_ids: list[UUID] | None = None
+    job_units: list[JobUnitRequest] | None = None
     behavioral_template_id: UUID | None = None
     selection_flow_type: SELECTION_FLOW_TYPE | None = None
     requires_behavioral_assessment: bool | None = None
@@ -325,6 +392,21 @@ class UpdateJobRequest(APISchemaModel):
     @classmethod
     def normalize_job_area_update(cls, value):
         return normalize_job_area_value(value)
+
+    @model_validator(mode="after")
+    def validate_unit_payload(self) -> Self:
+        if self.operational_unit_ids is not None and self.job_units is not None:
+            raise ValueError("Use operational_unit_ids ou job_units, não ambos.")
+        if (
+            self.operational_unit_ids is not None
+            and len(set(self.operational_unit_ids)) != len(self.operational_unit_ids)
+        ):
+            raise ValueError("operational_unit_ids não pode conter unidades duplicadas.")
+        if self.job_units is not None:
+            unit_ids = [unit.operational_unit_id for unit in self.job_units]
+            if len(set(unit_ids)) != len(unit_ids):
+                raise ValueError("job_units não pode conter unidades duplicadas.")
+        return self
 
     @field_validator(
         "mandatory_skills",
@@ -357,7 +439,9 @@ class UpdateJobRequest(APISchemaModel):
 
     @field_validator("behavioral_requirements")
     @classmethod
-    def normalize_optional_behavioral_requirements(cls, values: list[str] | None) -> list[str] | None:
+    def normalize_optional_behavioral_requirements(
+        cls, values: list[str] | None
+    ) -> list[str] | None:
         if values is None:
             return None
 
@@ -465,7 +549,9 @@ class CandidateScoreExplanationFactorSummaryItemResponse(BaseModel):
 class CandidateScoreExplanationFactorSummaryResponse(BaseModel):
     positive: list[CandidateScoreExplanationFactorSummaryItemResponse] = Field(default_factory=list)
     negative: list[CandidateScoreExplanationFactorSummaryItemResponse] = Field(default_factory=list)
-    contextual: list[CandidateScoreExplanationFactorSummaryItemResponse] = Field(default_factory=list)
+    contextual: list[CandidateScoreExplanationFactorSummaryItemResponse] = Field(
+        default_factory=list
+    )
 
 
 class CandidateScoreExplanationDeltaChangeResponse(BaseModel):
@@ -482,12 +568,15 @@ class CandidateScoreExplanationDeltaResponse(BaseModel):
     previous_score: float | None = None
     current_score: float | None = None
     score_change: float | None = None
-    change_reason: Literal[
-        "candidate_analysis_changed",
-        "job_requirements_changed",
-        "score_model_changed",
-        "manual_recompute_same_inputs",
-    ] | None = None
+    change_reason: (
+        Literal[
+            "candidate_analysis_changed",
+            "job_requirements_changed",
+            "score_model_changed",
+            "manual_recompute_same_inputs",
+        ]
+        | None
+    ) = None
     top_changes: list[CandidateScoreExplanationDeltaChangeResponse] = Field(default_factory=list)
 
 
@@ -503,8 +592,12 @@ class CandidateScoreExplanationResponse(BaseModel):
     recommendation: str
     engine_used: str
     ranking_summary_text: str
-    breakdown: CandidateScoreExplanationBreakdownResponse = Field(default_factory=CandidateScoreExplanationBreakdownResponse)
-    score_factors: CandidateScoreExplanationFactorSummaryResponse = Field(default_factory=CandidateScoreExplanationFactorSummaryResponse)
+    breakdown: CandidateScoreExplanationBreakdownResponse = Field(
+        default_factory=CandidateScoreExplanationBreakdownResponse
+    )
+    score_factors: CandidateScoreExplanationFactorSummaryResponse = Field(
+        default_factory=CandidateScoreExplanationFactorSummaryResponse
+    )
     delta: CandidateScoreExplanationDeltaResponse | None = None
     highlights: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
@@ -536,7 +629,9 @@ class JobQualityResponse(BaseModel):
 class BulkImportJobSkillRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     priority_level: Literal["priority", "complementary", "eliminatory"] = "complementary"
-    minimum_level: Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None = None
+    minimum_level: (
+        Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None
+    ) = None
     minimum_years: Decimal | None = Field(default=None, ge=0, le=80)
     weight: Decimal = Field(default=Decimal("1.00"), ge=0, le=10)
 
@@ -546,8 +641,13 @@ class BulkImportJobItemRequest(APISchemaModel):
     description: str = Field(min_length=1)
     requirements: str | None = None
     status: Literal["draft", "published", "paused", "closed", "cancelled"] = "draft"
-    seniority_level: Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None = None
-    minimum_education_level: Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"] | None = None
+    seniority_level: (
+        Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None
+    ) = None
+    minimum_education_level: (
+        Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"]
+        | None
+    ) = None
     minimum_years_experience: Decimal | None = None
     deal_breakers: list[DealBreaker] = Field(default_factory=list)
     work_model: Literal["remote", "hybrid", "onsite"] | None = None
@@ -633,8 +733,13 @@ class BulkUpdateJobDataRequest(APISchemaModel):
     description: str | None = Field(default=None, min_length=10)
     requirements: str | None = None
     status: Literal["draft", "published", "paused", "closed", "cancelled"] | None = None
-    seniority_level: Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None = None
-    minimum_education_level: Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"] | None = None
+    seniority_level: (
+        Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None
+    ) = None
+    minimum_education_level: (
+        Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"]
+        | None
+    ) = None
     minimum_years_experience: Decimal | None = None
     deal_breakers: list[DealBreaker] | None = None
     work_model: Literal["remote", "hybrid", "onsite"] | None = None
@@ -656,7 +761,9 @@ class BulkUpdateJobDataRequest(APISchemaModel):
 
     @field_validator("behavioral_requirements")
     @classmethod
-    def normalize_bulk_update_behavioral_requirements(cls, values: list[str] | None) -> list[str] | None:
+    def normalize_bulk_update_behavioral_requirements(
+        cls, values: list[str] | None
+    ) -> list[str] | None:
         if values is None:
             return None
 
@@ -714,6 +821,7 @@ class RemoveCandidateFromJobResponse(BaseModel):
 
 # ── Fase IA Vaga 2 — OCR response ─────────────────────────────────────────────
 
+
 class OcrSourceInfo(BaseModel):
     filename: str
     mime_type: str
@@ -729,6 +837,7 @@ class OcrExtractResponse(BaseModel):
 
 
 # ── Fase IA Vaga 3 — AI draft generation ──────────────────────────────────────
+
 
 class AiDraftSourceRequest(BaseModel):
     text_used: bool = True
