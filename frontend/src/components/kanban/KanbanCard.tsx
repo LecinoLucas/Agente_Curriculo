@@ -241,8 +241,8 @@ export const KanbanCard = memo(function KanbanCard({
   }
 
   // Determine score color and border accent color dynamically
-  let scoreColorClass = "text-slate-500 dark:text-slate-400";
-  let borderAccentClass = "border-l-slate-300 dark:border-l-slate-700";
+  let scoreColorClass = "text-text-muted";
+  let borderAccentClass = "border-l-border";
 
   if (jobFitScore !== null && jobFitScore !== undefined) {
     const score = Math.round(jobFitScore);
@@ -280,8 +280,8 @@ export const KanbanCard = memo(function KanbanCard({
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       className={[
-        "pipeline-candidate-card group relative w-full select-none overflow-hidden rounded-[18px] bg-white/98 p-3 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)] transition-all duration-200 dark:bg-slate-900/95",
-        "border border-slate-200/85 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700 hover:shadow-[0_18px_34px_-24px_rgba(15,23,42,0.38)]",
+        "pipeline-candidate-card shrink-0 group relative w-full select-none overflow-hidden rounded-[18px] bg-white/98 p-3 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)] transition-all duration-200 dark:bg-surface",
+        "border border-border/50 hover:border-border/80 dark:border-border/60 dark:hover:border-border hover:shadow-[0_18px_34px_-24px_rgba(15,23,42,0.38)]",
         "border-l-[3px]",
         borderAccentClass,
         isTopMatch ? "ring-1 ring-emerald-200/60 bg-emerald-50/30 dark:ring-emerald-500/10" : "",
@@ -297,7 +297,7 @@ export const KanbanCard = memo(function KanbanCard({
     >
       {draggable && (
         <div className="absolute -left-1 top-1/2 -translate-y-1/2 flex h-5 w-3 shrink-0 cursor-grab items-center justify-center opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40">
-          <GripVertical className="h-3.5 w-3.5 text-slate-400" />
+          <GripVertical className="h-3.5 w-3.5 text-text-muted/50" />
         </div>
       )}
 
@@ -307,12 +307,12 @@ export const KanbanCard = memo(function KanbanCard({
             {initials}
           </span>
           <div className="min-w-0 flex-1">
-            <span className="block truncate text-[13.5px] font-bold tracking-tight text-slate-800 transition-colors group-hover:text-slate-600 dark:text-slate-100 dark:group-hover:text-slate-200">
+            <span className="block truncate text-[13.5px] font-bold tracking-tight text-text transition-colors group-hover:text-text/80">
               {name}
             </span>
             {professionalContext && (
               <span
-                className="mt-0.5 block truncate text-[10.5px] font-medium text-slate-500 dark:text-slate-400"
+                className="mt-0.5 block truncate text-[10.5px] font-medium text-text-muted"
                 data-testid="kanban-card-context"
               >
                 {professionalContext}
@@ -320,7 +320,7 @@ export const KanbanCard = memo(function KanbanCard({
             )}
             {skillsSummary && (
               <span
-                className="mt-1 block truncate text-[10px] font-medium text-slate-400 dark:text-slate-500"
+                className="mt-1 block truncate text-[10px] font-medium text-text-muted/80"
                 data-testid="kanban-card-skills"
                 title={candidate.top_skills?.join(", ")}
               >
@@ -339,13 +339,13 @@ export const KanbanCard = memo(function KanbanCard({
             <span className={`text-[19px] font-black tracking-tight ${scoreColorClass}`}>
               {Math.round(jobFitScore)}%
             </span>
-            <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">
+            <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-[0.08em] text-text-muted">
               aderência
             </span>
           </div>
         ) : (
           <div className="flex shrink-0 flex-col items-end leading-none" data-testid="kanban-card-score-empty">
-            <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">
+            <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-text-muted">
               Sem score
             </span>
           </div>
@@ -355,17 +355,17 @@ export const KanbanCard = memo(function KanbanCard({
       <div className="mt-2.5 flex flex-col gap-1.5">
         {progressLabel && (
           <div
-            className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 dark:text-slate-400"
+            className="flex items-center gap-1.5 text-[10px] font-medium text-text-muted"
             data-testid="kanban-card-progress"
           >
-            <Clock3 className="h-3 w-3 shrink-0 text-slate-400 dark:text-slate-500" />
+            <Clock3 className="h-3 w-3 shrink-0 text-text-muted/80" />
             <span className="truncate">{progressLabel}</span>
           </div>
         )}
 
         {nextAction && (
           <div
-            className="flex items-center gap-1.5 rounded-lg border border-slate-100/80 bg-slate-50/75 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-300"
+            className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-surface-muted/50 px-2 py-1 text-[10px] font-semibold text-text-muted"
             data-testid="kanban-card-next-action"
           >
             {typeof nextAction === "string" ? (

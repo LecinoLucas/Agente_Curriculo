@@ -839,27 +839,27 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-1 text-slate-800 bg-[#F4F7FB] dark:bg-[#09090b] dark:text-slate-100 sm:px-2 sm:pt-2 lg:px-3">
+    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-1 text-slate-800 bg-[#F4F7FB] dark:bg-background dark:text-text sm:px-2 sm:pt-2 lg:px-3">
       
       {/* ── Header Area ── */}
       <div className="mb-1 mt-0 flex flex-col gap-2">
         {/* Top Row: Breadcrumb */}
         <nav aria-label="breadcrumb" className="sr-only">
           <span>Recrutamento</span>
-          <span className="text-slate-300 dark:text-slate-600">›</span>
-          <span className="font-bold text-slate-800 dark:text-slate-100">Pipeline</span>
+          <span className="text-slate-300 dark:text-text-muted">›</span>
+          <span className="font-bold text-slate-800 dark:text-text">Pipeline</span>
         </nav>
 
         {/* Second Row: Title, Combobox, Actions */}
         <div className="relative z-30 flex flex-col gap-3 pr-14 xl:flex-row xl:items-start xl:justify-between">
           <div className="relative z-10 min-w-0 flex-1 rounded-2xl border border-slate-200/80 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-              <h1 className="shrink-0 text-2xl font-black tracking-tight text-[#0f172a] dark:text-white">Pipeline</h1>
+              <h1 className="shrink-0 text-2xl font-black tracking-tight text-[#0f172a] dark:text-text">Pipeline</h1>
 
               {pipelineJobsError ? (
                 <span className="text-xs font-bold text-rose-500">{pipelineJobsError}</span>
               ) : (
-                <div className="relative z-20 min-w-[300px] max-w-full flex-1 rounded-xl border border-slate-200/80 bg-slate-50/85 px-2 py-1.5 shadow-inner shadow-white/80 dark:border-slate-800 dark:bg-slate-900">
+                <div className="relative z-20 min-w-[300px] max-w-full flex-1 rounded-xl border border-slate-200/80 bg-slate-50/85 px-2 py-1.5 shadow-inner shadow-white/80 dark:border-border dark:bg-surface-muted">
                   <JobCombobox
                     jobs={pipelineJobs}
                     loading={pipelineJobsLoading}
@@ -1002,7 +1002,7 @@ export function PipelinePage() {
                     {/* Left: Search & Toggles */}
                     <div className="flex flex-wrap items-center gap-2.5">
                       {/* Search Bar */}
-                      <div className="flex w-full items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-2 shadow-sm transition-all focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900 sm:w-64">
+                      <div className="flex w-full items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-2 shadow-sm transition-all focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-100 dark:border-border dark:bg-surface sm:w-64">
                         <Search className="h-4 w-4 shrink-0 text-slate-400" />
                         <input
                           type="text"
@@ -1011,14 +1011,14 @@ export function PipelinePage() {
                           onChange={(event) => setSearchTerm(event.target.value)}
                           aria-label="Buscar candidato"
                           data-testid="pipeline-search-input"
-                          className="flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
+                          className="flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:text-text"
                         />
                         {searchTerm && (
                           <button
                             type="button"
                             onClick={() => setSearchTerm("")}
                             aria-label="Limpar busca"
-                            className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                            className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-surface-muted"
                             data-testid="pipeline-search-clear"
                           >
                             <X className="h-3.5 w-3.5" />
@@ -1032,10 +1032,10 @@ export function PipelinePage() {
                         className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
                           sortOrder === "score_desc"
                             ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-teal-400/25 dark:bg-teal-400/10 dark:text-teal-200"
-                            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
+                            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted"
                         }`}
                       >
-                        <span className={`flex h-5 w-5 items-center justify-center rounded-full ${sortOrder === "score_desc" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40" : "bg-slate-100 text-slate-400 dark:bg-slate-800"}`}>
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-full ${sortOrder === "score_desc" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40" : "bg-slate-100 text-slate-400 dark:bg-surface-muted"}`}>
                           <CheckCircle2 className="h-3 w-3" />
                         </span>
                         Melhor match IA
@@ -1061,7 +1061,7 @@ export function PipelinePage() {
                     {/* Right: Filtros Button */}
                     <div className="flex flex-wrap items-center gap-2">
                       {isBoardRefreshing && (
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-bold text-slate-500 animate-pulse dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+                        <span className="inline-flex items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1 text-[9px] font-bold text-slate-500 animate-pulse dark:border-border dark:bg-surface-muted dark:text-text-muted">
                           <RefreshCw className="h-2.5 w-2.5 animate-spin" />
                         </span>
                       )}
@@ -1072,7 +1072,7 @@ export function PipelinePage() {
                         className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
                           showFilters || hasActiveFilters
                             ? "border-indigo-200 bg-indigo-50/50 text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-400"
-                            : "border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 dark:border-slate-800 dark:bg-slate-900 dark:text-indigo-400 dark:hover:bg-indigo-950/20"
+                            : "border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 dark:border-border dark:bg-surface dark:text-indigo-400 dark:hover:bg-indigo-950/20"
                         }`}
                       >
                         <Filter className="h-4 w-4" />
@@ -1083,7 +1083,7 @@ export function PipelinePage() {
                             className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
                               showFilters || hasActiveFilters
                                 ? "bg-indigo-100/80 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300"
-                                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                                : "bg-slate-100 text-slate-500 dark:bg-surface-muted dark:text-text-muted"
                             }`}
                           >
                             {activeFiltersCount}
@@ -1097,7 +1097,7 @@ export function PipelinePage() {
                           type="button"
                           onClick={clearAllFilters}
                           data-testid="pipeline-clear-filters"
-                          className="flex h-10 items-center justify-center rounded-[14px] border border-slate-200 bg-white px-3 text-slate-400 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-rose-900/50 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
+                          className="flex h-10 items-center justify-center rounded-[14px] border border-slate-200 bg-white px-3 text-slate-400 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500 dark:border-border dark:bg-surface dark:hover:border-rose-900/50 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
                           title="Limpar filtros"
                         >
                           <X className="h-4 w-4" />
@@ -1108,24 +1108,24 @@ export function PipelinePage() {
 
                   {/* Expanded Filters Area */}
                   {showFilters && (
-                    <div className="pipeline-filter-panel mt-1 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[18px] border border-slate-200 bg-slate-50/65 p-3 shadow-inner shadow-white/70 dark:border-slate-800 dark:bg-slate-900/50 animate-in slide-in-from-top-2 fade-in duration-200">
+                    <div className="pipeline-filter-panel mt-1 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[18px] border border-slate-200 bg-slate-50/65 p-3 shadow-inner shadow-white/70 dark:border-border dark:bg-surface-muted/50 animate-in slide-in-from-top-2 fade-in duration-200">
                       {/* Period */}
                       <div className="flex items-center gap-2.5">
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Período</span>
-                        <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900">
+                        <span className="text-xs font-bold text-slate-600 dark:text-text-muted">Período</span>
+                        <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-sm border border-slate-200 dark:border-border dark:bg-surface">
                           <input
                             type="date"
                             value={urlBoardFilters.entered_from ?? ""}
                             onChange={(event) => handleBoardDateFilterChange("entered_from", event.target.value)}
-                            className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-slate-200"
+                            className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-text"
                             aria-label="Entrada no processo de"
                           />
-                          <span className="text-slate-300 dark:text-slate-600">-</span>
+                          <span className="text-slate-300 dark:text-text-muted">-</span>
                           <input
                             type="date"
                             value={urlBoardFilters.entered_to ?? ""}
                             onChange={(event) => handleBoardDateFilterChange("entered_to", event.target.value)}
-                            className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-slate-200"
+                            className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-text"
                             aria-label="Entrada no processo até"
                           />
                         </div>
@@ -1133,8 +1133,8 @@ export function PipelinePage() {
 
                       {/* Last activity */}
                       <div className="flex items-center gap-2.5">
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Última atividade</span>
-                        <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900">
+                        <span className="text-xs font-bold text-slate-600 dark:text-text-muted">Última atividade</span>
+                        <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-sm border border-slate-200 dark:border-border dark:bg-surface">
                           <input
                             type="date"
                             value={urlBoardFilters.updated_to ?? ""}
@@ -1219,11 +1219,11 @@ export function PipelinePage() {
 
                 <div
                   ref={kanbanScrollRef}
-                  className="pipeline-kanban-scroll -mx-1 w-[calc(100%+0.5rem)] min-w-0 overflow-x-auto overflow-y-hidden px-1 pb-4 pt-1"
+                  className="pipeline-kanban-scroll -mx-1 w-[calc(100%+0.5rem)] min-w-0 flex-1 flex flex-col overflow-x-auto overflow-y-hidden px-1 pb-4 pt-1"
                   onScroll={syncMainKanbanScroll}
                   data-testid="kanban-scroll-container"
                 >
-                  <div className="flex w-full min-w-0 items-stretch gap-2 min-h-[620px] h-[calc(100vh-230px)] max-h-[calc(100vh-180px)] xl:gap-2">
+                  <div className="flex flex-1 w-full min-w-0 items-stretch gap-2 min-h-[620px] xl:gap-2">
                     {mainCols.map((col, idx) => (
                       <KanbanColumn
                         key={col.macroId}

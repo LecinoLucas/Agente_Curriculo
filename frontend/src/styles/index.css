@@ -553,137 +553,142 @@
 
   :root[data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 3 — Branco Gelo (Minimal)
+       Visual Theme 3 — Rosé Elegance
        -----------------------------------------------------------------------
        Direção:
-       - Extremamente minimalista e claro.
-       - Base branco gelo puro.
-       - Brand focado em tons pretos/grafite.
+       - Feminino elegante, sem rosa neon.
+       - Base em branco rosado sutil.
+       - Brand focado em rosa queimado e ameixa.
        ----------------------------------------------------------------------- */
 
-    --brand:               0 0% 10%;
-    --brand-dark:          0 0% 0%;
-    --brand-soft:          0 0% 90%;
-    --brand-glow:          0 0% 20%;
+    --brand:               340 45% 65%;
+    --brand-dark:          335 45% 45%;
+    --brand-soft:          340 30% 92%;
+    --brand-glow:          340 45% 65%;
 
-    --bg:                  0 0% 98%;
-    --surface:             0 0% 100%;
-    --surface-muted:       0 0% 95%;
-    --border:              0 0% 88%;
-    --border-strong:       0 0% 75%;
+    --bg:                  340 20% 98%;
+    --surface:             340 10% 100%;
+    --surface-muted:       340 15% 95%;
+    --border:              340 15% 90%;
+    --border-strong:       340 15% 80%;
 
-    --background:          0 0% 98%;
-    --foreground:          0 0% 15%;
-    --card:                0 0% 100%;
-    --card-foreground:     0 0% 15%;
-    --popover:             0 0% 100%;
-    --popover-foreground:  0 0% 15%;
-    --secondary:           0 0% 95%;
-    --secondary-foreground:0 0% 15%;
-    --muted:               0 0% 95%;
-    --muted-foreground:    0 0% 45%;
+    --background:          340 20% 98%;
+    --foreground:          330 20% 20%;
+    --card:                340 10% 100%;
+    --card-foreground:     330 20% 20%;
+    --popover:             340 10% 100%;
+    --popover-foreground:  330 20% 20%;
+    --secondary:           340 15% 95%;
+    --secondary-foreground:330 20% 20%;
+    --muted:               340 15% 95%;
+    --muted-foreground:    330 15% 45%;
 
-    --text:                0 0% 15%;
-    --text-muted:          0 0% 45%;
+    --text:                330 20% 20%;
+    --text-muted:          330 15% 45%;
 
-    --primary:             0 0% 10%;
-    --primary-hover:       0 0% 0%;
-    --primary-soft:        0 0% 95%;
+    --primary:             340 45% 65%;
+    --primary-hover:       340 45% 55%;
+    --primary-soft:        340 30% 92%;
     --primary-foreground:  0 0% 100%;
-    --ring:                0 0% 10%;
+    --ring:                340 45% 65%;
 
-    --accent:              210 10% 95%;
-    --accent-foreground:   0 0% 10%;
-    --accent-soft:         210 10% 95%;
-    --accent-contrast:     0 0% 10%;
+    --accent:              35 30% 85%;
+    --accent-foreground:   330 20% 20%;
+    --accent-soft:         35 30% 85%;
+    --accent-contrast:     330 20% 20%;
 
     --danger:              344 62% 45%;
     --danger-soft:         344 50% 95%;
     --destructive:         344 62% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --input:               0 0% 85%;
+    --input:               340 15% 85%;
 
-    --nav-bg:              0 0% 20%;
-    --nav-text:            0 0% 98%;
-    --nav-muted:           0 0% 70%;
-    --nav-active-bg:       0 0% 10%;
+    --nav-bg:              335 30% 15%;
+    --nav-text:            340 20% 98%;
+    --nav-muted:           340 15% 70%;
+    --nav-active-bg:       340 45% 65%;
     --nav-active-text:     0 0% 100%;
-    --nav-border:          0 0% 15%;
+    --nav-border:          335 30% 10%;
 
-    --sidebar-accent:      0 0% 10%;
-    --hero-start:          0 0% 15%;
-    --hero-end:            0 0% 20%;
+    --sidebar-accent:      340 45% 65%;
+    --hero-start:          340 20% 98%;
+    --hero-end:            340 15% 92%;
 
-    --page-glow-start:     0 0% 98%;
-    --page-glow-end:       0 0% 94%;
-    --page-gradient-start: 0 0% 98%;
-    --page-gradient-end:   0 0% 94%;
+    --page-glow-start:     340 20% 98%;
+    --page-glow-end:       340 15% 94%;
+    --page-gradient-start: 340 20% 98%;
+    --page-gradient-end:   340 15% 94%;
   }
 
   :root[data-visual-theme="theme-4"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 4 — Lilás com Cinza Escuro
+       Visual Theme 4 — Gold Executive
+       ----------------------------------------------------------------------- 
+       Direção:
+       - Sofisticado e premium.
+       - Base marfim e branco quente.
+       - Brand focado em dourado envelhecido e bronze.
        ----------------------------------------------------------------------- */
 
-    --brand:               270 60% 60%;
-    --brand-dark:          270 60% 40%;
-    --brand-soft:          270 60% 95%;
-    --brand-glow:          270 60% 70%;
+    --brand:               40 40% 55%;
+    --brand-dark:          35 45% 35%;
+    --brand-soft:          45 30% 92%;
+    --brand-glow:          40 40% 55%;
 
-    --bg:                  270 10% 98%;
-    --surface:             0 0% 100%;
-    --surface-muted:       270 10% 94%;
-    --border:              270 10% 88%;
-    --border-strong:       270 10% 75%;
+    --bg:                  45 30% 98%;
+    --surface:             45 20% 100%;
+    --surface-muted:       45 25% 95%;
+    --border:              45 20% 90%;
+    --border-strong:       45 20% 80%;
 
-    --background:          270 10% 98%;
-    --foreground:          270 10% 15%;
-    --card:                0 0% 100%;
-    --card-foreground:     270 10% 15%;
-    --popover:             0 0% 100%;
-    --popover-foreground:  270 10% 15%;
-    --secondary:           270 10% 94%;
-    --secondary-foreground:270 10% 15%;
-    --muted:               270 10% 94%;
-    --muted-foreground:    270 10% 45%;
+    --background:          45 30% 98%;
+    --foreground:          30 20% 20%;
+    --card:                45 20% 100%;
+    --card-foreground:     30 20% 20%;
+    --popover:             45 20% 100%;
+    --popover-foreground:  30 20% 20%;
+    --secondary:           45 25% 95%;
+    --secondary-foreground:30 20% 20%;
+    --muted:               45 25% 95%;
+    --muted-foreground:    30 15% 45%;
 
-    --text:                270 10% 15%;
-    --text-muted:          270 10% 45%;
+    --text:                30 20% 20%;
+    --text-muted:          30 15% 45%;
 
-    --primary:             270 60% 60%;
-    --primary-hover:       270 60% 50%;
-    --primary-soft:        270 60% 95%;
+    --primary:             40 40% 55%;
+    --primary-hover:       40 40% 45%;
+    --primary-soft:        45 30% 92%;
     --primary-foreground:  0 0% 100%;
-    --ring:                270 60% 60%;
+    --ring:                40 40% 55%;
 
-    --accent:              270 60% 95%;
-    --accent-foreground:   270 60% 40%;
-    --accent-soft:         270 60% 95%;
-    --accent-contrast:     210 10% 20%;
+    --accent:              35 60% 50%;
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         35 40% 90%;
+    --accent-contrast:     0 0% 100%;
 
     --danger:              344 62% 45%;
     --danger-soft:         344 50% 95%;
     --destructive:         344 62% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --input:               270 10% 85%;
+    --input:               45 20% 85%;
 
-    --nav-bg:              270 10% 20%;
-    --nav-text:            270 10% 98%;
-    --nav-muted:           270 10% 70%;
-    --nav-active-bg:       270 60% 60%;
+    --nav-bg:              30 25% 15%;
+    --nav-text:            45 30% 98%;
+    --nav-muted:           45 20% 70%;
+    --nav-active-bg:       40 40% 55%;
     --nav-active-text:     0 0% 100%;
-    --nav-border:          270 10% 15%;
+    --nav-border:          30 25% 10%;
 
-    --sidebar-accent:      270 60% 60%;
-    --hero-start:          270 60% 60%;
-    --hero-end:            270 10% 20%;
+    --sidebar-accent:      40 40% 55%;
+    --hero-start:          45 30% 98%;
+    --hero-end:            45 25% 92%;
 
-    --page-glow-start:     270 10% 98%;
-    --page-glow-end:       270 10% 94%;
-    --page-gradient-start: 270 10% 98%;
-    --page-gradient-end:   270 10% 94%;
+    --page-glow-start:     45 30% 98%;
+    --page-glow-end:       45 25% 94%;
+    --page-gradient-start: 45 30% 98%;
+    --page-gradient-end:   45 25% 94%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-1"] {
@@ -925,114 +930,140 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 3 Dark — Preto (Light/Minimal)
+       Visual Theme 3 Dark — Rosé Elegance
        -----------------------------------------------------------------------
        Direção:
-       - Fundo puramente preto/escuro.
-       - Contraste alto e minimalista.
+       - Fundo ameixa profundo.
+       - Surface berinjela/ameixa escuro.
+       - Mantém a elegância feminina com tons vinho.
        ----------------------------------------------------------------------- */
-    --brand:               0 0% 100%;
-    --brand-dark:          0 0% 80%;
-    --brand-soft:          0 0% 15%;
-    --brand-glow:          0 0% 90%;
-    --bg:                  0 0% 12%;
-    --surface:             0 0% 16%;
-    --surface-muted:       0 0% 20%;
-    --border:              0 0% 25%;
-    --border-strong:       0 0% 35%;
-    --background:          0 0% 12%;
-    --foreground:          0 0% 98%;
-    --card:                0 0% 16%;
-    --card-foreground:     0 0% 98%;
-    --popover:             0 0% 16%;
-    --popover-foreground:  0 0% 98%;
-    --secondary:           0 0% 20%;
-    --secondary-foreground:0 0% 98%;
-    --muted:               0 0% 20%;
-    --muted-foreground:    0 0% 60%;
-    --text:                0 0% 98%;
-    --text-muted:          0 0% 60%;
-    --primary:             0 0% 100%;
-    --primary-hover:       0 0% 90%;
-    --primary-soft:        0 0% 15%;
-    --primary-foreground:  0 0% 0%;
-    --ring:                0 0% 100%;
-    --accent:              0 0% 10%;
-    --accent-foreground:   0 0% 100%;
-    --accent-soft:         0 0% 10%;
-    --accent-contrast:     0 0% 98%;
-    --danger:              344 62% 45%;
-    --danger-soft:         344 50% 15%;
-    --destructive:         344 62% 45%;
-    --destructive-foreground: 0 0% 100%;
-    --input:               0 0% 25%;
-    --nav-bg:              0 0% 10%;
-    --nav-text:            0 0% 90%;
-    --nav-muted:           0 0% 60%;
-    --nav-active-bg:       0 0% 30%;
-    --nav-active-text:     0 0% 100%;
-    --nav-border:          0 0% 15%;
-    --sidebar-accent:      0 0% 100%;
-    --hero-start:          0 0% 30%;
-    --hero-end:            0 0% 10%;
-    --page-glow-start:     0 0% 20%;
-    --page-glow-end:       0 0% 15%;
-    --page-gradient-start: 0 0% 12%;
-    --page-gradient-end:   0 0% 10%;
-  }
+    --brand:               340 45% 65%;
+    --brand-dark:          335 45% 45%;
+    --brand-soft:          335 30% 25%;
+    --brand-glow:          340 45% 65%;
 
-  :root[data-theme="dark"][data-visual-theme="theme-4"] {
-    /* -----------------------------------------------------------------------
-       Visual Theme 4 Dark — Lilás com Cinza Escuro
-       ----------------------------------------------------------------------- */
-    --brand:               270 60% 65%;
-    --brand-dark:          270 60% 45%;
-    --brand-soft:          270 60% 20%;
-    --brand-glow:          270 60% 75%;
-    --bg:                  270 10% 12%;
-    --surface:             270 10% 16%;
-    --surface-muted:       270 10% 20%;
-    --border:              270 10% 25%;
-    --border-strong:       270 10% 35%;
-    --background:          270 10% 12%;
-    --foreground:          270 10% 90%;
-    --card:                270 10% 16%;
-    --card-foreground:     270 10% 90%;
-    --popover:             270 10% 16%;
-    --popover-foreground:  270 10% 90%;
-    --secondary:           270 10% 20%;
-    --secondary-foreground:270 10% 90%;
-    --muted:               270 10% 20%;
-    --muted-foreground:    270 10% 60%;
-    --text:                270 10% 90%;
-    --text-muted:          270 10% 60%;
-    --primary:             270 60% 65%;
-    --primary-hover:       270 60% 55%;
-    --primary-soft:        270 60% 20%;
+    --bg:                  330 30% 12%;
+    --surface:             330 25% 16%;
+    --surface-muted:       330 25% 20%;
+    --border:              330 25% 25%;
+    --border-strong:       330 25% 35%;
+
+    --background:          330 30% 12%;
+    --foreground:          340 20% 90%;
+    --card:                330 25% 16%;
+    --card-foreground:     340 20% 90%;
+    --popover:             330 25% 16%;
+    --popover-foreground:  340 20% 90%;
+    --secondary:           330 25% 20%;
+    --secondary-foreground:340 20% 90%;
+    --muted:               330 25% 20%;
+    --muted-foreground:    340 15% 65%;
+
+    --text:                340 20% 90%;
+    --text-muted:          340 15% 65%;
+
+    --primary:             340 45% 65%;
+    --primary-hover:       340 50% 75%;
+    --primary-soft:        335 30% 25%;
     --primary-foreground:  0 0% 100%;
-    --ring:                270 60% 65%;
-    --accent:              270 60% 20%;
-    --accent-foreground:   210 10% 90%;
-    --accent-soft:         270 60% 20%;
-    --accent-contrast:     210 10% 90%;
+    --ring:                340 45% 65%;
+
+    --accent:              335 30% 25%;
+    --accent-foreground:   340 45% 65%;
+    --accent-soft:         335 30% 25%;
+    --accent-contrast:     340 20% 90%;
+
     --danger:              344 62% 45%;
     --danger-soft:         344 50% 20%;
     --destructive:         344 62% 45%;
     --destructive-foreground: 0 0% 100%;
-    --input:               270 10% 25%;
-    --nav-bg:              270 10% 10%;
-    --nav-text:            270 10% 90%;
-    --nav-muted:           270 10% 60%;
-    --nav-active-bg:       270 60% 65%;
+
+    --input:               330 25% 25%;
+
+    --nav-bg:              330 30% 10%;
+    --nav-text:            340 20% 90%;
+    --nav-muted:           340 15% 60%;
+    --nav-active-bg:       340 45% 65%;
     --nav-active-text:     0 0% 100%;
-    --nav-border:          270 10% 15%;
-    --sidebar-accent:      270 60% 65%;
-    --hero-start:          270 60% 65%;
-    --hero-end:            270 10% 10%;
-    --page-glow-start:     270 60% 20%;
-    --page-glow-end:       270 10% 12%;
-    --page-gradient-start: 270 10% 12%;
-    --page-gradient-end:   270 10% 10%;
+    --nav-border:          330 25% 16%;
+
+    --sidebar-accent:      340 45% 65%;
+    --hero-start:          340 45% 65%;
+    --hero-end:            330 30% 10%;
+
+    --page-glow-start:     340 40% 20%;
+    --page-glow-end:       340 30% 15%;
+    --page-gradient-start: 330 30% 12%;
+    --page-gradient-end:   330 30% 10%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-4"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 4 Dark — Gold Executive
+       ----------------------------------------------------------------------- 
+       Direção:
+       - Fundo carbono/café muito escuro.
+       - Surface grafite quente.
+       - Brand focado em dourado envelhecido e bronze.
+       ----------------------------------------------------------------------- */
+    --brand:               40 40% 55%;
+    --brand-dark:          35 45% 35%;
+    --brand-soft:          30 20% 25%;
+    --brand-glow:          40 40% 55%;
+
+    --bg:                  30 15% 12%;
+    --surface:             30 10% 16%;
+    --surface-muted:       30 10% 20%;
+    --border:              30 10% 25%;
+    --border-strong:       30 10% 35%;
+
+    --background:          30 15% 12%;
+    --foreground:          40 20% 90%;
+    --card:                30 10% 16%;
+    --card-foreground:     40 20% 90%;
+    --popover:             30 10% 16%;
+    --popover-foreground:  40 20% 90%;
+    --secondary:           30 10% 20%;
+    --secondary-foreground:40 20% 90%;
+    --muted:               30 10% 20%;
+    --muted-foreground:    40 15% 65%;
+
+    --text:                40 20% 90%;
+    --text-muted:          40 15% 65%;
+
+    --primary:             40 40% 55%;
+    --primary-hover:       40 50% 65%;
+    --primary-soft:        30 20% 25%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                40 40% 55%;
+
+    --accent:              30 20% 25%;
+    --accent-foreground:   40 40% 55%;
+    --accent-soft:         30 20% 25%;
+    --accent-contrast:     40 20% 90%;
+
+    --danger:              344 62% 45%;
+    --danger-soft:         344 50% 20%;
+    --destructive:         344 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --input:               30 10% 25%;
+
+    --nav-bg:              30 15% 10%;
+    --nav-text:            40 20% 90%;
+    --nav-muted:           40 15% 60%;
+    --nav-active-bg:       40 40% 55%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          30 10% 16%;
+
+    --sidebar-accent:      40 40% 55%;
+    --hero-start:          40 40% 55%;
+    --hero-end:            30 15% 10%;
+
+    --page-glow-start:     40 40% 20%;
+    --page-glow-end:       40 30% 15%;
+    --page-gradient-start: 30 15% 12%;
+    --page-gradient-end:   30 15% 10%;
   }
 
   /* ==========================================================================
@@ -1756,13 +1787,12 @@
 
   .visual-theme-preview-theme-3 {
     background:
-      radial-gradient(circle at 28% 26%, hsl(84 88% 62%), transparent 38%),
-      linear-gradient(135deg, hsl(202 68% 12%), hsl(188 92% 42%) 54%, hsl(18 92% 62%));
+      linear-gradient(135deg, hsl(340 20% 98%) 0 34%, hsl(340 45% 65%) 34% 68%, hsl(335 45% 45%) 68% 100%);
   }
 
   .visual-theme-preview-theme-4 {
     background:
-      linear-gradient(135deg, hsl(0, 30%, 73%), hsl(0, 34%, 56%));
+      linear-gradient(135deg, hsl(45 30% 98%) 0 34%, hsl(40 40% 55%) 34% 68%, hsl(35 45% 35%) 68% 100%);
   }
 
   .visual-theme-option-copy {

@@ -19,7 +19,7 @@ const STATUS_BADGE: Record<string, string> = {
   danger:
     "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800",
   neutral:
-    "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",
+    "bg-slate-100 text-slate-600 border-slate-200 dark:bg-surface-muted dark:text-text-muted dark:border-border",
 };
 
 export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps) {
@@ -115,7 +115,7 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
           </span>
           
           <div className="flex items-center gap-2">
-            <span className="truncate text-[15px] font-bold tracking-tight text-slate-800 dark:text-slate-100">
+            <span className="truncate text-[15px] font-bold tracking-tight text-slate-800 dark:text-text">
               {loading && jobs.length === 0 ? "Carregando vagas…" : (selectedJob?.title ?? "Selecionar vaga")}
             </span>
             
@@ -137,9 +137,9 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute left-0 top-full z-[100] mt-2 w-full min-w-[320px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute left-0 top-full z-[100] mt-2 w-full min-w-[320px] rounded-2xl border border-slate-200 dark:border-border bg-white dark:bg-surface shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Search row */}
-          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 px-4 py-3">
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-border px-4 py-3">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <input
               ref={inputRef}
@@ -149,7 +149,7 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
               onKeyDown={handleKeyDown}
               placeholder="Buscar vaga por título ou status…"
               aria-label="Buscar vaga"
-              className="flex-1 bg-transparent text-sm font-medium text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none"
+              className="flex-1 bg-transparent text-sm font-medium text-slate-700 dark:text-text placeholder-slate-400 outline-none"
             />
             {query && (
               <button
@@ -182,7 +182,7 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
                     onMouseEnter={() => setHighlighted(idx)}
                     onClick={() => select(job.id)}
                     className={`flex cursor-pointer flex-col gap-1 px-4 py-3 transition-colors ${
-                      isHighlighted ? "bg-slate-50 dark:bg-slate-800/60" : ""
+                      isHighlighted ? "bg-slate-50 dark:bg-surface-muted/60" : ""
                     } ${isSelected ? "bg-[hsl(var(--primary))]/5 border-l-4 border-[hsl(var(--primary))]" : "border-l-4 border-transparent"}`}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -190,7 +190,7 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
                         className={`truncate text-sm font-bold ${
                           isSelected
                             ? "text-[hsl(var(--primary))]"
-                            : "text-slate-700 dark:text-slate-200"
+                            : "text-slate-700 dark:text-text"
                         }`}
                       >
                         {job.title}

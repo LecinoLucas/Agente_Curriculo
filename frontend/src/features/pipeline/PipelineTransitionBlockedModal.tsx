@@ -239,29 +239,29 @@ export function PipelineTransitionBlockedModal({
         {blocked ? (
           <div className="flex flex-col gap-4 text-sm">
             <p
-              className="text-slate-700 dark:text-slate-200"
+              className="text-slate-700 dark:text-text"
               data-testid="pipeline-blocked-message"
             >
               {blocked.message}
             </p>
 
             <div
-              className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-border/60 dark:bg-surface-muted/50 dark:text-text"
               data-testid="pipeline-blocked-stage-summary"
             >
-              <span className="uppercase tracking-wide text-[10px] text-slate-500 dark:text-slate-400">
+              <span className="uppercase tracking-wide text-[10px] text-slate-500 dark:text-text-muted">
                 Etapa atual
               </span>
               <span>{stageLabel(blocked.current_stage)}</span>
               <ArrowRight className="h-3.5 w-3.5 text-slate-400" aria-hidden />
-              <span className="uppercase tracking-wide text-[10px] text-slate-500 dark:text-slate-400">
+              <span className="uppercase tracking-wide text-[10px] text-slate-500 dark:text-text-muted">
                 Tentativa
               </span>
               <span>{stageLabel(blocked.target_stage)}</span>
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-text-muted">
                 Pendências obrigatórias ({blocked.missing_gates.length})
               </p>
               <ul className="flex flex-col gap-2">
@@ -314,7 +314,7 @@ export function PipelineTransitionBlockedModal({
                   className="mt-1 w-full rounded-md border border-rose-300 bg-white p-2 text-sm text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-200 disabled:opacity-60 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-50"
                 />
                 <div className="mt-1 flex items-center justify-between text-[11px]">
-                  <span className={reasonValid ? "text-slate-500 dark:text-slate-400" : "text-rose-700 dark:text-rose-300"}>
+                  <span className={reasonValid ? "text-slate-500 dark:text-text-muted" : "text-rose-700 dark:text-rose-300"}>
                     {trimmedReason.length}/{FORCE_REASON_MAX_LENGTH}
                   </span>
                   {showForceError ? (
@@ -334,7 +334,7 @@ export function PipelineTransitionBlockedModal({
             onClick={onClose}
             data-testid="pipeline-blocked-close"
             disabled={forceSubmitting}
-            className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-surface dark:text-text dark:hover:bg-surface-muted"
           >
             Entendi
           </button>

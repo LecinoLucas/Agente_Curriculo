@@ -280,7 +280,7 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
+    <div className="flex h-screen overflow-hidden bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
       {/* ── Sidebar Navigation ── */}
       <Sidebar
         groups={visibleGroups as any}

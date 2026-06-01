@@ -23,12 +23,12 @@ const THEMES: Array<{
   {
     value: "theme-3",
     label: "Tema 3",
-    description: "Branco Gelo (Minimal)",
+    description: "Rosé Elegance",
   },
   {
     value: "theme-4",
     label: "Tema 4",
-    description: "Lilás com Cinza Escuro",
+    description: "Gold Executive",
   },
 ];
 

@@ -71,7 +71,7 @@ export function PipelineRejectionReasonModal({
           </p>
 
           <label className="block">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+            <span className="text-xs font-semibold text-slate-700 dark:text-text">
               Motivo da desclassificação (mín. {REJECTION_REASON_MIN_LENGTH} caracteres)
             </span>
             <textarea
@@ -82,10 +82,10 @@ export function PipelineRejectionReasonModal({
               rows={3}
               disabled={submitting}
               placeholder="Ex.: perfil não atende os requisitos mínimos da vaga."
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-800 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-800 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:opacity-60 dark:border-border dark:bg-surface-muted dark:text-text"
             />
             <span
-              className={`mt-0.5 block text-right text-[11px] ${reasonValid ? "text-slate-500 dark:text-slate-400" : "text-rose-600 dark:text-rose-400"}`}
+              className={`mt-0.5 block text-right text-[11px] ${reasonValid ? "text-slate-500 dark:text-text-muted" : "text-rose-600 dark:text-rose-400"}`}
             >
               {trimmedReason.length}/{REJECTION_REASON_MAX_LENGTH}
             </span>
@@ -98,7 +98,7 @@ export function PipelineRejectionReasonModal({
             data-testid="rejection-reason-cancel"
             onClick={handleClose}
             disabled={submitting}
-            className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-surface dark:text-text dark:hover:bg-surface-muted"
           >
             Cancelar
           </button>

@@ -52,7 +52,7 @@ function RankingCard({
         "w-full rounded-xl border p-3.5 text-left transition-all hover:-translate-y-0.5",
         hasDealBreakerRejection
           ? "border-[hsl(var(--danger-soft))]/60 dark:border-rose-900 bg-danger-soft/20 hover:border-rose-350 hover:shadow-sm"
-          : "border-border/40 dark:border-slate-800 bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.01)] hover:border-slate-350 dark:hover:border-slate-700 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)]",
+          : "border-border/40 dark:border-border/60 bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.01)] hover:border-border/60 dark:hover:border-border hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)]",
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-3">
@@ -61,16 +61,16 @@ function RankingCard({
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[hsl(var(--primary))]/10 text-[10px] font-black text-[hsl(var(--primary))] border border-[hsl(var(--primary))]/15">
               {entry.rank}
             </span>
-            <p className="truncate text-xs font-bold text-slate-700 dark:text-slate-200">{entry.candidate_name}</p>
+            <p className="truncate text-xs font-bold text-text dark:text-text">{entry.candidate_name}</p>
           </div>
           <div className="mt-1.5 flex items-center gap-2">
-            <span className="rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+            <span className="rounded border border-border/40 dark:border-border/60 bg-surface-muted/50 dark:bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold text-text-muted dark:text-text-muted uppercase tracking-wider">
               {freshnessLabel}
             </span>
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+          <p className="text-[9px] font-black uppercase tracking-wider text-text-muted">
             Score
           </p>
           <p className="mt-0.5 text-base font-black tabular-nums text-[hsl(var(--primary))]">
@@ -80,14 +80,14 @@ function RankingCard({
       </div>
 
       {hasDealBreakerRejection && dealBreakerDisplay && (
-        <div className="mt-3 rounded-lg border border-rose-150 dark:border-rose-900 bg-white dark:bg-slate-950 p-2.5">
+        <div className="mt-3 rounded-lg border border-danger/20 dark:border-danger/30 bg-white dark:bg-danger/5 p-2.5">
           <p className="text-[9px] font-black uppercase tracking-widest text-rose-500">
             Critério Eliminatório
           </p>
-          <p className="mt-1 text-xs font-bold text-slate-700 dark:text-slate-200">
+          <p className="mt-1 text-xs font-bold text-text dark:text-text">
             {dealBreakerDisplay.fieldLabel}: esperado {dealBreakerDisplay.expected}
           </p>
-          <p className="mt-0.5 text-[10.5px] leading-relaxed text-slate-400">
+          <p className="mt-0.5 text-[10.5px] leading-relaxed text-text-muted">
              {dealBreakerDisplay.reason}.
           </p>
         </div>
@@ -99,7 +99,7 @@ function RankingCard({
             {reasonPreview.map((reason) => (
               <span
                 key={reason}
-                className="inline-flex items-center rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-1.5 py-0.5 text-[9px] font-bold text-slate-500 dark:text-slate-450"
+                className="inline-flex items-center rounded border border-border/40 dark:border-border/60 bg-surface-muted/50 dark:bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold text-text-muted dark:text-text-muted"
               >
                 {reason}
               </span>
@@ -109,7 +109,7 @@ function RankingCard({
       )}
 
       {entry.ranking_summary_text && (
-        <p className="mt-3 line-clamp-2 text-[10.5px] font-medium leading-relaxed text-slate-400">
+        <p className="mt-3 line-clamp-2 text-[10.5px] font-medium leading-relaxed text-text-muted">
           {entry.ranking_summary_text}
         </p>
       )}
@@ -143,14 +143,14 @@ export function PipelineRankingPanel({
   return (
     <aside
       id="pipeline-ranking-panel"
-      className="pipeline-ranking-panel sticky top-6 flex h-[720px] max-h-[85vh] flex-col rounded-2xl border border-border/40 dark:border-slate-800 bg-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
+      className="pipeline-ranking-panel sticky top-6 flex h-[720px] max-h-[85vh] flex-col rounded-2xl border border-border/40 dark:border-border/80 bg-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-border/40 dark:border-slate-800 pb-4">
+      <div className="flex items-start justify-between gap-3 border-b border-border/40 dark:border-border/60 pb-4">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-wider text-[hsl(var(--primary))]">
             Ranking IA Marajó
           </p>
-          <h3 className="mt-1 text-sm font-bold text-text dark:text-slate-100 truncate" title={jobTitle}>{jobTitle}</h3>
+          <h3 className="mt-1 text-sm font-bold text-text dark:text-text truncate" title={jobTitle}>{jobTitle}</h3>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {onRefresh && (
@@ -158,7 +158,7 @@ export function PipelineRankingPanel({
               type="button"
               onClick={onRefresh}
               disabled={loading}
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 shadow-sm transition hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/60 dark:border-border bg-white dark:bg-surface-muted text-text-muted dark:text-text-muted/80 shadow-sm transition hover:bg-surface-muted/50 dark:hover:bg-surface disabled:opacity-40"
               title="Atualizar ranking"
             >
               <RefreshCw className={["h-3.5 w-3.5", loading ? "animate-spin" : ""].join(" ")} />
@@ -167,7 +167,7 @@ export function PipelineRankingPanel({
           <button
             type="button"
             onClick={onToggle}
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 shadow-sm transition hover:bg-slate-50 dark:hover:bg-slate-800"
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/60 dark:border-border bg-white dark:bg-surface-muted text-text-muted dark:text-text-muted/80 shadow-sm transition hover:bg-surface-muted/50 dark:hover:bg-surface"
             title="Fechar"
           >
             <PanelRightClose className="h-3.5 w-3.5" />
@@ -192,14 +192,14 @@ export function PipelineRankingPanel({
         {!showInitialLoading && !error && ranking && ranking.candidates.length === 0 && (
           <div className="py-12 text-center">
             <span className="text-3xl mb-3 block">🏁</span>
-            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Nenhum ranking disponível</p>
-            <p className="mt-1 text-[10px] font-medium text-slate-400">Conclua a análise dos candidatos para gerar o ranking.</p>
+            <p className="text-xs font-bold text-text dark:text-text">Nenhum ranking disponível</p>
+            <p className="mt-1 text-[10px] font-medium text-text-muted">Conclua a análise dos candidatos para gerar o ranking.</p>
           </div>
         )}
 
         {!showInitialLoading && !error && ranking && ranking.candidates.length > 0 && (
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3.5 py-2 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+            <div className="flex items-center justify-between rounded-xl border border-border/40 dark:border-border/60 bg-surface-muted/50 dark:bg-surface-muted px-3.5 py-2 text-[9px] font-black text-text-muted dark:text-text-muted uppercase tracking-wider">
               <span>{ranking.total_candidates} Talentos</span>
               {ranking.score_version && <span>Versão {ranking.score_version}</span>}
             </div>

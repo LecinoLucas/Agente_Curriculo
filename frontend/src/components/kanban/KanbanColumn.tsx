@@ -155,7 +155,7 @@ export const KanbanColumn = memo(function KanbanColumn({
         "pipeline-kanban-column",
         `pipeline-kanban-column--${columnVisualKey}`,
         "kanban-column-enter",
-        "relative border border-slate-200/80 bg-white/95 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-900/80",
+        "relative border border-slate-200/80 bg-white/95 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.45)] dark:border-border dark:bg-surface-muted",
         isDropTarget && !dropDisabled ? "ring-2 ring-emerald-400/50 scale-[1.01]" : "",
         disabledCls,
       ]
@@ -174,11 +174,11 @@ export const KanbanColumn = memo(function KanbanColumn({
       {/* Column Header */}
       <div className={`pipeline-kanban-column__header relative flex items-center justify-between border-b border-slate-100/90 bg-gradient-to-r px-3.5 pb-2.5 pt-3 ${theme.headerGlow}`}>
         <div className="min-w-0">
-          <span className="block truncate text-[13px] font-black tracking-tight text-slate-800 dark:text-slate-100" title={column.label}>
+          <span className="block truncate text-[13px] font-black tracking-tight text-slate-800 dark:text-text" title={column.label}>
             {column.label}
           </span>
           {column.description ? (
-            <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-400 dark:text-slate-500">
+            <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-400 dark:text-text-muted">
               {column.description}
             </span>
           ) : null}
@@ -189,10 +189,10 @@ export const KanbanColumn = memo(function KanbanColumn({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button type="button" className="outline-none focus-visible:ring-2 focus-visible:ring-slate-400 rounded-full flex items-center justify-center">
-                    <Info className="h-3.5 w-3.5 cursor-pointer shrink-0 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300" />
+                    <Info className="h-3.5 w-3.5 cursor-pointer shrink-0 text-slate-400 transition-colors hover:text-slate-600 dark:text-text-muted dark:hover:text-text/80" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="center" className="max-w-[220px] text-center bg-white text-slate-700 border border-slate-200 shadow-md dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-xs font-medium z-[100] mt-1 p-2 rounded-lg">
+                <TooltipContent side="bottom" align="center" className="max-w-[220px] text-center bg-white text-slate-700 border border-slate-200 shadow-md dark:bg-popover dark:border-border dark:text-popover-foreground text-xs font-medium z-[100] mt-1 p-2 rounded-lg">
                   <p>{column.dropDisabledReason}</p>
                 </TooltipContent>
               </Tooltip>
@@ -211,7 +211,7 @@ export const KanbanColumn = memo(function KanbanColumn({
         isDropTarget && !dropDisabled
           ? 'mx-2 rounded-xl border-dashed border-emerald-300 bg-emerald-50/70 dark:border-emerald-600 dark:bg-emerald-900/30'
           : 'border-transparent'
-      } [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full`}>
+      } [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full`}>
         {column.candidates.map((c, cardIndex) => {
           const isTopMatch =
             showTopMatchHighlight &&
@@ -243,7 +243,7 @@ export const KanbanColumn = memo(function KanbanColumn({
             <h3 className={`text-[11px] font-bold ${theme.textEmpty}`}>
               Nenhum candidato
             </h3>
-            <p className="mt-1 max-w-[150px] text-[10px] font-medium leading-snug text-slate-400 dark:text-slate-500">
+            <p className="mt-1 max-w-[150px] text-[10px] font-medium leading-snug text-slate-400 dark:text-text-muted">
               {theme.emptySub}
             </p>
           </div>
