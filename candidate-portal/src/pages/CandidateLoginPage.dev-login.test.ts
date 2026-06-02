@@ -41,6 +41,22 @@ describe('CandidateLoginPage dev-login', () => {
     ).toBe(false);
   });
 
+  it('disables Google login on 127.0.0.1 in dev to avoid GSI origin 403', async () => {
+    mockAuthLayout();
+    const { shouldEnableGoogleLogin } = await import('./CandidateLoginPage');
+
+    expect(
+      shouldEnableGoogleLogin('client-id.apps.googleusercontent.com', { DEV: true }, '127.0.0.1'),
+    ).toBe(false);
+    expect(
+      shouldEnableGoogleLogin('client-id.apps.googleusercontent.com', { DEV: true }, 'localhost'),
+    ).toBe(true);
+    expect(
+      shouldEnableGoogleLogin('client-id.apps.googleusercontent.com', { DEV: false }, 'portal.example.com'),
+    ).toBe(true);
+    expect(shouldEnableGoogleLogin('', { DEV: true }, 'localhost')).toBe(false);
+  });
+
   it('does not render the dev-login block when the flag is disabled', async () => {
     vi.stubEnv('DEV', true);
     vi.stubEnv('VITE_ENABLE_DEV_CANDIDATE_LOGIN', 'false');

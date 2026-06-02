@@ -85,6 +85,43 @@ const OPENING_TURN = {
   options: [{ value: 'peritoro', label: 'Peritoró' }],
 };
 
+const IDENTIFY_SESSION = {
+  ...SESSION,
+  current_state: 'IDENTIFY',
+  assistant_message: 'Olá! Vou te ajudar a encontrar uma vaga. Para começar, me diga seu CPF ou WhatsApp.',
+  quick_replies: [
+    { value: 'cpf', label: 'Informar CPF' },
+    { value: 'whatsapp', label: 'Informar WhatsApp' },
+  ],
+};
+
+const IDENTIFY_TURN = {
+  session_id: 'sess-1',
+  current_state: 'IDENTIFY',
+  assistant_message: IDENTIFY_SESSION.assistant_message,
+  quick_replies: IDENTIFY_SESSION.quick_replies,
+  session: IDENTIFY_SESSION,
+  message: assistantMessage(IDENTIFY_SESSION.assistant_message),
+  options: IDENTIFY_SESSION.quick_replies,
+};
+
+const OTP_SESSION = {
+  ...SESSION,
+  current_state: 'VERIFY_OTP',
+  assistant_message: 'Enviamos um código de verificação. Digite o código de 6 dígitos para continuar.',
+  quick_replies: [],
+};
+
+const OTP_TURN = {
+  session_id: 'sess-1',
+  current_state: 'VERIFY_OTP',
+  assistant_message: OTP_SESSION.assistant_message,
+  quick_replies: [],
+  session: OTP_SESSION,
+  message: assistantMessage(OTP_SESSION.assistant_message),
+  options: [],
+};
+
 beforeEach(() => {
   vi.mocked(conversationStorage.get).mockReturnValue(null);
   vi.mocked(conversationsService.createConversation).mockResolvedValue(OPENING_TURN);
@@ -157,6 +194,75 @@ describe('CandidatePortal2Page', () => {
     );
   });
 
+  it('does not send raw cpf quick reply and waits for the real CPF', async () => {
+    vi.mocked(conversationsService.createConversation).mockResolvedValue(IDENTIFY_TURN);
+    vi.mocked(conversationsService.sendConversationMessage).mockResolvedValue({
+      session_id: 'sess-1',
+      current_state: 'VERIFY_OTP',
+      assistant_message: 'Digite o código de verificação.',
+      quick_replies: [],
+      session: { ...IDENTIFY_SESSION, current_state: 'VERIFY_OTP', quick_replies: [] },
+      message: assistantMessage('Digite o código de verificação.', 'msg-2'),
+      options: [],
+    });
+
+    render(<CandidatePortal2Page />);
+    await screen.findByText(IDENTIFY_SESSION.assistant_message);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Informar CPF' }));
+
+    expect(conversationsService.sendConversationMessage).not.toHaveBeenCalled();
+    expect(await screen.findByText('Digite seu CPF no campo abaixo para continuar.')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Digite seu CPF')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Sua mensagem'), { target: { value: '52998224725' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    expect(await screen.findByText('Digite o código de verificação.')).toBeTruthy();
+    expect(conversationsService.sendConversationMessage).toHaveBeenCalledWith(
+      'sess-1',
+      '52998224725',
+      'text',
+    );
+  });
+
+  it('does not send raw whatsapp quick reply and guides the user to type a phone', async () => {
+    vi.mocked(conversationsService.createConversation).mockResolvedValue(IDENTIFY_TURN);
+
+    render(<CandidatePortal2Page />);
+    await screen.findByText(IDENTIFY_SESSION.assistant_message);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Informar WhatsApp' }));
+
+    expect(conversationsService.sendConversationMessage).not.toHaveBeenCalled();
+    expect(await screen.findByText('Digite seu WhatsApp com DDD no campo abaixo.')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Digite seu WhatsApp com DDD')).toBeTruthy();
+  });
+
+  it('continues sending non-identification quick replies to the backend', async () => {
+    vi.mocked(conversationsService.sendConversationMessage).mockResolvedValue({
+      session_id: 'sess-1',
+      current_state: 'CHOOSE_UNIT_OR_ANY',
+      assistant_message: 'Escolha um posto.',
+      quick_replies: [],
+      session: { ...SESSION, current_state: 'CHOOSE_UNIT_OR_ANY', quick_replies: [] },
+      message: assistantMessage('Escolha um posto.', 'msg-2'),
+      options: [],
+    });
+
+    render(<CandidatePortal2Page />);
+    await screen.findByText('Em qual cidade você procura vaga?');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Peritoró' }));
+
+    expect(await screen.findByText('Escolha um posto.')).toBeTruthy();
+    expect(conversationsService.sendConversationMessage).toHaveBeenCalledWith(
+      'sess-1',
+      'peritoro',
+      'quick_reply',
+    );
+  });
+
   it('shows a friendly message when creating the session fails', async () => {
     vi.mocked(conversationsService.createConversation).mockRejectedValue(new Error('boom'));
 
@@ -179,5 +285,115 @@ describe('CandidatePortal2Page', () => {
     expect(
       await screen.findByText('Não consegui enviar sua mensagem. Tente novamente.'),
     ).toBeTruthy();
+  });
+
+  // ---- OP-6D.2: restart + OTP UX ----
+
+  it('shows resume feedback when an existing session is reused on reload', async () => {
+    vi.mocked(conversationStorage.get).mockReturnValue('sess-1');
+    vi.mocked(conversationsService.getConversation).mockResolvedValue(SESSION);
+    vi.mocked(conversationsService.listConversationMessages).mockResolvedValue([
+      assistantMessage('Bem-vindo de volta!', 'msg-1'),
+    ]);
+
+    render(<CandidatePortal2Page />);
+
+    expect(await screen.findByText('Continuamos de onde você parou.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Começar nova conversa' })).toBeTruthy();
+    expect(conversationsService.createConversation).not.toHaveBeenCalled();
+  });
+
+  it('"Começar nova conversa" clears the stored session id and creates a new one', async () => {
+    render(<CandidatePortal2Page />);
+    await screen.findByText('Em qual cidade você procura vaga?');
+
+    expect(conversationsService.createConversation).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Começar nova conversa' }));
+
+    await screen.findByText('Em qual cidade você procura vaga?');
+    expect(conversationStorage.clear).toHaveBeenCalled();
+    expect(conversationsService.createConversation).toHaveBeenCalledTimes(2);
+    expect(conversationStorage.set).toHaveBeenCalledWith('sess-1');
+  });
+
+  it('uses the 6-digit code placeholder and numeric input in VERIFY_OTP', async () => {
+    vi.mocked(conversationsService.createConversation).mockResolvedValue(OTP_TURN);
+
+    render(<CandidatePortal2Page />);
+    await screen.findByText(OTP_SESSION.assistant_message);
+
+    const field = screen.getByPlaceholderText('Digite o código de 6 dígitos') as HTMLInputElement;
+    expect(field.getAttribute('inputmode')).toBe('numeric');
+    expect(field.getAttribute('maxlength')).toBe('6');
+  });
+
+  it('"Não recebi o código" shows local help and never sends an OTP attempt', async () => {
+    vi.mocked(conversationsService.createConversation).mockResolvedValue(OTP_TURN);
+
+    render(<CandidatePortal2Page />);
+    await screen.findByText(OTP_SESSION.assistant_message);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Não recebi o código' }));
+
+    expect(
+      await screen.findByText(
+        'Sem problema. Você pode conferir o CPF/WhatsApp informado ou começar de novo.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tentar digitar o código' })).toBeTruthy();
+    expect(conversationsService.sendConversationMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not send non-numeric text typed in the OTP field', async () => {
+    vi.mocked(conversationsService.createConversation).mockResolvedValue(OTP_TURN);
+
+    render(<CandidatePortal2Page />);
+    await screen.findByText(OTP_SESSION.assistant_message);
+
+    const field = screen.getByLabelText('Sua mensagem') as HTMLInputElement;
+    fireEvent.change(field, { target: { value: 'nao tenho' } });
+    // Non-digits are stripped, so the field stays empty and send stays disabled.
+    expect(field.value).toBe('');
+    expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(conversationsService.sendConversationMessage).not.toHaveBeenCalled();
+  });
+
+  it('sends the code to the backend only when 6 digits are entered in VERIFY_OTP', async () => {
+    vi.mocked(conversationsService.createConversation).mockResolvedValue(OTP_TURN);
+    vi.mocked(conversationsService.sendConversationMessage).mockResolvedValue({
+      session_id: 'sess-1',
+      current_state: 'CHOOSE_LOCATION',
+      assistant_message: 'Em qual cidade você procura vaga?',
+      quick_replies: [],
+      session: { ...OTP_SESSION, current_state: 'CHOOSE_LOCATION' },
+      message: assistantMessage('Em qual cidade você procura vaga?', 'msg-2'),
+      options: [],
+    });
+
+    render(<CandidatePortal2Page />);
+    await screen.findByText(OTP_SESSION.assistant_message);
+
+    const field = screen.getByLabelText('Sua mensagem');
+    fireEvent.change(field, { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    await screen.findByText('Em qual cidade você procura vaga?');
+    expect(conversationsService.sendConversationMessage).toHaveBeenCalledWith('sess-1', '123456', 'text');
+  });
+
+  it('"Trocar CPF/WhatsApp" in VERIFY_OTP restarts with a fresh session', async () => {
+    vi.mocked(conversationsService.createConversation)
+      .mockResolvedValueOnce(OTP_TURN)
+      .mockResolvedValueOnce(IDENTIFY_TURN);
+
+    render(<CandidatePortal2Page />);
+    await screen.findByText(OTP_SESSION.assistant_message);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Trocar CPF/WhatsApp' }));
+
+    await screen.findByText(IDENTIFY_SESSION.assistant_message);
+    expect(conversationStorage.clear).toHaveBeenCalled();
+    expect(conversationsService.createConversation).toHaveBeenCalledTimes(2);
   });
 });

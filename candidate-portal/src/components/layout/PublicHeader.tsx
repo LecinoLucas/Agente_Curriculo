@@ -80,24 +80,17 @@ export function PublicHeader({ candidateName, onLogout }: PublicHeaderProps) {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="lg:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-1">
+        <div className="absolute left-3 right-3 top-[calc(100%+8px)] rounded-xl border border-gray-200 bg-white p-2 shadow-modal lg:hidden">
           {navLinks.map((link) => (
             <Link
               key={link.label}
               to={link.href}
-              className="block px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+              className="block rounded-lg px-3 py-2.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900"
               onClick={() => setMenuOpen(false)}
             >
               {link.label}
             </Link>
           ))}
-          {!candidateName && (
-            <Link to="/login" onClick={() => setMenuOpen(false)}>
-              <Button fullWidth size="sm" className="mt-2">
-                Área do candidato
-              </Button>
-            </Link>
-          )}
         </div>
       )}
     </header>

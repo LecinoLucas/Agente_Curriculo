@@ -22,6 +22,18 @@ export function shouldShowDevCandidateLogin(env: {
   return Boolean(env.DEV) && env.VITE_ENABLE_DEV_CANDIDATE_LOGIN === 'true';
 }
 
+export function shouldEnableGoogleLogin(
+  clientId: string,
+  env: { DEV?: boolean },
+  hostname: string,
+) {
+  if (!clientId) return false;
+  // The configured local OAuth origin is localhost. Loading GSI from 127.0.0.1
+  // produces a public 403 and noisy console errors before the user interacts.
+  if (env.DEV && hostname === '127.0.0.1') return false;
+  return true;
+}
+
 const SHOW_DEV_CANDIDATE_LOGIN = shouldShowDevCandidateLogin(
   (import.meta as ImportMeta & {
     env?: { DEV?: boolean; VITE_ENABLE_DEV_CANDIDATE_LOGIN?: string };
@@ -80,6 +92,11 @@ export function CandidateLoginPage() {
   // ── Google login ──────────────────────────────────────────────────────────
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const [googleError, setGoogleError] = useState('');
+  const googleLoginEnabled = shouldEnableGoogleLogin(
+    GOOGLE_CLIENT_ID,
+    (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env ?? {},
+    typeof window === 'undefined' ? '' : window.location.hostname,
+  );
 
   const googleCallbackRef = useRef<(cred: { credential: string }) => void>(
     () => undefined,
@@ -116,7 +133,7 @@ export function CandidateLoginPage() {
 
   // Load Google Identity Services script and render the official button.
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || !googleButtonRef.current) return;
+    if (!googleLoginEnabled || !googleButtonRef.current) return;
     const container = googleButtonRef.current;
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
@@ -143,7 +160,7 @@ export function CandidateLoginPage() {
       window.google?.accounts?.id?.cancel();
       if (document.body.contains(script)) document.body.removeChild(script);
     };
-  }, []);
+  }, [googleLoginEnabled]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -278,7 +295,7 @@ export function CandidateLoginPage() {
             </form>
 
             {/* Google login — only rendered when client ID is configured (real integration) */}
-            {GOOGLE_CLIENT_ID && (
+            {googleLoginEnabled && (
               <div className="mt-5">
                 <div className="relative flex items-center gap-3">
                   <div className="flex-1 border-t border-gray-200" />

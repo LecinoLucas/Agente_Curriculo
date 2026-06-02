@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Send, Sparkles, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Send, Sparkles, AlertCircle, RefreshCw, RotateCcw, Loader2 } from 'lucide-react';
 import { CandidatePortalLayout } from '../components/layout/CandidatePortalLayout';
 import { Button } from '../components/ui/Button';
 import {
@@ -16,6 +16,7 @@ import { conversationStorage } from '../services/conversationStorage';
 // Anything not mapped falls back to a neutral, non-technical phrase.
 const STATE_LABELS: Record<string, string> = {
   IDENTIFY: 'Conhecendo você',
+  VERIFY_OTP: 'Confirmando identidade',
   CHOOSE_LOCATION: 'Escolhendo a cidade',
   CHOOSE_UNIT_OR_ANY: 'Escolhendo o posto',
   CHOOSE_FUNCTION: 'Escolhendo a função',
@@ -107,24 +108,65 @@ interface FailedPayload {
 const INIT_ERROR = 'Não consegui iniciar o assistente agora. Tente novamente.';
 const SEND_ERROR = 'Não consegui enviar sua mensagem. Tente novamente.';
 
+type IdentifierMode = 'cpf' | 'whatsapp';
+
+const IDENTIFIER_GUIDANCE: Record<IdentifierMode, { instruction: string; placeholder: string }> = {
+  cpf: {
+    instruction: 'Digite seu CPF no campo abaixo para continuar.',
+    placeholder: 'Digite seu CPF',
+  },
+  whatsapp: {
+    instruction: 'Digite seu WhatsApp com DDD no campo abaixo.',
+    placeholder: 'Digite seu WhatsApp com DDD',
+  },
+};
+
+const OTP_PLACEHOLDER = 'Digite o código de 6 dígitos';
+const OTP_HELP_MESSAGE =
+  'Sem problema. Você pode conferir o CPF/WhatsApp informado ou começar de novo.';
+
+// Accepts a complete 6-digit verification code only — anything shorter or
+// non-numeric ("não tenho", "nao recebi", …) is never sent to the backend as OTP.
+function isCompleteOtp(value: string): boolean {
+  return /^\d{6}$/.test(value.trim());
+}
+
 export function CandidatePortal2Page() {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'init-error'>('loading');
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [options, setOptions] = useState<ConversationOption[]>([]);
   const [currentState, setCurrentState] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  const [identifierMode, setIdentifierMode] = useState<IdentifierMode | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [resumed, setResumed] = useState(false);
+  const [otpHelpShown, setOtpHelpShown] = useState(false);
 
   const sessionIdRef = useRef<string | null>(null);
   const lastFailedRef = useRef<FailedPayload | null>(null);
   const initStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const isOtpState = currentState === 'VERIFY_OTP';
+
+  // Create a brand-new backend session and reset the chat to its opening turn.
+  async function createFreshSession() {
+    const turn = await conversationsService.createConversation('web');
+    const sessionId = turnSessionId(turn);
+    sessionIdRef.current = sessionId;
+    conversationStorage.set(sessionId);
+    setMessages([toUiMessage(turn.message)]);
+    setOptions(turnOptions(turn));
+    setCurrentState(turnState(turn));
+    setPhase('ready');
+  }
 
   async function startConversation() {
     setPhase('loading');
 
-    // Try to resume an existing session first.
+    // Try to resume an existing session first (reload should keep the conversation).
     const stored = conversationStorage.get();
     if (stored) {
       try {
@@ -134,6 +176,7 @@ export function CandidatePortal2Page() {
         setMessages(toUiMessages(history));
         setCurrentState(session.current_state);
         setOptions(sessionOptions(session));
+        setResumed(true);
         setPhase('ready');
         return;
       } catch {
@@ -145,14 +188,30 @@ export function CandidatePortal2Page() {
 
     // No usable session — create a new one.
     try {
-      const turn = await conversationsService.createConversation('web');
-      const sessionId = turnSessionId(turn);
-      sessionIdRef.current = sessionId;
-      conversationStorage.set(sessionId);
-      setMessages([toUiMessage(turn.message)]);
-      setOptions(turnOptions(turn));
-      setCurrentState(turnState(turn));
-      setPhase('ready');
+      await createFreshSession();
+    } catch {
+      setPhase('init-error');
+    }
+  }
+
+  // Manual "start over": wipe the stored session + local history, then open a
+  // fresh conversation back at the IDENTIFY step. Reload-resume keeps working
+  // because we only clear storage here, on explicit user action.
+  async function restartConversation() {
+    conversationStorage.clear();
+    sessionIdRef.current = null;
+    lastFailedRef.current = null;
+    setResumed(false);
+    setOtpHelpShown(false);
+    setIdentifierMode(null);
+    setSendError(null);
+    setInput('');
+    setMessages([]);
+    setOptions([]);
+    setCurrentState(null);
+    setPhase('loading');
+    try {
+      await createFreshSession();
     } catch {
       setPhase('init-error');
     }
@@ -185,6 +244,9 @@ export function CandidatePortal2Page() {
       setMessages((prev) => [...prev, toUiMessage(turn.message)]);
       setOptions(turnOptions(turn));
       setCurrentState(turnState(turn));
+      setIdentifierMode(null);
+      setOtpHelpShown(false);
+      setResumed(false);
       lastFailedRef.current = null;
     } catch {
       setSendError(SEND_ERROR);
@@ -204,12 +266,65 @@ export function CandidatePortal2Page() {
     void performSend({ content: trimmed, type });
   }
 
+  function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const raw = event.target.value;
+    // In VERIFY_OTP keep only digits (max 6) so the candidate can't type
+    // free text like "não tenho" into the code field.
+    setInput(isOtpState ? raw.replace(/\D/g, '').slice(0, 6) : raw);
+  }
+
+  function showOtpHelp() {
+    setOtpHelpShown(true);
+    setInput('');
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `local-otp-help-${Date.now()}`,
+        role: 'assistant',
+        content: OTP_HELP_MESSAGE,
+      },
+    ]);
+  }
+
+  function focusCodeInput() {
+    setOtpHelpShown(false);
+    inputRef.current?.focus();
+  }
+
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Guard the OTP step: never send an incomplete/non-numeric code as an
+    // attempt — offer local help instead.
+    if (isOtpState && !isCompleteOtp(input)) {
+      if (input.trim().length > 0) showOtpHelp();
+      return;
+    }
     submitCandidateReply(input, 'text', input);
   }
 
+  const canSubmit = isOtpState ? isCompleteOtp(input) : input.trim().length > 0;
+
   function handleQuickReply(option: ConversationOption) {
+    if (
+      currentState === 'IDENTIFY' &&
+      (option.value === 'cpf' || option.value === 'whatsapp')
+    ) {
+      const mode = option.value;
+      const guidance = IDENTIFIER_GUIDANCE[mode];
+      setIdentifierMode(mode);
+      setInput('');
+      setOptions([]);
+      setMessages((prev) => [
+        ...prev,
+        { id: `local-mode-${mode}-${Date.now()}`, role: 'candidate', content: option.label },
+        {
+          id: `local-guidance-${mode}-${Date.now()}`,
+          role: 'assistant',
+          content: guidance.instruction,
+        },
+      ]);
+      return;
+    }
     submitCandidateReply(option.value, 'quick_reply', option.label);
   }
 
@@ -229,19 +344,39 @@ export function CandidatePortal2Page() {
           <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
             <Sparkles className="h-6 w-6 text-primary-700" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="text-xl font-extrabold text-gray-900">Assistente de vagas</h1>
             <p className="text-sm text-gray-500">{stateLabel(currentState)}</p>
           </div>
+          {phase === 'ready' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void restartConversation()}
+              className="flex-shrink-0"
+              aria-label="Começar nova conversa"
+            >
+              <RotateCcw className="h-4 w-4" />
+              <span className="hidden sm:inline">Começar nova conversa</span>
+            </Button>
+          )}
         </div>
 
+        {/* Resumed-session feedback */}
+        {phase === 'ready' && resumed && (
+          <div className="mb-3 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+            <RefreshCw className="h-4 w-4 flex-shrink-0 text-primary-700" />
+            <span>Continuamos de onde você parou.</span>
+          </div>
+        )}
+
         {/* Chat surface */}
-        <div className="flex min-h-[60vh] flex-col rounded-2xl border border-gray-200 bg-white shadow-card">
+        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white shadow-card">
           {/* Messages */}
           <div
             ref={scrollRef}
-            className="flex-1 space-y-3 overflow-y-auto p-4"
-            style={{ maxHeight: '60vh' }}
+            className="min-h-[180px] space-y-3 overflow-y-auto p-4 sm:min-h-[200px]"
+            style={{ maxHeight: '44vh' }}
             aria-live="polite"
           >
             {phase === 'loading' && (
@@ -303,6 +438,63 @@ export function CandidatePortal2Page() {
             </div>
           )}
 
+          {/* OTP step — friendly quick actions for lay candidates */}
+          {phase === 'ready' && isOtpState && (
+            <div className="flex flex-col gap-2 border-t border-gray-100 p-4">
+              {!otpHelpShown ? (
+                <>
+                  <p className="text-sm text-gray-500">
+                    Digite o código de 6 dígitos no campo abaixo ou escolha uma opção:
+                  </p>
+                  <Button variant="outline" size="lg" fullWidth onClick={focusCodeInput}>
+                    Digitar código
+                  </Button>
+                  <Button variant="outline" size="lg" fullWidth onClick={showOtpHelp}>
+                    Não recebi o código
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    fullWidth
+                    onClick={() => void restartConversation()}
+                  >
+                    Trocar CPF/WhatsApp
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    fullWidth
+                    onClick={() => void restartConversation()}
+                  >
+                    Começar de novo
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" size="lg" fullWidth onClick={focusCodeInput}>
+                    Tentar digitar o código
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    fullWidth
+                    onClick={() => void restartConversation()}
+                  >
+                    Trocar CPF/WhatsApp
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    fullWidth
+                    onClick={() => void restartConversation()}
+                  >
+                    Começar de novo
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Send error */}
           {sendError && (
             <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-primary-50 px-4 py-2.5">
@@ -322,15 +514,24 @@ export function CandidatePortal2Page() {
           {phase === 'ready' && (
             <form onSubmit={handleFormSubmit} className="flex items-center gap-2 border-t border-gray-100 p-3">
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="Escreva sua resposta…"
+                onChange={handleInputChange}
+                placeholder={
+                  isOtpState
+                    ? OTP_PLACEHOLDER
+                    : identifierMode
+                      ? IDENTIFIER_GUIDANCE[identifierMode].placeholder
+                      : 'Escreva sua resposta…'
+                }
+                inputMode={isOtpState ? 'numeric' : undefined}
+                maxLength={isOtpState ? 6 : undefined}
                 aria-label="Sua mensagem"
                 disabled={sending}
                 className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-700/20 disabled:opacity-60 sm:text-base"
               />
-              <Button type="submit" size="lg" loading={sending} disabled={!input.trim()}>
+              <Button type="submit" size="lg" loading={sending} disabled={!canSubmit}>
                 <Send className="h-4 w-4" />
                 <span className="sr-only">Enviar</span>
               </Button>

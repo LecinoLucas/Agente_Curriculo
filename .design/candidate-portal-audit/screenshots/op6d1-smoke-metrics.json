@@ -1,0 +1,27 @@
+[
+  {
+    "name": "op6d1-portal2-desktop",
+    "url": "http://localhost:5174/portal-2",
+    "errors": []
+  },
+  {
+    "name": "op6d1-portal2-mobile",
+    "url": "http://localhost:5174/portal-2",
+    "errors": []
+  },
+  {
+    "name": "op6d1-login-127-mobile",
+    "url": "http://127.0.0.1:5174/login",
+    "errors": []
+  },
+  {
+    "name": "op6d1-portal2-cpf-mobile",
+    "url": "http://localhost:5174/portal-2",
+    "errors": [],
+    "text": "Marajó\nRH\nÁrea do candidato\nAssistente de vagas\n\nConhecendo você\n\nOlá! Vou te ajudar a encontrar uma vaga. Para começar, me diga seu CPF ou WhatsApp.\nInformar CPF\nDigite seu CPF no campo abaixo para continuar.\nEnviar\n\nO assistente ajuda você a encontrar uma vaga. É rápido e simples.\n\nMarajó\nRH\n\nPortal de recrutamento da Rede Marajó, rede de postos em rodovias brasileiras.\n\nCANDIDATOS\n\nVer vagas\nMinha área\nRecuperar acesso\nDúvidas frequentes\n\nREDE MARAJÓ\n\nSobre nós\nNossas unidades\nContato\n\nCARREI"
+  },
+  {
+    "name": "op6d1-home-mobile-menu-open",
+    "ctaCount": 1
+  }
+]
