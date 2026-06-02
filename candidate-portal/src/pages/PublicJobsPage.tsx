@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Briefcase, Users, Search, ChevronRight, AlertCircle } from 'lucide-react';
+import { MapPin, Briefcase, Users, Search, ChevronRight, AlertCircle, Sparkles } from 'lucide-react';
 import { CandidatePortalLayout } from '../components/layout/CandidatePortalLayout';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -54,6 +54,23 @@ export function PublicJobsPage() {
           Encontre a oportunidade certa para você na Rede Marajó.
         </p>
       </div>
+
+      {/* Assistant CTA → Portal 2 */}
+      <Link
+        to="/portal-2"
+        className="mb-6 flex items-center gap-4 rounded-2xl bg-primary-700 px-5 py-4 text-white shadow-card transition-colors hover:bg-primary-800"
+      >
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white/15">
+          <Sparkles className="h-6 w-6" />
+        </div>
+        <div className="flex-1">
+          <p className="text-base font-bold">Encontrar vaga com assistente</p>
+          <p className="text-sm text-white/80">
+            Responda algumas perguntas simples e a gente encontra a vaga certa para você.
+          </p>
+        </div>
+        <ChevronRight className="h-5 w-5 flex-shrink-0" />
+      </Link>
 
       {/* Session-aware entry banner */}
       {candidateName ? (

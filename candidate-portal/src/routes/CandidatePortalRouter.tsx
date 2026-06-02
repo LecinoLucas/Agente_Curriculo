@@ -8,6 +8,7 @@ import { RecoverAccessPage } from '../pages/RecoverAccessPage';
 import { PasswordSetupPage } from '../pages/PasswordSetupPage';
 import { GoogleCompletionPage } from '../pages/GoogleCompletionPage';
 import { CandidateHomePage } from '../pages/CandidateHomePage';
+import { CandidatePortal2Page } from '../pages/CandidatePortal2Page';
 import { CandidateApplicationDetailPage } from '../pages/CandidateApplicationDetailPage';
 import { CandidateAssessmentPage } from '../pages/CandidateAssessmentPage';
 import { CandidatePreAdmissionPage } from '../pages/CandidatePreAdmissionPage';
@@ -36,6 +37,9 @@ export function CandidatePortalRouter() {
         <Route path="/contato" element={<ContactPage />} />
         <Route path="/privacidade" element={<PrivacyPage />} />
         <Route path="/termos" element={<TermsPage />} />
+
+        {/* Assistant (Portal 2) */}
+        <Route path="/portal-2" element={<CandidatePortal2Page />} />
 
         {/* Application flow */}
         <Route path="/candidatar/:identifier" element={<ApplicationFormPage />} />
