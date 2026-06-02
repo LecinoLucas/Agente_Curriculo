@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.admin_assistant_failure_service import AssistantFailureRecorder
 from src.application.services.admin_assistant_service import sanitise_assistant_text
+from src.application.services.assistant_content_provider import AssistantContentProvider
 from src.application.services.conversation_otp_service import ConversationOtpService
 from src.application.services.conversation_state_machine import (
     ConversationPrompt,
@@ -141,6 +142,15 @@ class ConversationService:
         self._application_repository = application_repository
         self._otp_service = ConversationOtpService(session)
         self._failure_recorder = AssistantFailureRecorder(session)
+        self._content_provider = AssistantContentProvider(session)
+
+    async def _prompt_for(
+        self,
+        state: str,
+        context: dict[str, Any] | None = None,
+    ) -> ConversationPrompt:
+        """Thin async wrapper: tries DB content then falls back to hardcoded."""
+        return await self._content_provider.prompt_for_state(state, context or {})
 
     async def create_session(self, body: ConversationCreateRequest) -> ConversationTurnResponse:
         now = datetime.now(UTC)
@@ -230,14 +240,14 @@ class ConversationService:
                     self._state_update("COLLECT_RESUME", content),
                 )
                 conversation.current_state = "COLLECT_LEAD_NAME"
-                prompt = prompt_for("COLLECT_LEAD_NAME", context)
+                prompt = prompt_for("COLLECT_LEAD_NAME", context)  # lead state: hardcoded
             else:
                 self._merge_context(
                     context,
                     self._state_update(conversation.current_state, content),
                 )
                 conversation.current_state = next_state(conversation.current_state)
-                prompt = prompt_for(conversation.current_state, context)
+                prompt = await self._prompt_for(conversation.current_state, context)
 
         conversation.context_json = context
         if conversation.current_state == "DONE" and conversation.status == "active":
@@ -375,9 +385,9 @@ class ConversationService:
                 context["pending_application_id"] = str(resume_session.application_id)
             state = self._safe_resume_state(resume_session.current_state)
             conversation.current_state = state
-            base = prompt_for(state, context)
+            base = await self._prompt_for(state, context)
             return ConversationPrompt(
-                state=state,
+                state=state,  # type: ignore[arg-type]
                 content=_RESUME_SESSION_MESSAGE,
                 quick_replies=base.quick_replies,
             )
@@ -459,12 +469,12 @@ class ConversationService:
         if confirmation != "confirm":
             self._merge_context(context, self._state_update("CONFIRM_APPLICATION", content))
             conversation.current_state = next_state("CONFIRM_APPLICATION")
-            return prompt_for(conversation.current_state, context)
+            return await self._prompt_for(conversation.current_state, context)
 
         if conversation.candidate_id is not None or context.get("identity_verified") is True:
             context["confirmation"] = "confirm"
             conversation.current_state = "DONE"
-            return prompt_for("DONE", context)
+            return await self._prompt_for("DONE", context)
 
         pending_candidate_id = self._uuid_from_context(context.get("pending_candidate_id"))
         context["pending_confirmation"] = "confirm"
@@ -519,7 +529,7 @@ class ConversationService:
             ):
                 await self._create_lead_candidate_and_application(conversation, context)
             conversation.current_state = "DONE"
-            return prompt_for("DONE", context)
+            return await self._prompt_for("DONE", context)
 
         if result.outcome in ("expired", "no_otp", "already_consumed"):
             await self._record_failure(
@@ -1002,10 +1012,11 @@ class ConversationService:
                         classification="unit",
                         attempts_count=await self._next_attempt_count(conversation.id, state),
                     )
+                    unit_base = await self._prompt_for("CHOOSE_UNIT_OR_ANY", context)
                     return ConversationPrompt(
                         state="CHOOSE_UNIT_OR_ANY",
                         content=_INVALID_UNIT_MESSAGE,
-                        quick_replies=prompt_for("CHOOSE_UNIT_OR_ANY", context).quick_replies,
+                        quick_replies=unit_base.quick_replies,
                     )
         elif state == "CHOOSE_FUNCTION":
             if not self._looks_like_business_text(content):
@@ -1032,10 +1043,11 @@ class ConversationService:
                 classification=self._classification_for_text(content, "shift"),
                 attempts_count=await self._next_attempt_count(conversation.id, state),
             )
+            shift_base = await self._prompt_for("CHOOSE_SHIFT")
             return ConversationPrompt(
                 state="CHOOSE_SHIFT",
                 content=_INVALID_SHIFT_MESSAGE,
-                quick_replies=prompt_for("CHOOSE_SHIFT").quick_replies,
+                quick_replies=shift_base.quick_replies,
             )
         return None
 
