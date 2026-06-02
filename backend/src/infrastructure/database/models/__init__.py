@@ -59,6 +59,10 @@ from src.infrastructure.database.models.communication_model import (
     CommunicationDeliveryAttemptModel,
     CommunicationTemplateModel,
 )
+from src.infrastructure.database.models.conversation_model import (
+    ConversationMessageModel,
+    ConversationSessionModel,
+)
 from src.infrastructure.database.models.document_ai_analysis_model import (
     DocumentAIAnalysisModel,
 )
@@ -182,6 +186,8 @@ __all__ = [
     "CommunicationTemplateModel",
     "CandidateCommunicationModel",
     "CommunicationDeliveryAttemptModel",
+    "ConversationSessionModel",
+    "ConversationMessageModel",
     "CollaborationCommentModel",
     "CandidateNoteModel",
     "JobAreaModel",
