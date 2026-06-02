@@ -31,31 +31,34 @@ from src.interface.api.routers import (
     admin_ai_limits,
     admin_ai_provider_credentials,
     admin_ai_provider_health,
-    admin_behavioral_ai,
-    admin_diagnostics,
-    admin_bi,
     admin_audit_logs,
-    admin_system_health,
+    admin_behavioral_ai,
+    admin_bi,
+    admin_diagnostics,
     admin_notifications,
-    admissions,
+    admin_system_health,
     admission_packages,
+    admissions,
     ai_models,
     analyses,
+    applications,
     auth,
     behavioral_templates,
     candidate_behavioral_assessments,
     candidate_portal_area,
     candidate_portal_auth,
-    candidaturas,
     candidates,
+    candidaturas,
     collaboration,
     communications,
+    dashboard,
     decision_summary,
     document_ai,
     hiring_decisions,
     internal_users,
     interview_schedules,
     interview_scorecards,
+    job_areas,
     jobs,
     manager,
     observability,
@@ -69,8 +72,6 @@ from src.interface.api.routers import (
     skill_equivalences,
     skills,
     users,
-    dashboard,
-    job_areas,
 )
 from src.interface.api.routers.integrations import google_calendar
 from src.observability.logging import configure_structured_logging
@@ -134,6 +135,7 @@ app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(communications.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)
 app.include_router(analyses.router, prefix=_PREFIX)
+app.include_router(applications.router, prefix=_PREFIX)
 app.include_router(behavioral_templates.router, prefix=_PREFIX)
 app.include_router(candidate_behavioral_assessments.router, prefix=_PREFIX)
 app.include_router(decision_summary.router, prefix=_PREFIX)
@@ -226,7 +228,12 @@ async def handle_invalid_pre_admission_transition(
 
 @app.exception_handler(ValidationException)
 async def handle_validation(request: Request, exc: ValidationException) -> JSONResponse:
-    return _error_response("VALIDATION_ERROR", exc.message, status.HTTP_422_UNPROCESSABLE_ENTITY, request)
+    return _error_response(
+        "VALIDATION_ERROR",
+        exc.message,
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        request,
+    )
 
 
 @app.exception_handler(RequestValidationError)

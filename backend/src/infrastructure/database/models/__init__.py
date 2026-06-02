@@ -34,6 +34,10 @@ from src.infrastructure.database.models.behavioral_template_model import (
     BehavioralTemplateQuestionModel,
 )
 from src.infrastructure.database.models.calendar_sync_event_model import CalendarSyncEventModel
+from src.infrastructure.database.models.candidate_application_model import (
+    CandidateApplicationModel,
+    CandidateLocationPreferenceModel,
+)
 from src.infrastructure.database.models.candidate_auth_token_model import CandidateAuthTokenModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,
@@ -120,6 +124,8 @@ __all__ = [
     "PasswordResetTokenModel",
     "CandidateModel",
     "CandidateAuthTokenModel",
+    "CandidateApplicationModel",
+    "CandidateLocationPreferenceModel",
     "GoogleCalendarConnectionModel",
     "CalendarSyncEventModel",
     "CandidateJobPipelineModel",
