@@ -128,27 +128,33 @@ describe("EstruturaOperacionalPage", () => {
     vi.mocked(operationalMasterService.updateOperationalUnit).mockResolvedValue(unit);
   });
 
-  it("renderiza grupos, localidades e filiais/postos carregados dos endpoints", async () => {
+  it("abre com filiais/postos em foco e mantem grupos como aba de apoio", async () => {
     const user = userEvent.setup();
 
     render(<EstruturaOperacionalPage />);
 
+    expect(await screen.findByText("4201")).toBeInTheDocument();
+    expect(screen.getByText("NOVA CRIXÁS")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /filiais\/postos/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("columnheader", { name: "Grupo" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Filial" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Nome" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Localidade" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Ponto de referência" })).not.toBeInTheDocument();
+    expect(screen.getByText(/O candidato verá localidade/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /nova filial\/posto/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /localidades/i }));
+    expect((await screen.findAllByText("Peritoro")).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("tab", { name: /grupos/i }));
     expect(await screen.findByText("Postos")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Grupo" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Nome" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Filial" })).not.toBeInTheDocument();
     expect(screen.queryByText("4201")).not.toBeInTheDocument();
     expect(screen.queryByText("NOVA CRIXÁS")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /localidades/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /filiais\/postos/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /localidades/i }));
-    expect((await screen.findAllByText("Peritoro")).length).toBeGreaterThan(0);
-
-    await user.click(screen.getByRole("button", { name: /filiais\/postos/i }));
-    expect(await screen.findByText("4201")).toBeInTheDocument();
-    expect(screen.getByText("NOVA CRIXÁS")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Filial" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Ponto de referência" })).toBeInTheDocument();
+    expect(screen.queryByText(/O candidato verá localidade/i)).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(operationalMasterService.listOperationalGroups).toHaveBeenCalled();
@@ -162,9 +168,9 @@ describe("EstruturaOperacionalPage", () => {
 
     render(<EstruturaOperacionalPage />);
 
-    expect(await screen.findByText("Postos")).toBeInTheDocument();
+    expect(await screen.findByText("NOVA CRIXÁS")).toBeInTheDocument();
     expect(screen.getByText(/pode visualizar, mas não criar ou editar/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /novo cadastro/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /nova filial\/posto/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /editar/i })).not.toBeInTheDocument();
     expect(screen.getByText("Somente leitura")).toBeInTheDocument();
   });
@@ -174,8 +180,9 @@ describe("EstruturaOperacionalPage", () => {
 
     render(<EstruturaOperacionalPage />);
 
-    await screen.findByText("Postos");
-    await user.click(screen.getByRole("button", { name: /novo cadastro/i }));
+    await screen.findByText("NOVA CRIXÁS");
+    await user.click(screen.getByRole("tab", { name: /grupos/i }));
+    await user.click(screen.getByRole("button", { name: /novo grupo/i }));
 
     const dialog = screen.getByRole("dialog", { name: /novo grupo/i });
     await user.type(within(dialog).getByLabelText("Grupo"), "03");
@@ -198,7 +205,8 @@ describe("EstruturaOperacionalPage", () => {
 
     render(<EstruturaOperacionalPage />);
 
-    await screen.findByText("Postos");
+    await screen.findByText("NOVA CRIXÁS");
+    await user.click(screen.getByRole("tab", { name: /grupos/i }));
     await user.click(screen.getByRole("button", { name: /inativar/i }));
 
     await waitFor(() => {

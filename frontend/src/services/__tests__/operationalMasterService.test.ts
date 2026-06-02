@@ -94,6 +94,32 @@ describe("operationalMasterService", () => {
     expect("code" in response.data[0]).toBe(false);
   });
 
+  it("prioriza group_code quando o backend tambem envia code legado", async () => {
+    httpRequestMock.mockResolvedValueOnce(
+      paginated([
+        {
+          id: "group-1",
+          code: "4201",
+          group_code: "02",
+          name: "Postos",
+          normalized_name: "postos",
+          description: null,
+          is_active: true,
+          created_at: "2026-05-01T10:00:00Z",
+          updated_at: "2026-05-02T10:00:00Z",
+        },
+      ]),
+    );
+
+    const response = await operationalMasterService.listOperationalGroups();
+
+    expect(response.data[0]).toMatchObject({
+      group_code: "02",
+      name: "Postos",
+    });
+    expect(response.data[0].group_code).not.toBe("4201");
+  });
+
   it("lista localidades com status, tipo e busca", async () => {
     httpRequestMock.mockResolvedValueOnce(paginated([]));
 
@@ -258,5 +284,54 @@ describe("operationalMasterService", () => {
       },
     });
     expect("code" in response.data[0]).toBe(false);
+  });
+
+  it("prioriza branch_code da filial e group_code do grupo vinculado", async () => {
+    httpRequestMock.mockResolvedValueOnce(
+      paginated([
+        {
+          id: "unit-1",
+          group_id: "group-1",
+          location_group_id: "location-1",
+          code: "02",
+          branch_code: "4201",
+          name: "NOVA CRIXÁS",
+          normalized_name: "nova crixas",
+          public_name: null,
+          type: "gas_station",
+          reference_point: "BR",
+          address: null,
+          city: "NOVA CRIXÁS",
+          state: "GO",
+          is_active: true,
+          created_at: "2026-05-01T10:00:00Z",
+          updated_at: "2026-05-02T10:00:00Z",
+          group: {
+            id: "group-1",
+            code: "4201",
+            group_code: "02",
+            name: "Postos",
+            normalized_name: "postos",
+            description: null,
+            is_active: true,
+            created_at: "2026-05-01T10:00:00Z",
+            updated_at: "2026-05-02T10:00:00Z",
+          },
+        },
+      ]),
+    );
+
+    const response = await operationalMasterService.listOperationalUnits();
+
+    expect(response.data[0]).toMatchObject({
+      branch_code: "4201",
+      name: "NOVA CRIXÁS",
+      group: {
+        group_code: "02",
+        name: "Postos",
+      },
+    });
+    expect(response.data[0].branch_code).not.toBe("02");
+    expect(response.data[0].group?.group_code).not.toBe("4201");
   });
 });

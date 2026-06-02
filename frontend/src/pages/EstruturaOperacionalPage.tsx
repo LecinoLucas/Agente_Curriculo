@@ -48,19 +48,19 @@ type ModalState =
 
 const TABS: Array<{ key: TabKey; label: string; description: string }> = [
   {
-    key: "groups",
-    label: "Grupos",
-    description: "Grupos internos usados por RH e Protheus.",
+    key: "units",
+    label: "Filiais/Postos",
+    description: "Cadastro principal das unidades reais usadas na operação.",
   },
   {
     key: "locations",
     label: "Localidades",
-    description: "Nomes humanos usados para orientar RH e candidato.",
+    description: "Apoio para orientar RH e candidato por região.",
   },
   {
-    key: "units",
-    label: "Filiais/Postos",
-    description: "Unidades reais, filiais e postos vinculados a grupo e localidade.",
+    key: "groups",
+    label: "Grupos",
+    description: "Grupos internos usados por RH e Protheus.",
   },
 ];
 
@@ -111,6 +111,12 @@ function optionLabel(value: string | null | undefined, fallback = "-") {
   return value?.trim() ? value : fallback;
 }
 
+function createButtonLabel(activeTab: TabKey) {
+  if (activeTab === "groups") return "Novo grupo";
+  if (activeTab === "locations") return "Nova localidade";
+  return "Nova filial/posto";
+}
+
 function findGroup(groups: OperationalGroup[], id: string) {
   return groups.find((group) => group.id === id);
 }
@@ -149,37 +155,47 @@ function SummaryTile({
 function Toolbar({
   search,
   setSearch,
+  placeholder,
   activeFilter,
   setActiveFilter,
   children,
 }: {
   search: string;
   setSearch: (value: string) => void;
+  placeholder: string;
   activeFilter: ActiveFilter;
   setActiveFilter: (value: ActiveFilter) => void;
   children?: ReactNode;
 }) {
   return (
-    <div className="grid gap-3 rounded-xl border border-border bg-surface px-4 py-4 shadow-sm lg:grid-cols-[minmax(220px,1fr)_180px_auto]">
-      <label className="relative block">
-        <span className="sr-only">Buscar</span>
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar por código, nome ou referência"
-          className="pl-9"
-        />
-      </label>
-      <label className="block">
-        <span className="sr-only">Status</span>
-        <Select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}>
-          <option value="all">Ativos e inativos</option>
-          <option value="active">Somente ativos</option>
-          <option value="inactive">Somente inativos</option>
-        </Select>
-      </label>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
+    <div className="rounded-xl border border-border/70 bg-surface-muted/45 px-3 py-2.5">
+      <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="relative block min-w-0 flex-1 xl:max-w-[320px]">
+            <span className="sr-only">Buscar</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={placeholder}
+              className="h-8 rounded-lg border-border/80 bg-surface pl-8 pr-3 text-sm shadow-none"
+            />
+          </label>
+          <label className="block sm:w-[128px] xl:w-[124px]">
+            <span className="sr-only">Status</span>
+            <Select
+              value={activeFilter}
+              onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
+              className="h-8 rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
+            >
+              <option value="all">Status</option>
+              <option value="active">Ativos</option>
+              <option value="inactive">Inativos</option>
+            </Select>
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 xl:justify-end">{children}</div>
+      </div>
     </div>
   );
 }
@@ -362,6 +378,26 @@ function UnitForm({
           </Select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
+          Filial
+          <Input
+            required
+            value={branchCode}
+            onChange={(event) => setBranchCode(event.target.value)}
+            maxLength={50}
+            placeholder="Código da filial"
+          />
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium text-text sm:col-span-2">
+          Nome
+          <Input
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={255}
+            placeholder="Nome da empresa ou unidade"
+          />
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium text-text">
           Localidade
           <Select required value={locationGroupId} onChange={(event) => setLocationGroupId(event.target.value)}>
             <option value="" disabled>
@@ -375,10 +411,6 @@ function UnitForm({
           </Select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
-          Filial
-          <Input required value={branchCode} onChange={(event) => setBranchCode(event.target.value)} maxLength={50} />
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium text-text">
           Tipo
           <Select value={type} onChange={(event) => setType(event.target.value as OperationalUnitType)}>
             {Object.entries(UNIT_TYPE_LABELS).map(([value, label]) => (
@@ -387,10 +419,6 @@ function UnitForm({
               </option>
             ))}
           </Select>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium text-text sm:col-span-2">
-          Nome
-          <Input required value={name} onChange={(event) => setName(event.target.value)} maxLength={255} />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text sm:col-span-2">
           Nome público
@@ -431,7 +459,7 @@ function UnitForm({
       <FormActions
         saving={saving}
         onCancel={onCancel}
-        submitLabel={item ? "Salvar unidade" : "Criar unidade"}
+        submitLabel={item ? "Salvar filial/posto" : "Criar filial/posto"}
         disabled={!canSubmit}
       />
     </form>
@@ -464,7 +492,7 @@ function FormActions({
 export function EstruturaOperacionalPage() {
   const { user } = useAuth();
   const canWrite = isAdmin(user?.role);
-  const [activeTab, setActiveTab] = useState<TabKey>("groups");
+  const [activeTab, setActiveTab] = useState<TabKey>("units");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [search, setSearch] = useState("");
   const [locationType, setLocationType] = useState<"" | LocationGroupType>("");
@@ -640,37 +668,39 @@ export function EstruturaOperacionalPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryTile label="Grupos" value={groups.length} icon={<Building2 className="h-5 w-5" />} />
-        <SummaryTile label="Localidades" value={locations.length} icon={<MapPin className="h-5 w-5" />} />
         <SummaryTile label="Filiais/Postos" value={units.length} icon={<Store className="h-5 w-5" />} />
+        <SummaryTile label="Localidades" value={locations.length} icon={<MapPin className="h-5 w-5" />} />
+        <SummaryTile label="Grupos" value={groups.length} icon={<Building2 className="h-5 w-5" />} />
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-2 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-3">
+      <div className="rounded-xl border border-border bg-surface px-3 py-3 shadow-sm">
+        <div role="tablist" aria-label="Cadastros da estrutura operacional" className="flex flex-col gap-2 sm:flex-row">
           {TABS.map((tab) => {
             const selected = activeTab === tab.key;
             return (
               <button
                 key={tab.key}
                 type="button"
+                role="tab"
+                aria-selected={selected}
                 onClick={() => {
                   setActiveTab(tab.key);
                   setSearch("");
                   setActiveFilter("all");
                 }}
                 className={[
-                  "min-h-[76px] rounded-lg px-4 py-3 text-left transition",
+                  "min-h-11 flex-1 rounded-lg px-4 py-2.5 text-left transition",
                   selected
-                    ? "bg-surface-muted text-text shadow-sm"
-                    : "text-text-muted hover:bg-surface-muted/70 hover:text-text",
+                    ? "bg-[hsl(var(--primary))] text-white shadow-sm"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text",
                 ].join(" ")}
               >
                 <span className="block text-sm font-semibold">{tab.label}</span>
-                <span className="mt-1 block text-xs leading-5">{tab.description}</span>
               </button>
             );
           })}
         </div>
+        <p className="mt-3 text-sm text-text-muted">{currentTab.description}</p>
       </div>
 
       <section className="space-y-4">
@@ -689,6 +719,13 @@ export function EstruturaOperacionalPage() {
         <Toolbar
           search={search}
           setSearch={setSearch}
+          placeholder={
+            activeTab === "groups"
+              ? "Buscar por grupo ou nome"
+              : activeTab === "locations"
+                ? "Buscar por localidade, cidade ou UF"
+                : "Buscar por grupo, filial, nome ou referência"
+          }
           activeFilter={activeFilter}
           setActiveFilter={setActiveFilter}
         >
@@ -697,9 +734,9 @@ export function EstruturaOperacionalPage() {
               aria-label="Tipo de localidade"
               value={locationType}
               onChange={(event) => setLocationType(event.target.value as "" | LocationGroupType)}
-              className="min-w-[180px]"
+              className="h-8 min-w-[132px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
             >
-              <option value="">Todos os tipos</option>
+              <option value="">Tipo</option>
               {Object.entries(LOCATION_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -714,9 +751,9 @@ export function EstruturaOperacionalPage() {
                 aria-label="Grupo da filial"
                 value={unitGroupId}
                 onChange={(event) => setUnitGroupId(event.target.value)}
-                className="min-w-[180px]"
+                className="h-8 min-w-[132px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
               >
-                <option value="">Todos os grupos</option>
+                <option value="">Grupo</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.group_code} - {group.name}
@@ -727,9 +764,9 @@ export function EstruturaOperacionalPage() {
                 aria-label="Localidade da filial"
                 value={unitLocationId}
                 onChange={(event) => setUnitLocationId(event.target.value)}
-                className="min-w-[180px]"
+                className="h-8 min-w-[132px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
               >
-                <option value="">Todas as localidades</option>
+                <option value="">Localidade</option>
                 {locations.map((location) => (
                   <option key={location.id} value={location.id}>
                     {location.name} / {location.state}
@@ -740,9 +777,9 @@ export function EstruturaOperacionalPage() {
                 aria-label="Tipo de filial"
                 value={unitType}
                 onChange={(event) => setUnitType(event.target.value as "" | OperationalUnitType)}
-                className="min-w-[150px]"
+                className="h-8 min-w-[120px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
               >
-                <option value="">Todos os tipos</option>
+                <option value="">Tipo</option>
                 {Object.entries(UNIT_TYPE_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
@@ -756,10 +793,10 @@ export function EstruturaOperacionalPage() {
             <Button
               type="button"
               onClick={() => setModal({ type: activeTab === "groups" ? "group" : activeTab === "locations" ? "location" : "unit" })}
-              className="min-h-10 gap-2"
+              className="h-8 rounded-lg gap-1.5 px-3 text-sm shadow-none"
             >
               <Plus className="h-4 w-4" />
-              Novo cadastro
+              {createButtonLabel(activeTab)}
             </Button>
           ) : null}
         </Toolbar>
@@ -848,8 +885,6 @@ export function EstruturaOperacionalPage() {
               { header: "Filial" },
               { header: "Nome" },
               { header: "Localidade" },
-              { header: "Tipo" },
-              { header: "Ponto de referência" },
               { header: "Status" },
               { header: "Atualizado" },
               { header: "Ações", className: "text-right" },
@@ -873,8 +908,6 @@ export function EstruturaOperacionalPage() {
                   <TableCell className="font-mono text-sm font-semibold text-text">{item.branch_code}</TableCell>
                   <TableCell className="font-medium text-text">{item.name}</TableCell>
                   <TableCell>{location ? `${location.name} / ${location.state}` : "-"}</TableCell>
-                  <TableCell>{UNIT_TYPE_LABELS[item.type]}</TableCell>
-                  <TableCell className="text-text-muted">{optionLabel(item.reference_point)}</TableCell>
                   <TableCell>{statusBadge(item.is_active)}</TableCell>
                   <TableCell className="text-text-muted">{formatDate(item.updated_at)}</TableCell>
                   <TableCell>
@@ -892,16 +925,18 @@ export function EstruturaOperacionalPage() {
         ) : null}
       </section>
 
-      <div className="rounded-xl border border-border bg-surface px-4 py-4 text-sm text-text-muted shadow-sm">
-        <div className="mb-2 flex items-center gap-2 font-semibold text-text">
-          <SlidersHorizontal className="h-4 w-4" />
-          Contrato operacional
+      {activeTab === "units" ? (
+        <div className="rounded-xl border border-border bg-surface px-4 py-4 text-sm text-text-muted shadow-sm">
+          <div className="mb-2 flex items-center gap-2 font-semibold text-text">
+            <SlidersHorizontal className="h-4 w-4" />
+            Contrato operacional
+          </div>
+          <p>
+            O candidato verá localidade, nome público e ponto de referência. Grupo e filial são dados internos
+            para RH e Protheus.
+          </p>
         </div>
-        <p>
-          O candidato verá localidade, nome público e ponto de referência. Grupo e filial são dados internos
-          para RH e Protheus.
-        </p>
-      </div>
+      ) : null}
 
       {modal ? (
         <Modal
