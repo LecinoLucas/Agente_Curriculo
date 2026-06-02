@@ -4,6 +4,7 @@ import {
   MessageSquare,
   Eye,
   ChevronLeft,
+  ChevronRight,
   User,
   Bot,
   Settings,
@@ -13,6 +14,9 @@ import {
   ShieldAlert,
   Info,
   Save,
+  Lock,
+  Lightbulb,
+  CornerDownRight,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +47,11 @@ import {
   type AssistantFailureListItem,
   type AssistantFailureStatus,
   type AssistantMessageItem,
+  type AssistantQuickReply,
+  type AssistantSetting,
+  type AssistantSettingValue,
+  type AssistantState,
+  type AssistantStateContent,
   type AssistantSessionDetail,
   type AssistantSessionListItem,
   type ListFailuresParams,
@@ -1333,6 +1342,434 @@ function FailuresPanel() {
   );
 }
 
+// ── Flow (Fluxo de perguntas) — read-only ───────────────────────────────────
+
+function formatSettingValue(
+  value: AssistantSettingValue,
+  isSensitive: boolean
+): string {
+  if (isSensitive && value == null) return "Protegido";
+  if (value == null) return "—";
+  if (Array.isArray(value)) return value.length ? value.map(String).join(", ") : "—";
+  if (typeof value === "boolean") return value ? "Sim" : "Não";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function FlowContentBlock({
+  title,
+  icon,
+  text,
+  emptyHint,
+}: {
+  title: string;
+  icon: ReactNode;
+  text: string | null;
+  emptyHint: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+        {icon}
+        {title}
+      </div>
+      {text ? (
+        <p className="whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-muted/40 p-3 text-sm text-text">
+          {text}
+        </p>
+      ) : (
+        <p className="rounded-lg border border-dashed border-border p-3 text-sm italic text-text-muted">
+          {emptyHint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function StateBadges({ state }: { state: AssistantState }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {state.is_editable ? (
+        <Badge variant="success" className="text-[10px]">
+          Editável
+        </Badge>
+      ) : (
+        <Badge variant="muted" className="text-[10px]">
+          Não editável
+        </Badge>
+      )}
+      {state.is_sensitive && (
+        <Badge variant="warning" className="text-[10px]">
+          <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" />
+          Sensível
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+function FlowStateDetail({
+  state,
+  content,
+  quickReplies,
+}: {
+  state: AssistantState;
+  content: AssistantStateContent | undefined;
+  quickReplies: AssistantQuickReply[];
+}) {
+  return (
+    <div className="space-y-4">
+      {/* State header */}
+      <Card className="max-w-full overflow-hidden">
+        <CardContent className="space-y-2 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-text">{state.label}</h3>
+              <code className="text-xs text-text-muted">{state.state}</code>
+            </div>
+            <StateBadges state={state} />
+          </div>
+          {state.description && (
+            <p className="text-sm text-text-muted">{state.description}</p>
+          )}
+          {state.is_sensitive && (
+            <p className="flex items-start gap-1.5 rounded-lg bg-warning/10 p-2 text-xs text-text">
+              <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-warning" aria-hidden="true" />
+              Estado sensível (identificação/verificação). Não pode ser editado pelo
+              painel.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Assistant texts */}
+      <Card className="max-w-full overflow-hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Texto do assistente</CardTitle>
+          <CardDescription>O que o candidato lê neste passo.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {content ? (
+            <>
+              <FlowContentBlock
+                title="Texto da pergunta"
+                icon={<MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />}
+                text={content.prompt_text}
+                emptyHint="Sem texto de pergunta configurado."
+              />
+              <FlowContentBlock
+                title="Texto auxiliar"
+                icon={<Lightbulb className="h-3.5 w-3.5" aria-hidden="true" />}
+                text={content.helper_text}
+                emptyHint="Sem texto auxiliar."
+              />
+              <FlowContentBlock
+                title="Fallback"
+                icon={<CornerDownRight className="h-3.5 w-3.5" aria-hidden="true" />}
+                text={content.fallback_text}
+                emptyHint="Sem mensagem de fallback."
+              />
+              <div className="grid grid-cols-1 gap-x-4 gap-y-1 pt-1 text-xs text-text-muted sm:grid-cols-3">
+                <span>
+                  Placeholder do campo:{" "}
+                  <span className="text-text">{content.input_placeholder ?? "—"}</span>
+                </span>
+                <span>
+                  Conteúdo ativo:{" "}
+                  <span className="text-text">{content.is_active ? "Sim" : "Não"}</span>
+                </span>
+                <span>
+                  Versão: <span className="text-text">{content.version}</span>
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="rounded-lg border border-dashed border-border p-3 text-sm italic text-text-muted">
+              Conteúdo não configurado para este estado.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick replies */}
+      <Card className="max-w-full overflow-hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Respostas rápidas</CardTitle>
+          <CardDescription>
+            <span className="font-medium text-text">Texto</span> é o que o candidato vê;{" "}
+            <span className="font-medium text-text">valor</span> é o dado técnico
+            reconhecido pela engine.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {quickReplies.length === 0 ? (
+            <p className="px-4 py-4 text-sm italic text-text-muted">
+              Nenhuma resposta rápida neste estado.
+            </p>
+          ) : (
+            <div className="max-w-full overflow-x-auto">
+              <table className="min-w-[420px] text-left" aria-label="Respostas rápidas do estado">
+                <thead>
+                  <tr className="border-b border-border bg-surface-muted/50 text-xs uppercase text-text-muted">
+                    <th className="px-4 py-2 font-medium">Texto (candidato)</th>
+                    <th className="px-4 py-2 font-medium">Valor (engine)</th>
+                    <th className="px-4 py-2 font-medium">Ordem</th>
+                    <th className="px-4 py-2 font-medium">Ativo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quickReplies.map((qr) => (
+                    <tr
+                      key={qr.id}
+                      className="border-b border-border last:border-0"
+                    >
+                      <td className="px-4 py-2.5 text-sm text-text">{qr.label}</td>
+                      <td className="px-4 py-2.5">
+                        <code className="text-xs text-text-muted">{qr.value}</code>
+                      </td>
+                      <td className="px-4 py-2.5 text-sm text-text-muted">
+                        {qr.sort_order}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge
+                          variant={qr.is_active ? "success" : "muted"}
+                          className="text-[10px]"
+                        >
+                          {qr.is_active ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function FlowPanel() {
+  const statesState = useAsyncState<AssistantState[]>();
+  const contentsState = useAsyncState<AssistantStateContent[]>();
+  const quickRepliesState = useAsyncState<AssistantQuickReply[]>();
+  const settingsState = useAsyncState<AssistantSetting[]>();
+  const [selectedState, setSelectedState] = useState<string | null>(null);
+
+  const loadFlow = useCallback(() => {
+    void statesState.run(() => assistantAdminService.listAssistantStates());
+    void contentsState.run(() => assistantAdminService.listStateContents());
+    void quickRepliesState.run(() => assistantAdminService.listQuickReplies());
+    void settingsState.run(() => assistantAdminService.listAssistantSettings());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadFlow();
+  }, [loadFlow]);
+
+  const states = statesState.data ?? [];
+  const sortedStates = [...states].sort((a, b) => a.order - b.order);
+
+  // Default-select the first state once the list is available.
+  useEffect(() => {
+    if (sortedStates.length === 0) return;
+    if (selectedState && sortedStates.some((s) => s.state === selectedState)) return;
+    setSelectedState(sortedStates[0].state);
+  }, [sortedStates, selectedState]);
+
+  const selected = sortedStates.find((s) => s.state === selectedState);
+  const selectedContent = contentsState.data?.find(
+    (c) => c.state === selectedState
+  );
+  const selectedQuickReplies = (quickRepliesState.data ?? [])
+    .filter((q) => q.state === selectedState)
+    .sort((a, b) => a.sort_order - b.sort_order);
+
+  const settings = settingsState.data ?? [];
+
+  return (
+    <div className="space-y-4">
+      {/* Read-only notice */}
+      <div
+        role="note"
+        className="flex flex-wrap items-start gap-2 rounded-xl border border-border bg-surface-muted/40 p-3 text-sm"
+      >
+        <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-text-muted" aria-hidden="true" />
+        <div>
+          <p className="font-medium text-text">Somente leitura nesta fase</p>
+          <p className="text-text-muted">
+            A topologia do fluxo não pode ser editada. Os textos e respostas rápidas
+            são exibidos como estão configurados no Assistente.
+          </p>
+        </div>
+      </div>
+
+      {statesState.loading && (
+        <Card>
+          <CardContent className="py-6">
+            <SkeletonRows count={6} />
+          </CardContent>
+        </Card>
+      )}
+
+      {statesState.error && !statesState.loading && (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+            <AlertCircle className="h-8 w-8 text-danger" aria-hidden="true" />
+            <p className="text-sm font-medium text-text">
+              Não foi possível carregar o fluxo de perguntas.
+            </p>
+            <Button variant="ghost" size="sm" onClick={loadFlow}>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+              Tentar novamente
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!statesState.loading && !statesState.error && sortedStates.length === 0 && (
+        <EmptyState
+          icon={<Settings className="h-8 w-8 text-text-muted" aria-hidden="true" />}
+          title="Nenhum estado configurado"
+          description="O fluxo do assistente ainda não retornou estados para exibir."
+        />
+      )}
+
+      {!statesState.loading && !statesState.error && sortedStates.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+          {/* States list */}
+          <Card className="max-w-full overflow-hidden lg:self-start">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Estados</CardTitle>
+              <CardDescription>Ordem fixa do fluxo.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ul>
+                {sortedStates.map((s, idx) => {
+                  const isSelected = s.state === selectedState;
+                  return (
+                    <li key={s.state}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedState(s.state)}
+                        aria-current={isSelected ? "true" : undefined}
+                        className={[
+                          "w-full border-b border-border px-4 py-3 text-left transition-colors last:border-0",
+                          isSelected
+                            ? "bg-primary/10"
+                            : "hover:bg-surface-muted/40",
+                        ].join(" ")}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-surface-muted text-[10px] font-semibold text-text-muted">
+                              {idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-text">
+                                {s.label}
+                              </p>
+                              <code className="text-[10px] text-text-muted">
+                                {s.state}
+                              </code>
+                            </div>
+                          </div>
+                          <ChevronRight
+                            className="h-4 w-4 flex-shrink-0 text-text-muted"
+                            aria-hidden="true"
+                          />
+                        </div>
+                        <div className="mt-1.5 pl-7">
+                          <StateBadges state={s} />
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+
+          {/* Selected state detail */}
+          <div>
+            {selected ? (
+              <FlowStateDetail
+                state={selected}
+                content={selectedContent}
+                quickReplies={selectedQuickReplies}
+              />
+            ) : (
+              <Card>
+                <CardContent className="py-12 text-center text-sm text-text-muted">
+                  Selecione um estado para ver os detalhes.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Related settings */}
+      {!statesState.loading && !statesState.error && (
+        <Card className="max-w-full overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Configurações relacionadas</CardTitle>
+            <CardDescription>
+              Parâmetros gerais do assistente (somente leitura).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {settingsState.loading && (
+              <div className="px-4 py-4">
+                <SkeletonRows count={3} />
+              </div>
+            )}
+            {settingsState.error && !settingsState.loading && (
+              <p className="px-4 py-4 text-sm text-text-muted">
+                Não foi possível carregar as configurações.
+              </p>
+            )}
+            {!settingsState.loading && !settingsState.error && settings.length === 0 && (
+              <p className="px-4 py-4 text-sm italic text-text-muted">
+                Nenhuma configuração disponível.
+              </p>
+            )}
+            {!settingsState.loading && settings.length > 0 && (
+              <ul className="divide-y divide-border">
+                {settings.map((setting) => (
+                  <li
+                    key={setting.key}
+                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-text">
+                        {setting.description ?? setting.key}
+                      </p>
+                      <code className="text-[10px] text-text-muted">{setting.key}</code>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {setting.is_sensitive && (
+                        <Lock
+                          className="h-3.5 w-3.5 text-text-muted"
+                          aria-label="Valor protegido"
+                        />
+                      )}
+                      <span className="text-sm text-text">
+                        {formatSettingValue(setting.value_json, setting.is_sensitive)}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20;
@@ -1404,11 +1841,10 @@ export function AssistantAdminPage() {
             <AlertTriangle className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Falhas
           </TabsTrigger>
-          <TabsTrigger value="fluxo" disabled>
+          <TabsTrigger value="fluxo">
             <Settings className="mr-1.5 h-4 w-4" aria-hidden="true" />
             <span className="sm:hidden">Fluxo</span>
             <span className="hidden sm:inline">Fluxo de perguntas</span>
-            <Badge variant="muted" className="ml-1.5 hidden text-[10px] sm:inline-flex">Em breve</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -1538,17 +1974,7 @@ export function AssistantAdminPage() {
         </TabsContent>
 
         <TabsContent value="fluxo" className="mt-4">
-          <Card>
-            <CardContent className="flex items-center justify-center py-16 text-center">
-              <div className="space-y-2">
-                <Settings className="mx-auto h-8 w-8 text-text-muted" aria-hidden="true" />
-                <p className="font-medium text-text">Fluxo de perguntas</p>
-                <p className="text-sm text-text-muted">
-                  Esta aba será disponibilizada em uma próxima fase.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <FlowPanel />
         </TabsContent>
       </Tabs>
 

@@ -23,7 +23,7 @@ class ConversationPrompt:
 
 
 STATE_TRANSITIONS: dict[ConversationState, ConversationState] = {
-    "IDENTIFY": "VERIFY_OTP",
+    "IDENTIFY": "CHOOSE_LOCATION",
     "VERIFY_OTP": "CHOOSE_LOCATION",
     "CHOOSE_LOCATION": "CHOOSE_UNIT_OR_ANY",
     "CHOOSE_UNIT_OR_ANY": "CHOOSE_FUNCTION",

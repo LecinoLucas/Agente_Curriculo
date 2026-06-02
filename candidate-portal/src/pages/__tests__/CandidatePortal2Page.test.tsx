@@ -209,15 +209,19 @@ describe('CandidatePortal2Page', () => {
     render(<CandidatePortal2Page />);
     await screen.findByText(IDENTIFY_SESSION.assistant_message);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Informar CPF' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Identificar com CPF' }));
 
     expect(conversationsService.sendConversationMessage).not.toHaveBeenCalled();
     expect(await screen.findByText('Digite seu CPF no campo abaixo para continuar.')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Digite seu CPF')).toBeTruthy();
+    const field = screen.getByPlaceholderText('Digite seu CPF') as HTMLInputElement;
+    expect(field.getAttribute('inputmode')).toBe('numeric');
 
-    fireEvent.change(screen.getByLabelText('Sua mensagem'), { target: { value: '52998224725' } });
+    fireEvent.change(field, { target: { value: '52998224725' } });
+    expect(field.value).toBe('529.982.247-25');
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
 
+    expect(await screen.findByText('CPF informado com final 725')).toBeTruthy();
+    expect(screen.queryByText('529.982.247-25')).toBeNull();
     expect(await screen.findByText('Digite o código de verificação.')).toBeTruthy();
     expect(conversationsService.sendConversationMessage).toHaveBeenCalledWith(
       'sess-1',
@@ -226,17 +230,39 @@ describe('CandidatePortal2Page', () => {
     );
   });
 
-  it('does not send raw whatsapp quick reply and guides the user to type a phone', async () => {
+  it('does not send raw whatsapp quick reply and sends the typed phone masked locally', async () => {
     vi.mocked(conversationsService.createConversation).mockResolvedValue(IDENTIFY_TURN);
+    vi.mocked(conversationsService.sendConversationMessage).mockResolvedValue({
+      session_id: 'sess-1',
+      current_state: 'VERIFY_OTP',
+      assistant_message: 'Digite o código de verificação.',
+      quick_replies: [],
+      session: { ...IDENTIFY_SESSION, current_state: 'VERIFY_OTP', quick_replies: [] },
+      message: assistantMessage('Digite o código de verificação.', 'msg-2'),
+      options: [],
+    });
 
     render(<CandidatePortal2Page />);
     await screen.findByText(IDENTIFY_SESSION.assistant_message);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Informar WhatsApp' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Identificar com WhatsApp' }));
 
     expect(conversationsService.sendConversationMessage).not.toHaveBeenCalled();
     expect(await screen.findByText('Digite seu WhatsApp com DDD no campo abaixo.')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Digite seu WhatsApp com DDD')).toBeTruthy();
+    const field = screen.getByPlaceholderText('Digite seu WhatsApp com DDD') as HTMLInputElement;
+    expect(field.getAttribute('inputmode')).toBe('numeric');
+
+    fireEvent.change(field, { target: { value: '11987654177' } });
+    expect(field.value).toBe('(11) 98765-4177');
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    expect(await screen.findByText('WhatsApp informado com final 177')).toBeTruthy();
+    expect(screen.queryByText('(11) 98765-4177')).toBeNull();
+    expect(conversationsService.sendConversationMessage).toHaveBeenCalledWith(
+      'sess-1',
+      '11987654177',
+      'text',
+    );
   });
 
   it('continues sending non-identification quick replies to the backend', async () => {
@@ -326,6 +352,9 @@ describe('CandidatePortal2Page', () => {
     const field = screen.getByPlaceholderText('Digite o código de 6 dígitos') as HTMLInputElement;
     expect(field.getAttribute('inputmode')).toBe('numeric');
     expect(field.getAttribute('maxlength')).toBe('6');
+    expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(field, { target: { value: '1234567' } });
+    expect(field.value).toBe('123456');
   });
 
   it('"Não recebi o código" shows local help and never sends an OTP attempt', async () => {
@@ -338,10 +367,11 @@ describe('CandidatePortal2Page', () => {
 
     expect(
       await screen.findByText(
-        'Sem problema. Você pode conferir o CPF/WhatsApp informado ou começar de novo.',
+        'Sem problema. Confira o CPF/WhatsApp informado ou comece de novo.',
       ),
     ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Tentar digitar o código' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Começar de novo' })).toBeNull();
     expect(conversationsService.sendConversationMessage).not.toHaveBeenCalled();
   });
 

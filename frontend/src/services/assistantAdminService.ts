@@ -128,6 +128,69 @@ export type ListFailuresParams = {
   page_size?: number;
 };
 
+// ── Assistant flow content (read-only) ──────────────────────────────────────
+
+export type AssistantState = {
+  state: string;
+  label: string;
+  description: string;
+  is_sensitive: boolean;
+  is_editable: boolean;
+  order: number;
+  allowed_quick_reply_values: string[];
+  allowed_placeholders: string[];
+};
+
+export type AssistantStateContent = {
+  state: string;
+  prompt_text: string;
+  helper_text: string | null;
+  fallback_text: string | null;
+  input_placeholder: string | null;
+  is_editable: boolean;
+  is_active: boolean;
+  version: number;
+  updated_at: string;
+};
+
+export type AssistantQuickReply = {
+  id: string;
+  state: string;
+  value: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssistantSettingValue =
+  | Record<string, unknown>
+  | unknown[]
+  | string
+  | number
+  | boolean
+  | null;
+
+export type AssistantSetting = {
+  key: string;
+  value_json: AssistantSettingValue;
+  is_sensitive: boolean;
+  description: string | null;
+  updated_at: string;
+};
+
+export type ListStateContentsParams = {
+  state?: string;
+  is_active?: boolean;
+  is_editable?: boolean;
+};
+
+export type ListQuickRepliesParams = {
+  state?: string;
+  is_active?: boolean;
+};
+
 export type UpdateFailurePayload = {
   status?: AssistantFailureStatus;
   classification?: AssistantFailureClassification;
@@ -165,6 +228,21 @@ function buildFailureQuery(params: ListFailuresParams): string {
   appendParam(parts, "to_date", params.to_date);
   if (params.page) parts.push(`page=${params.page}`);
   if (params.page_size) parts.push(`page_size=${params.page_size}`);
+  return parts.length > 0 ? `?${parts.join("&")}` : "";
+}
+
+function buildStateContentsQuery(params: ListStateContentsParams): string {
+  const parts: string[] = [];
+  appendParam(parts, "state", params.state);
+  if (params.is_active != null) parts.push(`is_active=${params.is_active}`);
+  if (params.is_editable != null) parts.push(`is_editable=${params.is_editable}`);
+  return parts.length > 0 ? `?${parts.join("&")}` : "";
+}
+
+function buildQuickRepliesQuery(params: ListQuickRepliesParams): string {
+  const parts: string[] = [];
+  appendParam(parts, "state", params.state);
+  if (params.is_active != null) parts.push(`is_active=${params.is_active}`);
   return parts.length > 0 ? `?${parts.join("&")}` : "";
 }
 
@@ -209,5 +287,37 @@ export const assistantAdminService = {
       `/api/v1/admin/assistant/failures/${failureId}`,
       { method: "PATCH", body: payload }
     );
+  },
+
+  // ── Flow content (read-only) ──────────────────────────────────────────────
+
+  listAssistantStates(): Promise<AssistantState[]> {
+    return httpRequest<AssistantState[]>("/api/v1/admin/assistant/states");
+  },
+
+  listStateContents(
+    params: ListStateContentsParams = {}
+  ): Promise<AssistantStateContent[]> {
+    return httpRequest<AssistantStateContent[]>(
+      `/api/v1/admin/assistant/state-contents${buildStateContentsQuery(params)}`
+    );
+  },
+
+  getStateContent(state: string): Promise<AssistantStateContent> {
+    return httpRequest<AssistantStateContent>(
+      `/api/v1/admin/assistant/state-contents/${state}`
+    );
+  },
+
+  listQuickReplies(
+    params: ListQuickRepliesParams = {}
+  ): Promise<AssistantQuickReply[]> {
+    return httpRequest<AssistantQuickReply[]>(
+      `/api/v1/admin/assistant/quick-replies${buildQuickRepliesQuery(params)}`
+    );
+  },
+
+  listAssistantSettings(): Promise<AssistantSetting[]> {
+    return httpRequest<AssistantSetting[]>("/api/v1/admin/assistant/settings");
   },
 };

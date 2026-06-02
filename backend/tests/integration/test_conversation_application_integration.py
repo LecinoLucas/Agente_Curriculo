@@ -228,8 +228,22 @@ async def test_no_candidate_id_does_not_create_application(
     await _location(db_session)
     session_id = await _start(client)  # anonymous web chat (public flow)
 
-    # Valid but unknown CPF → OTP issued, complete OTP, then send location data.
-    await _send(client, session_id, "52998224725")  # IDENTIFY → VERIFY_OTP
+    # Valid but unknown CPF → lead mode. Collecting preferences must not create
+    # a CandidateApplication because no candidate_id has been verified/linked.
+    await _send(client, session_id, "52998224725")
+    for content in ["Peritoró", "any_in_location", "Frentista", "night"]:
+        await _send(client, session_id, content)
+
+    count_before_confirm = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateApplicationModel)
+    )
+    assert count_before_confirm == 0
+
+    await _send(client, session_id, "continue")
+    await _send(client, session_id, "skip_resume")
+    confirm = await _send(client, session_id, "confirm")
+    assert confirm["current_state"] == "VERIFY_OTP"
+
     otp = await db_session.scalar(
         sa.select(ConversationOtpModel)
         .where(ConversationOtpModel.session_id == UUID(session_id))
@@ -243,9 +257,7 @@ async def test_no_candidate_id_does_not_create_application(
         f"{i:06d}" for i in range(1_000_000)
         if _sha256(f"{sid}:{i:06d}".encode()).hexdigest() == otp.otp_hash
     )
-    await _send(client, session_id, code)  # VERIFY_OTP → CHOOSE_LOCATION (no candidate)
-    for content in ["Peritoró", "any_in_location", "Frentista", "night"]:
-        await _send(client, session_id, content)
+    await _send(client, session_id, code)
 
     count = await db_session.scalar(
         sa.select(sa.func.count()).select_from(CandidateApplicationModel)

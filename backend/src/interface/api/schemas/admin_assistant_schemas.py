@@ -65,6 +65,30 @@ class AdminAssistantSettingItem(APISchemaModel):
     updated_at: datetime
 
 
+class AdminAssistantStateContentPatch(APISchemaModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_text: str | None = None
+    helper_text: str | None = None
+    fallback_text: str | None = None
+    input_placeholder: str | None = None
+    is_active: bool | None = None
+
+
+class AdminAssistantQuickReplyPatch(APISchemaModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class AdminAssistantSettingPatch(APISchemaModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value_json: AssistantSettingValue
+
+
 class AdminSessionCandidateInfo(APISchemaModel):
     id: UUID | None = None
     display_name: str

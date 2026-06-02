@@ -16,17 +16,21 @@ from src.application.services.admin_assistant_service import (
 )
 from src.application.services.admin_assistant_settings_service import (
     AdminAssistantSettingsService,
+    AssistantContentNotEditableError,
     QuickReplyQuery,
     StateContentQuery,
 )
-from src.interface.api.dependencies import HrRecruiterOrAdmin, get_db
+from src.interface.api.dependencies import AdminOnly, HrRecruiterOrAdmin, get_db
 from src.interface.api.schemas.admin_assistant_schemas import (
     AdminAssistantFailureDetail,
     AdminAssistantFailureListItem,
     AdminAssistantFailurePatch,
     AdminAssistantQuickReplyItem,
+    AdminAssistantQuickReplyPatch,
     AdminAssistantSettingItem,
+    AdminAssistantSettingPatch,
     AdminAssistantStateContentItem,
+    AdminAssistantStateContentPatch,
     AdminAssistantStateItem,
     AdminMessageItem,
     AdminSessionDetail,
@@ -175,6 +179,87 @@ async def list_assistant_settings(
     svc: AdminAssistantSettingsService = Depends(_settings_svc),
 ) -> list[AdminAssistantSettingItem]:
     return await svc.list_settings()
+
+
+@router.patch(
+    "/state-contents/{state}",
+    response_model=AdminAssistantStateContentItem,
+)
+async def patch_assistant_state_content(
+    state: str,
+    body: AdminAssistantStateContentPatch,
+    current_user: AdminOnly,
+    db: AsyncSession = Depends(get_db),
+) -> AdminAssistantStateContentItem:
+    svc = AdminAssistantSettingsService(db)
+    try:
+        item = await svc.update_state_content(state, body, actor_id=current_user.id)
+    except AssistantContentNotEditableError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conteúdo do estado não encontrado.",
+        )
+    await db.commit()
+    return item
+
+
+@router.patch(
+    "/quick-replies/{quick_reply_id}",
+    response_model=AdminAssistantQuickReplyItem,
+)
+async def patch_assistant_quick_reply(
+    quick_reply_id: UUID,
+    body: AdminAssistantQuickReplyPatch,
+    current_user: AdminOnly,
+    db: AsyncSession = Depends(get_db),
+) -> AdminAssistantQuickReplyItem:
+    svc = AdminAssistantSettingsService(db)
+    try:
+        item = await svc.update_quick_reply(quick_reply_id, body, actor_id=current_user.id)
+    except AssistantContentNotEditableError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quick reply não encontrada.",
+        )
+    await db.commit()
+    return item
+
+
+@router.patch("/settings/{key}", response_model=AdminAssistantSettingItem)
+async def patch_assistant_setting(
+    key: str,
+    body: AdminAssistantSettingPatch,
+    current_user: AdminOnly,
+    db: AsyncSession = Depends(get_db),
+) -> AdminAssistantSettingItem:
+    svc = AdminAssistantSettingsService(db)
+    try:
+        item = await svc.update_setting(key, body.value_json, actor_id=current_user.id)
+    except AssistantContentNotEditableError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Configuração não encontrada.",
+        )
+    await db.commit()
+    return item
 
 
 @router.get("/sessions", response_model=PaginatedResponse[AdminSessionListItem])

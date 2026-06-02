@@ -19,6 +19,7 @@ from src.application.services.conversation_state_machine import (
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.infrastructure.database.models.assistant_failure_model import AssistantFailureModel
 from src.infrastructure.database.models.candidate_application_model import (
+    APPLICATION_ACTIVE_STATUSES,
     CandidateApplicationModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
@@ -57,19 +58,19 @@ _APPLICATION_TRIGGER_KEYS = (
     "desired_shift",
 )
 
-# IDENTIFY transition copy. Success and not-found are intentionally near-identical
-# so an attacker cannot tell from the reply whether a CPF/WhatsApp exists.
+# IDENTIFY transition copy. Success and not-found are intentionally identical so
+# an attacker cannot tell from the reply whether a CPF/WhatsApp exists.
 _IDENTIFY_SUCCESS_MESSAGE = (
-    "Certo, vamos continuar. Agora me diga em qual cidade ou localidade "
-    "você quer trabalhar."
-)
-_IDENTIFY_NOT_FOUND_MESSAGE = (
-    "Tudo bem, vamos continuar. Agora me diga em qual cidade ou localidade "
+    "Certo. Agora me diga em qual cidade ou localidade "
     "você quer trabalhar."
 )
 _IDENTIFY_INVALID_MESSAGE = (
     "Não consegui entender. Digite seu CPF ou WhatsApp com DDD para continuar."
 )
+_RESUME_SESSION_MESSAGE = (
+    "Encontrei uma conversa em andamento. Vamos continuar de onde você parou."
+)
+_RESUME_APPLICATION_MESSAGE = "Você já tem uma candidatura em andamento. Vamos continuar."
 _INVALID_LOCATION_MESSAGE = (
     "Não encontrei essa localidade. Digite o nome da cidade ou localidade novamente."
 )
@@ -79,6 +80,17 @@ _INVALID_UNIT_MESSAGE = (
 )
 _INVALID_FUNCTION_MESSAGE = "Não consegui entender a função desejada. Digite o nome da função."
 _INVALID_SHIFT_MESSAGE = "Não consegui entender o turno. Escolha uma das opções disponíveis."
+_SAFE_RESUME_CONTEXT_KEYS = frozenset(
+    {
+        "location_hint",
+        "preference",
+        "desired_function",
+        "desired_shift",
+        "show_jobs_ack",
+        "resume_choice",
+    }
+)
+_UNSAFE_RESUME_STATES = {"IDENTIFY", "VERIFY_OTP", "DONE"}
 
 
 @dataclass(frozen=True)
@@ -148,8 +160,8 @@ class ConversationService:
         context = dict(conversation.context_json or {})
 
         if conversation.current_state == "IDENTIFY":
-            # Secure identification step. Resolves (or not) a candidate_id, issues
-            # an OTP, and advances to VERIFY_OTP only when input is valid.
+            # Lead-mode identification step. Resolves (or not) a candidate_id
+            # silently, stores only safe markers, and advances without OTP.
             prompt = await self._handle_identify(
                 conversation,
                 context,
@@ -173,6 +185,12 @@ class ConversationService:
             )
             if invalid_prompt is not None:
                 prompt = invalid_prompt
+            elif conversation.current_state == "CONFIRM_APPLICATION":
+                prompt = await self._handle_confirm_application(
+                    conversation,
+                    context,
+                    content,
+                )
             else:
                 self._merge_context(
                     context,
@@ -220,7 +238,7 @@ class ConversationService:
     #
     # Resolves a candidate_id from a CPF or WhatsApp without ever storing the raw
     # CPF/phone, without authenticating the candidate, and without revealing
-    # whether the identifier exists (success and not-found replies are alike).
+    # whether the identifier exists. OTP is delayed until a later committing step.
     # ------------------------------------------------------------------
     async def _handle_identify(
         self,
@@ -259,28 +277,166 @@ class ConversationService:
             )
 
         identifier_type, normalized, last4 = classification
-        # Resolve silently; whether or not a match is found, the OTP is always
-        # issued so the public response and timing are identical (anti-enumeration).
+        # Resolve silently. The public response below is identical whether a
+        # candidate was found or not (anti-enumeration).
         candidate_id = await self._resolve_candidate_id(identifier_type, normalized)
 
         # Store only non-sensitive markers. Never the raw CPF/phone.
         context["identifier_type"] = identifier_type
+        context["identity_verified"] = False
+        context["lead_mode"] = True
         if identifier_type == "cpf":
             context["cpf_last4"] = last4
+            context.pop("whatsapp_last4", None)
+        if identifier_type == "whatsapp":
+            context["whatsapp_last4"] = last4
+            context.pop("cpf_last4", None)
         if candidate_id is None:
             context["identifier_unresolved"] = True
+            context.pop("pending_candidate_id", None)
+            context.pop("possible_candidate_id", None)
+            context.pop("pending_application_id", None)
+            context.pop("pending_application_status", None)
+            context.pop("application_in_progress", None)
         else:
             context.pop("identifier_unresolved", None)
+            context["pending_candidate_id"] = str(candidate_id)
+            context["possible_candidate_id"] = str(candidate_id)
+            resume_prompt = await self._resume_prompt_if_available(
+                conversation,
+                context,
+                candidate_id,
+            )
+            if resume_prompt is not None:
+                return resume_prompt
 
-        # Issue OTP (always, regardless of candidate resolution).
-        await self._otp_service.issue_otp(
-            session_id=conversation.id,
-            candidate_id=candidate_id,
-            identifier_type=identifier_type,
+        conversation.current_state = "CHOOSE_LOCATION"
+        return ConversationPrompt(
+            state="CHOOSE_LOCATION",
+            content=_IDENTIFY_SUCCESS_MESSAGE,
         )
 
+    async def _resume_prompt_if_available(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        candidate_id: UUID,
+    ) -> ConversationPrompt | None:
+        resume_session = await self._find_resume_session(candidate_id, conversation.id)
+        if resume_session is not None:
+            self._merge_context(context, self._safe_resume_context(resume_session.context_json))
+            context["resumed_from_session_id"] = str(resume_session.id)
+            if resume_session.application_id is not None:
+                context["pending_application_id"] = str(resume_session.application_id)
+            state = self._safe_resume_state(resume_session.current_state)
+            conversation.current_state = state
+            base = prompt_for(state, context)
+            return ConversationPrompt(
+                state=state,
+                content=_RESUME_SESSION_MESSAGE,
+                quick_replies=base.quick_replies,
+            )
+
+        application = await self._find_active_application(candidate_id)
+        if application is not None:
+            context["pending_application_id"] = str(application.id)
+            context["pending_application_status"] = application.status
+            context["application_in_progress"] = True
+            conversation.current_state = "CHOOSE_LOCATION"
+            return ConversationPrompt(
+                state="CHOOSE_LOCATION",
+                content=_RESUME_APPLICATION_MESSAGE,
+            )
+
+        return None
+
+    async def _find_resume_session(
+        self,
+        candidate_id: UUID,
+        current_session_id: UUID,
+    ) -> ConversationSessionModel | None:
+        return await self._session.scalar(
+            sa.select(ConversationSessionModel)
+            .where(
+                ConversationSessionModel.candidate_id == candidate_id,
+                ConversationSessionModel.id != current_session_id,
+                ConversationSessionModel.status == "active",
+                ConversationSessionModel.deleted_at.is_(None),
+            )
+            .order_by(
+                ConversationSessionModel.last_message_at.desc(),
+                ConversationSessionModel.updated_at.desc(),
+            )
+            .limit(1)
+        )
+
+    async def _find_active_application(
+        self,
+        candidate_id: UUID,
+    ) -> CandidateApplicationModel | None:
+        return await self._session.scalar(
+            sa.select(CandidateApplicationModel)
+            .where(
+                CandidateApplicationModel.candidate_id == candidate_id,
+                CandidateApplicationModel.status.in_(APPLICATION_ACTIVE_STATUSES),
+                CandidateApplicationModel.deleted_at.is_(None),
+            )
+            .order_by(
+                CandidateApplicationModel.updated_at.desc(),
+                CandidateApplicationModel.created_at.desc(),
+            )
+            .limit(1)
+        )
+
+    @staticmethod
+    def _safe_resume_context(context: dict | None) -> dict[str, Any]:
+        if not isinstance(context, dict):
+            return {}
+        return {
+            key: value
+            for key, value in context.items()
+            if key in _SAFE_RESUME_CONTEXT_KEYS and value is not None
+        }
+
+    @staticmethod
+    def _safe_resume_state(state: str) -> str:
+        if state in _UNSAFE_RESUME_STATES:
+            return "CHOOSE_LOCATION"
+        return state
+
+    async def _handle_confirm_application(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+    ) -> ConversationPrompt:
+        confirmation = self._normalize(content)
+        if confirmation != "confirm":
+            self._merge_context(context, self._state_update("CONFIRM_APPLICATION", content))
+            conversation.current_state = next_state("CONFIRM_APPLICATION")
+            return prompt_for(conversation.current_state, context)
+
+        if conversation.candidate_id is not None or context.get("identity_verified") is True:
+            context["confirmation"] = "confirm"
+            conversation.current_state = "DONE"
+            return prompt_for("DONE", context)
+
+        pending_candidate_id = self._uuid_from_context(context.get("pending_candidate_id"))
+        context["pending_confirmation"] = "confirm"
+        context["otp_purpose"] = "confirm_application"
+        await self._otp_service.issue_otp(
+            session_id=conversation.id,
+            candidate_id=pending_candidate_id,
+            identifier_type=str(context.get("identifier_type") or "cpf"),
+        )
         conversation.current_state = "VERIFY_OTP"
-        return prompt_for("VERIFY_OTP")
+        return ConversationPrompt(
+            state="VERIFY_OTP",
+            content=(
+                "Para confirmar suas informações, enviamos um código de verificação. "
+                "Digite o código de 6 dígitos para continuar."
+            ),
+        )
 
     async def _handle_verify_otp(
         self,
@@ -300,11 +456,17 @@ class ConversationService:
                 conversation.candidate_id = result.candidate_id
             context["identity_verified"] = True
             context.pop("identifier_unresolved", None)
-            conversation.current_state = "CHOOSE_LOCATION"
-            return ConversationPrompt(
-                state="CHOOSE_LOCATION",
-                content="Identidade confirmada. Em qual cidade ou localidade você quer trabalhar?",
-            )
+            if context.get("otp_purpose") == "confirm_application":
+                context["confirmation"] = str(context.pop("pending_confirmation", "confirm"))
+                context.pop("otp_purpose", None)
+            context.pop("pending_candidate_id", None)
+            context.pop("possible_candidate_id", None)
+            context.pop("pending_application_id", None)
+            context.pop("pending_application_status", None)
+            context.pop("resumed_from_session_id", None)
+            context.pop("application_in_progress", None)
+            conversation.current_state = "DONE"
+            return prompt_for("DONE", context)
 
         if result.outcome in ("expired", "no_otp", "already_consumed"):
             await self._record_failure(
@@ -318,7 +480,9 @@ class ConversationService:
                 attempts_count=result.attempts_remaining,
             )
             # Issue a fresh OTP so the candidate can try again without restarting.
-            candidate_id = conversation.candidate_id
+            candidate_id = conversation.candidate_id or self._uuid_from_context(
+                context.get("pending_candidate_id")
+            )
             identifier_type = context.get("identifier_type", "cpf")
             await self._otp_service.issue_otp(
                 session_id=conversation.id,
@@ -349,7 +513,16 @@ class ConversationService:
             conversation.current_state = "IDENTIFY"
             context.pop("identifier_type", None)
             context.pop("cpf_last4", None)
+            context.pop("whatsapp_last4", None)
             context.pop("identifier_unresolved", None)
+            context.pop("pending_candidate_id", None)
+            context.pop("possible_candidate_id", None)
+            context.pop("pending_application_id", None)
+            context.pop("pending_application_status", None)
+            context.pop("resumed_from_session_id", None)
+            context.pop("application_in_progress", None)
+            context.pop("pending_confirmation", None)
+            context.pop("otp_purpose", None)
             base = prompt_for("IDENTIFY")
             return ConversationPrompt(
                 state="IDENTIFY",
@@ -447,6 +620,17 @@ class ConversationService:
         for token in (".", "-", "/", "(", ")", " ", "+"):
             expr = sa.func.replace(expr, token, "")
         return expr
+
+    @staticmethod
+    def _uuid_from_context(value: Any) -> UUID | None:
+        if isinstance(value, UUID):
+            return value
+        if not isinstance(value, str):
+            return None
+        try:
+            return UUID(value)
+        except ValueError:
+            return None
 
     @staticmethod
     def _is_valid_cpf(digits: str) -> bool:
@@ -869,7 +1053,7 @@ class ConversationService:
             channel=conversation.channel,
             current_state=conversation.current_state,
             status=conversation.status,
-            context=conversation.context_json or {},
+            context=self._public_context(conversation.context_json or {}),
             assistant_message=current_prompt.content,
             quick_replies=self._quick_replies(current_prompt),
             last_message_at=conversation.last_message_at,
@@ -884,7 +1068,7 @@ class ConversationService:
             session_id=message.session_id,
             role=message.role,
             direction=ConversationService._direction_for_role(message.role),
-            content=message.content,
+            content=ConversationService._public_message_content(message),
             message_type=message.message_type,
             interpreted_intent=message.interpreted_intent,
             metadata=message.metadata_json,
@@ -917,3 +1101,32 @@ class ConversationService:
     def _merge_context(target: dict[str, Any], updates: dict[str, Any]) -> None:
         for key, value in updates.items():
             target[key] = value
+
+    @staticmethod
+    def _public_context(context: dict[str, Any]) -> dict[str, Any]:
+        internal_keys = {
+            "pending_candidate_id",
+            "possible_candidate_id",
+            "identifier_unresolved",
+            "pending_confirmation",
+            "otp_purpose",
+            "pending_application_id",
+            "pending_application_status",
+            "resumed_from_session_id",
+        }
+        return {key: value for key, value in context.items() if key not in internal_keys}
+
+    @staticmethod
+    def _public_message_content(message: ConversationMessageModel) -> str:
+        if message.role != "candidate":
+            return message.content
+        content = message.content.strip()
+        digits = re.sub(r"\D", "", content)
+        if re.fullmatch(r"\d{6}", digits):
+            return "[código omitido]"
+        if len(digits) in {10, 11}:
+            final = digits[-3:]
+            if ConversationService._is_valid_cpf(digits):
+                return f"CPF informado com final {final}"
+            return f"WhatsApp informado com final {final}"
+        return message.content

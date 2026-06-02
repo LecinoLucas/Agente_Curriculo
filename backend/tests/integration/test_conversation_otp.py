@@ -1,7 +1,8 @@
-"""OP-6F.2 — OTP verification tests for the Conversation Engine.
+"""OP-6F.2/OP-6F.4 — OTP verification tests for the Conversation Engine.
 
 Verifies security properties:
-- OTP is issued on valid identifier input
+- OTP is not issued on valid identifier input
+- OTP is issued at the later confirmation step
 - Correct code confirms candidate_id
 - Wrong code does not confirm, decrements attempts
 - Consumed OTP cannot be reused
@@ -117,35 +118,72 @@ async def _extract_code(db_session: AsyncSession, session_id: str) -> str:
     raise AssertionError("OTP code not in 0-999999 range")
 
 
+async def _drive_to_confirm_application(
+    client: AsyncClient, session_id: str, identifier: str
+) -> None:
+    for content in [
+        identifier,
+        "Peritoró",
+        "any_in_location",
+        "Frentista",
+        "night",
+        "continue",
+        "skip_resume",
+    ]:
+        await _send(client, session_id, content)
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 
-async def test_identify_issues_otp_and_advances_to_verify_otp(
+async def test_identify_does_not_issue_otp_and_advances_to_location(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
     session_id = await _start(client)
     payload = await _send(client, session_id, VALID_CPF)
 
-    assert payload["current_state"] == "VERIFY_OTP"
-    assert "código" in payload["assistant_message"].lower()
-    assert payload["quick_replies"] == []  # No quick replies in VERIFY_OTP
+    assert payload["current_state"] == "CHOOSE_LOCATION"
+    assert "cidade ou localidade" in payload["assistant_message"].lower()
 
-    otp = await _latest_otp(db_session, session_id)
-    assert otp.consumed_at is None
-    assert otp.attempts == 0
+    otp_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(ConversationOtpModel)
+    )
+    assert otp_count == 0
 
 
-async def test_identify_issues_otp_for_whatsapp(
+async def test_identify_does_not_issue_otp_for_whatsapp(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
     session_id = await _start(client)
     payload = await _send(client, session_id, "(11) 99999-8888")
 
+    assert payload["current_state"] == "CHOOSE_LOCATION"
+    otp_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(ConversationOtpModel)
+    )
+    assert otp_count == 0
+
+
+async def test_confirm_application_issues_late_otp(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _candidate_with_cpf(db_session)
+    await _location(db_session)
+    session_id = await _start(client)
+    await _drive_to_confirm_application(client, session_id, VALID_CPF)
+
+    payload = await _send(client, session_id, "confirm")
+
     assert payload["current_state"] == "VERIFY_OTP"
+    assert "código" in payload["assistant_message"].lower()
+    assert payload["quick_replies"] == []
+
     otp = await _latest_otp(db_session, session_id)
-    assert otp.identifier_type == "whatsapp"
+    assert otp.consumed_at is None
+    assert otp.attempts == 0
 
 
 async def test_correct_otp_links_candidate_and_advances(
@@ -153,14 +191,15 @@ async def test_correct_otp_links_candidate_and_advances(
     db_session: AsyncSession,
 ):
     candidate = await _candidate_with_cpf(db_session)
+    await _location(db_session)
     session_id = await _start(client)
-    await _send(client, session_id, VALID_CPF)
+    await _drive_to_confirm_application(client, session_id, VALID_CPF)
+    await _send(client, session_id, "confirm")
 
     code = await _extract_code(db_session, session_id)
     verify = await _send(client, session_id, code)
 
-    assert verify["current_state"] == "CHOOSE_LOCATION"
-    assert "Identidade confirmada" in verify["assistant_message"]
+    assert verify["current_state"] == "DONE"
     assert verify["session"]["context"].get("identity_verified") is True
 
     session = await db_session.get(ConversationSessionModel, UUID(session_id))
@@ -176,8 +215,10 @@ async def test_wrong_otp_does_not_verify_and_stays_in_verify_otp(
     db_session: AsyncSession,
 ):
     await _candidate_with_cpf(db_session)
+    await _location(db_session)
     session_id = await _start(client)
-    await _send(client, session_id, VALID_CPF)
+    await _drive_to_confirm_application(client, session_id, VALID_CPF)
+    await _send(client, session_id, "confirm")
 
     payload = await _send(client, session_id, "000000")  # deliberately wrong
 
@@ -198,19 +239,22 @@ async def test_otp_consumed_cannot_be_reused(
     db_session: AsyncSession,
 ):
     await _candidate_with_cpf(db_session)
+    await _location(db_session)
     session_id = await _start(client)
-    await _send(client, session_id, VALID_CPF)
+    await _drive_to_confirm_application(client, session_id, VALID_CPF)
+    await _send(client, session_id, "confirm")
 
     code = await _extract_code(db_session, session_id)
     await _send(client, session_id, code)  # consume it
 
     # Start a new session and try the same code (cross-session replay attempt)
     session_id2 = await _start(client)
-    await _send(client, session_id2, VALID_CPF)
+    await _drive_to_confirm_application(client, session_id2, VALID_CPF)
+    await _send(client, session_id2, "confirm")
     payload2 = await _send(client, session_id2, code)
 
     # The code belongs to session_id, not session_id2 → the hash won't match
-    assert payload2["current_state"] != "CHOOSE_LOCATION"
+    assert payload2["current_state"] == "VERIFY_OTP"
 
 
 async def test_expired_otp_triggers_reissue(
@@ -218,8 +262,10 @@ async def test_expired_otp_triggers_reissue(
     db_session: AsyncSession,
 ):
     await _candidate_with_cpf(db_session)
+    await _location(db_session)
     session_id = await _start(client)
-    await _send(client, session_id, VALID_CPF)
+    await _drive_to_confirm_application(client, session_id, VALID_CPF)
+    await _send(client, session_id, "confirm")
 
     # Manually expire the OTP. Use naive UTC so SQLite comparisons work.
     otp = await _latest_otp(db_session, session_id)
@@ -246,8 +292,10 @@ async def test_max_attempts_returns_to_identify(
     db_session: AsyncSession,
 ):
     await _candidate_with_cpf(db_session)
+    await _location(db_session)
     session_id = await _start(client)
-    await _send(client, session_id, VALID_CPF)
+    await _drive_to_confirm_application(client, session_id, VALID_CPF)
+    await _send(client, session_id, "confirm")
 
     # Exhaust attempts.
     otp = await _latest_otp(db_session, session_id)
@@ -269,6 +317,7 @@ async def test_response_never_exposes_otp_cpf_phone_or_name(
     db_session: AsyncSession,
 ):
     await _candidate_with_cpf(db_session)
+    await _location(db_session)
     session_id = await _start(client)
 
     # IDENTIFY
@@ -279,6 +328,14 @@ async def test_response_never_exposes_otp_cpf_phone_or_name(
     assert "Pessoa Candidata" not in serialized
     assert "otp_hash" not in serialized
     assert "otp_code" not in serialized
+
+    await _send(client, session_id, "Peritoró")
+    await _send(client, session_id, "any_in_location")
+    await _send(client, session_id, "Frentista")
+    await _send(client, session_id, "night")
+    await _send(client, session_id, "continue")
+    await _send(client, session_id, "skip_resume")
+    await _send(client, session_id, "confirm")
 
     # Wrong VERIFY_OTP attempt
     wrong_payload = await _send(client, session_id, "000000")
@@ -296,10 +353,8 @@ async def test_session_without_verified_otp_does_not_create_application(
     await _location(db_session)
     session_id = await _start(client)
 
-    # Enter IDENTIFY and go directly to submitting location without verifying OTP.
+    # Enter IDENTIFY and submit location data before the late OTP.
     await _send(client, session_id, VALID_CPF)
-    # The session is now in VERIFY_OTP — trying to send a location value should
-    # be treated as an OTP code attempt, not as location data.
     await _send(client, session_id, "Peritoró")
 
     # No application should have been created because identity is not yet verified.
@@ -317,11 +372,10 @@ async def test_otp_flow_creates_no_pipeline(
     await _location(db_session)
     session_id = await _start(client)
 
-    await _send(client, session_id, VALID_CPF)
+    await _drive_to_confirm_application(client, session_id, VALID_CPF)
+    await _send(client, session_id, "confirm")
     code = await _extract_code(db_session, session_id)
     await _send(client, session_id, code)
-    for content in ["Peritoró", "any_in_location", "Frentista", "night"]:
-        await _send(client, session_id, content)
 
     pipeline_count = await db_session.scalar(
         sa.select(sa.func.count()).select_from(CandidateJobPipelineModel)
@@ -333,19 +387,28 @@ async def test_otp_for_unknown_candidate_still_issued_and_verifiable(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    """Anti-enumeration: OTP is issued even when no candidate matches the identifier."""
+    """Anti-enumeration: late OTP is issued even when no candidate matches."""
+    await _location(db_session)
     session_id = await _start(client)
     payload = await _send(client, session_id, VALID_CPF)
 
-    assert payload["current_state"] == "VERIFY_OTP"
+    assert payload["current_state"] == "CHOOSE_LOCATION"
+    await _send(client, session_id, "Peritoró")
+    await _send(client, session_id, "any_in_location")
+    await _send(client, session_id, "Frentista")
+    await _send(client, session_id, "night")
+    await _send(client, session_id, "continue")
+    await _send(client, session_id, "skip_resume")
+    confirm = await _send(client, session_id, "confirm")
+    assert confirm["current_state"] == "VERIFY_OTP"
+
     otp = await _latest_otp(db_session, session_id)
     assert otp.candidate_id is None
 
     code = await _extract_code(db_session, session_id)
     verify = await _send(client, session_id, code)
 
-    # Verifies OK but candidate_id stays None (nobody matched)
-    assert verify["current_state"] == "CHOOSE_LOCATION"
+    assert verify["current_state"] == "DONE"
     assert verify["session"]["context"].get("identity_verified") is True
 
     session = await db_session.get(ConversationSessionModel, UUID(session_id))

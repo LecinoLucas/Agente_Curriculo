@@ -138,4 +138,66 @@ describe("assistantAdminService", () => {
       { method: "PATCH", body: { status: "reviewed", classification: "talk_to_hr" } }
     );
   });
+
+  // ---- Flow content (read-only) ----
+
+  it("listAssistantStates calls GET /states", async () => {
+    httpRequestMock.mockResolvedValue([]);
+    const { assistantAdminService } = await import("../assistantAdminService");
+
+    await assistantAdminService.listAssistantStates();
+
+    expect(httpRequestMock).toHaveBeenCalledWith("/api/v1/admin/assistant/states");
+  });
+
+  it("listStateContents calls GET /state-contents without filters", async () => {
+    httpRequestMock.mockResolvedValue([]);
+    const { assistantAdminService } = await import("../assistantAdminService");
+
+    await assistantAdminService.listStateContents();
+
+    expect(httpRequestMock).toHaveBeenCalledWith("/api/v1/admin/assistant/state-contents");
+  });
+
+  it("listStateContents encodes filter params", async () => {
+    httpRequestMock.mockResolvedValue([]);
+    const { assistantAdminService } = await import("../assistantAdminService");
+
+    await assistantAdminService.listStateContents({ state: "CHOOSE_SHIFT", is_active: true });
+
+    const url = httpRequestMock.mock.calls[0][0] as string;
+    expect(url).toContain("state=CHOOSE_SHIFT");
+    expect(url).toContain("is_active=true");
+  });
+
+  it("getStateContent calls GET /state-contents/{state}", async () => {
+    httpRequestMock.mockResolvedValue({ state: "IDENTIFY" });
+    const { assistantAdminService } = await import("../assistantAdminService");
+
+    await assistantAdminService.getStateContent("IDENTIFY");
+
+    expect(httpRequestMock).toHaveBeenCalledWith(
+      "/api/v1/admin/assistant/state-contents/IDENTIFY"
+    );
+  });
+
+  it("listQuickReplies calls GET /quick-replies with state filter", async () => {
+    httpRequestMock.mockResolvedValue([]);
+    const { assistantAdminService } = await import("../assistantAdminService");
+
+    await assistantAdminService.listQuickReplies({ state: "CHOOSE_SHIFT" });
+
+    expect(httpRequestMock).toHaveBeenCalledWith(
+      "/api/v1/admin/assistant/quick-replies?state=CHOOSE_SHIFT"
+    );
+  });
+
+  it("listAssistantSettings calls GET /settings", async () => {
+    httpRequestMock.mockResolvedValue([]);
+    const { assistantAdminService } = await import("../assistantAdminService");
+
+    await assistantAdminService.listAssistantSettings();
+
+    expect(httpRequestMock).toHaveBeenCalledWith("/api/v1/admin/assistant/settings");
+  });
 });

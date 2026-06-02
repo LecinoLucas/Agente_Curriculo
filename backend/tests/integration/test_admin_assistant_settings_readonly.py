@@ -166,10 +166,12 @@ async def test_viewer_and_candidate_are_blocked(
     assert response.status_code in (401, 403)
 
 
-async def test_mutable_settings_endpoints_are_not_available(
+async def test_post_and_delete_endpoints_are_not_available(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
+    # POST/DELETE remain unavailable. PATCH for content is introduced in
+    # OP-6H-3E1 and is covered by test_admin_assistant_settings_patch.
     await _seed_settings(db_session)
     headers, _ = await _user_headers(client, db_session, UserRole.ADMIN)
 
@@ -178,16 +180,10 @@ async def test_mutable_settings_endpoints_are_not_available(
         headers=headers,
         json={"state": "CHOOSE_SHIFT"},
     )
-    patch_response = await client.patch(
-        "/api/v1/admin/assistant/state-contents/CHOOSE_SHIFT",
-        headers=headers,
-        json={"prompt_text": "Novo texto"},
-    )
     delete_response = await client.delete(
         "/api/v1/admin/assistant/settings/channels_enabled",
         headers=headers,
     )
 
     assert post_response.status_code == 405
-    assert patch_response.status_code == 405
     assert delete_response.status_code in (404, 405)

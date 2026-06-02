@@ -13,7 +13,6 @@ from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
 )
-from src.infrastructure.database.models.conversation_otp_model import ConversationOtpModel
 
 pytestmark = pytest.mark.asyncio
 
@@ -26,34 +25,14 @@ async def _create_conversation(client: AsyncClient) -> dict:
 
 async def _pass_identify(
     client: AsyncClient,
-    db_session: AsyncSession,
     session_id: str,
     identifier: str = "11999998888",
 ) -> None:
-    """Drive IDENTIFY → VERIFY_OTP → CHOOSE_LOCATION (submit correct OTP code)."""
-    from hashlib import sha256 as _sha256
-
+    """Drive IDENTIFY → CHOOSE_LOCATION for the lead-mode flow."""
     await client.post(
         f"/api/v1/conversations/{session_id}/messages",
         json={"content": identifier},
     )
-    otp = await db_session.scalar(
-        sa.select(ConversationOtpModel)
-        .where(ConversationOtpModel.session_id == UUID(session_id))
-        .order_by(ConversationOtpModel.created_at.desc())
-        .limit(1)
-    )
-    assert otp is not None
-    sid = UUID(session_id)
-    for i in range(1_000_000):
-        code = f"{i:06d}"
-        if _sha256(f"{sid}:{code}".encode()).hexdigest() == otp.otp_hash:
-            await client.post(
-                f"/api/v1/conversations/{session_id}/messages",
-                json={"content": code},
-            )
-            return
-    raise AssertionError("OTP code not found")
 
 
 async def test_create_conversation_returns_initial_state_and_quick_replies(
@@ -115,22 +94,22 @@ async def test_send_message_saves_candidate_and_assistant_messages(
     assert response.status_code == 200
     payload = response.json()
     assert payload["session_id"] == str(session_id)
-    # With OTP, IDENTIFY → VERIFY_OTP (not CHOOSE_LOCATION directly).
-    assert payload["current_state"] == "VERIFY_OTP"
+    assert payload["current_state"] == "CHOOSE_LOCATION"
     assert payload["quick_replies"] == []
-    assert "código" in payload["assistant_message"].lower()
+    assert "cidade ou localidade" in payload["assistant_message"].lower()
     # The raw identifier is NEVER stored in context — only non-sensitive markers.
     assert payload["session"]["context"]["identifier_type"] == "whatsapp"
-    assert payload["session"]["context"]["identifier_unresolved"] is True
+    assert "identifier_unresolved" not in payload["session"]["context"]
     assert "identifier_raw" not in payload["session"]["context"]
     assert "11999998888" not in str(payload["session"]["context"])
     assert payload["message"]["role"] == "assistant"
 
     session = await db_session.get(ConversationSessionModel, session_id)
     assert session is not None
-    assert session.current_state == "VERIFY_OTP"
+    assert session.current_state == "CHOOSE_LOCATION"
     assert session.candidate_id is None
     assert session.context_json["identifier_type"] == "whatsapp"
+    assert session.context_json["identifier_unresolved"] is True
     assert "identifier_raw" not in session.context_json
 
     messages = (
@@ -150,8 +129,7 @@ async def test_state_machine_advances_location_to_unit_choice_with_options(
 ):
     create_payload = await _create_conversation(client)
     session_id = create_payload["session_id"]
-    # IDENTIFY → VERIFY_OTP → CHOOSE_LOCATION (via OTP).
-    await _pass_identify(client, db_session, session_id)
+    await _pass_identify(client, session_id)
 
     response = await client.post(
         f"/api/v1/conversations/{session_id}/messages",
@@ -178,7 +156,7 @@ async def test_get_resume_keeps_state_and_options(
 ):
     create_payload = await _create_conversation(client)
     session_id = create_payload["session_id"]
-    await _pass_identify(client, db_session, session_id)
+    await _pass_identify(client, session_id)
     await client.post(
         f"/api/v1/conversations/{session_id}/messages",
         json={"content": "Peritoró"},
@@ -199,7 +177,7 @@ async def test_list_messages_returns_ordered_history(
 ):
     create_payload = await _create_conversation(client)
     session_id = create_payload["session_id"]
-    # Send a valid phone number to advance IDENTIFY → VERIFY_OTP (2 messages: candidate + assistant)
+    # Send a valid phone number to advance IDENTIFY → CHOOSE_LOCATION.
     await client.post(
         f"/api/v1/conversations/{session_id}/messages",
         json={"content": "11999998888", "message_type": "text"},

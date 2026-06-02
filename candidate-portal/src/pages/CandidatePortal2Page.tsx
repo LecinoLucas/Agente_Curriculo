@@ -38,14 +38,68 @@ interface UiMessage {
   content: string;
 }
 
+function onlyDigits(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+function formatCpf(value: string): string {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) {
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  }
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function formatWhatsapp(value: string): string {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function isValidCpfDigits(digits: string): boolean {
+  if (!/^\d{11}$/.test(digits) || /^(\d)\1{10}$/.test(digits)) return false;
+
+  const calcDigit = (length: number) => {
+    const sum = digits
+      .slice(0, length)
+      .split('')
+      .reduce((acc, digit, index) => acc + Number(digit) * (length + 1 - index), 0);
+    const rest = (sum * 10) % 11;
+    return rest === 10 ? 0 : rest;
+  };
+
+  return calcDigit(9) === Number(digits[9]) && calcDigit(10) === Number(digits[10]);
+}
+
+function maskIdentifierDisplay(mode: IdentifierMode, value: string): string {
+  const digits = onlyDigits(value);
+  const finalDigits = digits.slice(-3) || '---';
+  return mode === 'cpf'
+    ? `CPF informado com final ${finalDigits}`
+    : `WhatsApp informado com final ${finalDigits}`;
+}
+
+function maskLikelyIdentifier(content: string): string {
+  const digits = onlyDigits(content);
+  if (digits.length < 10 || digits.length > 11) return content;
+  const finalDigits = digits.slice(-3);
+  return isValidCpfDigits(digits)
+    ? `CPF informado com final ${finalDigits}`
+    : `WhatsApp informado com final ${finalDigits}`;
+}
+
 function toUiMessage(message: ConversationMessage): UiMessage {
+  const role =
+    message.role === 'candidate' || message.direction === 'inbound'
+      ? 'candidate'
+      : 'assistant';
   return {
     id: message.id,
-    role:
-      message.role === 'candidate' || message.direction === 'inbound'
-        ? 'candidate'
-        : 'assistant',
-    content: message.content,
+    role,
+    content: role === 'candidate' ? maskLikelyIdentifier(message.content) : message.content,
   };
 }
 
@@ -80,7 +134,11 @@ function toUiMessages(history: ConversationMessage[]): UiMessage[] {
       );
     }
 
-    return { id: message.id, role, content };
+    return {
+      id: message.id,
+      role,
+      content: role === 'candidate' ? maskLikelyIdentifier(content) : content,
+    };
   });
 }
 
@@ -98,6 +156,12 @@ function turnOptions(turn: ConversationTurn): ConversationOption[] {
 
 function sessionOptions(session: ConversationSession): ConversationOption[] {
   return session.quick_replies ?? [];
+}
+
+function optionDisplayLabel(option: ConversationOption, state: string | null): string {
+  if (state === 'IDENTIFY' && option.value === 'cpf') return 'Identificar com CPF';
+  if (state === 'IDENTIFY' && option.value === 'whatsapp') return 'Identificar com WhatsApp';
+  return option.label;
 }
 
 interface FailedPayload {
@@ -122,8 +186,7 @@ const IDENTIFIER_GUIDANCE: Record<IdentifierMode, { instruction: string; placeho
 };
 
 const OTP_PLACEHOLDER = 'Digite o código de 6 dígitos';
-const OTP_HELP_MESSAGE =
-  'Sem problema. Você pode conferir o CPF/WhatsApp informado ou começar de novo.';
+const OTP_HELP_MESSAGE = 'Sem problema. Confira o CPF/WhatsApp informado ou comece de novo.';
 
 // Accepts a complete 6-digit verification code only — anything shorter or
 // non-numeric ("não tenho", "nao recebi", …) is never sent to the backend as OTP.
@@ -270,7 +333,19 @@ export function CandidatePortal2Page() {
     const raw = event.target.value;
     // In VERIFY_OTP keep only digits (max 6) so the candidate can't type
     // free text like "não tenho" into the code field.
-    setInput(isOtpState ? raw.replace(/\D/g, '').slice(0, 6) : raw);
+    if (isOtpState) {
+      setInput(onlyDigits(raw).slice(0, 6));
+      return;
+    }
+    if (identifierMode === 'cpf') {
+      setInput(formatCpf(raw));
+      return;
+    }
+    if (identifierMode === 'whatsapp') {
+      setInput(formatWhatsapp(raw));
+      return;
+    }
+    setInput(raw);
   }
 
   function showOtpHelp() {
@@ -299,6 +374,14 @@ export function CandidatePortal2Page() {
       if (input.trim().length > 0) showOtpHelp();
       return;
     }
+    if (identifierMode) {
+      submitCandidateReply(
+        onlyDigits(input),
+        'text',
+        maskIdentifierDisplay(identifierMode, input),
+      );
+      return;
+    }
     submitCandidateReply(input, 'text', input);
   }
 
@@ -316,7 +399,11 @@ export function CandidatePortal2Page() {
       setOptions([]);
       setMessages((prev) => [
         ...prev,
-        { id: `local-mode-${mode}-${Date.now()}`, role: 'candidate', content: option.label },
+        {
+          id: `local-mode-${mode}-${Date.now()}`,
+          role: 'candidate',
+          content: mode === 'cpf' ? 'Identificar com CPF' : 'Identificar com WhatsApp',
+        },
         {
           id: `local-guidance-${mode}-${Date.now()}`,
           role: 'assistant',
@@ -325,7 +412,7 @@ export function CandidatePortal2Page() {
       ]);
       return;
     }
-    submitCandidateReply(option.value, 'quick_reply', option.label);
+    submitCandidateReply(option.value, 'quick_reply', optionDisplayLabel(option, currentState));
   }
 
   function handleRetrySend() {
@@ -432,7 +519,7 @@ export function CandidatePortal2Page() {
                   disabled={sending}
                   onClick={() => handleQuickReply(option)}
                 >
-                  {option.label}
+                  {optionDisplayLabel(option, currentState)}
                 </Button>
               ))}
             </div>
@@ -460,14 +547,6 @@ export function CandidatePortal2Page() {
                   >
                     Trocar CPF/WhatsApp
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="lg"
-                    fullWidth
-                    onClick={() => void restartConversation()}
-                  >
-                    Começar de novo
-                  </Button>
                 </>
               ) : (
                 <>
@@ -481,14 +560,6 @@ export function CandidatePortal2Page() {
                     onClick={() => void restartConversation()}
                   >
                     Trocar CPF/WhatsApp
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="lg"
-                    fullWidth
-                    onClick={() => void restartConversation()}
-                  >
-                    Começar de novo
                   </Button>
                 </>
               )}
@@ -525,8 +596,16 @@ export function CandidatePortal2Page() {
                       ? IDENTIFIER_GUIDANCE[identifierMode].placeholder
                       : 'Escreva sua resposta…'
                 }
-                inputMode={isOtpState ? 'numeric' : undefined}
-                maxLength={isOtpState ? 6 : undefined}
+                inputMode={isOtpState || identifierMode ? 'numeric' : undefined}
+                maxLength={
+                  isOtpState
+                    ? 6
+                    : identifierMode === 'cpf'
+                      ? 14
+                      : identifierMode === 'whatsapp'
+                        ? 15
+                        : undefined
+                }
                 aria-label="Sua mensagem"
                 disabled={sending}
                 className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-700/20 disabled:opacity-60 sm:text-base"

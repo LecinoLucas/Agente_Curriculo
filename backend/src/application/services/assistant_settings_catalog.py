@@ -299,6 +299,30 @@ def validate_setting_value(key: str, value: Any) -> None:
         validate_static_text_security(value)
 
 
+def validate_setting_patch_value(key: str, value: Any) -> None:
+    """Stricter validation for admin PATCH of a setting value.
+
+    Builds on :func:`validate_setting_value` (type/range/PII) and adds the
+    phase-specific safety guards. Does NOT decide sensitivity — the service
+    blocks sensitive keys separately.
+    """
+    if key not in ASSISTANT_SETTING_KEYS:
+        raise ValueError(f"Setting do assistente desconhecido: {key}")
+    if key == "channels_enabled" and isinstance(value, list) and any(
+        str(item).strip().lower() == "whatsapp" for item in value
+    ):
+        raise ValueError("channels_enabled não pode conter whatsapp nesta fase.")
+    validate_setting_value(key, value)
+    if key == "assistant_enabled" and value is False:
+        raise ValueError(
+            "Não é possível desligar o assistente nesta fase (sem confirmação)."
+        )
+    if key == "default_max_attempts" and (
+        not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 5
+    ):
+        raise ValueError("default_max_attempts deve estar entre 1 e 5 nesta fase.")
+
+
 def validate_catalog_integrity() -> None:
     for seed in STATE_CONTENT_SEED:
         validate_state_content_seed(seed)
