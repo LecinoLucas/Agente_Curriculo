@@ -370,13 +370,20 @@ async def test_identify_with_existing_cpf_active_application_returns_safe_status
         status="qualified",
     )
     session_id = await _start(client)
+    application_count_before = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateApplicationModel)
+    )
 
     payload = await _send(client, session_id, VALID_CPF)
 
     assert payload["current_state"] == "CHOOSE_LOCATION"
     assert payload["assistant_message"] == (
-        "Você já tem uma candidatura em andamento. Vamos continuar."
+        "Você já tem uma candidatura em andamento. Para continuar, me diga em qual "
+        "cidade ou localidade você quer trabalhar."
     )
+    response_blob = json.dumps(payload, ensure_ascii=False)
+    assert "Pessoa Candidata" not in response_blob
+    assert VALID_CPF not in response_blob
     public_context = payload["session"]["context"]
     assert public_context["application_in_progress"] is True
     assert public_context["identity_verified"] is False
@@ -390,6 +397,55 @@ async def test_identify_with_existing_cpf_active_application_returns_safe_status
     assert session.application_id is None
     assert session.context_json["pending_application_id"] == str(application.id)
     assert session.context_json["pending_application_status"] == "qualified"
+
+    continue_payload = await _send(client, session_id, "vamos")
+    assert continue_payload["current_state"] == "CHOOSE_LOCATION"
+    assert continue_payload["assistant_message"] == (
+        "Para continuar, me diga em qual cidade ou localidade você quer trabalhar."
+    )
+    assert "Não encontrei essa localidade" not in continue_payload["assistant_message"]
+
+    messages_response = await client.get(f"/api/v1/conversations/{session_id}/messages")
+    assert messages_response.status_code == 200
+    messages_blob = json.dumps(messages_response.json(), ensure_ascii=False)
+    assert VALID_CPF not in messages_blob
+    assert f"CPF informado com final {VALID_CPF[-3:]}" in messages_blob
+
+    application_count_after = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateApplicationModel)
+    )
+    pipeline_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateJobPipelineModel)
+    )
+    assert application_count_after == application_count_before
+    assert pipeline_count == 0
+
+
+async def test_identify_with_existing_whatsapp_active_application_asks_location_safely(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    candidate = await _candidate_with_phone(db_session)
+    await _active_application_for_candidate(db_session, candidate.id)
+    session_id = await _start(client)
+
+    payload = await _send(client, session_id, WHATSAPP)
+
+    assert payload["current_state"] == "CHOOSE_LOCATION"
+    assert payload["assistant_message"] == (
+        "Você já tem uma candidatura em andamento. Para continuar, me diga em qual "
+        "cidade ou localidade você quer trabalhar."
+    )
+    assert payload["session"]["context"]["identity_verified"] is False
+    response_blob = json.dumps(payload, ensure_ascii=False)
+    assert "Pessoa Candidata" not in response_blob
+    assert WHATSAPP not in response_blob
+
+    messages_response = await client.get(f"/api/v1/conversations/{session_id}/messages")
+    assert messages_response.status_code == 200
+    messages_blob = json.dumps(messages_response.json(), ensure_ascii=False)
+    assert WHATSAPP not in messages_blob
+    assert f"WhatsApp informado com final {WHATSAPP[-3:]}" in messages_blob
 
 
 async def test_get_by_current_session_id_keeps_session_priority(

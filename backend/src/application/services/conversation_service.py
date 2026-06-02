@@ -71,7 +71,13 @@ _IDENTIFY_INVALID_MESSAGE = (
 _RESUME_SESSION_MESSAGE = (
     "Encontrei uma conversa em andamento. Vamos continuar de onde você parou."
 )
-_RESUME_APPLICATION_MESSAGE = "Você já tem uma candidatura em andamento. Vamos continuar."
+_RESUME_APPLICATION_MESSAGE = (
+    "Você já tem uma candidatura em andamento. Para continuar, me diga em qual "
+    "cidade ou localidade você quer trabalhar."
+)
+_CHOOSE_LOCATION_CONTINUE_MESSAGE = (
+    "Para continuar, me diga em qual cidade ou localidade você quer trabalhar."
+)
 _INVALID_LOCATION_MESSAGE = (
     "Não encontrei essa localidade. Digite o nome da cidade ou localidade novamente."
 )
@@ -712,6 +718,11 @@ class ConversationService:
             and check_digit(digits[:10], 11) == int(digits[10])
         )
 
+    @staticmethod
+    def _is_continue_intent(content: str) -> bool:
+        normalized = ConversationService._normalize(content)
+        return normalized in {"vamos", "sim", "continuar", "ok"}
+
     # ------------------------------------------------------------------
     # Lead-registration helpers (OP-6F.5)
     #
@@ -979,6 +990,11 @@ class ConversationService:
     ) -> ConversationPrompt | None:
         state = conversation.current_state
         if state == "CHOOSE_LOCATION":
+            if self._is_continue_intent(content):
+                return ConversationPrompt(
+                    state="CHOOSE_LOCATION",
+                    content=_CHOOSE_LOCATION_CONTINUE_MESSAGE,
+                )
             has_locations = await self._has_active_locations()
             location = await self._resolve_location_group(content)
             if has_locations and location is None:
