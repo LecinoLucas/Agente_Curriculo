@@ -1,7 +1,17 @@
 # OP-6H - API Contract - Admin do Assistente do Candidato
 
-Data: 2026-06-02
-Status: Planejamento. Endpoints são desenho; não implementar nesta fase.
+Data: 2026-06-02 (seção OP-6H-1 atualizada na F0)
+Status: Planejamento. **Seção "Aba 1 — Conversas" está reconciliada e implementável.**
+As demais abas aguardam as fases respectivas.
+
+> **Nota de reconciliação (OP-6H-F0):**
+> - `direction` não existe em `conversation_messages`; derivar de `role`.
+> - `metadata_json` contém `{state, quick_replies}` para mensagens do assistente.
+> - `context_json` nunca deve ser exposto cru; usar apenas campos projetados explicitamente.
+> - `candidate_job_pipeline_id` (não `id`) é o identificador do pipeline entry.
+> - RBAC para leitura: usar `HrRecruiterOrAdmin` (já existe no projeto).
+> - Sem tabela `assistant_failures`; badge derivado em OP-6H-2.
+> - Sem endpoints de handoff; OP-6H-4.
 
 ## Princípios
 
@@ -32,49 +42,87 @@ Status: Planejamento. Endpoints são desenho; não implementar nesta fase.
 ## Aba 1 — Conversas
 
 ### GET /api/v1/admin/assistant/sessions
-Query: `status`, `state`, `channel`, `has_application`, `has_failure`, `from`,
-`to`, `page`, `page_size`.
+Query: `status`, `current_state`, `channel`, `has_application` (bool),
+`has_pipeline` (bool), `from_date`, `to_date`, `page` (default 1), `page_size` (default 20, max 100).
+Permissão: `HrRecruiterOrAdmin`.
+
+> **F0**: query param `has_failure` postergado (sem tabela `assistant_failures` ainda).
+> `flagged_for_hr` postergado (sem campo na sessão ainda — OP-6H-4).
+
 ```json
 {
   "items": [
     {
-      "id": "uuid",
-      "candidate": { "id": "uuid", "display_name": "Maria S.", "cpf_last4": "4725" },
+      "session_id": "uuid",
+      "candidate": {
+        "id": "uuid | null",
+        "display_name": "Maria S.",
+        "cpf_last4": "4725 | null",
+        "identity_verified": false
+      },
       "channel": "web",
       "current_state": "CHOOSE_LOCATION",
       "status": "active",
-      "last_message_preview": "qualquer posto serve",
       "last_message_at": "2026-06-02T10:00:00Z",
-      "application_id": "uuid | null",
-      "has_failure": false,
-      "flagged_for_hr": false
+      "created_at": "2026-06-02T09:50:00Z",
+      "application": {
+        "id": "uuid | null",
+        "status": "started | null",
+        "job_id": "uuid | null"
+      },
+      "pipeline": {
+        "id": "uuid | null",
+        "stage": "entry | null"
+      },
+      "context_summary": {
+        "identifier_type": "cpf | null",
+        "identity_verified": false,
+        "location_hint": "Peritoró | null",
+        "desired_function": "Frentista | null",
+        "desired_shift": "night | null"
+      }
     }
   ],
-  "total": 0, "page": 1, "page_size": 20
+  "total": 0, "page": 1, "page_size": 20, "total_pages": 0
 }
 ```
-`candidate` é `null` para sessão anônima. Nunca inclui CPF/telefone completos.
 
-### GET /api/v1/admin/assistant/sessions/{id}
-Detalhe da sessão + resumo do contexto **mascarado** (estado, canal, candidatura,
-flags). Não retorna `context_json` cru.
+- `session_id` (não `id`): o campo de resposta usa `session_id` para evitar
+  ambiguidade com outros UUIDs no frontend.
+- `candidate` é `null` para sessão anônima. Nunca inclui CPF/telefone completos.
+- `cpf_last4`: só presente quando `identity_verified = true` no `context_json`.
+- `pipeline.id`: usa `candidate_job_pipeline_id` do modelo (não a PK composta).
+- `context_summary`: projetado explicitamente do `context_json`; nunca o json cru.
 
-### GET /api/v1/admin/assistant/sessions/{id}/messages
-Thread somente leitura:
+### GET /api/v1/admin/assistant/sessions/{session_id}
+Mesmo objeto acima. Permissão: `HrRecruiterOrAdmin`.
+Acessar este endpoint deve gerar log de auditoria via `AuditLogService` existente.
+
+### GET /api/v1/admin/assistant/sessions/{session_id}/messages
+Thread somente leitura, ordenada por `created_at ASC, id ASC`.
+Permissão: `HrRecruiterOrAdmin`.
+
 ```json
 [
   {
     "id": "uuid",
-    "role": "assistant",
-    "content": "Em qual localidade você prefere trabalhar?",
-    "message_type": "text",
-    "state": "CHOOSE_LOCATION",
+    "role": "candidate",
+    "direction": "inbound",
+    "content": "<sanitizado>",
+    "message_type": "text | quick_reply | system",
     "quick_replies": [],
+    "state_at_message": "CHOOSE_LOCATION | null",
     "created_at": "2026-06-02T09:59:00Z"
   }
 ]
 ```
-`content` de mensagens do candidato passa por sanitização (mascara dígitos longos).
+
+- `direction`: derivado de `role` (`candidate`→`inbound`, `assistant`→`outbound`, `system`→`system`).
+  Não existe campo `direction` no modelo; deve ser calculado no service layer.
+- `quick_replies`: extraído de `metadata_json.quick_replies` quando `role='assistant'`.
+- `state_at_message`: extraído de `metadata_json.state` quando disponível.
+- `content`: **sanitizado** — sequências de 10–11 dígitos são substituídas por
+  `[número omitido]` antes de retornar (possível CPF/telefone digitado pelo candidato).
 
 ### (OP-6H-4) Ações de sessão — sempre via engine, auditadas
 - `POST /admin/assistant/sessions/{id}/flag-hr` `{ "note": "..." }`

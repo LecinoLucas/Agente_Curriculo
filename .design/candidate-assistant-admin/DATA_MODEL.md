@@ -1,7 +1,16 @@
 # OP-6H - Data Model - Admin do Assistente do Candidato
 
-Data: 2026-06-02
-Status: Planejamento. Nenhuma migration nesta fase.
+Data: 2026-06-02 (seção "Tabelas existentes" reconciliada na F0)
+Status: Parcialmente reconciliado. Tabelas existentes validadas contra código real.
+
+> **Correções da F0:**
+> - `conversation_messages` **não tem campo `direction`** — derivar de `role`.
+> - `conversation_sessions` **tem `deleted_at`** (soft-delete) — filtrar.
+> - `candidate_job_pipeline_id` é um UUID gerado separado (não a PK física).
+>   A PK do modelo é composta `(candidate_id, job_id)`; usar `candidate_job_pipeline_id`
+>   como identificador externo.
+> - `context_json` é seguro apenas para as chaves listadas na RECONCILIATION.md §2.
+> - `candidate.cpf` está em texto puro na tabela (não só hash) — risco PII alto.
 
 ## Princípio de propriedade (ownership)
 

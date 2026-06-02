@@ -1,33 +1,52 @@
 # OP-6H - Tasks - Admin do Assistente do Candidato
 
-Data: 2026-06-02
-Status: Backlog de planejamento. Vertical slices (back + front + teste por fatia).
-Nada implementável nesta fase (somente docs).
+Data: 2026-06-02 (atualizado em OP-6H-F0)
+Status: **OP-6H-F0 concluída.** OP-6H-1 pronta para implementação.
+Vertical slices (back + front + teste por fatia).
 
-## Fase 0 — Reconciliação (bloqueante)
+## Fase 0 — Reconciliação ✅ CONCLUÍDA
 
-- [ ] **OP-6H-0.1** Confirmar com a engine os endpoints internos de status de
-      sessão (close/reopen/flag) ou definir que o painel os solicita à engine.
-- [ ] **OP-6H-0.2** Decidir origem dos `states` (introspecção da state machine vs.
-      tabela de conteúdo editável).
-- [ ] **OP-6H-0.3** Decidir `assistant_failures`: tabela emitida pela engine ou
-      view derivada de `conversation_messages`.
-- [ ] **OP-6H-0.4** Fonte única dos limites de IA (`aiLimitsService`).
-- [ ] **OP-6H-0.5** RBAC por aba/ação confirmado (admin/hr/recruiter/viewer).
-- [ ] **OP-6H-0.6** Política de mascaramento/sanitização de PII revisada com
-      segurança/LGPD.
+- [x] **OP-6H-0.1** Endpoints internos de status de sessão: **não existem ainda**;
+      o painel consultará diretamente as tabelas em OP-6H-1 (read-only) e criará
+      endpoints novos de mutação em OP-6H-4.
+- [x] **OP-6H-0.2** Origem dos `states`: introspecção da state machine (`conversation_state_machine.py`);
+      conteúdo editável virá de `assistant_settings` (OP-6H-3, migration futura).
+- [x] **OP-6H-0.3** `assistant_failures`: **não existe tabela**. OP-6H-2 decidirá:
+      tabela nova populada pela engine, ou view derivada de `conversation_messages`.
+- [x] **OP-6H-0.4** Limites de IA: `aiLimitsService` já existente; `assistant_settings`
+      será a fonte para configurações específicas do assistente (OP-6H-3).
+- [x] **OP-6H-0.5** RBAC: `HrRecruiterOrAdmin` para leitura; `AdminOnly` para configurações.
+      Dep `HrRecruiterOrAdmin` já existe em `src/interface/api/dependencies.py:92`.
+- [x] **OP-6H-0.6** Mascaramento PII: definido em `RECONCILIATION.md` §6.
+      `candidates.cpf` é texto puro; sanitização de mensagens obrigatória.
 
-## OP-6H-1 — Conversas read-only (MVP)
+> Ver `RECONCILIATION.md` para o diagnóstico completo.
 
-- [ ] **1.1** Backend: `GET /admin/assistant/sessions` (filtros + paginação,
-      candidato mascarado).
-- [ ] **1.2** Backend: `GET /admin/assistant/sessions/{id}` (resumo mascarado).
-- [ ] **1.3** Backend: `GET /admin/assistant/sessions/{id}/messages`
-      (thread + sanitização).
-- [ ] **1.4** Frontend: `assistantAdminService` (métodos de sessão).
-- [ ] **1.5** Frontend: `CandidateAssistantAdminPage` + `ConversationsTab` +
+## OP-6H-1 — Conversas read-only (MVP) — ✅ PRONTA PARA IMPLEMENTAR
+
+Nenhuma migration necessária. Todos os dados existem.
+
+**Backend (novo)**
+- [ ] **1.1** `src/interface/api/schemas/admin_assistant_schemas.py`
+      Schemas: `AdminSessionListItem`, `AdminSessionDetail`, `AdminMessageItem`,
+      `AdminSessionListResponse` (paginado), `AdminContextSummary`.
+- [ ] **1.2** `src/application/services/admin_assistant_service.py`
+      `AdminAssistantService`: método `list_sessions` (filtros + join candidates/applications/pipeline),
+      `get_session` (detalhe mascarado), `list_messages` (sanitização de conteúdo).
+- [ ] **1.3** `src/interface/api/routers/admin_assistant.py`
+      Router `/admin/assistant`, permissão `HrRecruiterOrAdmin`.
+      Endpoints: `GET /sessions`, `GET /sessions/{session_id}`, `GET /sessions/{session_id}/messages`.
+- [ ] **1.4** Registrar em `main.py`:
+      `app.include_router(admin_assistant.router, prefix=_PREFIX)`
+- [ ] **1.5** `tests/integration/test_admin_assistant_sessions.py`
+      Testes: listagem, filtros por status/state/channel/date, detalhe, mensagens, PII mascarada.
+
+**Frontend (novo)**
+- [ ] **1.6** `frontend/src/services/assistantAdminService.ts`
+      Métodos: `listSessions`, `getSession`, `listMessages`.
+- [ ] **1.7** `frontend/src/pages/CandidateAssistantAdminPage.tsx` + `ConversationsTab` +
       `ConversationDetailDrawer`.
-- [ ] **1.6** Testes: serviço (mock http) + página (lista, filtros, PII mascarada).
+- [ ] **1.8** Testes frontend: mock http, render por aba, PII mascarada.
 
 ## OP-6H-2 — Falhas do assistente (MVP+1)
 

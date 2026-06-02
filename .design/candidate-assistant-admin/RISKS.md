@@ -1,7 +1,17 @@
 # OP-6H - Risks - Admin do Assistente do Candidato
 
-Data: 2026-06-02
-Status: Planejamento. Riscos e mitigações antes de implementar.
+Data: 2026-06-02 (atualizado em OP-6H-F0)
+Status: Reconciliado. Riscos atualizados com base no código real.
+
+## R0 — CPF em texto puro no banco (ALTO, LGPD) [CONFIRMADO NA F0]
+
+`candidates.cpf` é armazenado em texto puro (`Mapped[Optional[str]]`).
+O admin nunca deve expor esse campo. O `cpf_last4` pode ser exibido apenas quando
+`context_json.identity_verified = true` (OTP verificado). O content de mensagens do
+candidato pode conter o CPF digitado em texto livre — sanitização obrigatória.
+
+- Mitigação F0: documentado em RECONCILIATION.md §6; sanitização de mensagens
+  especificada no contrato; nunca incluir `cpf`, `cpf_hash` ou `phone` nas respostas.
 
 ## R1 — Vazamento de PII (ALTO, LGPD)
 
@@ -41,13 +51,14 @@ Mutação acidental de mensagens/auditoria quebraria rastreabilidade.
 - Mitigação: histórico e `assistant_admin_audit` são **append-only**; nenhum
   endpoint de delete/edit de mensagem; testes garantem ausência dessas rotas.
 
-## R6 — Identificação tratada como autenticação (MÉDIO/ALTO)
+## R6 — Identificação tratada como autenticação (MÉDIO) [MITIGADO por OTP]
 
-Sem OTP, o vínculo `candidate_id` por CPF/WhatsApp é fraco; o painel poderia exibir
-dados de candidatura a quem não é o dono.
+OTP implementado em OP-6F.2. O vínculo `candidate_id` só é confirmado após OTP
+correto (`identity_verified=true` em `context_json`). O painel exibe `cpf_last4`
+apenas quando este campo está presente e `identity_verified=true`.
 
-- Mitigação: sinalizar `identifier_unresolved`; não tratar identificação como
-  login; RBAC restrito; **OTP é a próxima proteção recomendada** (abaixo).
+- Mitigação confirmada: `context_json.identity_verified` como guarda de exibição;
+  RBAC restrito (`HrRecruiterOrAdmin`); acesso ao detalhe de sessão auditado.
 
 ## R7 — Regressão no admin existente (MÉDIO)
 
