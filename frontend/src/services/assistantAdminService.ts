@@ -191,6 +191,20 @@ export type ListQuickRepliesParams = {
   is_active?: boolean;
 };
 
+export type UpdateStateContentPayload = {
+  prompt_text?: string;
+  helper_text?: string | null;
+  fallback_text?: string | null;
+  input_placeholder?: string | null;
+  is_active?: boolean;
+};
+
+export type UpdateQuickReplyPayload = {
+  label?: string;
+  sort_order?: number;
+  is_active?: boolean;
+};
+
 export type UpdateFailurePayload = {
   status?: AssistantFailureStatus;
   classification?: AssistantFailureClassification;
@@ -319,5 +333,27 @@ export const assistantAdminService = {
 
   listAssistantSettings(): Promise<AssistantSetting[]> {
     return httpRequest<AssistantSetting[]>("/api/v1/admin/assistant/settings");
+  },
+
+  // ── Flow content mutations (AdminOnly) ────────────────────────────────────
+
+  updateStateContent(
+    state: string,
+    payload: UpdateStateContentPayload
+  ): Promise<AssistantStateContent> {
+    return httpRequest<AssistantStateContent>(
+      `/api/v1/admin/assistant/state-contents/${state}`,
+      { method: "PATCH", body: payload }
+    );
+  },
+
+  updateQuickReply(
+    id: string,
+    payload: UpdateQuickReplyPayload
+  ): Promise<AssistantQuickReply> {
+    return httpRequest<AssistantQuickReply>(
+      `/api/v1/admin/assistant/quick-replies/${id}`,
+      { method: "PATCH", body: payload }
+    );
   },
 };

@@ -200,4 +200,33 @@ describe("assistantAdminService", () => {
 
     expect(httpRequestMock).toHaveBeenCalledWith("/api/v1/admin/assistant/settings");
   });
+
+  // ---- Flow content mutations ----
+
+  it("updateStateContent sends PATCH with correct path and payload", async () => {
+    httpRequestMock.mockResolvedValue({ state: "CHOOSE_SHIFT", version: 2 });
+    const { assistantAdminService } = await import("../assistantAdminService");
+
+    await assistantAdminService.updateStateContent("CHOOSE_SHIFT", {
+      prompt_text: "Qual turno?",
+      is_active: true,
+    });
+
+    expect(httpRequestMock).toHaveBeenCalledWith(
+      "/api/v1/admin/assistant/state-contents/CHOOSE_SHIFT",
+      { method: "PATCH", body: { prompt_text: "Qual turno?", is_active: true } }
+    );
+  });
+
+  it("updateQuickReply sends PATCH with correct path and payload", async () => {
+    httpRequestMock.mockResolvedValue({ id: "qr-1", label: "De manhã" });
+    const { assistantAdminService } = await import("../assistantAdminService");
+
+    await assistantAdminService.updateQuickReply("qr-1", { label: "De manhã", sort_order: 0 });
+
+    expect(httpRequestMock).toHaveBeenCalledWith(
+      "/api/v1/admin/assistant/quick-replies/qr-1",
+      { method: "PATCH", body: { label: "De manhã", sort_order: 0 } }
+    );
+  });
 });

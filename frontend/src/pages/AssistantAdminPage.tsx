@@ -17,6 +17,8 @@ import {
   Lock,
   Lightbulb,
   CornerDownRight,
+  Pencil,
+  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +58,8 @@ import {
   type AssistantSessionListItem,
   type ListFailuresParams,
   type ListSessionsParams,
+  type UpdateStateContentPayload,
+  type UpdateQuickReplyPayload,
 } from "../services/assistantAdminService";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1342,7 +1346,22 @@ function FailuresPanel() {
   );
 }
 
-// ── Flow (Fluxo de perguntas) — read-only ───────────────────────────────────
+// ── Flow (Fluxo de perguntas) ────────────────────────────────────────────────
+
+const PII_ERROR_MESSAGE =
+  "Esse texto parece conter dado pessoal. Remova CPF, telefone ou e-mail.";
+const PLACEHOLDER_ERROR_MESSAGE =
+  "Texto contém um placeholder não permitido para este estado.";
+
+function friendlyPatchError(error: string | null): string {
+  if (!error) return "";
+  const lower = error.toLowerCase();
+  if (lower.includes("pii") || lower.includes("pessoal") || lower.includes("cpf") || lower.includes("telefone") || lower.includes("e-mail"))
+    return PII_ERROR_MESSAGE;
+  if (lower.includes("placeholder") || lower.includes("não permitido") || lower.includes("not permitted"))
+    return PLACEHOLDER_ERROR_MESSAGE;
+  return error;
+}
 
 function formatSettingValue(
   value: AssistantSettingValue,
@@ -1408,15 +1427,325 @@ function StateBadges({ state }: { state: AssistantState }) {
   );
 }
 
+// ── State content edit form ───────────────────────────────────────────────────
+
+function StateContentEditForm({
+  content,
+  stateKey,
+  allowedPlaceholders,
+  onSaved,
+  onCancel,
+}: {
+  content: AssistantStateContent;
+  stateKey: string;
+  allowedPlaceholders: string[];
+  onSaved: (updated: AssistantStateContent) => void;
+  onCancel: () => void;
+}) {
+  const [promptText, setPromptText] = useState(content.prompt_text);
+  const [helperText, setHelperText] = useState(content.helper_text ?? "");
+  const [fallbackText, setFallbackText] = useState(content.fallback_text ?? "");
+  const [inputPlaceholder, setInputPlaceholder] = useState(content.input_placeholder ?? "");
+  const [isActive, setIsActive] = useState(content.is_active);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const dirty =
+    promptText !== content.prompt_text ||
+    helperText !== (content.helper_text ?? "") ||
+    fallbackText !== (content.fallback_text ?? "") ||
+    inputPlaceholder !== (content.input_placeholder ?? "") ||
+    isActive !== content.is_active;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!promptText.trim()) { setError("O texto da pergunta é obrigatório."); return; }
+    setSaving(true); setError(null); setSaved(false);
+    const payload: UpdateStateContentPayload = {
+      prompt_text: promptText.trim(),
+      helper_text: helperText.trim() || null,
+      fallback_text: fallbackText.trim() || null,
+      input_placeholder: inputPlaceholder.trim() || null,
+      is_active: isActive,
+    };
+    try {
+      const updated = await assistantAdminService.updateStateContent(stateKey, payload);
+      setSaved(true);
+      onSaved(updated);
+    } catch (err) {
+      setError(friendlyPatchError(err instanceof Error ? err.message : "Erro ao salvar."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const textareaClass =
+    "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 resize-y min-h-[72px]";
+  const inputClass =
+    "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60";
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {allowedPlaceholders.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-surface-muted/40 px-3 py-2 text-xs text-text-muted">
+          <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+          <span>Placeholders permitidos:</span>
+          {allowedPlaceholders.map((p) => (
+            <code key={p} className="rounded bg-surface px-1">{`{${p}}`}</code>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-text-muted" htmlFor="sc-prompt">
+          Texto da pergunta <span className="text-danger">*</span>
+        </label>
+        <textarea
+          id="sc-prompt"
+          aria-label="Texto da pergunta"
+          value={promptText}
+          onChange={(e) => setPromptText(e.target.value)}
+          className={textareaClass}
+          disabled={saving}
+          required
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-text-muted" htmlFor="sc-helper">
+          Texto auxiliar
+        </label>
+        <textarea
+          id="sc-helper"
+          aria-label="Texto auxiliar"
+          value={helperText}
+          onChange={(e) => setHelperText(e.target.value)}
+          className={textareaClass}
+          disabled={saving}
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-text-muted" htmlFor="sc-fallback">
+          Fallback (quando não entendido)
+        </label>
+        <textarea
+          id="sc-fallback"
+          aria-label="Fallback"
+          value={fallbackText}
+          onChange={(e) => setFallbackText(e.target.value)}
+          className={textareaClass}
+          disabled={saving}
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-text-muted" htmlFor="sc-placeholder">
+          Placeholder do campo de entrada
+        </label>
+        <input
+          id="sc-placeholder"
+          type="text"
+          aria-label="Placeholder do campo de entrada"
+          value={inputPlaceholder}
+          onChange={(e) => setInputPlaceholder(e.target.value)}
+          className={inputClass}
+          disabled={saving}
+        />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          id="sc-active"
+          type="checkbox"
+          aria-label="Conteúdo ativo"
+          checked={isActive}
+          onChange={(e) => setIsActive(e.target.checked)}
+          disabled={saving}
+          className="h-4 w-4 rounded border-border accent-primary"
+        />
+        <label htmlFor="sc-active" className="text-sm text-text">
+          Conteúdo ativo
+        </label>
+      </div>
+
+      {error && (
+        <p className="flex items-start gap-1.5 rounded-lg border border-danger/30 bg-danger/5 p-2.5 text-sm text-danger" role="alert">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          {error}
+        </p>
+      )}
+      {saved && !error && (
+        <p className="text-sm text-success">Conteúdo salvo com sucesso.</p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button type="submit" size="sm" loading={saving} disabled={!dirty || saving}>
+          <Save className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+          {saving ? "Salvando…" : "Salvar"}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
+          <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ── Quick reply edit form ─────────────────────────────────────────────────────
+
+function QuickReplyEditForm({
+  qr,
+  stateIsEditable,
+  onSaved,
+  onCancel,
+}: {
+  qr: AssistantQuickReply;
+  stateIsEditable: boolean;
+  onSaved: (updated: AssistantQuickReply) => void;
+  onCancel: () => void;
+}) {
+  const [label, setLabel] = useState(qr.label);
+  const [sortOrder, setSortOrder] = useState(String(qr.sort_order));
+  const [isActive, setIsActive] = useState(qr.is_active);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const dirty =
+    label !== qr.label ||
+    sortOrder !== String(qr.sort_order) ||
+    isActive !== qr.is_active;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!label.trim()) { setError("O texto apresentado ao candidato é obrigatório."); return; }
+    const orderNum = parseInt(sortOrder, 10);
+    if (isNaN(orderNum) || orderNum < 0) { setError("Ordem deve ser um número maior ou igual a zero."); return; }
+    setSaving(true); setError(null); setSaved(false);
+    const payload: UpdateQuickReplyPayload = {
+      label: label.trim(),
+      sort_order: orderNum,
+      is_active: isActive,
+    };
+    try {
+      const updated = await assistantAdminService.updateQuickReply(qr.id, payload);
+      setSaved(true);
+      onSaved(updated);
+    } catch (err) {
+      setError(friendlyPatchError(err instanceof Error ? err.message : "Erro ao salvar."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputClass =
+    "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60";
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="rounded-lg bg-surface-muted/40 p-2.5 text-xs text-text-muted">
+        Valor técnico (engine, somente leitura):{" "}
+        <code className="font-semibold text-text">{qr.value}</code>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-text-muted" htmlFor={`qr-label-${qr.id}`}>
+          Texto apresentado ao candidato <span className="text-danger">*</span>
+        </label>
+        <input
+          id={`qr-label-${qr.id}`}
+          type="text"
+          aria-label="Texto apresentado ao candidato"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className={inputClass}
+          disabled={saving || !stateIsEditable}
+          required
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-text-muted" htmlFor={`qr-order-${qr.id}`}>
+          Ordem de exibição
+        </label>
+        <input
+          id={`qr-order-${qr.id}`}
+          type="number"
+          aria-label="Ordem de exibição"
+          min={0}
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value)}
+          className={inputClass + " w-24"}
+          disabled={saving || !stateIsEditable}
+        />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          id={`qr-active-${qr.id}`}
+          type="checkbox"
+          aria-label="Ativo"
+          checked={isActive}
+          onChange={(e) => setIsActive(e.target.checked)}
+          disabled={saving || !stateIsEditable}
+          className="h-4 w-4 rounded border-border accent-primary"
+        />
+        <label htmlFor={`qr-active-${qr.id}`} className="text-sm text-text">Ativo</label>
+      </div>
+
+      {error && (
+        <p className="flex items-start gap-1.5 rounded-lg border border-danger/30 bg-danger/5 p-2.5 text-sm text-danger" role="alert">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          {error}
+        </p>
+      )}
+      {saved && !error && (
+        <p className="text-sm text-success">Resposta rápida salva.</p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button type="submit" size="sm" loading={saving} disabled={!dirty || saving}>
+          <Save className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+          {saving ? "Salvando…" : "Salvar"}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
+          <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ── FlowStateDetail (with editing) ───────────────────────────────────────────
+
 function FlowStateDetail({
   state,
   content,
   quickReplies,
+  onContentUpdated,
+  onQuickReplyUpdated,
 }: {
   state: AssistantState;
   content: AssistantStateContent | undefined;
   quickReplies: AssistantQuickReply[];
+  onContentUpdated: (updated: AssistantStateContent) => void;
+  onQuickReplyUpdated: (updated: AssistantQuickReply) => void;
 }) {
+  const [editingContent, setEditingContent] = useState(false);
+  const [editingQrId, setEditingQrId] = useState<string | null>(null);
+
+  // Close editor when the selected state changes.
+  useEffect(() => {
+    setEditingContent(false);
+    setEditingQrId(null);
+  }, [state.state]);
+
+  const canEdit = state.is_editable && !state.is_sensitive;
+
   return (
     <div className="space-y-4">
       {/* State header */}
@@ -1435,8 +1764,7 @@ function FlowStateDetail({
           {state.is_sensitive && (
             <p className="flex items-start gap-1.5 rounded-lg bg-warning/10 p-2 text-xs text-text">
               <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-warning" aria-hidden="true" />
-              Estado sensível (identificação/verificação). Não pode ser editado pelo
-              painel.
+              Este estado é sensível e não pode ser editado nesta fase.
             </p>
           )}
         </CardContent>
@@ -1445,11 +1773,37 @@ function FlowStateDetail({
       {/* Assistant texts */}
       <Card className="max-w-full overflow-hidden">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Texto do assistente</CardTitle>
-          <CardDescription>O que o candidato lê neste passo.</CardDescription>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm">Texto do assistente</CardTitle>
+              <CardDescription>O que o candidato lê neste passo.</CardDescription>
+            </div>
+            {canEdit && content && !editingContent && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingContent(true)}
+                aria-label="Editar conteúdo do estado"
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                Editar conteúdo
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {content ? (
+          {editingContent && content ? (
+            <StateContentEditForm
+              content={content}
+              stateKey={state.state}
+              allowedPlaceholders={state.allowed_placeholders}
+              onSaved={(updated) => {
+                onContentUpdated(updated);
+                setEditingContent(false);
+              }}
+              onCancel={() => setEditingContent(false)}
+            />
+          ) : content ? (
             <>
               <FlowContentBlock
                 title="Texto da pergunta"
@@ -1497,8 +1851,7 @@ function FlowStateDetail({
           <CardTitle className="text-sm">Respostas rápidas</CardTitle>
           <CardDescription>
             <span className="font-medium text-text">Texto</span> é o que o candidato vê;{" "}
-            <span className="font-medium text-text">valor</span> é o dado técnico
-            reconhecido pela engine.
+            <span className="font-medium text-text">valor</span> é o dado técnico da engine (imutável).
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -1507,41 +1860,50 @@ function FlowStateDetail({
               Nenhuma resposta rápida neste estado.
             </p>
           ) : (
-            <div className="max-w-full overflow-x-auto">
-              <table className="min-w-[420px] text-left" aria-label="Respostas rápidas do estado">
-                <thead>
-                  <tr className="border-b border-border bg-surface-muted/50 text-xs uppercase text-text-muted">
-                    <th className="px-4 py-2 font-medium">Texto (candidato)</th>
-                    <th className="px-4 py-2 font-medium">Valor (engine)</th>
-                    <th className="px-4 py-2 font-medium">Ordem</th>
-                    <th className="px-4 py-2 font-medium">Ativo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quickReplies.map((qr) => (
-                    <tr
-                      key={qr.id}
-                      className="border-b border-border last:border-0"
-                    >
-                      <td className="px-4 py-2.5 text-sm text-text">{qr.label}</td>
-                      <td className="px-4 py-2.5">
-                        <code className="text-xs text-text-muted">{qr.value}</code>
-                      </td>
-                      <td className="px-4 py-2.5 text-sm text-text-muted">
-                        {qr.sort_order}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Badge
-                          variant={qr.is_active ? "success" : "muted"}
-                          className="text-[10px]"
+            <div className="divide-y divide-border">
+              {quickReplies.map((qr) => (
+                <div key={qr.id} className="px-4 py-3">
+                  {editingQrId === qr.id ? (
+                    <QuickReplyEditForm
+                      qr={qr}
+                      stateIsEditable={canEdit}
+                      onSaved={(updated) => {
+                        onQuickReplyUpdated(updated);
+                        setEditingQrId(null);
+                      }}
+                      onCancel={() => setEditingQrId(null)}
+                    />
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div>
+                          <p className="text-sm text-text">{qr.label}</p>
+                          <div className="flex items-center gap-2 text-xs text-text-muted">
+                            <code>{qr.value}</code>
+                            <span>·</span>
+                            <span>Ordem: {qr.sort_order}</span>
+                            <span>·</span>
+                            <Badge variant={qr.is_active ? "success" : "muted"} className="text-[10px]">
+                              {qr.is_active ? "Ativo" : "Inativo"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingQrId(qr.id)}
+                          aria-label={`Editar resposta rápida ${qr.label}`}
                         >
-                          {qr.is_active ? "Ativo" : "Inativo"}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span className="ml-1 hidden sm:inline">Editar resposta</span>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
@@ -1552,6 +1914,8 @@ function FlowStateDetail({
 
 function FlowPanel() {
   const statesState = useAsyncState<AssistantState[]>();
+  const [contents, setContents] = useState<AssistantStateContent[]>([]);
+  const [quickReplies, setQuickReplies] = useState<AssistantQuickReply[]>([]);
   const contentsState = useAsyncState<AssistantStateContent[]>();
   const quickRepliesState = useAsyncState<AssistantQuickReply[]>();
   const settingsState = useAsyncState<AssistantSetting[]>();
@@ -1559,8 +1923,14 @@ function FlowPanel() {
 
   const loadFlow = useCallback(() => {
     void statesState.run(() => assistantAdminService.listAssistantStates());
-    void contentsState.run(() => assistantAdminService.listStateContents());
-    void quickRepliesState.run(() => assistantAdminService.listQuickReplies());
+    void contentsState.run(() => assistantAdminService.listStateContents()).then(
+      (data) => { if (data) setContents(data); },
+      () => undefined
+    );
+    void quickRepliesState.run(() => assistantAdminService.listQuickReplies()).then(
+      (data) => { if (data) setQuickReplies(data); },
+      () => undefined
+    );
     void settingsState.run(() => assistantAdminService.listAssistantSettings());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1579,28 +1949,36 @@ function FlowPanel() {
   }, [sortedStates, selectedState]);
 
   const selected = sortedStates.find((s) => s.state === selectedState);
-  const selectedContent = contentsState.data?.find(
-    (c) => c.state === selectedState
-  );
-  const selectedQuickReplies = (quickRepliesState.data ?? [])
+  const selectedContent = contents.find((c) => c.state === selectedState);
+  const selectedQuickReplies = quickReplies
     .filter((q) => q.state === selectedState)
     .sort((a, b) => a.sort_order - b.sort_order);
 
   const settings = settingsState.data ?? [];
 
+  function handleContentUpdated(updated: AssistantStateContent) {
+    setContents((prev) => prev.map((c) => (c.state === updated.state ? updated : c)));
+  }
+
+  function handleQuickReplyUpdated(updated: AssistantQuickReply) {
+    setQuickReplies((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+  }
+
   return (
     <div className="space-y-4">
-      {/* Read-only notice */}
+      {/* Editorial notice */}
       <div
         role="note"
         className="flex flex-wrap items-start gap-2 rounded-xl border border-border bg-surface-muted/40 p-3 text-sm"
       >
         <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-text-muted" aria-hidden="true" />
         <div>
-          <p className="font-medium text-text">Somente leitura nesta fase</p>
+          <p className="font-medium text-text">
+            A edição altera apenas o conteúdo salvo.
+          </p>
           <p className="text-text-muted">
-            A topologia do fluxo não pode ser editada. Os textos e respostas rápidas
-            são exibidos como estão configurados no Assistente.
+            A engine ainda não usa estes textos em produção. A topologia do fluxo
+            (estados e transições) não pode ser alterada.
           </p>
         </div>
       </div>
@@ -1698,6 +2076,8 @@ function FlowPanel() {
                 state={selected}
                 content={selectedContent}
                 quickReplies={selectedQuickReplies}
+                onContentUpdated={handleContentUpdated}
+                onQuickReplyUpdated={handleQuickReplyUpdated}
               />
             ) : (
               <Card>
@@ -1716,7 +2096,7 @@ function FlowPanel() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Configurações relacionadas</CardTitle>
             <CardDescription>
-              Parâmetros gerais do assistente (somente leitura).
+              Parâmetros gerais do assistente. Somente leitura nesta fase.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">

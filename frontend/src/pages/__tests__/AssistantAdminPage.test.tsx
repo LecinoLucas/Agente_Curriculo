@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +26,8 @@ const listAssistantStatesMock = vi.fn();
 const listStateContentsMock = vi.fn();
 const listQuickRepliesMock = vi.fn();
 const listAssistantSettingsMock = vi.fn();
+const updateStateContentMock = vi.fn();
+const updateQuickReplyMock = vi.fn();
 
 vi.mock("../../services/assistantAdminService", () => ({
   assistantAdminService: {
@@ -39,6 +41,10 @@ vi.mock("../../services/assistantAdminService", () => ({
     listStateContents: (...args: unknown[]) => listStateContentsMock(...args),
     listQuickReplies: (...args: unknown[]) => listQuickRepliesMock(...args),
     listAssistantSettings: (...args: unknown[]) => listAssistantSettingsMock(...args),
+    updateStateContent: (state: string, payload: unknown) =>
+      updateStateContentMock(state, payload),
+    updateQuickReply: (id: string, payload: unknown) =>
+      updateQuickReplyMock(id, payload),
   },
 }));
 
@@ -273,6 +279,16 @@ beforeEach(() => {
   listStateContentsMock.mockResolvedValue(STATE_CONTENTS);
   listQuickRepliesMock.mockResolvedValue(QUICK_REPLIES);
   listAssistantSettingsMock.mockResolvedValue(SETTINGS);
+  updateStateContentMock.mockResolvedValue({
+    ...STATE_CONTENTS[1],
+    prompt_text: "Qual turno você prefere agora?",
+    version: 2,
+    updated_at: "2026-06-02T12:00:00Z",
+  });
+  updateQuickReplyMock.mockResolvedValue({
+    ...QUICK_REPLIES[0],
+    label: "De manhã",
+  });
 });
 
 afterEach(() => {
@@ -576,11 +592,10 @@ describe("AssistantAdminPage — Fluxo de perguntas tab", () => {
     await goToFlow(user);
 
     await waitFor(() => {
-      expect(screen.getByText(/Somente leitura nesta fase/i)).toBeInTheDocument();
+      expect(screen.getByText(/A edição altera apenas o conteúdo salvo/i)).toBeInTheDocument();
     });
-    expect(
-      screen.getByText(/A topologia do fluxo não pode ser editada/i)
-    ).toBeInTheDocument();
+    // Notice text split across elements — check the parent container text instead
+    expect(screen.getByText(/topologia do fluxo/i)).toBeInTheDocument();
     expect(listAssistantStatesMock).toHaveBeenCalled();
     expect(listStateContentsMock).toHaveBeenCalled();
     expect(listQuickRepliesMock).toHaveBeenCalled();
@@ -695,6 +710,274 @@ describe("AssistantAdminPage — Fluxo de perguntas tab", () => {
       expect(
         screen.getAllByText(/Meu CPF é \[cpf omitido\]/i).length
       ).toBeGreaterThanOrEqual(1);
+    });
+  });
+});
+
+// ── Fluxo — edição ─────────────────────────────────────────────────────────
+
+async function goToFlowAndSelectShift(user: ReturnType<typeof userEvent.setup>) {
+  const tab = screen.getByRole("tab", { name: /Fluxo/i });
+  await user.click(tab);
+  await waitFor(() => {
+    expect(listAssistantStatesMock).toHaveBeenCalled();
+  });
+  await waitFor(() => {
+    expect(screen.getAllByText("Escolhendo turno").length).toBeGreaterThanOrEqual(1);
+  });
+  // Select the CHOOSE_SHIFT state from the left list.
+  const shiftBtn = screen.getAllByText("Escolhendo turno")[0];
+  await user.click(shiftBtn);
+  await waitFor(() => {
+    expect(screen.getByText("Qual turno você prefere?")).toBeInTheDocument();
+  });
+}
+
+describe("AssistantAdminPage — Fluxo edição de conteúdo", () => {
+  it("shows Editar conteúdo button for editable state", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    expect(
+      screen.getByRole("button", { name: /Editar conteúdo/i })
+    ).toBeInTheDocument();
+  });
+
+  it("does NOT show Editar conteúdo button for IDENTIFY (sensitive/non-editable)", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+
+    const tab = screen.getByRole("tab", { name: /Fluxo/i });
+    await user.click(tab);
+    await waitFor(() => expect(listAssistantStatesMock).toHaveBeenCalled());
+    // IDENTIFY is the first state and is auto-selected.
+    await waitFor(() => {
+      expect(screen.getAllByText("Identificação").length).toBeGreaterThanOrEqual(1);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /Editar conteúdo/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("does NOT show Editar conteúdo button for VERIFY_OTP (sensitive)", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+
+    const tab = screen.getByRole("tab", { name: /Fluxo/i });
+    await user.click(tab);
+    await waitFor(() => expect(listAssistantStatesMock).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getAllByText("Verificação OTP").length).toBeGreaterThanOrEqual(1);
+    });
+
+    const otpBtn = screen.getAllByText("Verificação OTP")[0];
+    await user.click(otpBtn);
+    await waitFor(() => {
+      expect(screen.getAllByText("Verificação OTP").length).toBeGreaterThanOrEqual(1);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /Editar conteúdo/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("clicking Editar conteúdo shows the edit form", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    await user.click(screen.getByRole("button", { name: /Editar conteúdo/i }));
+
+    expect(screen.getByRole("textbox", { name: /Texto da pergunta/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Salvar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Cancelar/i })).toBeInTheDocument();
+  });
+
+  it("Cancelar closes the edit form without calling PATCH", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    await user.click(screen.getByRole("button", { name: /Editar conteúdo/i }));
+    await user.click(screen.getByRole("button", { name: /Cancelar/i }));
+
+    expect(updateStateContentMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Salvar/i })).not.toBeInTheDocument();
+  });
+
+  it("editing prompt_text calls updateStateContent with correct payload", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    await user.click(screen.getByRole("button", { name: /Editar conteúdo/i }));
+
+    const promptField = screen.getByRole("textbox", { name: /Texto da pergunta/i });
+    await user.clear(promptField);
+    await user.type(promptField, "Qual turno você prefere agora?");
+
+    await user.click(screen.getByRole("button", { name: /Salvar/i }));
+
+    await waitFor(() => {
+      expect(updateStateContentMock).toHaveBeenCalledWith(
+        "CHOOSE_SHIFT",
+        expect.objectContaining({ prompt_text: "Qual turno você prefere agora?" })
+      );
+    });
+  });
+
+  it("after save the updated content appears on screen", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    await user.click(screen.getByRole("button", { name: /Editar conteúdo/i }));
+
+    const promptField = screen.getByRole("textbox", { name: /Texto da pergunta/i });
+    await user.clear(promptField);
+    await user.type(promptField, "Qual turno você prefere agora?");
+    await user.click(screen.getByRole("button", { name: /Salvar/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Qual turno você prefere agora?")
+      ).toBeInTheDocument();
+    });
+    // Form is closed after save.
+    expect(screen.queryByRole("button", { name: /Salvar/i })).not.toBeInTheDocument();
+  });
+
+  it("shows PII error message when backend rejects for PII", async () => {
+    updateStateContentMock.mockRejectedValueOnce(
+      new Error("Texto do assistente não pode conter PII estática de exemplo.")
+    );
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    await user.click(screen.getByRole("button", { name: /Editar conteúdo/i }));
+    const promptField = screen.getByRole("textbox", { name: /Texto da pergunta/i });
+    await user.clear(promptField);
+    await user.type(promptField, "Ligue para teste@example.com");
+    await user.click(screen.getByRole("button", { name: /Salvar/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/dado pessoal/i);
+  });
+
+  it("shows placeholder error when backend rejects for unknown placeholder", async () => {
+    updateStateContentMock.mockRejectedValueOnce(
+      new Error("Placeholder não permitido para CHOOSE_SHIFT: desconhecido")
+    );
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    await user.click(screen.getByRole("button", { name: /Editar conteúdo/i }));
+    const promptField = screen.getByRole("textbox", { name: /Texto da pergunta/i });
+    // fireEvent to avoid userEvent treating {…} as keyboard shortcuts.
+    fireEvent.change(promptField, { target: { value: "{desconhecido} texto" } });
+    await user.click(screen.getByRole("button", { name: /Salvar/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/placeholder não permitido/i);
+  });
+
+  it("shows Editar resposta button for quick replies in editable state", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    // "Editar resposta" buttons appear for each quick reply.
+    const editBtns = screen.getAllByRole("button", {
+      name: /Editar resposta/i,
+    });
+    expect(editBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("quick reply edit form shows value as read-only", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    const [firstEditBtn] = screen.getAllByRole("button", {
+      name: /Editar resposta/i,
+    });
+    await user.click(firstEditBtn);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Valor técnico \(engine, somente leitura\)/i)
+      ).toBeInTheDocument();
+    });
+    // Value is displayed as text, not an input.
+    expect(
+      screen.queryByRole("textbox", { name: /Valor técnico/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("editing quick reply label calls updateQuickReply", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    const [firstEditBtn] = screen.getAllByRole("button", {
+      name: /Editar resposta/i,
+    });
+    await user.click(firstEditBtn);
+
+    const labelField = await screen.findByRole("textbox", {
+      name: /Texto apresentado ao candidato/i,
+    });
+    await user.clear(labelField);
+    await user.type(labelField, "De manhã");
+
+    await user.click(screen.getByRole("button", { name: /Salvar/i }));
+
+    await waitFor(() => {
+      expect(updateQuickReplyMock).toHaveBeenCalledWith(
+        "qr-1",
+        expect.objectContaining({ label: "De manhã" })
+      );
+    });
+  });
+
+  it("does not render a create quick reply button", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    expect(
+      screen.queryByRole("button", { name: /Nova resposta/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Adicionar/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not render a delete quick reply button", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    expect(
+      screen.queryByRole("button", { name: /Excluir/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Remover/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps Conversas and Falhas tabs working after editing", async () => {
+    const user = userEvent.setup();
+    render(<AssistantAdminPage />);
+    await goToFlowAndSelectShift(user);
+
+    await user.click(screen.getByRole("tab", { name: /Conversas/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("Maria S.").length).toBeGreaterThanOrEqual(1);
     });
   });
 });
