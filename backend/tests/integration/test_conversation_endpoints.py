@@ -96,7 +96,7 @@ async def test_send_message_saves_candidate_and_assistant_messages(
     assert payload["session_id"] == str(session_id)
     assert payload["current_state"] == "CHOOSE_LOCATION"
     assert payload["quick_replies"] == []
-    assert "cidade ou localidade" in payload["assistant_message"].lower()
+    assert "localidade" in payload["assistant_message"].lower()
     # The raw identifier is NEVER stored in context — only non-sensitive markers.
     assert payload["session"]["context"]["identifier_type"] == "whatsapp"
     assert "identifier_unresolved" not in payload["session"]["context"]

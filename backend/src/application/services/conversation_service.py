@@ -23,11 +23,15 @@ from src.infrastructure.database.models.candidate_application_model import (
     APPLICATION_ACTIVE_STATUSES,
     CandidateApplicationModel,
 )
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
 )
+from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.operational_master_model import (
     LocationGroupModel,
     OperationalUnitModel,
@@ -61,23 +65,18 @@ _APPLICATION_TRIGGER_KEYS = (
 
 # IDENTIFY transition copy. Success and not-found are intentionally identical so
 # an attacker cannot tell from the reply whether a CPF/WhatsApp exists.
-_IDENTIFY_SUCCESS_MESSAGE = (
-    "Certo. Agora me diga em qual cidade ou localidade "
-    "você quer trabalhar."
-)
+_IDENTIFY_SUCCESS_PREFIX = "Certo. "
 _IDENTIFY_INVALID_MESSAGE = (
     "Não consegui entender. Digite seu CPF ou WhatsApp com DDD para continuar."
 )
 _RESUME_SESSION_MESSAGE = (
     "Encontrei uma conversa em andamento. Vamos continuar de onde você parou."
 )
-_RESUME_APPLICATION_MESSAGE = (
-    "Você já tem uma candidatura em andamento. Para continuar, me diga em qual "
-    "cidade ou localidade você quer trabalhar."
+_RESUME_APPLICATION_SUBMITTED_MESSAGE = (
+    "Sua candidatura já foi enviada para análise do RH. Se precisar atualizar "
+    "alguma informação, o RH entrará em contato."
 )
-_CHOOSE_LOCATION_CONTINUE_MESSAGE = (
-    "Para continuar, me diga em qual cidade ou localidade você quer trabalhar."
-)
+_RESUME_APPLICATION_LINKED_MESSAGE = "Sua candidatura já está em análise pelo RH."
 _INVALID_LOCATION_MESSAGE = (
     "Não encontrei essa localidade. Digite o nome da cidade ou localidade novamente."
 )
@@ -136,6 +135,13 @@ class _ApplicationSync:
     status: str
 
 
+@dataclass(frozen=True)
+class _ApplicationResumeDecision:
+    state: str
+    content: str
+    quick_replies: tuple[tuple[str, str], ...] = ()
+
+
 class ConversationService:
     def __init__(
         self,
@@ -179,7 +185,11 @@ class ConversationService:
 
     async def get_session(self, session_id: UUID) -> ConversationSessionResponse:
         conversation = await self._get_session(session_id)
-        return self._session_response(conversation)
+        prompt = await self._prompt_for(
+            conversation.current_state,
+            conversation.context_json or {},
+        )
+        return self._session_response(conversation, prompt)
 
     async def receive_message(
         self,
@@ -308,10 +318,7 @@ class ConversationService:
         if conversation.candidate_id is not None:
             context.setdefault("identifier_type", "preset")
             conversation.current_state = "CHOOSE_LOCATION"
-            return ConversationPrompt(
-                state="CHOOSE_LOCATION",
-                content=_IDENTIFY_SUCCESS_MESSAGE,
-            )
+            return await self._identify_success_prompt(context)
 
         classification = self._classify_identifier(content)
         if classification is None:
@@ -353,6 +360,7 @@ class ConversationService:
             context.pop("possible_candidate_id", None)
             context.pop("pending_application_id", None)
             context.pop("pending_application_status", None)
+            context.pop("resumed_application_id", None)
             context.pop("application_in_progress", None)
             # For WhatsApp leads: store normalized digits as an internal key so
             # we can issue OTP and create the Candidate later without re-asking.
@@ -372,9 +380,14 @@ class ConversationService:
                 return resume_prompt
 
         conversation.current_state = "CHOOSE_LOCATION"
+        return await self._identify_success_prompt(context)
+
+    async def _identify_success_prompt(self, context: dict[str, Any]) -> ConversationPrompt:
+        prompt = await self._prompt_for("CHOOSE_LOCATION", context)
         return ConversationPrompt(
             state="CHOOSE_LOCATION",
-            content=_IDENTIFY_SUCCESS_MESSAGE,
+            content=f"{_IDENTIFY_SUCCESS_PREFIX}{prompt.content}",
+            quick_replies=prompt.quick_replies,
         )
 
     async def _resume_prompt_if_available(
@@ -402,14 +415,147 @@ class ConversationService:
         if application is not None:
             context["pending_application_id"] = str(application.id)
             context["pending_application_status"] = application.status
+            context["resumed_application_id"] = str(application.id)
             context["application_in_progress"] = True
-            conversation.current_state = "CHOOSE_LOCATION"
+            decision = await self._resume_decision_for_application(application, context)
+            conversation.current_state = decision.state
             return ConversationPrompt(
-                state="CHOOSE_LOCATION",
-                content=_RESUME_APPLICATION_MESSAGE,
+                state=decision.state,  # type: ignore[arg-type]
+                content=decision.content,
+                quick_replies=decision.quick_replies,
             )
 
         return None
+
+    async def _resume_decision_for_application(
+        self,
+        application: CandidateApplicationModel,
+        context: dict[str, Any],
+    ) -> _ApplicationResumeDecision:
+        if application.status == "submitted":
+            return _ApplicationResumeDecision(
+                state="DONE",
+                content=_RESUME_APPLICATION_SUBMITTED_MESSAGE,
+            )
+
+        if application.status == "linked_to_pipeline":
+            await self._find_active_pipeline_for_application(application.id)
+            return _ApplicationResumeDecision(
+                state="DONE",
+                content=_RESUME_APPLICATION_LINKED_MESSAGE,
+            )
+
+        await self._hydrate_context_from_application(application, context)
+        state = await self._next_application_resume_state(application)
+        prompt = await self._prompt_for(state, context)
+        return _ApplicationResumeDecision(
+            state=state,
+            content=self._resume_application_content(prompt.content),
+            quick_replies=prompt.quick_replies,
+        )
+
+    async def _find_active_pipeline_for_application(
+        self,
+        application_id: UUID,
+    ) -> CandidateJobPipelineModel | None:
+        return await self._session.scalar(
+            sa.select(CandidateJobPipelineModel)
+            .where(
+                CandidateJobPipelineModel.application_id == application_id,
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+            )
+            .limit(1)
+        )
+
+    async def _hydrate_context_from_application(
+        self,
+        application: CandidateApplicationModel,
+        context: dict[str, Any],
+    ) -> None:
+        location_id = await self._application_resume_location_id(application)
+        if location_id is not None and not context.get("location_hint"):
+            location_name = await self._location_name(location_id)
+            if location_name:
+                context["location_hint"] = location_name
+
+        if application.accepts_any_unit_in_location:
+            context.setdefault("preference", "any_in_location")
+        elif application.preferred_unit_id is not None and not context.get("preference"):
+            unit_name = await self._unit_name(application.preferred_unit_id)
+            if unit_name:
+                context["preference"] = unit_name
+
+        if application.desired_job_area:
+            context.setdefault("desired_function", application.desired_job_area)
+        if application.desired_shift:
+            context.setdefault("desired_shift", application.desired_shift)
+
+    async def _next_application_resume_state(
+        self,
+        application: CandidateApplicationModel,
+    ) -> str:
+        has_job_context = application.job_id is not None
+        has_location = await self._application_resume_location_id(application) is not None
+        has_unit_preference = (
+            application.accepts_any_unit_in_location
+            or application.preferred_unit_id is not None
+            or has_job_context
+        )
+
+        if not has_location and not has_job_context:
+            return "CHOOSE_LOCATION"
+        if not has_unit_preference:
+            return "CHOOSE_UNIT_OR_ANY"
+        if not self._clean_text(application.desired_job_area):
+            return "CHOOSE_FUNCTION"
+        if not self._clean_text(application.desired_shift):
+            return "CHOOSE_SHIFT"
+        return "CONFIRM_APPLICATION"
+
+    async def _application_resume_location_id(
+        self,
+        application: CandidateApplicationModel,
+    ) -> UUID | None:
+        if application.preferred_location_group_id is not None:
+            return application.preferred_location_group_id
+        if application.preferred_unit_id is not None:
+            return await self._session.scalar(
+                sa.select(OperationalUnitModel.location_group_id).where(
+                    OperationalUnitModel.id == application.preferred_unit_id,
+                    OperationalUnitModel.is_active.is_(True),
+                )
+            )
+        if application.job_id is None:
+            return None
+        return await self._session.scalar(
+            sa.select(JobModel.location_group_id).where(
+                JobModel.id == application.job_id,
+                JobModel.deleted_at.is_(None),
+            )
+        )
+
+    async def _location_name(self, location_id: UUID) -> str | None:
+        return await self._session.scalar(
+            sa.select(LocationGroupModel.name).where(
+                LocationGroupModel.id == location_id,
+                LocationGroupModel.is_active.is_(True),
+            )
+        )
+
+    async def _unit_name(self, unit_id: UUID) -> str | None:
+        return await self._session.scalar(
+            sa.select(OperationalUnitModel.name).where(
+                OperationalUnitModel.id == unit_id,
+                OperationalUnitModel.is_active.is_(True),
+            )
+        )
+
+    @staticmethod
+    def _resume_application_content(prompt_content: str) -> str:
+        return f"Você já tem uma candidatura em andamento. {prompt_content}"
 
     async def _find_resume_session(
         self,
@@ -522,10 +668,7 @@ class ConversationService:
                 context.pop("otp_purpose", None)
             context.pop("pending_candidate_id", None)
             context.pop("possible_candidate_id", None)
-            context.pop("pending_application_id", None)
-            context.pop("pending_application_status", None)
             context.pop("resumed_from_session_id", None)
-            context.pop("application_in_progress", None)
             # Lead registration: create Candidate + Application after verified OTP.
             if (
                 conversation.candidate_id is None
@@ -589,6 +732,7 @@ class ConversationService:
             context.pop("pending_application_id", None)
             context.pop("pending_application_status", None)
             context.pop("resumed_from_session_id", None)
+            context.pop("resumed_application_id", None)
             context.pop("application_in_progress", None)
             context.pop("pending_confirmation", None)
             context.pop("otp_purpose", None)
@@ -880,6 +1024,7 @@ class ConversationService:
             return
 
         context = conversation.context_json or {}
+        await self._promote_pending_application(conversation, context)
         already_linked = conversation.application_id is not None
         if not already_linked and not self._should_have_application(context):
             return
@@ -909,7 +1054,8 @@ class ConversationService:
             # Linked application was removed — relink lazily on the next turn.
             conversation.application_id = None
             return
-        application.status = fields.status
+        if not self._is_resumed_application(conversation, context):
+            application.status = fields.status
         application.preferred_location_group_id = fields.preferred_location_group_id
         application.preferred_unit_id = fields.preferred_unit_id
         application.accepts_any_unit_in_location = fields.accepts_any_unit_in_location
@@ -917,6 +1063,36 @@ class ConversationService:
         application.desired_shift = fields.desired_shift
         application.updated_at = datetime.now(UTC)
         await self._application_repository.update_application(application)
+
+    async def _promote_pending_application(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+    ) -> None:
+        if conversation.application_id is not None or conversation.candidate_id is None:
+            return
+
+        application_id = self._uuid_from_context(context.get("pending_application_id"))
+        if application_id is None:
+            return
+
+        application = await self._application_repository.get_application(application_id)
+        if (
+            application is None
+            or application.candidate_id != conversation.candidate_id
+            or application.status not in APPLICATION_ACTIVE_STATUSES
+        ):
+            return
+
+        conversation.application_id = application.id
+        context["resumed_application_id"] = str(application.id)
+
+    @staticmethod
+    def _is_resumed_application(
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+    ) -> bool:
+        return context.get("resumed_application_id") == str(conversation.application_id)
 
     async def _derive_application_sync(
         self,
@@ -991,10 +1167,7 @@ class ConversationService:
         state = conversation.current_state
         if state == "CHOOSE_LOCATION":
             if self._is_continue_intent(content):
-                return ConversationPrompt(
-                    state="CHOOSE_LOCATION",
-                    content=_CHOOSE_LOCATION_CONTINUE_MESSAGE,
-                )
+                return await self._prompt_for("CHOOSE_LOCATION", context)
             has_locations = await self._has_active_locations()
             location = await self._resolve_location_group(content)
             if has_locations and location is None:
@@ -1338,6 +1511,7 @@ class ConversationService:
             "pending_application_id",
             "pending_application_status",
             "resumed_from_session_id",
+            "resumed_application_id",
             # Lead-registration: PII stored temporarily; never exposed via API.
             "lead_name",
             "lead_whatsapp",

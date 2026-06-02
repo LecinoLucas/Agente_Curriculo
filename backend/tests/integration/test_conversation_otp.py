@@ -37,6 +37,7 @@ from src.infrastructure.database.models.operational_master_model import Location
 pytestmark = pytest.mark.asyncio
 
 VALID_CPF = "52998224725"
+OTHER_VALID_CPF = "16899535009"
 WHATSAPP = "11999998888"
 
 
@@ -144,7 +145,7 @@ async def test_identify_does_not_issue_otp_and_advances_to_location(
     payload = await _send(client, session_id, VALID_CPF)
 
     assert payload["current_state"] == "CHOOSE_LOCATION"
-    assert "cidade ou localidade" in payload["assistant_message"].lower()
+    assert "localidade" in payload["assistant_message"].lower()
 
     otp_count = await db_session.scalar(
         sa.select(sa.func.count()).select_from(ConversationOtpModel)
@@ -239,6 +240,7 @@ async def test_otp_consumed_cannot_be_reused(
     db_session: AsyncSession,
 ):
     await _candidate_with_cpf(db_session)
+    await _candidate_with_cpf(db_session, OTHER_VALID_CPF)
     await _location(db_session)
     session_id = await _start(client)
     await _drive_to_confirm_application(client, session_id, VALID_CPF)
@@ -249,7 +251,7 @@ async def test_otp_consumed_cannot_be_reused(
 
     # Start a new session and try the same code (cross-session replay attempt)
     session_id2 = await _start(client)
-    await _drive_to_confirm_application(client, session_id2, VALID_CPF)
+    await _drive_to_confirm_application(client, session_id2, OTHER_VALID_CPF)
     await _send(client, session_id2, "confirm")
     payload2 = await _send(client, session_id2, code)
 

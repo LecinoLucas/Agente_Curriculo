@@ -16,6 +16,9 @@ ConversationState = Literal[
     "CHOOSE_SHIFT",
     "SHOW_JOBS",
     "COLLECT_RESUME",
+    "COLLECT_LEAD_NAME",
+    "COLLECT_LEAD_WHATSAPP",
+    "COLLECT_LGPD_CONSENT",
     "CONFIRM_APPLICATION",
     "DONE",
 ]

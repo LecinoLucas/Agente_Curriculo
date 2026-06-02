@@ -20,6 +20,9 @@ from src.infrastructure.database.models.assistant_settings_model import (
     AssistantQuickReplyModel,
     AssistantStateContentModel,
 )
+from src.infrastructure.database.models.candidate_application_model import (
+    CandidateApplicationModel,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_model import (
     ConversationSessionModel,
@@ -30,6 +33,11 @@ from src.infrastructure.database.models.operational_master_model import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+VALID_CPF = "52998224725"
+OTHER_VALID_CPF = "16899535009"
+WHATSAPP = "11999998888"
+CUSTOM_LOCATION_PROMPT = "Em qual localidade você prefere trabalhar, qual posto ?"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +70,23 @@ async def _location(db: AsyncSession, name: str = "Peritoró") -> LocationGroupM
     await db.commit()
     await db.refresh(loc)
     return loc
+
+
+async def _set_location_prompt(db: AsyncSession, text: str = CUSTOM_LOCATION_PROMPT) -> None:
+    await db.execute(
+        sa.update(AssistantStateContentModel)
+        .where(AssistantStateContentModel.state == "CHOOSE_LOCATION")
+        .values(prompt_text=text)
+    )
+    await db.commit()
+
+
+async def _candidate_with_cpf(db: AsyncSession, cpf: str = VALID_CPF) -> CandidateModel:
+    cand = CandidateModel(full_name="Pessoa X", cpf=cpf)
+    db.add(cand)
+    await db.commit()
+    await db.refresh(cand)
+    return cand
 
 
 async def _extract_otp(db: AsyncSession, session_id: str) -> str:
@@ -135,6 +160,125 @@ async def test_patch_and_send_reflects_new_text(
     assert r["current_state"] == "CHOOSE_SHIFT"
     assert "turno de preferência" in r["assistant_message"]
     assert "v2" in r["assistant_message"]
+
+
+async def test_edited_choose_location_prompt_is_used_after_unknown_cpf(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+    await _set_location_prompt(db_session)
+
+    session_id = await _start(client)
+    r = await _send(client, session_id, OTHER_VALID_CPF)
+
+    assert r["current_state"] == "CHOOSE_LOCATION"
+    assert r["assistant_message"] == f"Certo. {CUSTOM_LOCATION_PROMPT}"
+
+
+async def test_edited_choose_location_prompt_is_used_after_unknown_whatsapp(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+    await _set_location_prompt(db_session)
+
+    session_id = await _start(client)
+    r = await _send(client, session_id, WHATSAPP)
+
+    assert r["current_state"] == "CHOOSE_LOCATION"
+    assert r["assistant_message"] == f"Certo. {CUSTOM_LOCATION_PROMPT}"
+
+
+async def test_edited_choose_location_prompt_is_used_for_application_resume(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+    await _set_location_prompt(db_session)
+    cand = await _candidate_with_cpf(db_session)
+    db_session.add(
+        CandidateApplicationModel(
+            candidate_id=cand.id,
+            source="bot",
+            status="started",
+        )
+    )
+    await db_session.commit()
+
+    session_id = await _start(client)
+    r = await _send(client, session_id, VALID_CPF)
+
+    assert r["current_state"] == "CHOOSE_LOCATION"
+    assert r["assistant_message"] == (
+        f"Você já tem uma candidatura em andamento. {CUSTOM_LOCATION_PROMPT}"
+    )
+    assert "pending_application_id" not in r["session"]["context"]
+
+
+async def test_submitted_application_resume_does_not_use_intake_prompt(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+    await _set_location_prompt(db_session)
+    cand = await _candidate_with_cpf(db_session)
+    db_session.add(
+        CandidateApplicationModel(
+            candidate_id=cand.id,
+            source="bot",
+            status="submitted",
+        )
+    )
+    await db_session.commit()
+
+    session_id = await _start(client)
+    r = await _send(client, session_id, VALID_CPF)
+
+    assert r["current_state"] == "DONE"
+    assert "enviada para análise do RH" in r["assistant_message"]
+    assert CUSTOM_LOCATION_PROMPT not in r["assistant_message"]
+
+
+async def test_linked_application_resume_does_not_use_intake_prompt(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+    await _set_location_prompt(db_session)
+    cand = await _candidate_with_cpf(db_session)
+    db_session.add(
+        CandidateApplicationModel(
+            candidate_id=cand.id,
+            source="bot",
+            status="linked_to_pipeline",
+        )
+    )
+    await db_session.commit()
+
+    session_id = await _start(client)
+    r = await _send(client, session_id, VALID_CPF)
+
+    assert r["current_state"] == "DONE"
+    assert r["assistant_message"] == "Sua candidatura já está em análise pelo RH."
+    assert CUSTOM_LOCATION_PROMPT not in r["assistant_message"]
+
+
+async def test_get_session_reflects_edited_choose_location_prompt(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+    await _set_location_prompt(db_session)
+    session_id = await _start(client)
+    await _send(client, session_id, OTHER_VALID_CPF)
+
+    response = await client.get(f"/api/v1/conversations/{session_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["current_state"] == "CHOOSE_LOCATION"
+    assert payload["assistant_message"] == CUSTOM_LOCATION_PROMPT
 
 
 # ── Fallback to hardcoded when row absent ─────────────────────────────────────
