@@ -1,19 +1,14 @@
 from datetime import UTC, datetime
-from hashlib import sha256
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.database.models.candidate_application_model import (
-    CandidateApplicationModel,
-)
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
-from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
@@ -22,159 +17,258 @@ from src.infrastructure.database.models.conversation_model import (
 pytestmark = pytest.mark.asyncio
 
 
-async def _create_candidate_with_application(
-    db_session: AsyncSession,
-    *,
-    cpf_digits: str,
-) -> tuple[CandidateModel, CandidateApplicationModel]:
-    candidate = CandidateModel(
-        full_name="Candidato Conversa",
-        email="conversation@example.com",
-        phone="11987654321",
-        cpf=None,
-        cpf_hash=sha256(cpf_digits.encode("utf-8")).hexdigest(),
-        cpf_last4=cpf_digits[-4:],
-        location_city="Goiânia",
-        location_state="GO",
-        location_country="BR",
-        created_by=None,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-    db_session.add(candidate)
-    await db_session.flush()
-
-    application = CandidateApplicationModel(
-        candidate_id=candidate.id,
-        job_id=None,
-        source="web_portal",
-        status="started",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-    db_session.add(application)
-    await db_session.commit()
-    return candidate, application
+async def _create_conversation(client: AsyncClient) -> dict:
+    response = await client.post("/api/v1/conversations", json={"channel": "web"})
+    assert response.status_code == 201
+    return response.json()
 
 
-async def test_create_session_returns_initial_question_and_nullable_links(
+async def test_create_conversation_returns_initial_state_and_quick_replies(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    response = await client.post("/api/v1/conversations", json={"channel": "web"})
+    payload = await _create_conversation(client)
 
-    assert response.status_code == 201
-    payload = response.json()
-    assert payload["session"]["channel"] == "web"
-    assert payload["session"]["current_state"] == "IDENTIFY"
-    assert payload["session"]["status"] == "active"
-    assert "CPF ou WhatsApp" in payload["message"]["content"]
+    assert payload["session_id"]
+    assert payload["current_state"] == "IDENTIFY"
+    assert payload["assistant_message"] == (
+        "Olá! Vou te ajudar a encontrar uma vaga. "
+        "Para começar, me diga seu CPF ou WhatsApp."
+    )
+    assert payload["quick_replies"] == [
+        {"value": "cpf", "label": "Informar CPF"},
+        {"value": "whatsapp", "label": "Informar WhatsApp"},
+    ]
+    assert payload["session"]["id"] == payload["session_id"]
+    assert payload["options"] == payload["quick_replies"]
+    assert payload["message"]["role"] == "assistant"
     assert payload["message"]["direction"] == "outbound"
 
-    session = await db_session.get(ConversationSessionModel, UUID(payload["session"]["id"]))
+    session = await db_session.get(ConversationSessionModel, UUID(payload["session_id"]))
     assert session is not None
     assert session.candidate_id is None
     assert session.application_id is None
 
 
-async def test_message_advances_state_saves_messages_and_keeps_current_state(
+async def test_get_conversation_returns_current_state_and_quick_replies(
+    client: AsyncClient,
+):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+
+    response = await client.get(f"/api/v1/conversations/{session_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["session_id"] == session_id
+    assert payload["current_state"] == "IDENTIFY"
+    assert payload["status"] == "active"
+    assert payload["quick_replies"] == create_payload["quick_replies"]
+    assert "CPF ou WhatsApp" in payload["assistant_message"]
+
+
+async def test_send_message_saves_candidate_and_assistant_messages(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    cpf_digits = "12345678901"
-    candidate, application = await _create_candidate_with_application(
-        db_session,
-        cpf_digits=cpf_digits,
-    )
-    create_response = await client.post("/api/v1/conversations", json={"channel": "web"})
-    session_id = UUID(create_response.json()["session"]["id"])
+    create_payload = await _create_conversation(client)
+    session_id = UUID(create_payload["session_id"])
 
-    message_response = await client.post(
+    response = await client.post(
         f"/api/v1/conversations/{session_id}/messages",
-        json={"content": cpf_digits},
+        json={"content": "11999998888", "message_type": "text"},
     )
 
-    assert message_response.status_code == 200
-    payload = message_response.json()
-    assert payload["session"]["current_state"] == "RESUME_OR_NEW"
-    assert payload["session"]["context"] == {
-        "identified": True,
-        "candidate_found": True,
-        "active_application_found": True,
-        "answers": {},
-    }
-    assert "continuar" in payload["message"]["content"].lower()
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["session_id"] == str(session_id)
+    assert payload["current_state"] == "CHOOSE_LOCATION"
+    assert payload["quick_replies"] == []
+    # Unknown WhatsApp → not-found transition copy (mirrors the success copy).
+    assert payload["assistant_message"].startswith("Tudo bem, vamos continuar")
+    # The raw identifier is NEVER stored in context — only non-sensitive markers.
+    assert payload["session"]["context"]["identifier_type"] == "whatsapp"
+    assert payload["session"]["context"]["identifier_unresolved"] is True
+    assert "identifier_raw" not in payload["session"]["context"]
+    assert "11999998888" not in str(payload["session"]["context"])
+    assert payload["message"]["role"] == "assistant"
 
     session = await db_session.get(ConversationSessionModel, session_id)
     assert session is not None
-    assert session.candidate_id == candidate.id
-    assert session.application_id == application.id
-    assert session.current_state == "RESUME_OR_NEW"
+    assert session.current_state == "CHOOSE_LOCATION"
+    assert session.candidate_id is None
+    assert session.context_json["identifier_type"] == "whatsapp"
+    assert "identifier_raw" not in session.context_json
 
     messages = (
         await db_session.execute(
             sa.select(ConversationMessageModel)
-            .where(ConversationMessageModel.session_id == session.id)
-            .order_by(ConversationMessageModel.created_at.asc())
+            .where(ConversationMessageModel.session_id == session_id)
+            .order_by(ConversationMessageModel.created_at.asc(), ConversationMessageModel.id.asc())
         )
     ).scalars().all()
-    assert [message.direction for message in messages] == ["outbound", "inbound", "outbound"]
-    assert messages[1].content == "[identificacao protegida]"
-    assert messages[1].interpreted_intent == "identity_provided"
+    assert [message.role for message in messages] == ["assistant", "candidate", "assistant"]
+    assert messages[1].content == "11999998888"
 
 
-async def test_recover_session_and_list_messages(
+async def test_state_machine_advances_location_to_unit_choice_with_options(
     client: AsyncClient,
 ):
-    create_response = await client.post("/api/v1/conversations", json={"channel": "web"})
-    session_id = create_response.json()["session"]["id"]
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+    # IDENTIFY now requires a minimally valid identifier (CPF/WhatsApp) to advance.
     await client.post(
         f"/api/v1/conversations/{session_id}/messages",
-        json={"content": "Peritoro"},
+        json={"content": "11999998888", "message_type": "text"},
     )
 
-    session_response = await client.get(f"/api/v1/conversations/{session_id}")
-    messages_response = await client.get(f"/api/v1/conversations/{session_id}/messages")
+    response = await client.post(
+        f"/api/v1/conversations/{session_id}/messages",
+        json={"content": "Peritoró", "message_type": "text"},
+    )
 
-    assert session_response.status_code == 200
-    assert session_response.json()["id"] == session_id
-    assert session_response.json()["current_state"] == "RESUME_OR_NEW"
-    assert session_response.json()["context"]["identified"] is False
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["current_state"] == "CHOOSE_UNIT_OR_ANY"
+    assert payload["assistant_message"] == (
+        "Encontrei Peritoró. Você prefere um posto específico "
+        "ou qualquer posto da localidade?"
+    )
+    assert payload["quick_replies"] == [
+        {"value": "any_in_location", "label": "Qualquer posto em Peritoró"},
+        {"value": "choose_unit", "label": "Escolher posto"},
+    ]
+    assert payload["session"]["context"]["location_hint"] == "Peritoró"
 
-    assert messages_response.status_code == 200
-    messages = messages_response.json()
-    assert len(messages) == 3
-    assert messages[0]["direction"] == "outbound"
-    assert messages[1]["direction"] == "inbound"
-    assert messages[2]["direction"] == "outbound"
+
+async def test_get_resume_keeps_state_and_options(
+    client: AsyncClient,
+):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+    await client.post(
+        f"/api/v1/conversations/{session_id}/messages",
+        json={"content": "11999998888", "message_type": "text"},
+    )
+    await client.post(
+        f"/api/v1/conversations/{session_id}/messages",
+        json={"content": "Peritoró"},
+    )
+
+    response = await client.get(f"/api/v1/conversations/{session_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["current_state"] == "CHOOSE_UNIT_OR_ANY"
+    assert payload["quick_replies"][0]["value"] == "any_in_location"
+    assert payload["context"]["location_hint"] == "Peritoró"
 
 
-async def test_does_not_store_plain_cpf_or_create_pipeline(
+async def test_list_messages_returns_ordered_history(
+    client: AsyncClient,
+):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+    await client.post(
+        f"/api/v1/conversations/{session_id}/messages",
+        json={"content": "cpf", "message_type": "quick_reply"},
+    )
+
+    response = await client.get(f"/api/v1/conversations/{session_id}/messages")
+
+    assert response.status_code == 200
+    messages = response.json()
+    assert [message["role"] for message in messages] == [
+        "assistant",
+        "candidate",
+        "assistant",
+    ]
+    assert [message["direction"] for message in messages] == [
+        "outbound",
+        "inbound",
+        "outbound",
+    ]
+
+
+async def test_missing_session_returns_404(client: AsyncClient):
+    response = await client.get(f"/api/v1/conversations/{uuid4()}")
+
+    assert response.status_code == 404
+
+
+async def test_completed_session_does_not_advance(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    cpf_digits = "12345678901"
-    await _create_candidate_with_application(db_session, cpf_digits=cpf_digits)
-    create_response = await client.post("/api/v1/conversations", json={"channel": "web"})
-    session_id = UUID(create_response.json()["session"]["id"])
+    now = datetime.now(UTC)
+    session = ConversationSessionModel(
+        channel="web",
+        current_state="DONE",
+        status="completed",
+        context_json={"identifier_raw": "cpf"},
+        last_message_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(session)
+    await db_session.commit()
 
-    await client.post(
-        f"/api/v1/conversations/{session_id}/messages",
-        json={"content": f"Meu CPF é {cpf_digits}"},
+    response = await client.post(
+        f"/api/v1/conversations/{session.id}/messages",
+        json={"content": "continuar"},
     )
 
-    session = await db_session.get(ConversationSessionModel, session_id)
-    assert session is not None
-    assert cpf_digits not in str(session.context_json)
+    assert response.status_code == 422
+    refreshed = await db_session.get(ConversationSessionModel, session.id)
+    assert refreshed is not None
+    assert refreshed.current_state == "DONE"
+    assert refreshed.status == "completed"
 
-    messages = (
-        await db_session.execute(
-            sa.select(ConversationMessageModel).where(
-                ConversationMessageModel.session_id == session.id
-            )
+    message_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(ConversationMessageModel)
+    )
+    assert message_count == 0
+
+
+async def test_cancelled_session_does_not_advance(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    now = datetime.now(UTC)
+    session = ConversationSessionModel(
+        channel="web",
+        current_state="CHOOSE_LOCATION",
+        status="cancelled",
+        context_json={},
+        last_message_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(session)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/conversations/{session.id}/messages",
+        json={"content": "Peritoró"},
+    )
+
+    assert response.status_code == 422
+    refreshed = await db_session.get(ConversationSessionModel, session.id)
+    assert refreshed is not None
+    assert refreshed.current_state == "CHOOSE_LOCATION"
+
+
+async def test_conversation_flow_does_not_create_pipeline(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+    for content in ["cpf", "Peritoró", "any_in_location", "Frentista", "night"]:
+        await client.post(
+            f"/api/v1/conversations/{session_id}/messages",
+            json={"content": content},
         )
-    ).scalars().all()
-    assert all(cpf_digits not in message.content for message in messages)
 
     pipeline_count = await db_session.scalar(
         sa.select(sa.func.count()).select_from(CandidateJobPipelineModel)

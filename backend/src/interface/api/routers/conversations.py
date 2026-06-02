@@ -4,6 +4,9 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.conversation_service import ConversationService
+from src.infrastructure.repositories.sqlalchemy_candidate_application_repository import (
+    SQLAlchemyCandidateApplicationRepository,
+)
 from src.infrastructure.repositories.sqlalchemy_conversation_repository import (
     SQLAlchemyConversationRepository,
 )
@@ -20,7 +23,11 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
 def _service(db: AsyncSession) -> ConversationService:
-    return ConversationService(db, SQLAlchemyConversationRepository(db))
+    return ConversationService(
+        SQLAlchemyConversationRepository(db),
+        db,
+        SQLAlchemyCandidateApplicationRepository(db),
+    )
 
 
 @router.post("", response_model=ConversationTurnResponse, status_code=status.HTTP_201_CREATED)
@@ -33,28 +40,28 @@ async def create_conversation(
     return turn
 
 
-@router.get("/{conversation_id}", response_model=ConversationSessionResponse)
+@router.get("/{session_id}", response_model=ConversationSessionResponse)
 async def get_conversation(
-    conversation_id: UUID,
+    session_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> ConversationSessionResponse:
-    return await _service(db).get_session(conversation_id)
+    return await _service(db).get_session(session_id)
 
 
-@router.post("/{conversation_id}/messages", response_model=ConversationTurnResponse)
+@router.post("/{session_id}/messages", response_model=ConversationTurnResponse)
 async def create_conversation_message(
-    conversation_id: UUID,
+    session_id: UUID,
     body: ConversationMessageCreateRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ConversationTurnResponse:
-    turn = await _service(db).receive_message(conversation_id, body)
+    turn = await _service(db).receive_message(session_id, body)
     await db.commit()
     return turn
 
 
-@router.get("/{conversation_id}/messages", response_model=list[ConversationMessageResponse])
+@router.get("/{session_id}/messages", response_model=list[ConversationMessageResponse])
 async def list_conversation_messages(
-    conversation_id: UUID,
+    session_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> list[ConversationMessageResponse]:
-    return await _service(db).list_messages(conversation_id)
+    return await _service(db).list_messages(session_id)

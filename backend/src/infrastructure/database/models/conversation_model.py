@@ -11,22 +11,18 @@ JSONB_COMPAT = JSONB().with_variant(sa.JSON(), "sqlite")
 
 CONVERSATION_CHANNELS = ("web", "whatsapp")
 CONVERSATION_STATES = (
-    "START",
     "IDENTIFY",
-    "RESUME_OR_NEW",
     "CHOOSE_LOCATION",
     "CHOOSE_UNIT_OR_ANY",
     "CHOOSE_FUNCTION",
     "CHOOSE_SHIFT",
     "SHOW_JOBS",
-    "COLLECT_BASIC_DATA",
     "COLLECT_RESUME",
     "CONFIRM_APPLICATION",
-    "SUBMITTED",
-    "FOLLOW_UP",
+    "DONE",
 )
-CONVERSATION_STATUSES = ("active", "completed", "abandoned", "expired")
-CONVERSATION_MESSAGE_DIRECTIONS = ("inbound", "outbound", "system")
+CONVERSATION_STATUSES = ("active", "completed", "abandoned", "cancelled")
+CONVERSATION_MESSAGE_ROLES = ("candidate", "assistant", "system")
 CONVERSATION_MESSAGE_TYPES = ("text", "quick_reply", "system")
 
 
@@ -39,15 +35,14 @@ class ConversationSessionModel(Base):
         ),
         sa.CheckConstraint(
             "current_state IN ("
-            "'START', 'IDENTIFY', 'RESUME_OR_NEW', 'CHOOSE_LOCATION', "
+            "'IDENTIFY', 'CHOOSE_LOCATION', "
             "'CHOOSE_UNIT_OR_ANY', 'CHOOSE_FUNCTION', 'CHOOSE_SHIFT', 'SHOW_JOBS', "
-            "'COLLECT_BASIC_DATA', 'COLLECT_RESUME', 'CONFIRM_APPLICATION', "
-            "'SUBMITTED', 'FOLLOW_UP'"
+            "'COLLECT_RESUME', 'CONFIRM_APPLICATION', 'DONE'"
             ")",
             name="ck_conversation_sessions_current_state",
         ),
         sa.CheckConstraint(
-            "status IN ('active', 'completed', 'abandoned', 'expired')",
+            "status IN ('active', 'completed', 'abandoned', 'cancelled')",
             name="ck_conversation_sessions_status",
         ),
         sa.Index("ix_conversation_sessions_candidate_id", "candidate_id"),
@@ -81,7 +76,7 @@ class ConversationSessionModel(Base):
     current_state: Mapped[str] = mapped_column(
         sa.String(50),
         nullable=False,
-        server_default="START",
+        server_default="IDENTIFY",
     )
     status: Mapped[str] = mapped_column(
         sa.String(30),
@@ -132,8 +127,8 @@ class ConversationMessageModel(Base):
     __tablename__ = "conversation_messages"
     __table_args__ = (
         sa.CheckConstraint(
-            "direction IN ('inbound', 'outbound', 'system')",
-            name="ck_conversation_messages_direction",
+            "role IN ('candidate', 'assistant', 'system')",
+            name="ck_conversation_messages_role",
         ),
         sa.CheckConstraint(
             "message_type IN ('text', 'quick_reply', 'system')",
@@ -154,7 +149,7 @@ class ConversationMessageModel(Base):
         sa.ForeignKey("conversation_sessions.id", ondelete="CASCADE"),
         nullable=False,
     )
-    direction: Mapped[str] = mapped_column(sa.String(20), nullable=False)
+    role: Mapped[str] = mapped_column(sa.String(20), nullable=False)
     content: Mapped[str] = mapped_column(sa.Text, nullable=False)
     message_type: Mapped[str] = mapped_column(
         sa.String(30),

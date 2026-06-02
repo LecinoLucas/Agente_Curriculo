@@ -8,21 +8,18 @@ from src.interface.api.schemas.common import APISchemaModel, ORMAPISchemaModel
 
 ConversationChannel = Literal["web", "whatsapp"]
 ConversationState = Literal[
-    "START",
     "IDENTIFY",
-    "RESUME_OR_NEW",
     "CHOOSE_LOCATION",
     "CHOOSE_UNIT_OR_ANY",
     "CHOOSE_FUNCTION",
     "CHOOSE_SHIFT",
     "SHOW_JOBS",
-    "COLLECT_BASIC_DATA",
     "COLLECT_RESUME",
     "CONFIRM_APPLICATION",
-    "SUBMITTED",
-    "FOLLOW_UP",
+    "DONE",
 ]
-ConversationStatus = Literal["active", "completed", "abandoned", "expired"]
+ConversationStatus = Literal["active", "completed", "abandoned", "cancelled"]
+ConversationMessageRole = Literal["candidate", "assistant", "system"]
 ConversationMessageDirection = Literal["inbound", "outbound", "system"]
 ConversationMessageType = Literal["text", "quick_reply", "system"]
 
@@ -30,7 +27,6 @@ ConversationMessageType = Literal["text", "quick_reply", "system"]
 class ConversationCreateRequest(APISchemaModel):
     channel: ConversationChannel = "web"
     candidate_id: UUID | None = None
-    application_id: UUID | None = None
 
 
 class ConversationMessageCreateRequest(APISchemaModel):
@@ -38,17 +34,20 @@ class ConversationMessageCreateRequest(APISchemaModel):
     message_type: ConversationMessageType = "text"
 
 
-class ConversationOptionResponse(APISchemaModel):
+class ConversationQuickReplyResponse(APISchemaModel):
     value: str
     label: str
 
 
 class ConversationSessionResponse(ORMAPISchemaModel):
     id: UUID
+    session_id: UUID
     channel: str
     current_state: str
     status: str
     context: dict
+    assistant_message: str
+    quick_replies: list[ConversationQuickReplyResponse]
     last_message_at: datetime
     created_at: datetime
     updated_at: datetime
@@ -57,7 +56,8 @@ class ConversationSessionResponse(ORMAPISchemaModel):
 class ConversationMessageResponse(ORMAPISchemaModel):
     id: UUID
     session_id: UUID
-    direction: str
+    role: ConversationMessageRole
+    direction: ConversationMessageDirection
     content: str
     message_type: str
     interpreted_intent: str | None = None
@@ -66,6 +66,10 @@ class ConversationMessageResponse(ORMAPISchemaModel):
 
 
 class ConversationTurnResponse(APISchemaModel):
+    session_id: UUID
+    current_state: str
+    assistant_message: str
+    quick_replies: list[ConversationQuickReplyResponse]
     session: ConversationSessionResponse
     message: ConversationMessageResponse
-    options: list[ConversationOptionResponse]
+    options: list[ConversationQuickReplyResponse]
