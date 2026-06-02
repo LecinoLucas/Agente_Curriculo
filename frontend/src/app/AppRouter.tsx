@@ -9,6 +9,7 @@ import {
   ALL_AUTH_ROLES,
   ANALYSIS_ROLES,
   CANDIDATES_ACCESS_ROLES,
+  INTERNAL_STAFF_ROLES,
   JOB_MANAGEMENT_ROLES,
   MANAGER_AREA_ROLES,
   OPERATIONAL_MASTER_ROLES,
@@ -168,6 +169,12 @@ const ManagerReviewPage = lazy(() =>
 const CandidatePortalRedirectPage = lazy(() =>
   import("../pages/CandidatePortalRedirectPage").then((m) => ({
     default: m.CandidatePortalRedirectPage,
+  }))
+);
+
+const AssistantAdminPage = lazy(() =>
+  import("../pages/AssistantAdminPage").then((m) => ({
+    default: m.AssistantAdminPage,
   }))
 );
 
@@ -398,6 +405,14 @@ export function AppRouter() {
         <Route
           path="admin/behavioral-templates/:templateId/edit"
           element={protectedPage(<BehavioralTemplateEditorPage />, JOB_MANAGEMENT_ROLES)}
+        />
+
+        <Route
+          path="admin/assistente-candidato"
+          element={protectedPage(
+            <AssistantAdminPage />,
+            INTERNAL_STAFF_ROLES
+          )}
         />
 
         <Route

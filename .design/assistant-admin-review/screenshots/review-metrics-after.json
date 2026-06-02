@@ -1,0 +1,80 @@
+[
+  {
+    "name": "review-after-assistant-admin-desktop-1280",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "url": "/admin/assistente-candidato",
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "overflowX": false,
+    "bodyWidth": 1280,
+    "dialogDescription": null
+  },
+  {
+    "name": "review-after-assistant-admin-tablet-768",
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "url": "/admin/assistente-candidato",
+    "scrollWidth": 850,
+    "clientWidth": 768,
+    "overflowX": true,
+    "bodyWidth": 768,
+    "dialogDescription": null
+  },
+  {
+    "name": "review-after-assistant-admin-mobile-375",
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "url": "/admin/assistente-candidato",
+    "scrollWidth": 841,
+    "clientWidth": 375,
+    "overflowX": true,
+    "bodyWidth": 375,
+    "dialogDescription": null
+  },
+  {
+    "name": "review-after-assistant-admin-empty-mobile-375",
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "url": "/admin/assistente-candidato",
+    "scrollWidth": 375,
+    "clientWidth": 375,
+    "overflowX": false,
+    "bodyWidth": 375,
+    "dialogDescription": null
+  },
+  {
+    "name": "review-after-assistant-admin-detail-desktop-1280",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "url": "/admin/assistente-candidato",
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "overflowX": false,
+    "bodyWidth": 1280,
+    "dialogDescription": "radix-:rb:"
+  },
+  {
+    "name": "review-after-assistant-admin-detail-mobile-375",
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "url": "/admin/assistente-candidato",
+    "scrollWidth": 841,
+    "clientWidth": 375,
+    "overflowX": true,
+    "bodyWidth": 841,
+    "dialogDescription": "radix-:rb:"
+  }
+]

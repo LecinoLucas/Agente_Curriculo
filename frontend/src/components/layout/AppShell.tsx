@@ -33,6 +33,7 @@ import {
   ANALYSIS_ROLES,
   CANDIDATE_PORTAL_ROLES,
   CANDIDATES_ACCESS_ROLES,
+  INTERNAL_STAFF_ROLES,
   JOB_MANAGEMENT_ROLES,
   MANAGER_AREA_ROLES,
   OPERATIONAL_MASTER_ROLES,
@@ -82,6 +83,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
       { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: STAFF_ROLES },
       { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: CANDIDATES_ACCESS_ROLES },
       { to: "/agenda", label: "Agenda", caption: "Calendário", roles: AGENDA_ACCESS_ROLES },
+      { to: "/admin/assistente-candidato", label: "Assistente do Candidato", caption: "Conversas Portal 2", roles: INTERNAL_STAFF_ROLES },
     ],
   },
   {

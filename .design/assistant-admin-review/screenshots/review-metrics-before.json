@@ -1,0 +1,80 @@
+[
+  {
+    "name": "review-assistant-admin-desktop-1280",
+    "errors": [],
+    "metrics": {
+      "url": "http://127.0.0.1:5173/admin/assistente-candidato",
+      "overflowX": false,
+      "bodyWidth": 1280,
+      "clientWidth": 1280,
+      "bodyHeight": 800,
+      "text": "RA\nMarajo RH\nATS & Recrutamento IA\nCentral RH\nRecrutamento\nAvaliações\nAdmissão\nGestores\nAdministração\nOutros\nSair\nAssistente do Candidato\n\nAcompanhe conversas do Portal 2 sem expor dados sensíveis.\n\nConversas\nFluxo de perguntas\nEm breve\nTodos os status\nAtiva\nConcluída\nAbandonada\nCancelada\nTodos os estados\nIdentificação\nVerificação OTP\nEscolhendo cidade\nEscolhendo posto\nEscolhendo função\nEscolhendo turno\nMostrando vagas\nColetando currículo\nConfirmando\nConcluído\nTodos os canais\nWeb\nWhatsApp\nCom ou sem candidatura\nCom candidatura\nSem candidatura\nCom ou sem pipeline\nNo pipeline\nFora do pipeline\nLimpar\nConversas(1)\n\nSomente leitura. Dados pessoais mascarados.\n\nCANDIDATO\tCANAL\tESTADO\tSTATUS\tCANDIDATURA\tPIPELINE\tÚLTIMA INTERAÇÃO\tAÇÃO\n\nMaria S.\nCPF: •••4725\n\tWeb\tEscolhendo cidade\tAtiva\tIniciada\t—\t02/06/2026, 07:00\t\nVer conversa\n@LecinoLucas Developer 2026 Rede Marajo RH IA",
+      "dialogDescription": null
+    }
+  },
+  {
+    "name": "review-assistant-admin-tablet-768",
+    "errors": [],
+    "metrics": {
+      "url": "http://127.0.0.1:5173/admin/assistente-candidato",
+      "overflowX": false,
+      "bodyWidth": 768,
+      "clientWidth": 768,
+      "bodyHeight": 1024,
+      "text": "RA\nMarajo RH\nATS & Recrutamento IA\nCentral RH\nRecrutamento\nPipeline\nVagas\nCandidaturas\nCandidatos\nAgenda\nAssistente do Candidato\nAvaliações\nAnálises IA\nAvaliação comportamental\nTemplates comportamentais\nAdmissão\nAdmitidos\nChecklists admissionais\nGestores\nPainel do gestor\nAdministração\nEstrutura operacional\nUsuários\nCadastros\nCredenciais IA\nBI\nAuditoria\nSaúde do sistema\nImportação de CVs\nImportação por form\nOutros\nPortal do Candidato (Preview)\nDemo RH\nSair\nAssistente do Candidato\n\nAcompanhe conversas do Portal 2 sem expor dados sensíveis.\n\nConversas\nFluxo de perguntas\nEm breve\nTodos os status\nAtiva\nConcluída\nAbandonada\nCancelada\nTodos os estados\nIdentificação\nVerificação OTP\nEscolhendo cidade\nEscolhendo posto\nEscolhendo função\nEscolhendo turno\nMostrando vagas\nColetando currículo\nConfirmando\nConcluído\nTodos os canais\nWeb\nWhatsApp\nCom ou sem candidatura\nCom candidatura\nSem candidatura\nCom ou sem pipeline\nNo pipeline\nFora do pipeline\nLimpar\nConversas(1)\n\nSomente leitura. Dados pessoais mascarados.\n\nCANDIDATO\tCANAL\tESTADO\tSTATUS\tCANDIDATURA\tPIPELINE\tÚLTIMA INTERAÇÃO\tAÇÃO\n\nMaria S.\nCPF: •••4725\n\tWeb\tEscolhendo cidade\tAtiva\tIniciada\t—\t02/06/2026, 07:00\t\nVer conversa\n@LecinoLucas Developer 2026 Rede Marajo RH IA",
+      "dialogDescription": null
+    }
+  },
+  {
+    "name": "review-assistant-admin-mobile-375",
+    "errors": [],
+    "metrics": {
+      "url": "http://127.0.0.1:5173/admin/assistente-candidato",
+      "overflowX": false,
+      "bodyWidth": 375,
+      "clientWidth": 375,
+      "bodyHeight": 812,
+      "text": "RA\nMarajo RH\nATS & Recrutamento IA\nCentral RH\nRecrutamento\nPipeline\nVagas\nCandidaturas\nCandidatos\nAgenda\nAssistente do Candidato\nAvaliações\nAnálises IA\nAvaliação comportamental\nTemplates comportamentais\nAdmissão\nAdmitidos\nChecklists admissionais\nGestores\nPainel do gestor\nAdministração\nEstrutura operacional\nUsuários\nCadastros\nCredenciais IA\nBI\nAuditoria\nSaúde do sistema\nImportação de CVs\nImportação por form\nOutros\nPortal do Candidato (Preview)\nDemo RH\nSair\nAssistente do Candidato\n\nAcompanhe conversas do Portal 2 sem expor dados sensíveis.\n\nConversas\nFluxo de perguntas\nEm breve\nTodos os status\nAtiva\nConcluída\nAbandonada\nCancelada\nTodos os estados\nIdentificação\nVerificação OTP\nEscolhendo cidade\nEscolhendo posto\nEscolhendo função\nEscolhendo turno\nMostrando vagas\nColetando currículo\nConfirmando\nConcluído\nTodos os canais\nWeb\nWhatsApp\nCom ou sem candidatura\nCom candidatura\nSem candidatura\nCom ou sem pipeline\nNo pipeline\nFora do pipeline\nLimpar\nConversas(1)\n\nSomente leitura. Dados pessoais mascarados.\n\nCANDIDATO\tCANAL\tESTADO\tSTATUS\tCANDIDATURA\tPIPELINE\tÚLTIMA INTERAÇÃO\tAÇÃO\n\nMaria S.\nCPF: •••4725\n\tWeb\tEscolhendo cidade\tAtiva\tIniciada\t—\t02/06/2026, 07:00\t\nVer conversa\n@LecinoLucas Developer 2026 Rede Marajo RH IA",
+      "dialogDescription": null
+    }
+  },
+  {
+    "name": "review-assistant-admin-empty-mobile-375",
+    "errors": [],
+    "metrics": {
+      "url": "http://127.0.0.1:5173/admin/assistente-candidato",
+      "overflowX": false,
+      "bodyWidth": 375,
+      "clientWidth": 375,
+      "bodyHeight": 812,
+      "text": "RA\nMarajo RH\nATS & Recrutamento IA\nCentral RH\nRecrutamento\nPipeline\nVagas\nCandidaturas\nCandidatos\nAgenda\nAssistente do Candidato\nAvaliações\nAnálises IA\nAvaliação comportamental\nTemplates comportamentais\nAdmissão\nAdmitidos\nChecklists admissionais\nGestores\nPainel do gestor\nAdministração\nEstrutura operacional\nUsuários\nCadastros\nCredenciais IA\nBI\nAuditoria\nSaúde do sistema\nImportação de CVs\nImportação por form\nOutros\nPortal do Candidato (Preview)\nDemo RH\nSair\nAssistente do Candidato\n\nAcompanhe conversas do Portal 2 sem expor dados sensíveis.\n\nConversas\nFluxo de perguntas\nEm breve\nTodos os status\nAtiva\nConcluída\nAbandonada\nCancelada\nTodos os estados\nIdentificação\nVerificação OTP\nEscolhendo cidade\nEscolhendo posto\nEscolhendo função\nEscolhendo turno\nMostrando vagas\nColetando currículo\nConfirmando\nConcluído\nTodos os canais\nWeb\nWhatsApp\nCom ou sem candidatura\nCom candidatura\nSem candidatura\nCom ou sem pipeline\nNo pipeline\nFora do pipeline\nLimpar\nConversas(0)\n\nSomente leitura. Dados pessoais mascarados.\n\nNenhuma conversa encontrada\n\nTente ajustar os filtros ou aguardar novas interações no Portal 2.\n\n@LecinoLucas Developer 2026 Rede Marajo RH IA",
+      "dialogDescription": null
+    }
+  },
+  {
+    "name": "review-assistant-admin-detail-desktop-1280",
+    "errors": [],
+    "metrics": {
+      "url": "http://127.0.0.1:5173/admin/assistente-candidato",
+      "overflowX": false,
+      "bodyWidth": 1280,
+      "clientWidth": 1280,
+      "bodyHeight": 800,
+      "text": "RA\nMarajo RH\nATS & Recrutamento IA\nCentral RH\nRecrutamento\nAvaliações\nAdmissão\nGestores\nAdministração\nOutros\nSair\nAssistente do Candidato\n\nAcompanhe conversas do Portal 2 sem expor dados sensíveis.\n\nConversas\nFluxo de perguntas\nEm breve\nTodos os status\nAtiva\nConcluída\nAbandonada\nCancelada\nTodos os estados\nIdentificação\nVerificação OTP\nEscolhendo cidade\nEscolhendo posto\nEscolhendo função\nEscolhendo turno\nMostrando vagas\nColetando currículo\nConfirmando\nConcluído\nTodos os canais\nWeb\nWhatsApp\nCom ou sem candidatura\nCom candidatura\nSem candidatura\nCom ou sem pipeline\nNo pipeline\nFora do pipeline\nLimpar\nConversas(1)\n\nSomente leitura. Dados pessoais mascarados.\n\nCANDIDATO\tCANAL\tESTADO\tSTATUS\tCANDIDATURA\tPIPELINE\tÚLTIMA INTERAÇÃO\tAÇÃO\n\nMaria S.\nCPF: •••4725\n\tWeb\tEscolhendo cidade\tAtiva\tIniciada\t—\t02/06/2026, 07:00\t\nVer conversa\n@LecinoLucas Developer 2026 Rede Marajo RH IA\nDetalhe da conversa\nMaria S.\nCPF •••4725\nVerificado\nEstado: Escolhendo cidade\nStatus: Ativa\nCanal: Web\nCriado: 02/06/2026, 06:50\nCandidatura: Iniciada\n\nLocalidade: Peritoro\n\nFunção: Frentista\n\nTurno: night\n\nDados mascarados pelo sistema. Histórico somente leitura.\n\nOla! Em qual cidade voce quer trabalhar?\n\nPeritoro\n\n02/06/2026, 06:51\n\nPeritoro\n\n02/06/2026, 06:52\n\nVoce prefere qualquer posto na localidade ou escolher um posto especifico?\n\nQualquer posto\n\n02/06/2026, 06:53\n\nFechar",
+      "dialogDescription": "radix-:rb:"
+    }
+  },
+  {
+    "name": "review-assistant-admin-detail-mobile-375",
+    "errors": [],
+    "metrics": {
+      "url": "http://127.0.0.1:5173/admin/assistente-candidato",
+      "overflowX": true,
+      "bodyWidth": 841,
+      "clientWidth": 375,
+      "bodyHeight": 812,
+      "text": "RA\nMarajo RH\nATS & Recrutamento IA\nCentral RH\nRecrutamento\nPipeline\nVagas\nCandidaturas\nCandidatos\nAgenda\nAssistente do Candidato\nAvaliações\nAnálises IA\nAvaliação comportamental\nTemplates comportamentais\nAdmissão\nAdmitidos\nChecklists admissionais\nGestores\nPainel do gestor\nAdministração\nEstrutura operacional\nUsuários\nCadastros\nCredenciais IA\nBI\nAuditoria\nSaúde do sistema\nImportação de CVs\nImportação por form\nOutros\nPortal do Candidato (Preview)\nDemo RH\nSair\nAssistente do Candidato\n\nAcompanhe conversas do Portal 2 sem expor dados sensíveis.\n\nConversas\nFluxo de perguntas\nEm breve\nTodos os status\nAtiva\nConcluída\nAbandonada\nCancelada\nTodos os estados\nIdentificação\nVerificação OTP\nEscolhendo cidade\nEscolhendo posto\nEscolhendo função\nEscolhendo turno\nMostrando vagas\nColetando currículo\nConfirmando\nConcluído\nTodos os canais\nWeb\nWhatsApp\nCom ou sem candidatura\nCom candidatura\nSem candidatura\nCom ou sem pipeline\nNo pipeline\nFora do pipeline\nLimpar\nConversas(1)\n\nSomente leitura. Dados pessoais mascarados.\n\nCANDIDATO\tCANAL\tESTADO\tSTATUS\tCANDIDATURA\tPIPELINE\tÚLTIMA INTERAÇÃO\tAÇÃO\n\nMaria S.\nCPF: •••4725\n\tWeb\tEscolhendo cidade\tAtiva\tIniciada\t—\t02/06/2026, 07:00\t\nVer conversa\n@LecinoLucas Developer 2026 Rede Marajo RH IA\nDetalhe da conversa\nMaria S.\nCPF •••4725\nVerificado\nEstado: Escolhendo cidade\nStatus: Ativa\nCanal: Web\nCriado: 02/06/2026, 06:50\nCandidatura: Iniciada\n\nLocalidade: Peritoro\n\nFunção: Frentista\n\nTurno: night\n\nDados mascarados pelo sistema. Histórico somente leitura.\n\nOla! Em qual cidade voce quer trabalhar?\n\nPeritoro\n\n02/06/2026, 06:51\n\nPeritoro\n\n02/06/2026, 06:52\n\nVoce prefe",
+      "dialogDescription": "radix-:rb:"
+    }
+  }
+]
