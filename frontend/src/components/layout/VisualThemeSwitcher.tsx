@@ -28,7 +28,7 @@ const THEMES: Array<{
   {
     value: "theme-4",
     label: "Tema 4",
-    description: "Gold Executive",
+    description: "Creme Vibrante",
   },
 ];
 
@@ -43,8 +43,8 @@ export function VisualThemeSwitcher() {
         className={cn(
           "flex h-9 w-9 items-center justify-center rounded-lg border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))]",
           open
-            ? "border-white/20 bg-white/10 text-text"
-            : "border-white/10 bg-white/5 text-text-muted hover:bg-white/10 hover:text-text"
+            ? "border-[hsl(var(--nav-border))]/80 bg-[hsl(var(--nav-active-bg))]/35 text-[hsl(var(--nav-text))]"
+            : "border-transparent bg-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]"
         )}
         aria-label="Selecionar tema visual"
         aria-expanded={open}

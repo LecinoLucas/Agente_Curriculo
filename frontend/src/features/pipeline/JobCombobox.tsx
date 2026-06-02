@@ -13,11 +13,11 @@ interface JobComboboxProps {
 
 const STATUS_BADGE: Record<string, string> = {
   success:
-    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800",
+    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/22 dark:text-emerald-200 dark:border-emerald-900/40",
   warning:
-    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800",
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/22 dark:text-amber-200 dark:border-amber-900/40",
   danger:
-    "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800",
+    "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/22 dark:text-rose-200 dark:border-rose-900/40",
   neutral:
     "bg-slate-100 text-slate-600 border-slate-200 dark:bg-surface-muted dark:text-text-muted dark:border-border",
 };
@@ -105,7 +105,7 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
         className="flex w-full items-center gap-4 text-left focus:outline-none"
       >
         {/* Briefcase Icon Area */}
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-[#8a1c31] text-white dark:bg-rose-900/50 dark:text-rose-200">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-[#8a1c31] text-white dark:border dark:border-[hsl(var(--primary))]/30 dark:bg-[hsl(var(--primary))]/14 dark:text-[hsl(var(--text))]">
           <Briefcase className="h-5 w-5" />
         </div>
 

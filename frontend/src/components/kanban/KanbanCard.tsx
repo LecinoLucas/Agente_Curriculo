@@ -76,11 +76,11 @@ function getAiProcessingState(candidate: JobCandidate): { label: string; tone: "
 }
 
 const BADGE_TONE_CLASS: Record<PipelineCardBadgeTone, string> = {
-  danger: "border border-rose-200/80 bg-rose-50 text-rose-700",
-  warning: "border border-amber-200/80 bg-amber-50 text-amber-700",
-  progress: "border border-cyan-200/80 bg-cyan-50 text-cyan-700",
-  success: "border border-emerald-200/80 bg-emerald-50 text-emerald-700",
-  neutral: "border border-slate-200 bg-slate-100/90 text-slate-600",
+  danger: "border border-rose-200/80 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/22 dark:text-rose-200",
+  warning: "border border-amber-200/80 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/22 dark:text-amber-200",
+  progress: "border border-cyan-200/80 bg-cyan-50 text-cyan-700 dark:border-cyan-900/40 dark:bg-cyan-950/22 dark:text-cyan-200",
+  success: "border border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/22 dark:text-emerald-200",
+  neutral: "border border-slate-200 bg-slate-100/90 text-slate-600 dark:border-border dark:bg-surface-muted dark:text-text-muted",
 };
 
 function buildProfessionalContext(candidate: JobCandidate, aiProcessingState: ReturnType<typeof getAiProcessingState>): string | null {
@@ -247,20 +247,20 @@ export const KanbanCard = memo(function KanbanCard({
   if (jobFitScore !== null && jobFitScore !== undefined) {
     const score = Math.round(jobFitScore);
     if (score >= 80) {
-      scoreColorClass = "text-emerald-600 dark:text-emerald-400";
-      borderAccentClass = "border-l-emerald-400 dark:border-l-emerald-500";
+      scoreColorClass = "text-emerald-600 dark:text-emerald-300";
+      borderAccentClass = "border-l-emerald-400 dark:border-l-emerald-700";
     } else if (score >= 60) {
-      scoreColorClass = "text-cyan-700 dark:text-cyan-400";
-      borderAccentClass = "border-l-cyan-400 dark:border-l-cyan-500";
+      scoreColorClass = "text-cyan-700 dark:text-cyan-300";
+      borderAccentClass = "border-l-cyan-400 dark:border-l-cyan-700";
     } else if (score >= 40) {
-      scoreColorClass = "text-amber-600 dark:text-amber-500";
-      borderAccentClass = "border-l-amber-400 dark:border-l-amber-500";
+      scoreColorClass = "text-amber-600 dark:text-amber-300";
+      borderAccentClass = "border-l-amber-400 dark:border-l-amber-700";
     } else {
-      scoreColorClass = "text-rose-500 dark:text-rose-400";
-      borderAccentClass = "border-l-rose-300 dark:border-l-rose-500";
+      scoreColorClass = "text-rose-500 dark:text-rose-300";
+      borderAccentClass = "border-l-rose-300 dark:border-l-rose-700";
     }
   } else if (isTopMatch) {
-    borderAccentClass = "border-l-emerald-400 dark:border-l-emerald-500";
+    borderAccentClass = "border-l-emerald-400 dark:border-l-emerald-700";
   }
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
@@ -284,7 +284,7 @@ export const KanbanCard = memo(function KanbanCard({
         "border border-border/50 hover:border-border/80 dark:border-border/60 dark:hover:border-border hover:shadow-[0_18px_34px_-24px_rgba(15,23,42,0.38)]",
         "border-l-[3px]",
         borderAccentClass,
-        isTopMatch ? "ring-1 ring-emerald-200/60 bg-emerald-50/30 dark:ring-emerald-500/10" : "",
+        isTopMatch ? "ring-1 ring-emerald-200/60 bg-emerald-50/30 dark:ring-emerald-900/35 dark:bg-emerald-950/10" : "",
         isSaving ? "cursor-wait opacity-50" : draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         isDragging ? "opacity-40 ring-2 ring-slate-400 dark:ring-slate-500 scale-95 rotate-1" : "opacity-100",
         "kanban-card-enter",

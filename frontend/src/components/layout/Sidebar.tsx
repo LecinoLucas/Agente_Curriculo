@@ -67,7 +67,7 @@ export function Sidebar({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          "group/sidebar fixed inset-y-0 left-0 z-50 flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]/50",
+          "group/sidebar fixed inset-y-0 left-0 z-50 flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]/70",
           mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[4.5rem]",
           isHovered && "lg:w-56"
         )}
@@ -84,7 +84,7 @@ export function Sidebar({
             className="flex items-center gap-3 overflow-hidden text-left outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] rounded-lg transition-transform hover:scale-[1.02]"
             title="Ir para Pipeline"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[hsl(var(--nav-active-bg))] text-[10px] font-extrabold text-white">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[hsl(var(--nav-border))]/80 bg-[hsl(var(--nav-active-bg))] text-[10px] font-extrabold text-[hsl(var(--nav-active-text))]">
               RA
             </div>
             <div className={cn("flex flex-col min-w-0 transition-opacity duration-300", 
@@ -103,14 +103,14 @@ export function Sidebar({
           <button
             type="button"
             onClick={onToggleMobileMenu}
-            className="lg:hidden p-1 rounded-lg hover:bg-white/10 text-[hsl(var(--nav-muted))] hover:text-[hsl(var(--nav-text))] transition-colors"
+            className="lg:hidden p-1 rounded-lg text-[hsl(var(--nav-muted))] transition-colors hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
         {/* Navigation Links */}
-        <nav aria-label="Navegação principal" className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+        <nav aria-label="Navegação principal" className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1 scrollbar-thin scrollbar-thumb-[hsl(var(--nav-border))]/80 hover:scrollbar-thumb-[hsl(var(--nav-border))]">
           {groups.map((group) => {
             if (!group.isDropdown) {
               const item = group.items[0];
@@ -127,7 +127,7 @@ export function Sidebar({
                     "group flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
                     active
                       ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-                      : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                      : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]"
                   )}
                   title={item.label}
                 >
@@ -157,8 +157,8 @@ export function Sidebar({
                   className={cn(
                     "flex items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
                     isGroupActive && !isOpen
-                      ? "text-[hsl(var(--nav-active-text))] bg-white/5"
-                      : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                      ? "bg-[hsl(var(--nav-active-bg))]/35 text-[hsl(var(--nav-active-text))]"
+                      : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]"
                   )}
                   title={group.label}
                 >
@@ -206,7 +206,7 @@ export function Sidebar({
                           "flex items-center rounded-lg py-2 pl-10 pr-3 text-[13px] font-medium transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))]",
                           active
                             ? "bg-[hsl(var(--nav-active-bg))]/50 text-[hsl(var(--nav-active-text))] font-semibold"
-                            : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
+                            : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]",
                           "lg:hidden",
                           (isHovered || mobileMenuOpen) && "lg:flex",
                           mobileMenuOpen ? "flex" : ""
@@ -237,7 +237,7 @@ export function Sidebar({
               <button
                 type="button"
                 onClick={onToggleTheme}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-white/10 hover:text-[hsl(var(--nav-text))]"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]"
                 title={theme === "light" ? "Modo escuro" : "Modo claro"}
               >
                 {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
@@ -248,7 +248,7 @@ export function Sidebar({
                   if (mobileMenuOpen) onToggleMobileMenu();
                   navigate("/perfil");
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-white/10 hover:text-[hsl(var(--nav-text))]"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]"
                 title="Meu perfil"
               >
                 <UserRound className="h-4 w-4" />

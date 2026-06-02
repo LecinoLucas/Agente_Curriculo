@@ -55,7 +55,7 @@ export function TopNavDropdown({
           "focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
           isActive
             ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-            : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
+            : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]",
         )}
       >
         {renderIcon(group.label)}
@@ -70,7 +70,7 @@ export function TopNavDropdown({
         <div
           id={menuId}
           role="menu"
-          className="absolute left-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-white/10 bg-[hsl(var(--nav-bg))]/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200"
+          className="absolute left-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-[hsl(var(--nav-border))]/80 bg-[hsl(var(--nav-bg))]/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200"
         >
           {group.items.map((item) => {
             const active = isItemActive(item.to);
@@ -92,10 +92,10 @@ export function TopNavDropdown({
                   "focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
                   active
                     ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-                    : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
+                    : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]",
                 )}
               >
-                <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors", active ? "bg-white/10 text-[hsl(var(--nav-active-text))]" : "bg-white/5 text-[hsl(var(--nav-muted))] group-hover:text-[hsl(var(--nav-text))]")}>
+                <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors", active ? "bg-[hsl(var(--nav-active-bg))]/60 text-[hsl(var(--nav-active-text))]" : "bg-[hsl(var(--nav-active-bg))]/20 text-[hsl(var(--nav-muted))] group-hover:text-[hsl(var(--nav-text))]")}>
                   {renderIcon(item.to)}
                 </div>
                 <div className="min-w-0 flex-1">

@@ -470,7 +470,7 @@
        - Azul aço/industrial com presença corporativa.
        - Base cinza fria azulada, texto slate e cards branco frio.
        - Vermelho fica restrito a erro/destructive, não a primary.
-       - Navbar azul escuro forte para diferenciar o shell.
+       - Navbar branca, limpa e contemporânea com contraste suave.
        ----------------------------------------------------------------------- */
 
     /* Cor principal da marca no tema atual. */
@@ -534,12 +534,12 @@
     /* Borda/fundo base de inputs. */
     --input:               207 10% 85%;
 
-    --nav-bg:              207 10% 20%;
-    --nav-text:            207 10% 98%;
-    --nav-muted:           207 10% 70%;
-    --nav-active-bg:       207 76% 38%;
-    --nav-active-text:     0 0% 100%;
-    --nav-border:          207 10% 15%;
+    --nav-bg:              0 0% 100%;
+    --nav-text:            215 24% 12%;
+    --nav-muted:           215 14% 34%;
+    --nav-active-bg:       207 72% 94%;
+    --nav-active-text:     215 24% 12%;
+    --nav-border:          210 18% 86%;
 
     --sidebar-accent:      207 76% 38%;
     --hero-start:          207 76% 38%;
@@ -623,72 +623,72 @@
 
   :root[data-visual-theme="theme-4"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 4 — Gold Executive
+       Visual Theme 4 — Creme Vibrante
        ----------------------------------------------------------------------- 
        Direção:
-       - Sofisticado e premium.
-       - Base marfim e branco quente.
-       - Brand focado em dourado envelhecido e bronze.
+       - Claro, leve e contemporâneo.
+       - Base creme quente com superfícies quase marfim.
+       - Destaques vibrantes em coral com apoio aqua suave.
        ----------------------------------------------------------------------- */
 
-    --brand:               42 90% 45%;
-    --brand-dark:          38 95% 30%;
-    --brand-soft:          45 80% 92%;
-    --brand-glow:          42 90% 45%;
+    --brand:               18 92% 58%;
+    --brand-dark:          12 80% 44%;
+    --brand-soft:          24 100% 92%;
+    --brand-glow:          32 98% 68%;
 
-    --bg:                  45 30% 98%;
-    --surface:             45 20% 100%;
-    --surface-muted:       45 25% 95%;
-    --border:              45 20% 90%;
-    --border-strong:       45 20% 80%;
+    --bg:                  42 56% 96%;
+    --surface:             40 70% 99%;
+    --surface-muted:       42 44% 93%;
+    --border:              34 34% 85%;
+    --border-strong:       30 30% 74%;
 
-    --background:          45 30% 98%;
-    --foreground:          30 20% 20%;
-    --card:                45 20% 100%;
-    --card-foreground:     30 20% 20%;
-    --popover:             45 20% 100%;
-    --popover-foreground:  30 20% 20%;
-    --secondary:           45 25% 95%;
-    --secondary-foreground:30 20% 20%;
-    --muted:               45 25% 95%;
-    --muted-foreground:    30 15% 45%;
+    --background:          42 56% 96%;
+    --foreground:          22 24% 16%;
+    --card:                40 70% 99%;
+    --card-foreground:     22 24% 16%;
+    --popover:             40 70% 99%;
+    --popover-foreground:  22 24% 16%;
+    --secondary:           42 44% 93%;
+    --secondary-foreground:22 24% 16%;
+    --muted:               42 44% 93%;
+    --muted-foreground:    24 12% 40%;
 
-    --text:                30 20% 20%;
-    --text-muted:          30 15% 45%;
+    --text:                22 24% 16%;
+    --text-muted:          24 12% 40%;
 
-    --primary:             42 90% 45%;
-    --primary-hover:       38 95% 35%;
-    --primary-soft:        45 80% 92%;
+    --primary:             18 92% 58%;
+    --primary-hover:       14 84% 50%;
+    --primary-soft:        24 100% 92%;
     --primary-foreground:  0 0% 100%;
-    --ring:                42 90% 45%;
+    --ring:                18 92% 58%;
 
-    --accent:              35 60% 50%;
+    --accent:              178 60% 42%;
     --accent-foreground:   0 0% 100%;
-    --accent-soft:         35 40% 90%;
-    --accent-contrast:     0 0% 100%;
+    --accent-soft:         178 52% 90%;
+    --accent-contrast:     176 54% 22%;
 
     --danger:              344 62% 45%;
     --danger-soft:         344 50% 95%;
     --destructive:         344 62% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --input:               45 20% 85%;
+    --input:               34 34% 82%;
 
-    --nav-bg:              30 25% 15%;
-    --nav-text:            45 30% 98%;
-    --nav-muted:           45 20% 70%;
-    --nav-active-bg:       42 90% 45%;
-    --nav-active-text:     0 0% 100%;
-    --nav-border:          30 25% 10%;
+    --nav-bg:              40 70% 99%;
+    --nav-text:            22 24% 16%;
+    --nav-muted:           24 14% 36%;
+    --nav-active-bg:       18 90% 93%;
+    --nav-active-text:     20 24% 18%;
+    --nav-border:          34 34% 86%;
 
-    --sidebar-accent:      42 90% 45%;
-    --hero-start:          45 30% 98%;
-    --hero-end:            45 25% 92%;
+    --sidebar-accent:      18 92% 58%;
+    --hero-start:          42 60% 96%;
+    --hero-end:            24 100% 90%;
 
-    --page-glow-start:     45 30% 98%;
-    --page-glow-end:       45 25% 94%;
-    --page-gradient-start: 45 30% 98%;
-    --page-gradient-end:   45 25% 94%;
+    --page-glow-start:     42 60% 97%;
+    --page-glow-end:       24 100% 94%;
+    --page-gradient-start: 42 56% 96%;
+    --page-gradient-end:   32 90% 94%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-1"] {
@@ -702,20 +702,20 @@
        ----------------------------------------------------------------------- */
 
     /* Cor principal da marca no tema atual. */
-    --brand:               356 82% 58%;
+    --brand:               356 62% 54%;
     /* Versão mais escura da marca, usada em bordas, hover e profundidade. */
-    --brand-dark:          356 66% 40%;
+    --brand-dark:          356 48% 34%;
     /* Versão suave da marca, usada em fundos leves e badges. */
-    --brand-soft:          220 12% 20%;
+    --brand-soft:          220 14% 18%;
     /* Tom luminoso da marca, usado em brilhos e gradientes. */
-    --brand-glow:          356 84% 64%;
+    --brand-glow:          356 52% 46%;
 
     /* Fundo principal da aplicação. */
     --bg:                  220 12% 10%;
-    --surface:             220 12% 14%;
-    --surface-muted:       220 12% 18%;
-    --border:              220 12% 22%;
-    --border-strong:       220 12% 32%;
+    --surface:             220 14% 13%;
+    --surface-muted:       220 14% 17%;
+    --border:              220 12% 21%;
+    --border-strong:       220 10% 29%;
 
     --background:          220 12% 10%;
     --card:                220 12% 14%;
@@ -723,61 +723,61 @@
     --secondary:           220 12% 18%;
     --muted:               220 12% 18%;
 
-    --text:                220 5% 92%;
-    --text-muted:          220 5% 72%;
+    --text:                220 8% 89%;
+    --text-muted:          220 7% 66%;
 
     /* Cor principal de ação: botões, foco e CTA. */
-    --primary:             356 82% 60%;
+    --primary:             356 56% 54%;
     /* Variação da cor principal para hover. */
-    --primary-hover:       356 74% 52%;
+    --primary-hover:       356 52% 48%;
     /* Fundo suave baseado na cor principal. */
-    --primary-soft:        356 26% 20%;
+    --primary-soft:        356 28% 18%;
     /* Texto usado sobre a cor primary. */
     --primary-foreground:  0 0% 100%;
     /* Cor do anel de foco acessível. */
-    --ring:                356 82% 60%;
+    --ring:                356 56% 54%;
 
     /* Token shadcn/Radix para texto principal. */
-    --foreground:          220 5% 92%;
+    --foreground:          220 8% 89%;
     /* Token shadcn/Radix para texto dentro de cards. */
-    --card-foreground:     220 5% 92%;
+    --card-foreground:     220 8% 89%;
     /* Token shadcn/Radix para texto em popovers/dropdowns. */
-    --popover-foreground:  220 5% 92%;
+    --popover-foreground:  220 8% 89%;
 
     /* Token shadcn/Radix para área de destaque. */
-    --accent:              220 15% 20%;
+    --accent:              220 15% 19%;
     /* Texto usado sobre o accent. */
-    --accent-foreground:   220 5% 92%;
+    --accent-foreground:   220 8% 89%;
     /* Fundo de destaque suave. */
-    --accent-soft:         220 15% 20%;
+    --accent-soft:         220 15% 19%;
     /* Texto usado sobre áreas de destaque suave. */
-    --accent-contrast:     220 5% 92%;
+    --accent-contrast:     220 8% 89%;
 
     /* Cor semântica para erro/risco, separada do vermelho da marca. */
-    --danger:              344 72% 58%;
+    --danger:              344 58% 54%;
     /* Fundo suave para estados de erro/risco. */
-    --danger-soft:         344 30% 20%;
+    --danger-soft:         344 26% 18%;
     /* Token shadcn/Radix para ações destrutivas. */
-    --destructive:         344 72% 58%;
+    --destructive:         344 58% 54%;
     /* Texto usado sobre destructive. */
     --destructive-foreground: 0 0% 100%;
 
     /* Borda/fundo base de inputs. */
-    --input:               220 12% 22%;
+    --input:               220 12% 20%;
 
     --nav-bg:              220 15% 8%;
-    --nav-text:            220 10% 90%;
-    --nav-muted:           220 10% 60%;
-    --nav-active-bg:       356 82% 60%;
-    --nav-active-text:     0 0% 100%;
-    --nav-border:          220 15% 15%;
+    --nav-text:            220 8% 88%;
+    --nav-muted:           220 8% 61%;
+    --nav-active-bg:       356 34% 22%;
+    --nav-active-text:     220 8% 92%;
+    --nav-border:          220 15% 14%;
 
-    --sidebar-accent:      356 82% 60%;
-    --hero-start:          356 82% 60%;
+    --sidebar-accent:      356 50% 46%;
+    --hero-start:          356 40% 24%;
     --hero-end:            220 15% 8%;
 
-    --page-glow-start:     356 70% 32%;
-    --page-glow-end:       220 20% 12%;
+    --page-glow-start:     356 32% 18%;
+    --page-glow-end:       220 18% 11%;
     --page-gradient-start: 220 12% 10%;
     --page-gradient-end:   220 15% 8%;
   }
@@ -876,56 +876,56 @@
        Visual Theme 2 Dark — Botânico Floral
        -----------------------------------------------------------------------
        Direção:
-       - Escuro botânico e elegante.
+       - Escuro industrial, frio e elegante.
        ----------------------------------------------------------------------- */
-    --brand:               350 50% 70%;
-    --brand-dark:          350 60% 60%;
-    --brand-soft:          350 30% 20%;
-    --brand-glow:          350 50% 70%;
-    --bg:                  207 10% 12%;
-    --surface:             207 10% 16%;
-    --surface-muted:       207 10% 20%;
-    --border:              207 10% 25%;
-    --border-strong:       207 10% 35%;
-    --background:          207 10% 12%;
-    --foreground:          207 10% 95%;
-    --card:                207 10% 16%;
-    --card-foreground:     207 10% 95%;
-    --popover:             207 10% 16%;
-    --popover-foreground:  207 10% 95%;
-    --secondary:           207 10% 20%;
-    --secondary-foreground:207 10% 95%;
-    --muted:               207 10% 20%;
-    --muted-foreground:    207 10% 65%;
-    --text:                207 10% 95%;
-    --text-muted:          207 10% 65%;
-    --primary:             350 50% 65%;
-    --primary-hover:       350 60% 75%;
-    --primary-soft:        350 30% 20%;
+    --brand:               207 46% 58%;
+    --brand-dark:          210 40% 42%;
+    --brand-soft:          212 30% 18%;
+    --brand-glow:          207 34% 40%;
+    --bg:                  212 18% 11%;
+    --surface:             212 16% 14%;
+    --surface-muted:       212 16% 18%;
+    --border:              212 12% 23%;
+    --border-strong:       212 10% 31%;
+    --background:          212 18% 11%;
+    --foreground:          210 10% 90%;
+    --card:                212 16% 14%;
+    --card-foreground:     210 10% 90%;
+    --popover:             212 16% 14%;
+    --popover-foreground:  210 10% 90%;
+    --secondary:           212 16% 18%;
+    --secondary-foreground:210 10% 90%;
+    --muted:               212 16% 18%;
+    --muted-foreground:    210 8% 66%;
+    --text:                210 10% 90%;
+    --text-muted:          210 8% 66%;
+    --primary:             207 42% 54%;
+    --primary-hover:       207 38% 48%;
+    --primary-soft:        212 30% 18%;
     --primary-foreground:  0 0% 100%;
-    --ring:                350 50% 65%;
-    --accent:              350 30% 20%;
-    --accent-foreground:   350 50% 70%;
-    --accent-soft:         350 30% 20%;
-    --accent-contrast:     35 20% 95%;
-    --danger:              344 62% 45%;
-    --danger-soft:         344 50% 20%;
-    --destructive:         344 62% 45%;
+    --ring:                207 42% 54%;
+    --accent:              212 18% 19%;
+    --accent-foreground:   210 10% 90%;
+    --accent-soft:         212 18% 19%;
+    --accent-contrast:     210 10% 90%;
+    --danger:              344 50% 52%;
+    --danger-soft:         344 24% 18%;
+    --destructive:         344 50% 52%;
     --destructive-foreground: 0 0% 100%;
-    --input:               207 10% 25%;
-    --nav-bg:              207 10% 10%;
-    --nav-text:            207 10% 90%;
-    --nav-muted:           207 10% 60%;
-    --nav-active-bg:       207 50% 65%;
-    --nav-active-text:     0 0% 100%;
-    --nav-border:          207 10% 16%;
-    --sidebar-accent:      207 50% 65%;
-    --hero-start:          207 50% 65%;
-    --hero-end:            207 10% 10%;
-    --page-glow-start:     207 40% 20%;
-    --page-glow-end:       207 30% 15%;
-    --page-gradient-start: 207 10% 12%;
-    --page-gradient-end:   207 10% 10%;
+    --input:               212 12% 21%;
+    --nav-bg:              212 20% 9%;
+    --nav-text:            210 10% 88%;
+    --nav-muted:           210 8% 61%;
+    --nav-active-bg:       208 28% 24%;
+    --nav-active-text:     210 10% 92%;
+    --nav-border:          212 14% 15%;
+    --sidebar-accent:      207 38% 48%;
+    --hero-start:          208 28% 24%;
+    --hero-end:            212 20% 9%;
+    --page-glow-start:     207 28% 18%;
+    --page-glow-end:       212 18% 12%;
+    --page-gradient-start: 212 18% 11%;
+    --page-gradient-end:   212 20% 9%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-3"] {
@@ -935,12 +935,12 @@
        Direção:
        - Fundo ameixa profundo.
        - Surface berinjela/ameixa escuro.
-       - Mantém a elegância feminina com tons vinho.
+       - Mantém a elegância com ameixa profunda e menor saturação.
        ----------------------------------------------------------------------- */
-    --brand:               340 45% 65%;
-    --brand-dark:          335 45% 45%;
-    --brand-soft:          335 30% 25%;
-    --brand-glow:          340 45% 65%;
+    --brand:               338 32% 58%;
+    --brand-dark:          334 34% 40%;
+    --brand-soft:          332 24% 20%;
+    --brand-glow:          338 28% 42%;
 
     --bg:                  330 30% 12%;
     --surface:             330 25% 16%;
@@ -949,29 +949,29 @@
     --border-strong:       330 25% 35%;
 
     --background:          330 30% 12%;
-    --foreground:          340 20% 90%;
+    --foreground:          335 12% 89%;
     --card:                330 25% 16%;
-    --card-foreground:     340 20% 90%;
+    --card-foreground:     335 12% 89%;
     --popover:             330 25% 16%;
-    --popover-foreground:  340 20% 90%;
+    --popover-foreground:  335 12% 89%;
     --secondary:           330 25% 20%;
-    --secondary-foreground:340 20% 90%;
+    --secondary-foreground:335 12% 89%;
     --muted:               330 25% 20%;
-    --muted-foreground:    340 15% 65%;
+    --muted-foreground:    335 8% 65%;
 
-    --text:                340 20% 90%;
-    --text-muted:          340 15% 65%;
+    --text:                335 12% 89%;
+    --text-muted:          335 8% 65%;
 
-    --primary:             340 45% 65%;
-    --primary-hover:       340 50% 75%;
-    --primary-soft:        335 30% 25%;
+    --primary:             338 32% 58%;
+    --primary-hover:       338 28% 50%;
+    --primary-soft:        332 24% 20%;
     --primary-foreground:  0 0% 100%;
-    --ring:                340 45% 65%;
+    --ring:                338 32% 58%;
 
-    --accent:              335 30% 25%;
-    --accent-foreground:   340 45% 65%;
-    --accent-soft:         335 30% 25%;
-    --accent-contrast:     340 20% 90%;
+    --accent:              332 24% 20%;
+    --accent-foreground:   335 12% 89%;
+    --accent-soft:         332 24% 20%;
+    --accent-contrast:     335 12% 89%;
 
     --danger:              344 62% 45%;
     --danger-soft:         344 50% 20%;
@@ -981,89 +981,89 @@
     --input:               330 25% 25%;
 
     --nav-bg:              330 30% 10%;
-    --nav-text:            340 20% 90%;
-    --nav-muted:           340 15% 60%;
-    --nav-active-bg:       340 45% 65%;
-    --nav-active-text:     0 0% 100%;
+    --nav-text:            335 12% 89%;
+    --nav-muted:           335 8% 61%;
+    --nav-active-bg:       334 26% 24%;
+    --nav-active-text:     335 12% 92%;
     --nav-border:          330 25% 16%;
 
-    --sidebar-accent:      340 45% 65%;
-    --hero-start:          340 45% 65%;
+    --sidebar-accent:      338 28% 46%;
+    --hero-start:          334 26% 24%;
     --hero-end:            330 30% 10%;
 
-    --page-glow-start:     340 40% 20%;
-    --page-glow-end:       340 30% 15%;
+    --page-glow-start:     336 26% 18%;
+    --page-glow-end:       334 20% 13%;
     --page-gradient-start: 330 30% 12%;
     --page-gradient-end:   330 30% 10%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-4"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 4 Dark — Gold Executive
+       Visual Theme 4 Dark — Creme Vibrante
        ----------------------------------------------------------------------- 
        Direção:
-       - Fundo carbono/café muito escuro.
-       - Surface grafite quente.
-       - Brand focado em dourado envelhecido e bronze.
+       - Fundo espresso profundo e quente.
+       - Surface grafite castanho discreto.
+       - Coral queimado como acento, sem excesso de brilho.
        ----------------------------------------------------------------------- */
-    --brand:               45 95% 55%;
-    --brand-dark:          42 90% 45%;
-    --brand-soft:          42 80% 20%;
-    --brand-glow:          45 95% 65%;
+    --brand:               18 64% 58%;
+    --brand-dark:          16 46% 40%;
+    --brand-soft:          18 24% 20%;
+    --brand-glow:          22 38% 42%;
 
-    --bg:                  30 15% 12%;
-    --surface:             30 10% 16%;
-    --surface-muted:       30 10% 20%;
-    --border:              30 10% 25%;
-    --border-strong:       30 10% 35%;
+    --bg:                  24 16% 11%;
+    --surface:             24 12% 14%;
+    --surface-muted:       24 12% 18%;
+    --border:              24 10% 23%;
+    --border-strong:       24 10% 31%;
 
-    --background:          30 15% 12%;
-    --foreground:          40 20% 90%;
-    --card:                30 10% 16%;
-    --card-foreground:     40 20% 90%;
-    --popover:             30 10% 16%;
-    --popover-foreground:  40 20% 90%;
-    --secondary:           30 10% 20%;
-    --secondary-foreground:40 20% 90%;
-    --muted:               30 10% 20%;
-    --muted-foreground:    40 15% 65%;
+    --background:          24 16% 11%;
+    --foreground:          32 18% 89%;
+    --card:                24 12% 14%;
+    --card-foreground:     32 18% 89%;
+    --popover:             24 12% 14%;
+    --popover-foreground:  32 18% 89%;
+    --secondary:           24 12% 18%;
+    --secondary-foreground:32 18% 89%;
+    --muted:               24 12% 18%;
+    --muted-foreground:    30 10% 66%;
 
-    --text:                40 20% 90%;
-    --text-muted:          40 15% 65%;
+    --text:                32 18% 89%;
+    --text-muted:          30 10% 66%;
 
-    --primary:             45 95% 55%;
-    --primary-hover:       45 100% 65%;
-    --primary-soft:        42 80% 20%;
-    --primary-foreground:  30 20% 10%;
-    --ring:                45 95% 55%;
+    --primary:             18 64% 58%;
+    --primary-hover:       18 52% 50%;
+    --primary-soft:        18 24% 20%;
+    --primary-foreground:  24 18% 10%;
+    --ring:                18 64% 58%;
 
-    --accent:              30 20% 25%;
-    --accent-foreground:   40 40% 55%;
-    --accent-soft:         30 20% 25%;
-    --accent-contrast:     40 20% 90%;
+    --accent:              24 12% 18%;
+    --accent-foreground:   32 18% 89%;
+    --accent-soft:         24 12% 18%;
+    --accent-contrast:     32 18% 89%;
 
-    --danger:              344 62% 45%;
-    --danger-soft:         344 50% 20%;
-    --destructive:         344 62% 45%;
+    --danger:              344 50% 52%;
+    --danger-soft:         344 26% 18%;
+    --destructive:         344 50% 52%;
     --destructive-foreground: 0 0% 100%;
 
-    --input:               30 10% 25%;
+    --input:               24 10% 22%;
 
-    --nav-bg:              30 15% 10%;
-    --nav-text:            40 20% 90%;
-    --nav-muted:           40 15% 60%;
-    --nav-active-bg:       45 95% 55%;
-    --nav-active-text:     30 20% 10%;
-    --nav-border:          30 10% 16%;
+    --nav-bg:              24 16% 9%;
+    --nav-text:            32 18% 89%;
+    --nav-muted:           30 10% 62%;
+    --nav-active-bg:       18 28% 24%;
+    --nav-active-text:     32 18% 92%;
+    --nav-border:          24 10% 15%;
 
-    --sidebar-accent:      45 95% 55%;
-    --hero-start:          45 95% 55%;
-    --hero-end:            30 15% 10%;
+    --sidebar-accent:      18 44% 46%;
+    --hero-start:          18 28% 24%;
+    --hero-end:            24 16% 9%;
 
-    --page-glow-start:     45 95% 25%;
-    --page-glow-end:       42 90% 15%;
-    --page-gradient-start: 30 15% 12%;
-    --page-gradient-end:   30 15% 10%;
+    --page-glow-start:     18 24% 18%;
+    --page-glow-end:       24 18% 12%;
+    --page-gradient-start: 24 16% 11%;
+    --page-gradient-end:   24 16% 9%;
   }
 
   /* ==========================================================================
@@ -1792,7 +1792,7 @@
 
   .visual-theme-preview-theme-4 {
     background:
-      linear-gradient(135deg, hsl(45 30% 98%) 0 34%, hsl(45 95% 55%) 34% 68%, hsl(38 95% 30%) 68% 100%);
+      linear-gradient(135deg, hsl(42 56% 96%) 0 34%, hsl(18 92% 58%) 34% 68%, hsl(178 60% 42%) 68% 100%);
   }
 
   .visual-theme-option-copy {

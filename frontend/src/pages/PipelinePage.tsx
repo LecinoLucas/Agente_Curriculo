@@ -852,14 +852,14 @@ export function PipelinePage() {
 
         {/* Second Row: Title, Combobox, Actions */}
         <div className="relative z-30 flex flex-col gap-3 pr-14 xl:flex-row xl:items-start xl:justify-between">
-          <div className="relative z-10 min-w-0 flex-1 rounded-2xl border border-slate-200/80 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+          <div className="relative z-10 min-w-0 flex-1 rounded-2xl border border-slate-200/80 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
               <h1 className="shrink-0 text-2xl font-black tracking-tight text-[#0f172a] dark:text-text">Pipeline</h1>
 
               {pipelineJobsError ? (
                 <span className="text-xs font-bold text-rose-500">{pipelineJobsError}</span>
               ) : (
-                <div className="relative z-20 min-w-[300px] max-w-full flex-1 rounded-xl border border-slate-200/80 bg-slate-50/85 px-2 py-1.5 shadow-inner shadow-white/80 dark:border-border dark:bg-surface-muted">
+                <div className="relative z-20 min-w-[300px] max-w-full flex-1 rounded-xl border border-slate-200/80 bg-slate-50/85 px-2 py-1.5 shadow-inner shadow-white/80 dark:border-border dark:bg-surface-muted dark:shadow-none">
                   <JobCombobox
                     jobs={pipelineJobs}
                     loading={pipelineJobsLoading}
@@ -873,37 +873,37 @@ export function PipelinePage() {
             {selectedJob && (selectedJob.seniority_level || selectedJob.work_model || selectedJob.location) && (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {selectedJob.seniority_level && (
-                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400">
+                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30 dark:border-border dark:bg-surface-muted dark:shadow-none">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
                       <Briefcase className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">Senioridade</span>
-                      <span className="text-[10px] font-bold text-slate-700">{selectedJob.seniority_level}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted">Senioridade</span>
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-text">{selectedJob.seniority_level}</span>
                     </div>
                   </div>
                 )}
 
                 {selectedJob.work_model && (
-                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400">
+                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30 dark:border-border dark:bg-surface-muted dark:shadow-none">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
                       <Home className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">Modalidade</span>
-                      <span className="text-[10px] font-bold text-slate-700">{formatWorkModel(selectedJob.work_model)}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted">Modalidade</span>
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-text">{formatWorkModel(selectedJob.work_model)}</span>
                     </div>
                   </div>
                 )}
 
                 {selectedJob.location && (
-                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400">
+                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30 dark:border-border dark:bg-surface-muted dark:shadow-none">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
                       <MapPin className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">Localização</span>
-                      <span className="text-[10px] font-bold text-slate-700">{selectedJob.location}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted">Localização</span>
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-text">{selectedJob.location}</span>
                     </div>
                   </div>
                 )}
@@ -912,7 +912,7 @@ export function PipelinePage() {
           </div>
 
           {/* Action Controls */}
-          <div className="flex flex-wrap gap-2 rounded-[14px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur sm:flex-nowrap sm:items-center">
+          <div className="flex flex-wrap gap-2 rounded-[14px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:flex-nowrap sm:items-center">
             {canMutate && (
               <button
                 type="button"
@@ -920,8 +920,8 @@ export function PipelinePage() {
                 disabled={!canUse}
                 className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border px-3 text-[11px] font-bold transition-all ${
                   canUse
-                    ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e]"
-                    : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e] dark:border-[hsl(var(--primary))]/35 dark:bg-[hsl(var(--primary))]/16 dark:text-[hsl(var(--text))] dark:shadow-none dark:hover:bg-[hsl(var(--primary))]/24"
+                    : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
                 }`}
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -933,9 +933,9 @@ export function PipelinePage() {
               <button
                 type="button"
                 onClick={() => setShowRanking((current) => !current)}
-                className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 ${showRanking ? "bg-slate-50 text-slate-800" : ""}`}
+                className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
               >
-                <BarChart3 className="h-3.5 w-3.5 text-slate-400" />
+                <BarChart3 className="h-3.5 w-3.5 text-slate-400 dark:text-text-muted" />
                 Ver Ranking IA
               </button>
             )}
@@ -946,9 +946,9 @@ export function PipelinePage() {
                 aria-label="Atualizar board"
                 onClick={() => void handleManualRefresh()}
                 disabled={boardLoading}
-                className="pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50"
+                className="pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
               >
-                <RefreshCw className={`h-3.5 w-3.5 text-slate-400 ${boardLoading ? "animate-spin" : ""}`} />
+                <RefreshCw className={`h-3.5 w-3.5 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
                 Atualizar
               </button>
             )}
@@ -996,13 +996,13 @@ export function PipelinePage() {
               
 
                 {/* Filters Toolbar */}
-                <div className="pipeline-toolbar mb-3 mt-0 flex flex-col gap-2 rounded-[20px] border border-slate-200/80 bg-white/95 px-3 py-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.38)] backdrop-blur">
+                <div className="pipeline-toolbar mb-3 mt-0 flex flex-col gap-2 rounded-[20px] border border-slate-200/80 bg-white/95 px-3 py-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.38)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     
                     {/* Left: Search & Toggles */}
                     <div className="flex flex-wrap items-center gap-2.5">
                       {/* Search Bar */}
-                      <div className="flex w-full items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-2 shadow-sm transition-all focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-100 dark:border-border dark:bg-surface sm:w-64">
+                      <div className="flex w-full items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-2 shadow-sm transition-all focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-100 dark:border-border dark:bg-surface-muted dark:shadow-none dark:focus-within:bg-surface dark:focus-within:ring-emerald-900/30 sm:w-64">
                         <Search className="h-4 w-4 shrink-0 text-slate-400" />
                         <input
                           type="text"
@@ -1031,11 +1031,11 @@ export function PipelinePage() {
                         onClick={() => setSortOrder(sortOrder === "score_desc" ? "name_az" : "score_desc")}
                         className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
                           sortOrder === "score_desc"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-teal-400/25 dark:bg-teal-400/10 dark:text-teal-200"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/45 dark:bg-emerald-950/24 dark:text-emerald-200"
                             : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted"
                         }`}
                       >
-                        <span className={`flex h-5 w-5 items-center justify-center rounded-full ${sortOrder === "score_desc" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40" : "bg-slate-100 text-slate-400 dark:bg-surface-muted"}`}>
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-full ${sortOrder === "score_desc" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/45 dark:text-emerald-200" : "bg-slate-100 text-slate-400 dark:bg-surface-muted"}`}>
                           <CheckCircle2 className="h-3 w-3" />
                         </span>
                         Melhor match IA
@@ -1049,8 +1049,8 @@ export function PipelinePage() {
                         data-testid="pipeline-pending-toggle"
                         className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
                           onlyPending
-                            ? "border-orange-300 bg-orange-100 text-orange-800 dark:border-orange-800 dark:bg-orange-900/50 dark:text-orange-300"
-                            : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-400 dark:hover:bg-orange-900/40"
+                            ? "border-orange-300 bg-orange-100 text-orange-800 dark:border-orange-900/55 dark:bg-orange-950/26 dark:text-orange-200"
+                            : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-950/45 dark:bg-transparent dark:text-orange-300 dark:hover:bg-orange-950/18"
                         }`}
                       >
                         <AlertTriangle className="h-4 w-4" />
@@ -1071,7 +1071,7 @@ export function PipelinePage() {
                         onClick={() => setShowFilters((prev) => !prev)}
                         className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
                           showFilters || hasActiveFilters
-                            ? "border-indigo-200 bg-indigo-50/50 text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-400"
+                            ? "border-indigo-200 bg-indigo-50/50 text-indigo-700 dark:border-indigo-950/55 dark:bg-indigo-950/22 dark:text-indigo-200"
                             : "border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 dark:border-border dark:bg-surface dark:text-indigo-400 dark:hover:bg-indigo-950/20"
                         }`}
                       >
@@ -1082,7 +1082,7 @@ export function PipelinePage() {
                             data-testid="pipeline-active-filters-badge"
                             className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
                               showFilters || hasActiveFilters
-                                ? "bg-indigo-100/80 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300"
+                                ? "bg-indigo-100/80 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-200"
                                 : "bg-slate-100 text-slate-500 dark:bg-surface-muted dark:text-text-muted"
                             }`}
                           >
