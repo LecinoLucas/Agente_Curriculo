@@ -52,7 +52,7 @@ vi.mock("../../services/operationalMasterService", () => ({
 
 const group = {
   id: "group-1",
-  code: "02",
+  group_code: "02",
   name: "Postos",
   normalized_name: "postos",
   description: "Grupo operacional de postos",
@@ -77,8 +77,8 @@ const unit = {
   id: "unit-1",
   group_id: "group-1",
   location_group_id: "location-1",
-  code: "4301",
-  name: "Posto 4301",
+  branch_code: "4201",
+  name: "NOVA CRIXÁS",
   normalized_name: "posto-4301",
   public_name: "Posto Peritoro",
   type: "gas_station" as const,
@@ -134,6 +134,10 @@ describe("EstruturaOperacionalPage", () => {
     render(<EstruturaOperacionalPage />);
 
     expect(await screen.findByText("Postos")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Grupo" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Nome" })).toBeInTheDocument();
+    expect(screen.queryByText("4201")).not.toBeInTheDocument();
+    expect(screen.queryByText("NOVA CRIXÁS")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /localidades/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /filiais\/postos/i })).toBeInTheDocument();
 
@@ -141,8 +145,10 @@ describe("EstruturaOperacionalPage", () => {
     expect((await screen.findAllByText("Peritoro")).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: /filiais\/postos/i }));
-    expect(await screen.findByText("4301")).toBeInTheDocument();
-    expect(screen.getByText("Posto Peritoro")).toBeInTheDocument();
+    expect(await screen.findByText("4201")).toBeInTheDocument();
+    expect(screen.getByText("NOVA CRIXÁS")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Filial" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Ponto de referência" })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(operationalMasterService.listOperationalGroups).toHaveBeenCalled();
@@ -172,14 +178,14 @@ describe("EstruturaOperacionalPage", () => {
     await user.click(screen.getByRole("button", { name: /novo cadastro/i }));
 
     const dialog = screen.getByRole("dialog", { name: /novo grupo/i });
-    await user.type(within(dialog).getByLabelText("Código"), "03");
+    await user.type(within(dialog).getByLabelText("Grupo"), "03");
     await user.type(within(dialog).getByLabelText("Nome"), "Escritorio");
     await user.type(within(dialog).getByLabelText("Descrição"), "Grupo corporativo");
     await user.click(within(dialog).getByRole("button", { name: /criar grupo/i }));
 
     await waitFor(() => {
       expect(operationalMasterService.createOperationalGroup).toHaveBeenCalledWith({
-        code: "03",
+        group_code: "03",
         name: "Escritorio",
         description: "Grupo corporativo",
       });

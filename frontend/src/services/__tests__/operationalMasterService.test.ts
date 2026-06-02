@@ -10,6 +10,16 @@ vi.mock("../http", () => ({
 
 import { operationalMasterService } from "../operationalMasterService";
 
+function paginated<T>(data: T[]) {
+  return {
+    data,
+    total: data.length,
+    page: 1,
+    page_size: 100,
+    total_pages: 1,
+  };
+}
+
 describe("operationalMasterService", () => {
   beforeEach(() => {
     httpRequestMock.mockReset();
@@ -17,6 +27,8 @@ describe("operationalMasterService", () => {
   });
 
   it("lista grupos operacionais com filtros", async () => {
+    httpRequestMock.mockResolvedValueOnce(paginated([]));
+
     await operationalMasterService.listOperationalGroups({
       page: 2,
       page_size: 25,
@@ -36,7 +48,7 @@ describe("operationalMasterService", () => {
 
   it("envia create e patch de grupos preservando null explicito", async () => {
     await operationalMasterService.createOperationalGroup({
-      code: "02",
+      group_code: "02",
       name: "Postos",
       description: null,
     });
@@ -57,7 +69,34 @@ describe("operationalMasterService", () => {
     });
   });
 
+  it("mapeia code do backend para group_code no frontend", async () => {
+    httpRequestMock.mockResolvedValueOnce(
+      paginated([
+        {
+          id: "group-1",
+          code: "02",
+          name: "Postos",
+          normalized_name: "postos",
+          description: null,
+          is_active: true,
+          created_at: "2026-05-01T10:00:00Z",
+          updated_at: "2026-05-02T10:00:00Z",
+        },
+      ]),
+    );
+
+    const response = await operationalMasterService.listOperationalGroups();
+
+    expect(response.data[0]).toMatchObject({
+      group_code: "02",
+      name: "Postos",
+    });
+    expect("code" in response.data[0]).toBe(false);
+  });
+
   it("lista localidades com status, tipo e busca", async () => {
+    httpRequestMock.mockResolvedValueOnce(paginated([]));
+
     await operationalMasterService.listLocationGroups({
       page_size: 100,
       active: true,
@@ -100,6 +139,8 @@ describe("operationalMasterService", () => {
   });
 
   it("lista filiais/postos com todos os filtros operacionais", async () => {
+    httpRequestMock.mockResolvedValueOnce(paginated([]));
+
     await operationalMasterService.listOperationalUnits({
       page: 1,
       page_size: 50,
@@ -127,7 +168,7 @@ describe("operationalMasterService", () => {
     await operationalMasterService.createOperationalUnit({
       group_id: "group-1",
       location_group_id: "location-1",
-      code: "4301",
+      branch_code: "4301",
       name: "Posto 4301",
       public_name: null,
       type: "gas_station",
@@ -171,5 +212,51 @@ describe("operationalMasterService", () => {
         state: null,
       },
     });
+  });
+
+  it("mapeia code do backend para branch_code no frontend", async () => {
+    httpRequestMock.mockResolvedValueOnce(
+      paginated([
+        {
+          id: "unit-1",
+          group_id: "group-1",
+          location_group_id: "location-1",
+          code: "4201",
+          name: "NOVA CRIXÁS",
+          normalized_name: "nova crixas",
+          public_name: null,
+          type: "gas_station",
+          reference_point: "BR",
+          address: null,
+          city: "NOVA CRIXÁS",
+          state: "GO",
+          is_active: true,
+          created_at: "2026-05-01T10:00:00Z",
+          updated_at: "2026-05-02T10:00:00Z",
+          group: {
+            id: "group-1",
+            code: "02",
+            name: "Postos",
+            normalized_name: "postos",
+            description: null,
+            is_active: true,
+            created_at: "2026-05-01T10:00:00Z",
+            updated_at: "2026-05-02T10:00:00Z",
+          },
+        },
+      ]),
+    );
+
+    const response = await operationalMasterService.listOperationalUnits();
+
+    expect(response.data[0]).toMatchObject({
+      branch_code: "4201",
+      name: "NOVA CRIXÁS",
+      group: {
+        group_code: "02",
+        name: "Postos",
+      },
+    });
+    expect("code" in response.data[0]).toBe(false);
   });
 });

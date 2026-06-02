@@ -115,6 +115,11 @@ function findGroup(groups: OperationalGroup[], id: string) {
   return groups.find((group) => group.id === id);
 }
 
+function unitGroupLabel(unit: OperationalUnit, groups: OperationalGroup[]) {
+  const group = unit.group ?? findGroup(groups, unit.group_id);
+  return group ? group.group_code : "-";
+}
+
 function findLocation(locations: LocationGroup[], id: string) {
   return locations.find((location) => location.id === id);
 }
@@ -190,14 +195,14 @@ function GroupForm({
   onCancel: () => void;
   onSubmit: (payload: CreateOperationalGroupPayload) => Promise<void>;
 }) {
-  const [code, setCode] = useState(item?.code ?? "");
+  const [groupCode, setGroupCode] = useState(item?.group_code ?? "");
   const [name, setName] = useState(item?.name ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     await onSubmit({
-      code: code.trim(),
+      group_code: groupCode.trim(),
       name: name.trim(),
       description: cleanOptional(description),
     });
@@ -207,8 +212,8 @@ function GroupForm({
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="grid gap-4 overflow-y-auto px-6 py-5">
         <label className="grid gap-1.5 text-sm font-medium text-text">
-          Código
-          <Input required value={code} onChange={(event) => setCode(event.target.value)} maxLength={50} />
+          Grupo
+          <Input required value={groupCode} onChange={(event) => setGroupCode(event.target.value)} maxLength={50} />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
           Nome
@@ -313,7 +318,7 @@ function UnitForm({
 }) {
   const [groupId, setGroupId] = useState(item?.group_id ?? groups[0]?.id ?? "");
   const [locationGroupId, setLocationGroupId] = useState(item?.location_group_id ?? locations[0]?.id ?? "");
-  const [code, setCode] = useState(item?.code ?? "");
+  const [branchCode, setBranchCode] = useState(item?.branch_code ?? "");
   const [name, setName] = useState(item?.name ?? "");
   const [publicName, setPublicName] = useState(item?.public_name ?? "");
   const [type, setType] = useState<OperationalUnitType>(item?.type ?? "gas_station");
@@ -327,7 +332,7 @@ function UnitForm({
     await onSubmit({
       group_id: groupId,
       location_group_id: locationGroupId,
-      code: code.trim(),
+      branch_code: branchCode.trim(),
       name: name.trim(),
       public_name: cleanOptional(publicName),
       type,
@@ -351,7 +356,7 @@ function UnitForm({
             </option>
             {groups.map((group) => (
               <option key={group.id} value={group.id}>
-                {group.code} - {group.name}
+                {group.group_code} - {group.name}
               </option>
             ))}
           </Select>
@@ -370,8 +375,8 @@ function UnitForm({
           </Select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
-          Código filial
-          <Input required value={code} onChange={(event) => setCode(event.target.value)} maxLength={50} />
+          Filial
+          <Input required value={branchCode} onChange={(event) => setBranchCode(event.target.value)} maxLength={50} />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
           Tipo
@@ -384,7 +389,7 @@ function UnitForm({
           </Select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text sm:col-span-2">
-          Nome interno
+          Nome
           <Input required value={name} onChange={(event) => setName(event.target.value)} maxLength={255} />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text sm:col-span-2">
@@ -714,7 +719,7 @@ export function EstruturaOperacionalPage() {
                 <option value="">Todos os grupos</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
-                    {group.code} - {group.name}
+                    {group.group_code} - {group.name}
                   </option>
                 ))}
               </Select>
@@ -762,8 +767,8 @@ export function EstruturaOperacionalPage() {
         {activeTab === "groups" ? (
           <DataTable
             columns={[
-              { header: "Código" },
               { header: "Grupo" },
+              { header: "Nome" },
               { header: "Status" },
               { header: "Atualizado" },
               { header: "Ações", className: "text-right" },
@@ -779,11 +784,8 @@ export function EstruturaOperacionalPage() {
             rowKey={(item) => item.id}
             renderRow={(item) => (
               <TableRow>
-                <TableCell className="font-mono text-sm font-semibold text-text">{item.code}</TableCell>
-                <TableCell>
-                  <div className="font-medium text-text">{item.name}</div>
-                  <div className="text-xs text-text-muted">{optionLabel(item.description)}</div>
-                </TableCell>
+                <TableCell className="font-mono text-sm font-semibold text-text">{item.group_code}</TableCell>
+                <TableCell className="font-medium text-text">{item.name}</TableCell>
                 <TableCell>{statusBadge(item.is_active)}</TableCell>
                 <TableCell className="text-text-muted">{formatDate(item.updated_at)}</TableCell>
                 <TableCell>
@@ -842,11 +844,14 @@ export function EstruturaOperacionalPage() {
         {activeTab === "units" ? (
           <DataTable
             columns={[
-              { header: "Filial/Posto" },
               { header: "Grupo" },
+              { header: "Filial" },
+              { header: "Nome" },
               { header: "Localidade" },
               { header: "Tipo" },
+              { header: "Ponto de referência" },
               { header: "Status" },
+              { header: "Atualizado" },
               { header: "Ações", className: "text-right" },
             ]}
             items={units}
@@ -859,23 +864,19 @@ export function EstruturaOperacionalPage() {
             }}
             rowKey={(item) => item.id}
             renderRow={(item) => {
-              const group = findGroup(groups, item.group_id);
               const location = findLocation(locations, item.location_group_id);
               return (
                 <TableRow>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span className="font-mono text-sm font-semibold text-text">{item.code}</span>
-                      <span className="font-medium text-text">{item.name}</span>
-                      <span className="text-xs text-text-muted">
-                        {optionLabel(item.public_name ?? item.reference_point)}
-                      </span>
-                    </div>
+                  <TableCell className="font-mono text-sm font-semibold text-text">
+                    {unitGroupLabel(item, groups)}
                   </TableCell>
-                  <TableCell>{group ? `${group.code} - ${group.name}` : "-"}</TableCell>
+                  <TableCell className="font-mono text-sm font-semibold text-text">{item.branch_code}</TableCell>
+                  <TableCell className="font-medium text-text">{item.name}</TableCell>
                   <TableCell>{location ? `${location.name} / ${location.state}` : "-"}</TableCell>
                   <TableCell>{UNIT_TYPE_LABELS[item.type]}</TableCell>
+                  <TableCell className="text-text-muted">{optionLabel(item.reference_point)}</TableCell>
                   <TableCell>{statusBadge(item.is_active)}</TableCell>
+                  <TableCell className="text-text-muted">{formatDate(item.updated_at)}</TableCell>
                   <TableCell>
                     <RowActions
                       canWrite={canWrite}
