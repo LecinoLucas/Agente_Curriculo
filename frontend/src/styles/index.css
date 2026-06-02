@@ -631,10 +631,10 @@
        - Brand focado em dourado envelhecido e bronze.
        ----------------------------------------------------------------------- */
 
-    --brand:               40 40% 55%;
-    --brand-dark:          35 45% 35%;
-    --brand-soft:          45 30% 92%;
-    --brand-glow:          40 40% 55%;
+    --brand:               42 90% 45%;
+    --brand-dark:          38 95% 30%;
+    --brand-soft:          45 80% 92%;
+    --brand-glow:          42 90% 45%;
 
     --bg:                  45 30% 98%;
     --surface:             45 20% 100%;
@@ -656,11 +656,11 @@
     --text:                30 20% 20%;
     --text-muted:          30 15% 45%;
 
-    --primary:             40 40% 55%;
-    --primary-hover:       40 40% 45%;
-    --primary-soft:        45 30% 92%;
+    --primary:             42 90% 45%;
+    --primary-hover:       38 95% 35%;
+    --primary-soft:        45 80% 92%;
     --primary-foreground:  0 0% 100%;
-    --ring:                40 40% 55%;
+    --ring:                42 90% 45%;
 
     --accent:              35 60% 50%;
     --accent-foreground:   0 0% 100%;
@@ -677,11 +677,11 @@
     --nav-bg:              30 25% 15%;
     --nav-text:            45 30% 98%;
     --nav-muted:           45 20% 70%;
-    --nav-active-bg:       40 40% 55%;
+    --nav-active-bg:       42 90% 45%;
     --nav-active-text:     0 0% 100%;
     --nav-border:          30 25% 10%;
 
-    --sidebar-accent:      40 40% 55%;
+    --sidebar-accent:      42 90% 45%;
     --hero-start:          45 30% 98%;
     --hero-end:            45 25% 92%;
 
@@ -1006,10 +1006,10 @@
        - Surface grafite quente.
        - Brand focado em dourado envelhecido e bronze.
        ----------------------------------------------------------------------- */
-    --brand:               40 40% 55%;
-    --brand-dark:          35 45% 35%;
-    --brand-soft:          30 20% 25%;
-    --brand-glow:          40 40% 55%;
+    --brand:               45 95% 55%;
+    --brand-dark:          42 90% 45%;
+    --brand-soft:          42 80% 20%;
+    --brand-glow:          45 95% 65%;
 
     --bg:                  30 15% 12%;
     --surface:             30 10% 16%;
@@ -1031,11 +1031,11 @@
     --text:                40 20% 90%;
     --text-muted:          40 15% 65%;
 
-    --primary:             40 40% 55%;
-    --primary-hover:       40 50% 65%;
-    --primary-soft:        30 20% 25%;
-    --primary-foreground:  0 0% 100%;
-    --ring:                40 40% 55%;
+    --primary:             45 95% 55%;
+    --primary-hover:       45 100% 65%;
+    --primary-soft:        42 80% 20%;
+    --primary-foreground:  30 20% 10%;
+    --ring:                45 95% 55%;
 
     --accent:              30 20% 25%;
     --accent-foreground:   40 40% 55%;
@@ -1052,16 +1052,16 @@
     --nav-bg:              30 15% 10%;
     --nav-text:            40 20% 90%;
     --nav-muted:           40 15% 60%;
-    --nav-active-bg:       40 40% 55%;
-    --nav-active-text:     0 0% 100%;
+    --nav-active-bg:       45 95% 55%;
+    --nav-active-text:     30 20% 10%;
     --nav-border:          30 10% 16%;
 
-    --sidebar-accent:      40 40% 55%;
-    --hero-start:          40 40% 55%;
+    --sidebar-accent:      45 95% 55%;
+    --hero-start:          45 95% 55%;
     --hero-end:            30 15% 10%;
 
-    --page-glow-start:     40 40% 20%;
-    --page-glow-end:       40 30% 15%;
+    --page-glow-start:     45 95% 25%;
+    --page-glow-end:       42 90% 15%;
     --page-gradient-start: 30 15% 12%;
     --page-gradient-end:   30 15% 10%;
   }
@@ -1792,7 +1792,7 @@
 
   .visual-theme-preview-theme-4 {
     background:
-      linear-gradient(135deg, hsl(45 30% 98%) 0 34%, hsl(40 40% 55%) 34% 68%, hsl(35 45% 35%) 68% 100%);
+      linear-gradient(135deg, hsl(45 30% 98%) 0 34%, hsl(45 95% 55%) 34% 68%, hsl(38 95% 30%) 68% 100%);
   }
 
   .visual-theme-option-copy {
