@@ -25,6 +25,12 @@ from src.infrastructure.database.models.analysis_model import (
     MatchingObservationModel,
     PromptTemplateModel,
 )
+from src.infrastructure.database.models.assistant_failure_model import AssistantFailureModel
+from src.infrastructure.database.models.assistant_settings_model import (
+    AssistantQuickReplyModel,
+    AssistantSettingModel,
+    AssistantStateContentModel,
+)
 from src.infrastructure.database.models.audit_model import AuditLogModel
 from src.infrastructure.database.models.behavioral_assignment_model import (
     BehavioralAssessmentAIEvaluationModel,
@@ -134,6 +140,10 @@ __all__ = [
     "PasswordResetTokenModel",
     "CandidateModel",
     "CandidateAuthTokenModel",
+    "AssistantFailureModel",
+    "AssistantStateContentModel",
+    "AssistantQuickReplyModel",
+    "AssistantSettingModel",
     "CandidateApplicationModel",
     "CandidateLocationPreferenceModel",
     "GoogleCalendarConnectionModel",

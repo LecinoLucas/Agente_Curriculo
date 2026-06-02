@@ -31,6 +31,7 @@ from src.interface.api.routers import (
     admin_ai_limits,
     admin_ai_provider_credentials,
     admin_ai_provider_health,
+    admin_assistant,
     admin_audit_logs,
     admin_behavioral_ai,
     admin_bi,
@@ -122,6 +123,7 @@ app.include_router(candidate_portal_auth.router, prefix=_PREFIX)
 app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(users.router, prefix=_PREFIX)
 app.include_router(internal_users.router, prefix=_PREFIX)
+app.include_router(admin_assistant.router, prefix=_PREFIX)
 app.include_router(admin_bi.router, prefix=_PREFIX)
 app.include_router(admin_diagnostics.router, prefix=_PREFIX)
 app.include_router(admin_audit_logs.router, prefix=_PREFIX)

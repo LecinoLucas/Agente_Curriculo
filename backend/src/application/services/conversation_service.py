@@ -7,6 +7,8 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.admin_assistant_failure_service import AssistantFailureRecorder
+from src.application.services.admin_assistant_service import sanitise_assistant_text
 from src.application.services.conversation_otp_service import ConversationOtpService
 from src.application.services.conversation_state_machine import (
     ConversationPrompt,
@@ -15,6 +17,7 @@ from src.application.services.conversation_state_machine import (
     prompt_for,
 )
 from src.domain.exceptions import NotFoundException, ValidationException
+from src.infrastructure.database.models.assistant_failure_model import AssistantFailureModel
 from src.infrastructure.database.models.candidate_application_model import (
     CandidateApplicationModel,
 )
@@ -46,6 +49,7 @@ from src.interface.api.schemas.conversation_schemas import (
 # Context keys that signal the candidate has started providing real intake data.
 # The CandidateApplication is only created once at least one is present, so a bare
 # IDENTIFY step (no candidate data yet) never produces an application.
+_FAILURE_ATTEMPT_LIMIT = 3
 _APPLICATION_TRIGGER_KEYS = (
     "location_hint",
     "preference",
@@ -66,6 +70,15 @@ _IDENTIFY_NOT_FOUND_MESSAGE = (
 _IDENTIFY_INVALID_MESSAGE = (
     "Não consegui entender. Digite seu CPF ou WhatsApp com DDD para continuar."
 )
+_INVALID_LOCATION_MESSAGE = (
+    "Não encontrei essa localidade. Digite o nome da cidade ou localidade novamente."
+)
+_INVALID_UNIT_MESSAGE = (
+    "Não consegui identificar esse posto. Você pode escolher qualquer posto da localidade "
+    "ou digitar o nome do posto novamente."
+)
+_INVALID_FUNCTION_MESSAGE = "Não consegui entender a função desejada. Digite o nome da função."
+_INVALID_SHIFT_MESSAGE = "Não consegui entender o turno. Escolha uma das opções disponíveis."
 
 
 @dataclass(frozen=True)
@@ -91,6 +104,7 @@ class ConversationService:
         self._session = session
         self._application_repository = application_repository
         self._otp_service = ConversationOtpService(session)
+        self._failure_recorder = AssistantFailureRecorder(session)
 
     async def create_session(self, body: ConversationCreateRequest) -> ConversationTurnResponse:
         now = datetime.now(UTC)
@@ -125,7 +139,7 @@ class ConversationService:
             raise ValidationException("Sessão de conversa não está ativa.")
 
         content = body.content.strip()
-        await self._add_candidate_message(
+        candidate_message = await self._add_candidate_message(
             conversation,
             content=content,
             message_type=body.message_type,
@@ -136,14 +150,36 @@ class ConversationService:
         if conversation.current_state == "IDENTIFY":
             # Secure identification step. Resolves (or not) a candidate_id, issues
             # an OTP, and advances to VERIFY_OTP only when input is valid.
-            prompt = await self._handle_identify(conversation, context, content)
+            prompt = await self._handle_identify(
+                conversation,
+                context,
+                content,
+                candidate_message,
+            )
         elif conversation.current_state == "VERIFY_OTP":
             # OTP verification step. Confirms identity before advancing.
-            prompt = await self._handle_verify_otp(conversation, context, content)
+            prompt = await self._handle_verify_otp(
+                conversation,
+                context,
+                content,
+                candidate_message,
+            )
         else:
-            self._merge_context(context, self._state_update(conversation.current_state, content))
-            conversation.current_state = next_state(conversation.current_state)
-            prompt = prompt_for(conversation.current_state, context)
+            invalid_prompt = await self._invalid_prompt_if_needed(
+                conversation,
+                context,
+                content,
+                candidate_message,
+            )
+            if invalid_prompt is not None:
+                prompt = invalid_prompt
+            else:
+                self._merge_context(
+                    context,
+                    self._state_update(conversation.current_state, content),
+                )
+                conversation.current_state = next_state(conversation.current_state)
+                prompt = prompt_for(conversation.current_state, context)
 
         conversation.context_json = context
         if conversation.current_state == "DONE":
@@ -191,6 +227,7 @@ class ConversationService:
         conversation: ConversationSessionModel,
         context: dict[str, Any],
         content: str,
+        candidate_message: ConversationMessageModel,
     ) -> ConversationPrompt:
         # Identity already known (e.g. candidate_id passed at session creation):
         # the IDENTIFY question is moot, advance on any non-empty input.
@@ -205,6 +242,15 @@ class ConversationService:
         classification = self._classify_identifier(content)
         if classification is None:
             # Invalid/confusing input → stay in IDENTIFY and re-ask simply.
+            await self._record_failure(
+                conversation,
+                candidate_message,
+                state="IDENTIFY",
+                raw_message=content,
+                reason="invalid_identity_input",
+                classification="identity",
+                attempts_count=await self._next_attempt_count(conversation.id, "IDENTIFY"),
+            )
             base = prompt_for("IDENTIFY")
             return ConversationPrompt(
                 state="IDENTIFY",
@@ -241,6 +287,7 @@ class ConversationService:
         conversation: ConversationSessionModel,
         context: dict[str, Any],
         content: str,
+        candidate_message: ConversationMessageModel,
     ) -> ConversationPrompt:
         """Verify the candidate-supplied OTP code and advance or stay."""
         result = await self._otp_service.verify_otp(
@@ -260,6 +307,16 @@ class ConversationService:
             )
 
         if result.outcome in ("expired", "no_otp", "already_consumed"):
+            await self._record_failure(
+                conversation,
+                candidate_message,
+                state="VERIFY_OTP",
+                raw_message="[otp omitido]",
+                sanitized_message="[otp omitido]",
+                reason=f"otp_{result.outcome}",
+                classification="identity",
+                attempts_count=result.attempts_remaining,
+            )
             # Issue a fresh OTP so the candidate can try again without restarting.
             candidate_id = conversation.candidate_id
             identifier_type = context.get("identifier_type", "cpf")
@@ -277,6 +334,16 @@ class ConversationService:
             )
 
         if result.outcome == "locked":
+            await self._record_failure(
+                conversation,
+                candidate_message,
+                state="VERIFY_OTP",
+                raw_message="[otp omitido]",
+                sanitized_message="[otp omitido]",
+                reason="otp_attempt_limit",
+                classification="identity",
+                attempts_count=0,
+            )
             # Too many attempts: go back to IDENTIFY so the candidate can try a
             # different identifier. This is not a permanent block.
             conversation.current_state = "IDENTIFY"
@@ -295,6 +362,16 @@ class ConversationService:
 
         # wrong_code — stay in VERIFY_OTP, inform the candidate how many tries remain.
         remaining = result.attempts_remaining
+        await self._record_failure(
+            conversation,
+            candidate_message,
+            state="VERIFY_OTP",
+            raw_message="[otp omitido]",
+            sanitized_message="[otp omitido]",
+            reason="otp_wrong_code",
+            classification="identity",
+            attempts_count=remaining,
+        )
         plural = "tentativa" if remaining == 1 else "tentativas"
         return ConversationPrompt(
             state="VERIFY_OTP",
@@ -502,6 +579,98 @@ class ConversationService:
             stmt = stmt.where(OperationalUnitModel.location_group_id == location_group_id)
         return await self._session.scalar(stmt)
 
+    async def _invalid_prompt_if_needed(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+        candidate_message: ConversationMessageModel,
+    ) -> ConversationPrompt | None:
+        state = conversation.current_state
+        if state == "CHOOSE_LOCATION":
+            has_locations = await self._has_active_locations()
+            location = await self._resolve_location_group(content)
+            if has_locations and location is None:
+                await self._record_failure(
+                    conversation,
+                    candidate_message,
+                    state=state,
+                    raw_message=content,
+                    reason="location_not_found",
+                    classification="location",
+                    attempts_count=await self._next_attempt_count(conversation.id, state),
+                )
+                return ConversationPrompt(
+                    state="CHOOSE_LOCATION",
+                    content=_INVALID_LOCATION_MESSAGE,
+                )
+        elif state == "CHOOSE_UNIT_OR_ANY":
+            preference = self._unit_preference(content)
+            if preference in {"any_in_location", "choose_unit"}:
+                return None
+            location = await self._resolve_location_group(context.get("location_hint"))
+            if await self._has_active_units(location.id if location else None):
+                unit = await self._resolve_unit(content, location.id if location else None)
+                if unit is None:
+                    await self._record_failure(
+                        conversation,
+                        candidate_message,
+                        state=state,
+                        raw_message=content,
+                        reason="unit_not_found",
+                        classification="unit",
+                        attempts_count=await self._next_attempt_count(conversation.id, state),
+                    )
+                    return ConversationPrompt(
+                        state="CHOOSE_UNIT_OR_ANY",
+                        content=_INVALID_UNIT_MESSAGE,
+                        quick_replies=prompt_for("CHOOSE_UNIT_OR_ANY", context).quick_replies,
+                    )
+        elif state == "CHOOSE_FUNCTION":
+            if not self._looks_like_business_text(content):
+                await self._record_failure(
+                    conversation,
+                    candidate_message,
+                    state=state,
+                    raw_message=content,
+                    reason="function_not_understood",
+                    classification=self._classification_for_text(content, "function"),
+                    attempts_count=await self._next_attempt_count(conversation.id, state),
+                )
+                return ConversationPrompt(
+                    state="CHOOSE_FUNCTION",
+                    content=_INVALID_FUNCTION_MESSAGE,
+                )
+        elif state == "CHOOSE_SHIFT" and self._shift_value(content) is None:
+            await self._record_failure(
+                conversation,
+                candidate_message,
+                state=state,
+                raw_message=content,
+                reason="shift_not_understood",
+                classification=self._classification_for_text(content, "shift"),
+                attempts_count=await self._next_attempt_count(conversation.id, state),
+            )
+            return ConversationPrompt(
+                state="CHOOSE_SHIFT",
+                content=_INVALID_SHIFT_MESSAGE,
+                quick_replies=prompt_for("CHOOSE_SHIFT").quick_replies,
+            )
+        return None
+
+    async def _has_active_locations(self) -> bool:
+        return bool(
+            await self._session.scalar(
+                sa.select(sa.exists().where(LocationGroupModel.is_active.is_(True)))
+            )
+        )
+
+    async def _has_active_units(self, location_group_id: UUID | None) -> bool:
+        predicate = OperationalUnitModel.is_active.is_(True)
+        if location_group_id is not None:
+            predicate = predicate & (OperationalUnitModel.location_group_id == location_group_id)
+        return bool(await self._session.scalar(sa.select(sa.exists().where(predicate))))
+
     @staticmethod
     def _should_have_application(context: dict[str, Any]) -> bool:
         return any(context.get(key) for key in _APPLICATION_TRIGGER_KEYS)
@@ -537,7 +706,7 @@ class ConversationService:
         if current_state == "CHOOSE_FUNCTION":
             return {"desired_function": content}
         if current_state == "CHOOSE_SHIFT":
-            return {"desired_shift": content}
+            return {"desired_shift": ConversationService._shift_value(content) or content}
         if current_state == "SHOW_JOBS":
             return {"show_jobs_ack": content}
         if current_state == "COLLECT_RESUME":
@@ -554,6 +723,82 @@ class ConversationService:
         if normalized in {"choose_unit", "escolher", "escolher posto", "specific"}:
             return "choose_unit"
         return content
+
+    @staticmethod
+    def _shift_value(content: str) -> str | None:
+        normalized = content.strip().casefold()
+        values = {
+            "morning": "morning",
+            "manha": "morning",
+            "manhã": "morning",
+            "afternoon": "afternoon",
+            "tarde": "afternoon",
+            "night": "night",
+            "noite": "night",
+            "any": "any",
+            "qualquer": "any",
+            "qualquer turno": "any",
+        }
+        return values.get(normalized)
+
+    @staticmethod
+    def _looks_like_business_text(content: str) -> bool:
+        stripped = content.strip()
+        if len(stripped) < 3:
+            return False
+        letters = sum(1 for char in stripped if char.isalpha())
+        return letters >= 3
+
+    @staticmethod
+    def _classification_for_text(content: str, fallback: str) -> str:
+        normalized = content.strip().casefold()
+        if any(token in normalized for token in ("humano", "rh", "atendente", "pessoa")):
+            return "talk_to_hr"
+        if len(normalized) > 120 or normalized.count("http") > 0:
+            return "spam"
+        return fallback
+
+    async def _next_attempt_count(self, session_id: UUID, state: str) -> int:
+        current = await self._session.scalar(
+            sa.select(sa.func.count()).where(
+                AssistantFailureModel.session_id == session_id,
+                AssistantFailureModel.state == state,
+            )
+        )
+        return int(current or 0) + 1
+
+    async def _record_failure(
+        self,
+        conversation: ConversationSessionModel,
+        candidate_message: ConversationMessageModel,
+        *,
+        state: str,
+        raw_message: str,
+        reason: str,
+        classification: str,
+        attempts_count: int | None = None,
+        sanitized_message: str | None = None,
+    ) -> None:
+        stored_reason = reason
+        if (
+            attempts_count is not None
+            and attempts_count >= _FAILURE_ATTEMPT_LIMIT
+            and not reason.startswith("otp_")
+        ):
+            stored_reason = f"{reason}_attempt_limit"
+
+        await self._failure_recorder.record_failure(
+            session_id=conversation.id,
+            message_id=candidate_message.id,
+            candidate_id=conversation.candidate_id,
+            application_id=conversation.application_id,
+            state=state,
+            raw_message=raw_message,
+            sanitized_message=sanitized_message or sanitise_assistant_text(raw_message),
+            reason=stored_reason,
+            classification=classification,
+            attempts_count=attempts_count,
+        )
 
     async def _add_candidate_message(
         self,
