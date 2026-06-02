@@ -1,4 +1,7 @@
 # Importa todos os modelos para que o Alembic os detecte na autogeneration
+from src.infrastructure.database.models import (
+    candidate_identity_events as candidate_identity_events,
+)
 from src.infrastructure.database.models.admission_model import (
     Admission,
     CandidateDocument,
@@ -62,6 +65,9 @@ from src.infrastructure.database.models.communication_model import (
 from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
+)
+from src.infrastructure.database.models.conversation_otp_model import (
+    ConversationOtpModel,
 )
 from src.infrastructure.database.models.document_ai_analysis_model import (
     DocumentAIAnalysisModel,
@@ -188,6 +194,7 @@ __all__ = [
     "CommunicationDeliveryAttemptModel",
     "ConversationSessionModel",
     "ConversationMessageModel",
+    "ConversationOtpModel",
     "CollaborationCommentModel",
     "CandidateNoteModel",
     "JobAreaModel",

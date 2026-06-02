@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 ConversationState = Literal[
     "IDENTIFY",
+    "VERIFY_OTP",
     "CHOOSE_LOCATION",
     "CHOOSE_UNIT_OR_ANY",
     "CHOOSE_FUNCTION",
@@ -22,7 +23,8 @@ class ConversationPrompt:
 
 
 STATE_TRANSITIONS: dict[ConversationState, ConversationState] = {
-    "IDENTIFY": "CHOOSE_LOCATION",
+    "IDENTIFY": "VERIFY_OTP",
+    "VERIFY_OTP": "CHOOSE_LOCATION",
     "CHOOSE_LOCATION": "CHOOSE_UNIT_OR_ANY",
     "CHOOSE_UNIT_OR_ANY": "CHOOSE_FUNCTION",
     "CHOOSE_FUNCTION": "CHOOSE_SHIFT",
@@ -56,6 +58,14 @@ def prompt_for(state: str, context: dict[str, Any] | None = None) -> Conversatio
             quick_replies=(
                 ("cpf", "Informar CPF"),
                 ("whatsapp", "Informar WhatsApp"),
+            ),
+        )
+    if coerced_state == "VERIFY_OTP":
+        return ConversationPrompt(
+            state="VERIFY_OTP",
+            content=(
+                "Enviamos um código de verificação. "
+                "Digite o código de 6 dígitos para continuar."
             ),
         )
     if coerced_state == "CHOOSE_LOCATION":

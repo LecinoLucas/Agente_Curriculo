@@ -9,6 +9,7 @@ from src.interface.api.schemas.common import APISchemaModel, ORMAPISchemaModel
 ConversationChannel = Literal["web", "whatsapp"]
 ConversationState = Literal[
     "IDENTIFY",
+    "VERIFY_OTP",
     "CHOOSE_LOCATION",
     "CHOOSE_UNIT_OR_ANY",
     "CHOOSE_FUNCTION",

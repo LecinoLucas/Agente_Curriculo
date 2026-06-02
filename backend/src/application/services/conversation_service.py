@@ -1,13 +1,13 @@
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from hashlib import sha256
 from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.conversation_otp_service import ConversationOtpService
 from src.application.services.conversation_state_machine import (
     ConversationPrompt,
     first_prompt,
@@ -33,6 +33,7 @@ from src.infrastructure.repositories.sqlalchemy_candidate_application_repository
 from src.infrastructure.repositories.sqlalchemy_conversation_repository import (
     SQLAlchemyConversationRepository,
 )
+from src.infrastructure.security.cpf_identity import derive_cpf_identity
 from src.interface.api.schemas.conversation_schemas import (
     ConversationCreateRequest,
     ConversationMessageCreateRequest,
@@ -89,6 +90,7 @@ class ConversationService:
         self._repository = repository
         self._session = session
         self._application_repository = application_repository
+        self._otp_service = ConversationOtpService(session)
 
     async def create_session(self, body: ConversationCreateRequest) -> ConversationTurnResponse:
         now = datetime.now(UTC)
@@ -132,10 +134,12 @@ class ConversationService:
         context = dict(conversation.context_json or {})
 
         if conversation.current_state == "IDENTIFY":
-            # Secure identification step. Resolves (or not) a candidate_id and only
-            # advances when a minimally valid identifier is provided. Stays in
-            # IDENTIFY on invalid input so the chat never gets stuck.
+            # Secure identification step. Resolves (or not) a candidate_id, issues
+            # an OTP, and advances to VERIFY_OTP only when input is valid.
             prompt = await self._handle_identify(conversation, context, content)
+        elif conversation.current_state == "VERIFY_OTP":
+            # OTP verification step. Confirms identity before advancing.
+            prompt = await self._handle_verify_otp(conversation, context, content)
         else:
             self._merge_context(context, self._state_update(conversation.current_state, content))
             conversation.current_state = next_state(conversation.current_state)
@@ -209,25 +213,95 @@ class ConversationService:
             )
 
         identifier_type, normalized, last4 = classification
+        # Resolve silently; whether or not a match is found, the OTP is always
+        # issued so the public response and timing are identical (anti-enumeration).
         candidate_id = await self._resolve_candidate_id(identifier_type, normalized)
 
-        # Only non-sensitive markers ever reach context_json. Never the raw CPF.
+        # Store only non-sensitive markers. Never the raw CPF/phone.
         context["identifier_type"] = identifier_type
         if identifier_type == "cpf":
             context["cpf_last4"] = last4
-
-        conversation.current_state = "CHOOSE_LOCATION"
-        if candidate_id is not None:
-            conversation.candidate_id = candidate_id
+        if candidate_id is None:
+            context["identifier_unresolved"] = True
+        else:
             context.pop("identifier_unresolved", None)
+
+        # Issue OTP (always, regardless of candidate resolution).
+        await self._otp_service.issue_otp(
+            session_id=conversation.id,
+            candidate_id=candidate_id,
+            identifier_type=identifier_type,
+        )
+
+        conversation.current_state = "VERIFY_OTP"
+        return prompt_for("VERIFY_OTP")
+
+    async def _handle_verify_otp(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+    ) -> ConversationPrompt:
+        """Verify the candidate-supplied OTP code and advance or stay."""
+        result = await self._otp_service.verify_otp(
+            session_id=conversation.id,
+            code=content,
+        )
+
+        if result.outcome == "ok":
+            if result.candidate_id is not None:
+                conversation.candidate_id = result.candidate_id
+            context["identity_verified"] = True
+            context.pop("identifier_unresolved", None)
+            conversation.current_state = "CHOOSE_LOCATION"
             return ConversationPrompt(
                 state="CHOOSE_LOCATION",
-                content=_IDENTIFY_SUCCESS_MESSAGE,
+                content="Identidade confirmada. Em qual cidade ou localidade você quer trabalhar?",
             )
-        context["identifier_unresolved"] = True
+
+        if result.outcome in ("expired", "no_otp", "already_consumed"):
+            # Issue a fresh OTP so the candidate can try again without restarting.
+            candidate_id = conversation.candidate_id
+            identifier_type = context.get("identifier_type", "cpf")
+            await self._otp_service.issue_otp(
+                session_id=conversation.id,
+                candidate_id=candidate_id,
+                identifier_type=str(identifier_type),
+            )
+            return ConversationPrompt(
+                state="VERIFY_OTP",
+                content=(
+                    "O código expirou. Enviamos um novo código. "
+                    "Digite o código de 6 dígitos para continuar."
+                ),
+            )
+
+        if result.outcome == "locked":
+            # Too many attempts: go back to IDENTIFY so the candidate can try a
+            # different identifier. This is not a permanent block.
+            conversation.current_state = "IDENTIFY"
+            context.pop("identifier_type", None)
+            context.pop("cpf_last4", None)
+            context.pop("identifier_unresolved", None)
+            base = prompt_for("IDENTIFY")
+            return ConversationPrompt(
+                state="IDENTIFY",
+                content=(
+                    "Muitas tentativas incorretas. Por favor, informe seu CPF ou "
+                    "WhatsApp novamente para receber um novo código."
+                ),
+                quick_replies=base.quick_replies,
+            )
+
+        # wrong_code — stay in VERIFY_OTP, inform the candidate how many tries remain.
+        remaining = result.attempts_remaining
+        plural = "tentativa" if remaining == 1 else "tentativas"
         return ConversationPrompt(
-            state="CHOOSE_LOCATION",
-            content=_IDENTIFY_NOT_FOUND_MESSAGE,
+            state="VERIFY_OTP",
+            content=(
+                f"Código incorreto. Você ainda tem {remaining} {plural}. "
+                "Digite o código de 6 dígitos para continuar."
+            ),
         )
 
     def _classify_identifier(self, content: str) -> tuple[str, str, str] | None:
@@ -264,10 +338,12 @@ class ConversationService:
         # Primary lookup is by cpf_hash (never compares the raw CPF). Existing rows
         # may only have the plaintext `cpf` column populated, so a normalized-digits
         # equality is kept as a compatibility fallback.
-        cpf_hash = self._hash_cpf(digits)
+        identity = derive_cpf_identity(digits)
+        if identity is None:
+            return None
         candidate_id = await self._session.scalar(
             sa.select(CandidateModel.id).where(
-                CandidateModel.cpf_hash == cpf_hash,
+                CandidateModel.cpf_hash == identity.cpf_hash,
                 CandidateModel.deleted_at.is_(None),
             )
         )
@@ -275,7 +351,7 @@ class ConversationService:
             return candidate_id
         return await self._session.scalar(
             sa.select(CandidateModel.id).where(
-                CandidateModel.cpf == digits,
+                self._normalized_digits_expr(CandidateModel.cpf) == identity.digits,
                 CandidateModel.deleted_at.is_(None),
             )
         )
@@ -289,8 +365,11 @@ class ConversationService:
         )
 
     @staticmethod
-    def _hash_cpf(digits: str) -> str:
-        return sha256(digits.encode("utf-8")).hexdigest()
+    def _normalized_digits_expr(column: sa.ColumnElement[str | None]) -> sa.ColumnElement[str]:
+        expr = sa.func.coalesce(column, "")
+        for token in (".", "-", "/", "(", ")", " ", "+"):
+            expr = sa.func.replace(expr, token, "")
+        return expr
 
     @staticmethod
     def _is_valid_cpf(digits: str) -> bool:

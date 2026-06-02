@@ -11,6 +11,7 @@ from src.infrastructure.repositories.sqlalchemy_conversation_repository import (
     SQLAlchemyConversationRepository,
 )
 from src.interface.api.dependencies import get_db
+from src.interface.api.rate_limiting import rate_limit_conversation_messages
 from src.interface.api.schemas.conversation_schemas import (
     ConversationCreateRequest,
     ConversationMessageCreateRequest,
@@ -52,6 +53,7 @@ async def get_conversation(
 async def create_conversation_message(
     session_id: UUID,
     body: ConversationMessageCreateRequest,
+    _rl: None = Depends(rate_limit_conversation_messages),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationTurnResponse:
     turn = await _service(db).receive_message(session_id, body)

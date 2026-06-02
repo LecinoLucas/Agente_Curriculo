@@ -149,6 +149,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_ADMIN_AI_CREDENTIALS: str = "20/minute"
     RATE_LIMIT_AI_DRAFT_OCR: str = "20/minute"
     RATE_LIMIT_AI_DRAFT_GENERATE: str = "10/day"
+    RATE_LIMIT_CONVERSATION_MESSAGES: str = "20/minute"
+    RATE_LIMIT_CONVERSATION_OTP: str = "10/minute"
+
+    # Conversation OTP verification (OP-6F.2)
+    OTP_EXPIRATION_MINUTES: int = 10
+    OTP_MAX_ATTEMPTS: int = 5
 
     # AI draft (Fase IA Vaga 5) — cost-control limits
     JOB_AI_DRAFT_DAILY_LIMIT: int = 10

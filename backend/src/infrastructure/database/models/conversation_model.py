@@ -12,6 +12,7 @@ JSONB_COMPAT = JSONB().with_variant(sa.JSON(), "sqlite")
 CONVERSATION_CHANNELS = ("web", "whatsapp")
 CONVERSATION_STATES = (
     "IDENTIFY",
+    "VERIFY_OTP",
     "CHOOSE_LOCATION",
     "CHOOSE_UNIT_OR_ANY",
     "CHOOSE_FUNCTION",
@@ -35,7 +36,7 @@ class ConversationSessionModel(Base):
         ),
         sa.CheckConstraint(
             "current_state IN ("
-            "'IDENTIFY', 'CHOOSE_LOCATION', "
+            "'IDENTIFY', 'VERIFY_OTP', 'CHOOSE_LOCATION', "
             "'CHOOSE_UNIT_OR_ANY', 'CHOOSE_FUNCTION', 'CHOOSE_SHIFT', 'SHOW_JOBS', "
             "'COLLECT_RESUME', 'CONFIRM_APPLICATION', 'DONE'"
             ")",

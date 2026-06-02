@@ -59,6 +59,8 @@ _retry_item = parse_limit(settings.RATE_LIMIT_ANALYSIS_RETRY)
 _admin_ai_credentials_item = parse_limit(settings.RATE_LIMIT_ADMIN_AI_CREDENTIALS)
 _ai_draft_ocr_item = parse_limit(settings.RATE_LIMIT_AI_DRAFT_OCR)
 _ai_draft_generate_item = parse_limit(settings.RATE_LIMIT_AI_DRAFT_GENERATE)
+_conversation_messages_item = parse_limit(settings.RATE_LIMIT_CONVERSATION_MESSAGES)
+_conversation_otp_item = parse_limit(settings.RATE_LIMIT_CONVERSATION_OTP)
 
 
 async def _check(item, *keys: str, message: str) -> None:
@@ -106,6 +108,26 @@ async def rate_limit_public_check_exists(request: Request) -> None:
         _ip(request),
         "public:check-exists",
         message="Muitas validações enviadas. Aguarde 1 minuto e tente novamente.",
+    )
+
+
+async def rate_limit_conversation_messages(request: Request) -> None:
+    """Conversation messages: IP-based. Protects IDENTIFY from identifier probing."""
+    await _check(
+        _conversation_messages_item,
+        _ip(request),
+        "conversations:messages",
+        message="Muitas mensagens enviadas. Aguarde 1 minuto e tente novamente.",
+    )
+
+
+async def rate_limit_conversation_otp(request: Request) -> None:
+    """OTP submissions: tighter IP-based limit for VERIFY_OTP step."""
+    await _check(
+        _conversation_otp_item,
+        _ip(request),
+        "conversations:otp",
+        message="Muitas tentativas de código. Aguarde 1 minuto e tente novamente.",
     )
 
 

@@ -19,6 +19,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_model import ConversationSessionModel
+from src.infrastructure.database.models.conversation_otp_model import ConversationOtpModel
 from src.infrastructure.database.models.operational_master_model import (
     LocationGroupModel,
     OperationalGroupModel,
@@ -227,8 +228,23 @@ async def test_no_candidate_id_does_not_create_application(
     await _location(db_session)
     session_id = await _start(client)  # anonymous web chat (public flow)
 
-    # Valid but unknown CPF → advances past IDENTIFY without resolving a candidate.
-    for content in ["52998224725", "Peritoró", "any_in_location", "Frentista", "night"]:
+    # Valid but unknown CPF → OTP issued, complete OTP, then send location data.
+    await _send(client, session_id, "52998224725")  # IDENTIFY → VERIFY_OTP
+    otp = await db_session.scalar(
+        sa.select(ConversationOtpModel)
+        .where(ConversationOtpModel.session_id == UUID(session_id))
+        .order_by(ConversationOtpModel.created_at.desc())
+        .limit(1)
+    )
+    assert otp is not None
+    from hashlib import sha256 as _sha256
+    sid = UUID(session_id)
+    code = next(
+        f"{i:06d}" for i in range(1_000_000)
+        if _sha256(f"{sid}:{i:06d}".encode()).hexdigest() == otp.otp_hash
+    )
+    await _send(client, session_id, code)  # VERIFY_OTP → CHOOSE_LOCATION (no candidate)
+    for content in ["Peritoró", "any_in_location", "Frentista", "night"]:
         await _send(client, session_id, content)
 
     count = await db_session.scalar(
