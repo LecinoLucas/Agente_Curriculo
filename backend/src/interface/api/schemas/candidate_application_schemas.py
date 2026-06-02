@@ -70,6 +70,13 @@ class CandidateApplicationResponse(ORMAPISchemaModel):
     deleted_at: datetime | None = None
 
 
+class LinkApplicationPipelineResponse(APISchemaModel):
+    application_id: UUID
+    pipeline_id: UUID | None
+    application_status: str
+    created: bool
+
+
 class CandidateLocationPreferenceCreateRequest(APISchemaModel):
     candidate_id: UUID
     location_group_id: UUID

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from uuid import NAMESPACE_URL, UUID, uuid5, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import sqlalchemy as sa
 import structlog
@@ -20,9 +20,9 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
-from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
+from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionChecklistItemModel,
@@ -33,7 +33,6 @@ from src.infrastructure.database.models.scoring_model import (
     ScoreModelVersionModel,
 )
 from src.infrastructure.database.models.user_model import UserModel
-
 
 logger = structlog.get_logger(__name__)
 
@@ -78,7 +77,10 @@ class SQLAlchemyPipelineRepository:
     def _entry_select(cls):
         table = cls._entry_table()
         return sa.select(
-            sa.cast(table.c.candidate_job_pipeline_id, sa.String).label("candidate_job_pipeline_id"),
+            sa.cast(
+                table.c.candidate_job_pipeline_id,
+                sa.String,
+            ).label("candidate_job_pipeline_id"),
             sa.cast(table.c.candidate_id, sa.String).label("candidate_id"),
             sa.cast(table.c.job_id, sa.String).label("job_id"),
             table.c.pipeline_stage.label("pipeline_stage"),
@@ -100,6 +102,7 @@ class SQLAlchemyPipelineRepository:
         if row is None:
             return None
         payload = dict(row)
+
         def _parse_uuid(value: object, *, required: bool) -> UUID | None:
             if value is None:
                 if required:
@@ -125,8 +128,14 @@ class SQLAlchemyPipelineRepository:
             candidate_id=payload["candidate_id"],
             job_id=payload["job_id"],
         )
-        payload["resume_version_id"] = _parse_uuid(payload.get("resume_version_id"), required=False)
-        payload["current_analysis_id"] = _parse_uuid(payload.get("current_analysis_id"), required=False)
+        payload["resume_version_id"] = _parse_uuid(
+            payload.get("resume_version_id"),
+            required=False,
+        )
+        payload["current_analysis_id"] = _parse_uuid(
+            payload.get("current_analysis_id"),
+            required=False,
+        )
         payload["last_moved_by"] = _parse_uuid(payload.get("last_moved_by"), required=False)
         return SimpleNamespace(**payload)
 
@@ -161,7 +170,12 @@ class SQLAlchemyPipelineRepository:
             )
         )
 
-    async def get_pre_admission_gate_snapshot(self, *, candidate_id: UUID, job_id: UUID) -> dict[str, object]:
+    async def get_pre_admission_gate_snapshot(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> dict[str, object]:
         case = await self._session.scalar(
             sa.select(PreAdmissionCaseModel)
             .where(
@@ -191,7 +205,9 @@ class SQLAlchemyPipelineRepository:
             )
             .order_by(PreAdmissionChecklistItemModel.created_at.asc())
         )
-        unresolved_required_titles = [title for title in unresolved_required_rows.scalars().all() if title]
+        unresolved_required_titles = [
+            title for title in unresolved_required_rows.scalars().all() if title
+        ]
         total_items = int(
             await self._session.scalar(
                 sa.select(sa.func.count())
@@ -250,7 +266,11 @@ class SQLAlchemyPipelineRepository:
             .limit(1)
         )
 
-    async def find_any_entry(self, candidate_id: UUID, job_id: UUID) -> CandidateJobPipelineModel | None:
+    async def find_any_entry(
+        self,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobPipelineModel | None:
         table = self._entry_table()
         result = await self._session.execute(
             self._entry_select().where(
@@ -260,7 +280,11 @@ class SQLAlchemyPipelineRepository:
         )
         return self._build_entry_namespace(result.mappings().first())
 
-    async def find_active_entry(self, candidate_id: UUID, job_id: UUID) -> CandidateJobPipelineModel | None:
+    async def find_active_entry(
+        self,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobPipelineModel | None:
         table = self._entry_table()
         result = await self._session.execute(
             self._entry_select().where(
@@ -285,7 +309,10 @@ class SQLAlchemyPipelineRepository:
             )
         )
 
-    async def find_active_entry_by_candidate(self, candidate_id: UUID) -> CandidateJobPipelineModel | None:
+    async def find_active_entry_by_candidate(
+        self,
+        candidate_id: UUID,
+    ) -> CandidateJobPipelineModel | None:
         table = self._entry_table()
         result = await self._session.execute(
             self._entry_select().where(
@@ -297,7 +324,11 @@ class SQLAlchemyPipelineRepository:
         )
         return self._build_entry_namespace(result.mappings().first())
 
-    async def find_entry(self, candidate_id: UUID, job_id: UUID) -> CandidateJobPipelineModel | None:
+    async def find_entry(
+        self,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobPipelineModel | None:
         return await self.find_any_entry(candidate_id, job_id)
 
     async def save_entry(self, entry: CandidateJobPipelineModel) -> CandidateJobPipelineModel:
@@ -747,6 +778,7 @@ class SQLAlchemyPipelineRepository:
         resume_version_id: UUID | None = None,
         current_analysis_id: UUID | None = None,
         source: str = "manual",
+        application_id: UUID | None = None,
     ) -> dict:
         pipeline_status = "terminal" if status in _TERMINAL_LINK_STATUSES else "active"
         relationship_values = _relationship_update_values(
@@ -770,6 +802,7 @@ class SQLAlchemyPipelineRepository:
                 source=source,
                 resume_version_id=resume_version_id,
                 current_analysis_id=current_analysis_id,
+                application_id=application_id,
                 entered_at=updated_at,
                 last_moved_by=moved_by,
                 created_at=updated_at,

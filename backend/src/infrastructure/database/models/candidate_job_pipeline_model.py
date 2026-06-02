@@ -73,6 +73,11 @@ class CandidateJobPipelineModel(Base):
         sa.UUID(as_uuid=True),
         sa.ForeignKey("analyses.id", ondelete="SET NULL"),
     )
+    application_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("candidate_applications.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     entered_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     last_moved_by: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
@@ -110,9 +115,11 @@ class CandidateJobPipelineModel(Base):
         ),
         sa.CheckConstraint(
             "("
-            "relationship_status = 'active' AND is_terminal = FALSE AND terminated_at IS NULL AND termination_reason IS NULL"
+            "relationship_status = 'active' AND is_terminal = FALSE "
+            "AND terminated_at IS NULL AND termination_reason IS NULL"
             ") OR ("
-            "relationship_status <> 'active' AND is_terminal = TRUE AND terminated_at IS NOT NULL"
+            "relationship_status <> 'active' AND is_terminal = TRUE "
+            "AND terminated_at IS NOT NULL"
             ")",
             name="ck_candidate_job_pipeline_relationship_terminal",
         ),
@@ -151,6 +158,10 @@ class CandidateJobPipelineModel(Base):
         sa.Index(
             "idx_candidate_job_pipeline_analysis",
             "current_analysis_id",
+        ),
+        sa.Index(
+            "idx_candidate_job_pipeline_application_id",
+            "application_id",
         ),
         sa.Index(
             "uq_candidate_job_pipeline_row_id",
@@ -198,7 +209,12 @@ class CandidateJobPipelineEventModel(Base):
     )
 
     __table_args__ = (
-        sa.Index("idx_candidate_job_pipeline_events_entry_time", "candidate_id", "job_id", "created_at"),
+        sa.Index(
+            "idx_candidate_job_pipeline_events_entry_time",
+            "candidate_id",
+            "job_id",
+            "created_at",
+        ),
         sa.Index("idx_candidate_job_pipeline_events_job_time", "job_id", "created_at"),
         sa.Index("idx_candidate_job_pipeline_events_type_time", "event_type", "created_at"),
         sa.Index("idx_candidate_job_pipeline_events_actor", "actor_id"),

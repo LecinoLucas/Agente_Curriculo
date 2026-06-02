@@ -3,6 +3,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.candidate_application_pipeline_service import (
+    CandidateApplicationPipelineService,
+)
 from src.application.services.candidate_application_service import CandidateApplicationService
 from src.infrastructure.repositories.sqlalchemy_candidate_application_repository import (
     SQLAlchemyCandidateApplicationRepository,
@@ -14,6 +17,7 @@ from src.interface.api.schemas.candidate_application_schemas import (
     CandidateApplicationUpdateRequest,
     CandidateLocationPreferenceCreateRequest,
     CandidateLocationPreferenceResponse,
+    LinkApplicationPipelineResponse,
 )
 from src.interface.api.schemas.common import PaginatedResponse
 
@@ -126,3 +130,36 @@ async def update_application(
     await db.commit()
     await db.refresh(application)
     return CandidateApplicationResponse.model_validate(application)
+
+
+@router.post(
+    "/{application_id}/link-pipeline",
+    response_model=LinkApplicationPipelineResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def link_application_to_pipeline(
+    application_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> LinkApplicationPipelineResponse:
+    """Link a submitted CandidateApplication to the pipeline (OP-6G).
+
+    - Requires application.status = 'submitted'.
+    - Requires application.candidate_id and application.job_id.
+    - Idempotent: repeated calls for an already-linked application return success
+      without creating a duplicate pipeline entry.
+    - Returns 409 if the candidate already has a conflicting active pipeline entry.
+    """
+    svc = CandidateApplicationPipelineService(db)
+    result = await svc.link_to_pipeline(
+        application_id=application_id,
+        actor_id=current_user.id,
+    )
+    await db.commit()
+    application = await _service(db).get_application(application_id)
+    return LinkApplicationPipelineResponse(
+        application_id=result.application_id,
+        pipeline_id=result.pipeline_id,
+        application_status=application.status,
+        created=result.created,
+    )
