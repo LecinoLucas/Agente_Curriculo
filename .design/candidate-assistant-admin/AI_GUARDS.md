@@ -1,84 +1,79 @@
-# OP-6E - AI Guards - Admin do Assistente do Candidato
+# OP-6H - AI Guards - Admin do Assistente do Candidato
 
-Data: 2026-06-01
-Status: Planejamento. Regras de IA e auditoria para a futura tela e o engine que
-ela observa.
+Data: 2026-06-02
+Status: Planejamento. Regras de IA, segurança e auditoria para o painel admin.
 
 ## Regras inegociáveis
 
-1. **IA não decide reprovação.** Nenhuma chamada de IA, nem ação desta tela,
-   reprova/aprova candidato. Decisão de elegibilidade é humana + regras, nunca o
-   modelo.
-2. **IA não cria pipeline sozinha.** A IA não dispara criação/movimentação de
-   `candidate_job_pipeline`. Vínculo de candidatura→pipeline é de outra fase e é
-   acionado por humano/regra.
-3. **IA apenas interpreta texto livre.** Papel do modelo: transformar
-   "qualquer posto em Peritoró" em uma **sugestão** de intenção
-   (função/localidade/turno). Sugestão, não comando.
-4. **A state machine decide a transição.** O próximo estado vem da máquina de
-   estados (OP-6B), não do modelo. A IA pode preencher um slot; a transição é
-   determinística.
-5. **Tudo é auditável.** Toda interpretação e toda ação admin têm rastro
-   (quem, quando, antes/depois). Ver `assistant_admin_audit` no DATA_MODEL.
-6. **Preferir botões/respostas rápidas.** Quick replies primeiro; IA é fallback
-   para texto livre não coberto por frases mapeadas. Economiza token e aumenta
-   previsibilidade.
+1. **IA não decide reprovação nem contratação.** Nenhuma ação do painel nem do
+   interpretador aprova/reprova/contrata. Decisão é humana + regras.
+2. **IA não cria/move pipeline.** O painel não dispara
+   `candidate_job_pipeline`. CandidateApplication só vira pipeline em fase
+   explícita, fora daqui.
+3. **IA apenas sugere intenção.** O interpretador/IA transforma texto livre em uma
+   **sugestão** (`choose_location`, `talk_to_hr`, ...). A **state machine valida**
+   e decide a transição. Sugestão nunca é comando.
+4. **A engine é a única fonte de verdade do fluxo.** O painel não cria transições,
+   não cria estados, não roda lógica paralela ao Conversation Engine. Edição
+   futura é só **conteúdo** (texto, quick replies, fallback, limites).
+5. **Um só motor para todos os canais.** WhatsApp futuro usa a mesma engine; o
+   painel trata canal como configuração, nunca como pipeline de IA separado.
+6. **Tudo auditável; nada apagável.** Histórico de mensagens e auditoria de
+   conversa são imutáveis para o admin. Toda mutação administrativa é registrada.
 
-## Ordem de interpretação (econômica)
+## Fronteiras do que o admin NÃO pode
 
-Para cada mensagem de candidato em texto livre:
-
-1. **Quick reply / opção clicada** → sem IA.
-2. **Match em `assistant_intents`** (frase/exemplos) → sem IA.
-3. **Heurística simples** (palavras-chave de função/localidade conhecidas) →
-   sem IA.
-4. **IA (último recurso)** → só se 1–3 falharem e dentro dos limites de IA.
-
-Quando IA não resolve, a mensagem entra em **Falhas do assistente** e o estado
-usa a `not_understood_message` com quick replies, sem travar o candidato.
-
-## Limites de IA (configuráveis, aba Configurações)
-
-- `ai_max_tokens_per_session`, `ai_max_calls_per_session`.
-- `ai_fallback_behavior`: `quick_replies_only` (default) ou `handoff`.
-- Ao exceder limite: parar de chamar IA na sessão e cair no fallback. Nunca
-  "tentar mais forte" automaticamente.
-- Reusar a política do `aiLimitsService` existente como fonte de verdade
-  (confirmar) em vez de duplicar limites.
-
-## Fronteiras de escopo (o que a IA/tela NÃO toca)
-
-- Não altera `CandidateApplication` nem candidate-portal.
-- Não aciona matching/IA de scoring.
-- Não interage com pré-admissão.
-- Não envia WhatsApp (placeholder desabilitado).
-- Não altera o bot real nem o pipeline.
+- Apagar/editar `conversation_messages` ou `assistant_admin_audit`.
+- Criar transição arbitrária da state machine.
+- Permitir que IA reprove/contrate.
+- Expor CPF/telefone completos.
+- Habilitar WhatsApp antes da engine suportar o canal.
+- Alterar CandidateApplication de forma a criar pipeline.
 
 ## Privacidade / LGPD
 
-- Conversas podem conter dados pessoais; a tela mostra apenas o necessário para
-  identificação (nome curto/ID), nunca CPF em claro/hash.
-- `interpreted_intent` e mensagens são dados de candidato; acesso restrito por
-  RBAC e logado.
-- Sugestões de IA são marcadas como sugestão e não persistem como verdade até um
-  humano confirmar (ex.: mapear falha → intenção).
+- **CPF nunca em claro.** O painel só vê `cpf_last4` (já o que a engine guarda em
+  `context_json`). Telefone sempre mascarado.
+- **Sanitização de texto livre:** mensagens do candidato (Falhas/thread) passam por
+  filtro que mascara sequências longas de dígitos (possível CPF/telefone) antes de
+  exibir/persistir em `assistant_failures.raw_message`.
+- **Minimização:** respostas de API expõem só o necessário; nada de `cpf_hash`,
+  `context_json` cru, e-mail.
+- **Anti-enumeração herdada:** o painel não revela se um CPF/telefone existe; ele
+  apenas mostra sessões já criadas (com candidato mascarado ou anônimo).
+- **OTP é a próxima proteção** (ver RISKS): enquanto não houver OTP, o vínculo de
+  `candidate_id` por identificador é "fraco"; o painel deve sinalizar sessões
+  `identifier_unresolved` e não tratar identificação como autenticação.
+
+## Ordem de interpretação (quando a IA/interpretador entrar)
+
+1. Quick reply / opção clicada → sem IA.
+2. Match em `assistant_intents` (frase/normalized) → sugestão direta, sem IA.
+3. Heurística simples (palavras-chave de localidade/função) → sem IA.
+4. IA (último recurso) → só dentro dos limites do `aiLimitsService`.
+
+Falha em todos → registra `assistant_failures` e usa `fallback_message` com quick
+replies; nunca trava o candidato. **Preferir botões/respostas rápidas** para
+economizar token e aumentar previsibilidade.
 
 ## Auditoria mínima por ação
 
-| Ação | O que registrar |
+| Ação | Registrar |
 | --- | --- |
-| Encaminhar/abandonar sessão | actor, sessão, status antes/depois, motivo |
-| Editar estado (conteúdo) | actor, state_key, diff de texto/quick replies |
-| Criar/editar/remover intenção | actor, intenção, diff |
-| Mapear falha → intenção | actor, message_id, intenção resultante, `source=from_failure` |
-| Editar configurações | actor, diff de settings (inclui limites de IA) |
+| Ver conversa | actor, session_id (acesso a PII logado) |
+| Flag/encerrar/reabrir sessão | actor, session, status antes/depois, nota |
+| Classificar/resolver falha | actor, failure_id, classificação, intent gerada |
+| Criar/editar/desativar intenção | actor, intent, diff |
+| Editar conteúdo de estado | actor, state_key, diff (só campos editáveis) |
+| Editar settings | actor, key, valor antes/depois |
 
-## Checklist de revisão de IA (antes de implementar)
+## Checklist de revisão (antes de implementar cada fase)
 
-- [ ] Nenhum endpoint/ação chama IA para decidir aprovação/reprovação.
-- [ ] Nenhuma ação cria/move pipeline automaticamente.
-- [ ] Transições continuam determinísticas (state machine), IA só sugere slot.
-- [ ] Quick replies cobrem os caminhos principais; IA é fallback.
-- [ ] Limites de IA aplicados e originados do `aiLimitsService`.
-- [ ] Toda mutação grava auditoria com diff.
-- [ ] Nenhum dado sensível exposto além do necessário.
+- [ ] Nenhum endpoint/ação chama IA para decidir aprovação/reprovação/contratação.
+- [ ] Nenhuma ação cria/move pipeline.
+- [ ] Transições/estados continuam só na engine; painel edita só conteúdo.
+- [ ] PII completa nunca sai da API nem é renderizada.
+- [ ] Texto livre sanitizado antes de exibir/persistir.
+- [ ] Toda mutação grava auditoria; auditoria/histórico são append-only.
+- [ ] WhatsApp permanece desabilitado; canais reusam a mesma engine.
+- [ ] Limites de IA originados do `aiLimitsService`.

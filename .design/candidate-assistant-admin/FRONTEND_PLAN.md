@@ -1,27 +1,25 @@
-# OP-6E - Frontend Plan - Admin do Assistente do Candidato
+# OP-6H - Frontend Plan - Admin do Assistente do Candidato
 
-Data: 2026-06-01
+Data: 2026-06-02
 Status: Planejamento. Nenhum componente criado nesta fase.
 
-## Padrões reaproveitados
+## App e padrões
 
-Seguir convenções já existentes no frontend admin:
-
-- Página única com abas, como `EstruturaOperacionalPage.tsx`.
-- Serviço dedicado em `frontend/src/services/`, padrão de
-  `operationalMasterService.ts` / `aiLimitsService.ts` / `auditLogsService.ts`.
-- Cliente HTTP central `http.ts`.
-- Estado de aba via query param (deep-link), como nas páginas admin atuais.
-- Tabela + drawer de detalhe, padrão de `CandidaturasPage` / `PipelinePage`.
+- Vive no app **`frontend`** (staff/admin), **não** no `candidate-portal`.
+- Página única com abas, padrão `EstruturaOperacionalPage.tsx`.
+- Serviço dedicado em `frontend/src/services/`, padrão `operationalMasterService.ts`
+  / `auditLogsService.ts`, usando o cliente central `http.ts`.
+- Estado de aba por query param (deep-link), como no admin atual.
+- Tabela + drawer de detalhe, padrão `CandidaturasPage`/`PipelinePage`.
 
 ## Arquivos propostos (quando implementar)
 
 ```
 frontend/src/pages/
-  CandidateAssistantAdminPage.tsx        # página container com 5 abas
+  CandidateAssistantAdminPage.tsx          # container com 5 abas
 frontend/src/pages/__tests__/
   CandidateAssistantAdminPage.test.tsx
-frontend/src/components/assistant-admin/  # subcomponentes por aba
+frontend/src/features/assistant-admin/     # subcomponentes por aba
   ConversationsTab.tsx
   ConversationDetailDrawer.tsx
   FlowStatesTab.tsx
@@ -29,70 +27,71 @@ frontend/src/components/assistant-admin/  # subcomponentes por aba
   FailuresTab.tsx
   AssistantSettingsTab.tsx
 frontend/src/services/
-  candidateAssistantAdminService.ts       # chama /api/v1/admin/assistant/*
+  assistantAdminService.ts                 # chama /api/v1/admin/assistant/*
 frontend/src/services/__tests__/
-  candidateAssistantAdminService.test.ts
+  assistantAdminService.test.ts
 ```
 
-Rota registrada na navegação admin existente: `/admin/assistente-candidato`.
+Rota registrada na navegação admin: `/admin/assistente-candidato`. Item de menu
+e rota protegidos por RBAC.
 
-## Aba 1 - Conversas (entrega 1, read-mostly)
+## Aba 1 — Conversas (MVP, read-only)
 
-- Tabela: candidato, estado atual, última mensagem, candidatura vinculada, status.
-- Filtros no topo (status, estado, canal, período, tem candidatura).
-- Linha → abre `ConversationDetailDrawer` com a thread (somente leitura).
-- Ações por linha: Ver histórico, Marcar abandonada, Encaminhar para RH.
-- Ações de mutação confirmam antes de executar e mostram toast de auditoria.
+- Tabela: candidato (mascarado), canal, estado atual, status, última mensagem,
+  data, candidatura, badges de falha/handoff.
+- Filtros no topo (status, estado, canal, período, tem candidatura, tem falha).
+- Linha → `ConversationDetailDrawer` (thread read-only, mensagens sanitizadas).
+- Ações de estado (flag/close/reopen) chegam em OP-6H-4, com confirmação + toast
+  de auditoria.
 
-## Aba 2 - Fluxo de perguntas (entrega 2)
+## Aba 2 — Fluxo de perguntas (read-only → edição futura)
 
-- Lista de estados (state_key, pergunta, quick replies, próximas etapas, ativo).
-- Entrega 1: somente leitura. Entrega 2: editar texto/quick replies/ativo.
-- `next_states` sempre read-only (lógica de OP-6B).
+- Lista/diagrama dos 9 estados, com prompt, helper, quick replies, fallback,
+  limite de tentativas, ativo.
+- MVP: somente leitura. Edição futura restrita a `editable_fields`; `next_states`
+  sempre read-only.
 
-## Aba 3 - Frases e intenções (entrega 2)
+## Aba 3 — Frases e intenções (futuro)
 
-- Tabela editável: frase, intenção, valor, alvo (localidade/unidade), ativo.
-- Form de criar/editar com seletor de `location_groups`/`operational_units`
-  reaproveitando serviços de cadastro mestre operacional.
-- Filtro por tipo de intenção e busca por frase.
+- Tabela editável: frase, intenção (select do catálogo), ativo.
+- Form criar/editar; busca por frase; filtro por intenção.
+- Deixar claro na UI que isto **sugere**, não decide fluxo.
 
-## Aba 4 - Falhas do assistente (entrega 1, leitura + ação de mapear)
+## Aba 4 — Falhas do assistente (MVP+1)
 
-- Tabela: mensagem não entendida, estado, ocorrências, sugestão, status.
-- Ação "Mapear" → modal que cria/atualiza intenção (Aba 3), com `source=from_failure`.
-- Ação "Ignorar".
-- Feedback claro de que mapear **não** decide nada sobre o candidato.
+- Tabela: mensagem (sanitizada), estado, tentativas, sessão/candidato (mascarado),
+  data, sugestão, status.
+- Ação "Classificar" → modal (localidade/função/filila/turno/RH) que pode criar
+  frase conhecida (Aba 3) e/ou encaminhar ao RH.
+- Feedback explícito: classificar **não** decide nada sobre o candidato.
 
-## Aba 5 - Configurações (entrega 2)
+## Aba 5 — Configurações (futuro)
 
-- Form: canal web (toggle), WhatsApp (toggle **desabilitado**/placeholder),
-  mensagens padrão (textarea), limites de IA (numéricos), fallback (select).
-- Limites de IA validados contra política do `aiLimitsService`.
+- Form: assistente ativo (toggle), mensagem inicial/fallback (textarea), limite de
+  tentativas (numérico), "oferecer Falar com RH após N", expiração (numérico),
+  exigir OTP (toggle desabilitado/placeholder), canais (web on; whatsapp
+  desabilitado).
+- Limites validados contra `aiLimitsService`.
 
-## Acessibilidade e responsividade
+## Acessibilidade, responsividade, PII
 
-- Tabelas com cabeçalho fixo e versão mobile em cards (padrão das páginas atuais).
+- Tabelas com cabeçalho fixo e versão mobile em cards (padrão atual).
 - Drawer com foco preso e fechável por ESC.
-- Ações destrutivas/irreversíveis (abandonar, encaminhar) com confirmação.
-
-## Economia de token (UX)
-
-- A tela admin **incentiva quick replies**: ao editar estados, destacar que
-  respostas rápidas reduzem chamadas de IA.
-- A aba Frases/Falhas existe justamente para resolver intenções por **match
-  direto**, evitando IA quando possível.
+- Ações irreversíveis/sensíveis (encerrar/encaminhar) com confirmação.
+- **PII sempre mascarada na renderização**; nunca renderizar CPF/telefone
+  completos mesmo que cheguem por engano — o serviço também filtra.
 
 ## Entrega faseada (frontend)
 
-1. **F1 (read-mostly)**: Conversas (lista, detalhe, abandon/handoff) + Falhas
-   (lista + mapear). Depende só de leitura de OP-6B + endpoints de sessão.
-2. **F2 (config)**: Frases/intenções CRUD, Fluxo (edição de conteúdo),
-   Configurações.
-3. **F3**: melhorias (diagrama de fluxo, agregação avançada de falhas).
+1. **OP-6H-1**: Conversas (lista + detalhe read-only).
+2. **OP-6H-2**: Falhas (lista + classificar).
+3. **OP-6H-3**: Configurações + edição de conteúdo dos estados; Frases/intenções.
+4. **OP-6H-4**: ações de handoff/close/reopen nas Conversas.
+5. **OP-6H-5**: visão de auditoria administrativa.
 
 ## Testes
 
-- Serviço: mock de `http.ts`, cobrir cada endpoint e erros.
-- Página: render por aba, filtros, confirmação de ações, estados vazios/erro.
-- Sem chamadas reais a IA nos testes.
+- Serviço: mock de `http.ts`, cobrir cada endpoint, paginação e erros.
+- Página: render por aba, filtros, confirmação de ações, estados vazio/erro, e
+  **asserção de que PII completa nunca aparece**.
+- Sem chamadas reais de IA nos testes.

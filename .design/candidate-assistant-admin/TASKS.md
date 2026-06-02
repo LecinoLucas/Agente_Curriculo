@@ -1,75 +1,76 @@
-# OP-6E - Tasks - Admin do Assistente do Candidato
+# OP-6H - Tasks - Admin do Assistente do Candidato
 
-Data: 2026-06-01
-Status: Backlog de planejamento. Nada implementável até OP-6B publicar o
-Conversation Engine. Tarefas em vertical slices (back + front + teste por fatia).
+Data: 2026-06-02
+Status: Backlog de planejamento. Vertical slices (back + front + teste por fatia).
+Nada implementável nesta fase (somente docs).
 
-## Fase 0 - Reconciliação (bloqueante)
+## Fase 0 — Reconciliação (bloqueante)
 
-- [ ] **OP-6E-0.1** Confirmar com OP-6B o esquema real de `conversation_sessions`
-      e `conversation_messages` (nomes, status, campos).
-- [ ] **OP-6E-0.2** Confirmar quais endpoints de sessão OP-6B já expõe
-      (listar, detalhe, abandon, handoff).
-- [ ] **OP-6E-0.3** Decidir: conteúdo dos estados é editável aqui ou só em OP-6B.
-- [ ] **OP-6E-0.4** Decidir: "falhas" é view sobre mensagens ou tabela própria.
-- [ ] **OP-6E-0.5** Confirmar fonte de verdade dos limites de IA
-      (`aiLimitsService`).
-- [ ] **OP-6E-0.6** Confirmar papéis RBAC para cada aba/ação.
+- [ ] **OP-6H-0.1** Confirmar com a engine os endpoints internos de status de
+      sessão (close/reopen/flag) ou definir que o painel os solicita à engine.
+- [ ] **OP-6H-0.2** Decidir origem dos `states` (introspecção da state machine vs.
+      tabela de conteúdo editável).
+- [ ] **OP-6H-0.3** Decidir `assistant_failures`: tabela emitida pela engine ou
+      view derivada de `conversation_messages`.
+- [ ] **OP-6H-0.4** Fonte única dos limites de IA (`aiLimitsService`).
+- [ ] **OP-6H-0.5** RBAC por aba/ação confirmado (admin/hr/recruiter/viewer).
+- [ ] **OP-6H-0.6** Política de mascaramento/sanitização de PII revisada com
+      segurança/LGPD.
 
-## Fase 1 - Slice "Conversas" (read-mostly)
+## OP-6H-1 — Conversas read-only (MVP)
 
-- [ ] **OP-6E-1.1** Backend: `GET /admin/assistant/sessions` (lista + filtros)
-      — reusar de OP-6B se existir.
-- [ ] **OP-6E-1.2** Backend: `GET /admin/assistant/sessions/{id}` (thread).
-- [ ] **OP-6E-1.3** Backend: `POST .../abandon` e `.../handoff` com auditoria
-      (ou consumir os de OP-6B).
-- [ ] **OP-6E-1.4** Frontend: `candidateAssistantAdminService` (métodos de sessão).
-- [ ] **OP-6E-1.5** Frontend: `CandidateAssistantAdminPage` + `ConversationsTab`
-      + `ConversationDetailDrawer`.
-- [ ] **OP-6E-1.6** Testes: serviço (mock http) + página (lista, filtros, ações).
+- [ ] **1.1** Backend: `GET /admin/assistant/sessions` (filtros + paginação,
+      candidato mascarado).
+- [ ] **1.2** Backend: `GET /admin/assistant/sessions/{id}` (resumo mascarado).
+- [ ] **1.3** Backend: `GET /admin/assistant/sessions/{id}/messages`
+      (thread + sanitização).
+- [ ] **1.4** Frontend: `assistantAdminService` (métodos de sessão).
+- [ ] **1.5** Frontend: `CandidateAssistantAdminPage` + `ConversationsTab` +
+      `ConversationDetailDrawer`.
+- [ ] **1.6** Testes: serviço (mock http) + página (lista, filtros, PII mascarada).
 
-## Fase 2 - Slice "Falhas do assistente"
+## OP-6H-2 — Falhas do assistente (MVP+1)
 
-- [ ] **OP-6E-2.1** Backend: `GET /admin/assistant/failures` (view/agregação).
-- [ ] **OP-6E-2.2** Backend: `POST .../failures/{id}/map` e `.../ignore`
-      (cria intenção `from_failure`, auditado).
-- [ ] **OP-6E-2.3** Frontend: `FailuresTab` + modal de mapear.
-- [ ] **OP-6E-2.4** Testes.
+- [ ] **2.1** Backend: emissão/derivação de `assistant_failures` (decisão 0.3).
+- [ ] **2.2** Backend: `GET /admin/assistant/failures` + `PATCH .../{id}`
+      (classificar/resolver/encaminhar, auditado).
+- [ ] **2.3** Frontend: `FailuresTab` + modal de classificação.
+- [ ] **2.4** Testes.
 
-## Fase 3 - Slice "Frases e intenções"
+## OP-6H-3 — Configuração de textos e quick replies
 
-- [ ] **OP-6E-3.1** Migration: `assistant_intents` (VARCHAR+CHECK, sem enum).
-- [ ] **OP-6E-3.2** Backend: CRUD `GET/POST/PATCH/DELETE /admin/assistant/intents`.
-- [ ] **OP-6E-3.3** Frontend: `IntentsTab` com seletor de localidade/unidade.
-- [ ] **OP-6E-3.4** Testes.
+- [ ] **3.1** Migration: `assistant_settings` (+ `assistant_intents` se entrar aqui).
+- [ ] **3.2** Backend: `GET/PATCH /admin/assistant/settings/{key}`
+      (rejeita whatsapp; valida limites).
+- [ ] **3.3** Backend: `GET /admin/assistant/states` + edição de conteúdo restrita
+      a `editable_fields` (sem topologia).
+- [ ] **3.4** Backend: CRUD `assistant_intents`.
+- [ ] **3.5** Frontend: `AssistantSettingsTab`, `FlowStatesTab` (edição), `IntentsTab`.
+- [ ] **3.6** Testes.
 
-## Fase 4 - Slice "Fluxo de perguntas"
+## OP-6H-4 — Handoff para RH
 
-- [ ] **OP-6E-4.1** Backend: `GET /admin/assistant/flow/states` (de OP-6B).
-- [ ] **OP-6E-4.2** Backend: `PATCH .../flow/states/{key}` se conteúdo editável
-      (texto/quick replies/ativo; nunca `next_states`).
-- [ ] **OP-6E-4.3** Frontend: `FlowStatesTab` (leitura → edição).
-- [ ] **OP-6E-4.4** Testes.
+- [ ] **4.1** Backend: `POST sessions/{id}/flag-hr | close | reopen` via engine,
+      auditado.
+- [ ] **4.2** Frontend: ações na `ConversationsTab`/drawer com confirmação.
+- [ ] **4.3** Testes (inclui "nenhuma pipeline criada").
 
-## Fase 5 - Slice "Configurações"
+## OP-6H-5 — Auditoria administrativa
 
-- [ ] **OP-6E-5.1** Migration/config: `assistant_settings`.
-- [ ] **OP-6E-5.2** Backend: `GET/PUT /admin/assistant/settings` (rejeitar
-      WhatsApp=true; validar limites de IA contra `aiLimitsService`).
-- [ ] **OP-6E-5.3** Frontend: `AssistantSettingsTab`.
-- [ ] **OP-6E-5.4** Testes.
+- [ ] **5.1** Backend: `assistant_admin_audit` (ou integração AuditLogs) em toda
+      mutação, append-only.
+- [ ] **5.2** Frontend: visão de auditoria (read-only) filtrável.
+- [ ] **5.3** Testes.
 
-## Fase 6 - Transversal
+## Transversal (todas as fases)
 
-- [ ] **OP-6E-6.1** Auditoria: gravar `assistant_admin_audit` em toda mutação
-      (ou integrar AuditLogs existente).
-- [ ] **OP-6E-6.2** Checklist de AI Guards aprovado (ver AI_GUARDS.md).
-- [ ] **OP-6E-6.3** RBAC aplicado e testado por aba/ação.
-- [ ] **OP-6E-6.4** Revisão de regressão (ver RISKS.md) e smoke do admin.
+- [ ] **T.1** Checklist de AI Guards aprovado (ver AI_GUARDS.md).
+- [ ] **T.2** RBAC aplicado e testado por aba/ação.
+- [ ] **T.3** PII nunca exposta (teste de contrato de API e de render).
+- [ ] **T.4** Revisão de regressão (ver RISKS.md): página/serviço isolados, sem
+      tocar candidate-portal, engine, pipeline, CandidateApplication.
 
-## Ordem recomendada de entrega
+## Ordem recomendada
 
-F0 → F1 → F2 → (F3, F4, F5 em paralelo conforme F0.3/0.4/0.5) → F6 contínuo.
-
-A primeira entrega de valor é **F1 + F2** (acompanhar conversas e revisar falhas),
-puramente em cima de leitura do OP-6B.
+F0 → OP-6H-1 → OP-6H-2 → OP-6H-3 → OP-6H-4 → OP-6H-5. Primeira entrega de valor:
+**OP-6H-1** (acompanhar conversas), puramente leitura sobre a engine.

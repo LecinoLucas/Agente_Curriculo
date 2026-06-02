@@ -1,158 +1,146 @@
-# OP-6E - Data Model - Admin do Assistente do Candidato
+# OP-6H - Data Model - Admin do Assistente do Candidato
 
-Data: 2026-06-01
+Data: 2026-06-02
 Status: Planejamento. Nenhuma migration nesta fase.
 
 ## Princípio de propriedade (ownership)
 
-- Tabelas de **conversa** são de **OP-6B** (Conversation Engine). Esta tela só
-  **lê** e, no máximo, atualiza campos operacionais já previstos por OP-6B
-  (status da sessão). Os esquemas abaixo marcados como **[OP-6B]** são
-  **suposições a confirmar** com OP-6B antes de qualquer código.
-- Tabelas de **configuração/admin** marcadas como **[OP-6E]** são novas e seriam
-  criadas quando esta tela for implementada — não nesta fase.
-- Sem enum PostgreSQL: usar `VARCHAR` + `CHECK`, padrão já adotado em OP-5, para
-  rollback e expansão simples.
+- Tabelas de **conversa/candidatura** já existem e são do Conversation Engine /
+  CandidateApplication. O painel admin **lê** essas tabelas e, no máximo, atualiza
+  campos operacionais já previstos (status de sessão) **via endpoint da engine**,
+  nunca por escrita direta.
+- Tabelas **[OP-6H novas]** (`assistant_*`) seriam criadas na fase respectiva, não
+  agora. Padrão do projeto: `VARCHAR` + `CHECK` em vez de enum PostgreSQL.
+- Toda escrita administrativa gera registro em `assistant_admin_audit`.
 
-## [OP-6B] conversation_sessions (assumido)
+## Tabelas existentes (somente leitura pelo painel)
 
-Esperado do Conversation Engine. Confirmar nomes reais com OP-6B.
+### conversation_sessions (Conversation Engine — real)
 
-| Campo | Tipo | Observação |
+| Campo | Tipo | Uso no painel |
 | --- | --- | --- |
-| `id` | UUID PK | Sessão de conversa. |
-| `candidate_id` | UUID FK nullable -> `candidates.id` | Candidato, se resolvido. |
-| `candidate_application_id` | UUID FK nullable | Candidatura vinculada (só leitura nesta tela). |
-| `channel` | varchar(20) | `web`, futuro `whatsapp`. |
-| `current_state` | varchar(60) | Estado atual da state machine. |
-| `status` | varchar(20) | `active`, `waiting`, `abandoned`, `handed_off`, `closed`. |
-| `last_message_at` | timestamptz | Para coluna "última mensagem". |
-| `handed_off_to` | UUID nullable | Usuário RH responsável, se encaminhado. |
-| `created_at` / `updated_at` | timestamptz | Auditoria temporal. |
+| `id` | UUID PK | identidade da sessão |
+| `candidate_id` | UUID FK→candidates (nullable) | candidato, se identificado |
+| `application_id` | UUID FK→candidate_applications (nullable) | link à candidatura |
+| `channel` | varchar (`web`/`whatsapp`) | canal |
+| `current_state` | varchar (9 estados) | estado atual |
+| `status` | varchar (`active`/`completed`/`abandoned`/`cancelled`) | status |
+| `context_json` | JSONB | derivar gargalo; **PII já minimizada** |
+| `last_message_at` | timestamptz | data última interação |
+| `created_at`/`updated_at`/`deleted_at` | timestamptz | auditoria temporal |
 
-Campos que a tela **lê**: todos acima.
-Campos que a tela pode **atualizar** (via endpoint do OP-6B, não direto):
-`status` (abandonar/encaminhar), `handed_off_to`.
+`context_json` hoje contém apenas: `identifier_type`, `cpf_last4`,
+`identifier_unresolved`, `location_hint`, `preference`, `desired_function`,
+`desired_shift`, `show_jobs_ack`, `resume_choice`, `confirmation`. **Nunca CPF
+completo.** O painel não deve assumir outros campos sensíveis.
 
-## [OP-6B] conversation_messages (assumido)
+### conversation_messages (Conversation Engine — real)
 
-| Campo | Tipo | Observação |
+| Campo | Tipo | Uso no painel |
 | --- | --- | --- |
-| `id` | UUID PK | Mensagem. |
-| `session_id` | UUID FK -> `conversation_sessions.id` | Sessão. |
-| `role` | varchar(15) | `candidate`, `assistant`, `system`. |
-| `content` | text | Texto da mensagem. |
-| `state_at_message` | varchar(60) nullable | Estado quando a mensagem ocorreu. |
-| `interpreted_intent` | JSONB nullable | Intenção inferida (função/local/turno). |
-| `was_understood` | boolean nullable | `false` alimenta a aba Falhas. |
-| `created_at` | timestamptz | Ordenação da thread. |
+| `id` | UUID PK | identidade |
+| `session_id` | UUID FK→conversation_sessions | thread |
+| `role` | varchar (`candidate`/`assistant`/`system`) | quem falou |
+| `content` | text | conteúdo (sanitizar ao exibir) |
+| `message_type` | varchar (`text`/`quick_reply`/`system`) | tipo |
+| `interpreted_intent` | varchar(100) nullable | intenção, quando houver |
+| `metadata_json` | JSONB nullable | p/ assistant: `{state, quick_replies[]}` |
+| `created_at` | timestamptz | ordenação |
 
-A tela lê tudo; **não escreve** em mensagens.
+O painel **lê**; nunca escreve nem edita mensagens.
 
-## [OP-6B/compartilhado] flow_states (estados da state machine)
+### candidate_applications / candidates / location_groups / operational_units
 
-A **lógica** de transição é de OP-6B. Esta tela precisa de uma representação de
-conteúdo dos estados para a Aba "Fluxo de perguntas". Duas opções a decidir com
-OP-6B:
+Lidas para enriquecer a visão (candidatura vinculada, localidade/unidade
+preferida). Sem escrita pelo painel. Exibição sempre mascarando PII de
+`candidates` (CPF/telefone). Reuso do cadastro mestre operacional para rótulos.
 
-- (A) OP-6B já expõe estados + conteúdo via endpoint → esta tela só consome.
-- (B) Conteúdo editável (texto da pergunta, quick replies, ativo/inativo) vive em
-  tabela própria **[OP-6E]** `assistant_flow_states_content`, referenciando a
-  chave de estado do OP-6B.
+---
 
-Estrutura assumida para exibição:
+## Tabelas novas [OP-6H] (futuras — não criar nesta fase)
 
-| Campo | Tipo | Observação |
-| --- | --- | --- |
-| `state_key` | varchar(60) | Identificador do estado (de OP-6B). |
-| `prompt_text` | text | Pergunta exibida ao candidato. |
-| `quick_replies` | JSONB | Lista de opções rápidas `[{label, value}]`. |
-| `next_states` | JSONB | Transições possíveis (somente leitura; de OP-6B). |
-| `is_active` | boolean | Ativo/Inativo. |
-
-## [OP-6E] assistant_intents (Aba "Frases e intenções")
-
-Nova tabela admin. Mapa frase → intenção, base do interpretador econômico.
+### 1. assistant_intents (Aba 3)
 
 | Campo | Tipo | Regra |
 | --- | --- | --- |
-| `id` | UUID PK | Entrada de intenção. |
-| `phrase` | text not null | Frase comum (ex.: "quero vaga de frentista"). |
-| `intent_type` | varchar(30) not null | `desired_role`, `location`, `shift`, `any_unit`, `other`. |
-| `intent_value` | varchar(255) nullable | Valor normalizado (ex.: `frentista`, `Peritoró`). |
-| `target_location_group_id` | UUID FK nullable -> `location_groups.id` | Quando intenção é localidade. |
-| `target_unit_id` | UUID FK nullable -> `operational_units.id` | Quando intenção é unidade. |
-| `examples` | JSONB nullable | Variações da frase. |
-| `is_active` | boolean not null default true | Ativo/Inativo. |
-| `source` | varchar(20) | `manual`, `from_failure` (criada a partir de falha). |
-| `created_by` / `updated_by` | UUID | Auditoria de autoria. |
-| `created_at` / `updated_at` | timestamptz | Auditoria temporal. |
+| `id` | UUID PK | |
+| `phrase` | text not null | frase original |
+| `normalized_phrase` | text not null | normalizada (casefold/sem acento) |
+| `intent` | varchar(40) not null | catálogo de intenções (CHECK) |
+| `is_active` | boolean not null default true | |
+| `created_at`/`updated_at` | timestamptz | |
 
-Reaproveita cadastro mestre operacional (`location_groups`, `operational_units`)
-para casar com a estrutura real de filiais/localidades.
+Catálogo de `intent` (CHECK): `job_search_interest`, `choose_location`,
+`choose_unit`, `choose_function`, `choose_shift`, `talk_to_hr`.
+Índice único sugerido em `normalized_phrase` (parcial onde `is_active`).
+**A intenção só sugere; a state machine valida** (ver AI_GUARDS).
 
-## [OP-6E] assistant_failures (Aba "Falhas do assistente")
+### 2. assistant_failures (Aba 4)
 
-Pode ser tabela própria **ou** uma *view* derivada de `conversation_messages`
-onde `was_understood = false`. Decisão depende de OP-6B.
-
-Visão lógica necessária:
-
-| Campo | Origem | Observação |
+| Campo | Tipo | Regra |
 | --- | --- | --- |
-| `message_id` | conversation_messages | Mensagem não entendida. |
-| `content` | conversation_messages | Texto do candidato. |
-| `state_at_message` | conversation_messages | Estado em que ocorreu. |
-| `occurrences` | agregação | Quantas mensagens equivalentes. |
-| `suggested_intent` | derivado/heurística | Sugestão de correção (não decide nada). |
-| `review_status` | [OP-6E] | `open`, `mapped`, `ignored`. |
-| `mapped_intent_id` | FK -> assistant_intents | Preenchido quando vira intenção. |
+| `id` | UUID PK | |
+| `session_id` | UUID FK→conversation_sessions | onde ocorreu |
+| `message_id` | UUID FK→conversation_messages (nullable) | mensagem alvo |
+| `state` | varchar(60) | estado no momento |
+| `raw_message` | text | texto sanitizado (sem PII bruta) |
+| `reason` | varchar(60) | `not_understood`/`stuck`/`max_attempts` |
+| `status` | varchar(20) not null default `open` | `open`/`resolved`/`forwarded` |
+| `reviewed_by` | UUID FK→users (nullable) | revisor |
+| `reviewed_at` | timestamptz nullable | |
+| `created_at` | timestamptz | |
 
-Mapear uma falha cria/atualiza uma linha de `assistant_intents` com
-`source='from_failure'`.
+Pode ser **tabela** populada pela engine ao detectar falha **ou** derivada por
+*view* sobre `conversation_messages` (a decidir com o time da engine — ver RISKS).
+Classificar uma falha pode criar uma `assistant_intents` (`talk_to_hr` etc.).
 
-## [OP-6E] assistant_settings (Aba "Configurações")
+### 3. assistant_settings (Aba 5)
 
-Configuração singleton (uma linha por ambiente) ou key/value.
-
-| Chave | Tipo | Observação |
+| Campo | Tipo | Regra |
 | --- | --- | --- |
-| `channel_web_enabled` | boolean | Canal web ligado. |
-| `channel_whatsapp_enabled` | boolean | **Sempre false nesta fase** (placeholder). |
-| `welcome_message` | text | Saudação. |
-| `not_understood_message` | text | Mensagem de "não entendi". |
-| `handoff_message` | text | Mensagem ao encaminhar para RH. |
-| `closing_message` | text | Encerramento. |
-| `ai_max_tokens_per_session` | int | Limite de IA por sessão. |
-| `ai_max_calls_per_session` | int | Limite de chamadas de IA por sessão. |
-| `ai_fallback_behavior` | varchar(20) | `quick_replies_only`, `handoff`. |
+| `key` | varchar(60) PK | chave da configuração |
+| `value` | text/JSONB | valor |
+| `description` | text nullable | rótulo amigável |
+| `updated_by` | UUID FK→users | quem alterou |
+| `updated_at` | timestamptz | quando |
 
-Limites de IA devem conversar com o `aiLimitsService` já existente — confirmar se
-reutiliza a mesma fonte de verdade em vez de duplicar.
+Chaves planejadas: `assistant_enabled`, `welcome_message`, `fallback_message`,
+`max_attempts_per_state`, `offer_hr_after_attempts`, `session_expiration_minutes`,
+`require_otp` (futuro, default false), `channels_enabled`
+(ex.: `["web"]`; whatsapp desabilitado nesta fase).
+Limites de IA devem conversar com o `aiLimitsService` existente (não duplicar).
 
-## [OP-6E] assistant_admin_audit (auditoria de ações admin)
+### 4. assistant_admin_audit (transversal)
 
-Toda ação administrativa desta tela é auditável. Reusar a infra de `AuditLogs`
-existente se possível; senão, tabela dedicada:
-
-| Campo | Tipo | Observação |
+| Campo | Tipo | Regra |
 | --- | --- | --- |
-| `id` | UUID PK | Evento. |
-| `actor_id` | UUID | Quem executou. |
-| `action` | varchar(40) | `abandon_session`, `handoff_session`, `edit_state`, `map_intent`, `edit_settings`. |
-| `target_type` | varchar(30) | `session`, `state`, `intent`, `settings`. |
-| `target_id` | varchar(80) | Alvo. |
-| `before` / `after` | JSONB | Diff da mudança. |
-| `created_at` | timestamptz | Quando. |
+| `id` | UUID PK | |
+| `actor_id` | UUID FK→users | quem agiu |
+| `action` | varchar(40) | `view`/`flag_followup`/`close`/`reopen`/`edit_state_content`/`map_intent`/`resolve_failure`/`edit_settings` |
+| `entity_type` | varchar(30) | `session`/`state`/`intent`/`failure`/`settings` |
+| `entity_id` | varchar(80) | alvo |
+| `before_json` | JSONB nullable | estado anterior |
+| `after_json` | JSONB nullable | estado posterior |
+| `created_at` | timestamptz | |
+
+Reusar a infra de AuditLogs existente se cobrir o caso; senão, esta tabela
+dedicada. **Append-only**: admin nunca apaga/edita auditoria.
 
 ## Resumo de propriedade
 
-| Tabela | Dono | Esta tela faz |
+| Tabela | Dono | Painel faz |
 | --- | --- | --- |
-| `conversation_sessions` | OP-6B | lê; atualiza status via endpoint OP-6B |
-| `conversation_messages` | OP-6B | lê |
-| estados da state machine | OP-6B | lê lógica; edita conteúdo (a decidir) |
-| `assistant_intents` | OP-6E | CRUD |
-| `assistant_failures` | OP-6E (ou view OP-6B) | lê + marca/mapeia |
-| `assistant_settings` | OP-6E | lê/edita |
-| `assistant_admin_audit` | OP-6E / AuditLogs | escreve em toda ação |
+| conversation_sessions | Conversation Engine | lê; status via endpoint da engine |
+| conversation_messages | Conversation Engine | lê |
+| candidate_applications / candidates / master | OP-5/OP-2 | lê (mascarado) |
+| assistant_intents | OP-6H | CRUD |
+| assistant_failures | OP-6H (ou view da engine) | lê + classifica |
+| assistant_settings | OP-6H | lê/edita |
+| assistant_admin_audit | OP-6H / AuditLogs | escreve em toda mutação |
+
+## Decisões a confirmar
+
+1. Conteúdo dos estados editável (Aba 2): a engine expõe e o painel grava em
+   `assistant_settings`/override próprio, ou os textos continuam só no código?
+2. `assistant_failures` é tabela populada pela engine ou view?
+3. Origem única dos limites de IA (`aiLimitsService` vs. `assistant_settings`).

@@ -1,102 +1,106 @@
-# OP-6E - Risks - Admin do Assistente do Candidato
+# OP-6H - Risks - Admin do Assistente do Candidato
 
-Data: 2026-06-01
+Data: 2026-06-02
 Status: Planejamento. Riscos e mitigações antes de implementar.
 
-## R1 - Acoplamento com OP-6B ainda instável (ALTO)
+## R1 — Vazamento de PII (ALTO, LGPD)
 
-A tela depende de `conversation_sessions`/`conversation_messages`/state machine
-que OP-6B ainda está construindo. Esquema pode mudar.
+Conversas e falhas contêm dados pessoais; listas/threads podem expor mais do que o
+necessário (CPF/telefone, texto livre com números).
 
-- Mitigação: Fase 0 (reconciliação) é bloqueante; só implementar após esquema
-  congelado. Contratos deste plano são "a confirmar". Consumir endpoints de OP-6B
-  em vez de ler tabelas direto, reduzindo acoplamento de schema.
+- Mitigação: API só devolve máscaras (`cpf_last4`, telefone mascarado); nunca
+  `cpf_hash`/`context_json` cru. Sanitização de texto livre (mascara dígitos
+  longos). Render no front também mascara. Acesso a PII é logado.
 
-## R2 - Duplicação de responsabilidade de sessão (MÉDIO)
+## R2 — Admin reprogramar o fluxo (ALTO, produto/segurança)
 
-Abandonar/encaminhar altera estado de sessão, que é de OP-6B. Risco de duas fontes
-escrevendo no mesmo dado.
+Tentação de editar transições/estados pelo painel, criando lógica paralela à engine.
 
-- Mitigação: OP-6E **não** escreve direto em `conversation_sessions`; usa endpoint
-  de OP-6B. Se não existir, OP-6B o expõe. Documentar dono único.
+- Mitigação: painel **só** edita conteúdo (`editable_fields`); `next_states` e
+  topologia são read-only e ficam na engine. Sem criar/remover estados.
 
-## R3 - IA ultrapassar seu papel (ALTO, segurança/produto)
+## R3 — IA ultrapassar seu papel (ALTO)
 
-Risco de a IA acabar decidindo elegibilidade ou criando pipeline.
+Intenções/IA acabarem decidindo fluxo, reprovação ou contratação.
 
-- Mitigação: AI_GUARDS.md — IA só interpreta texto; state machine decide; nenhuma
-  ação cria pipeline. Checklist de AI Guards obrigatório na revisão (OP-6E-6.2).
+- Mitigação: AI_GUARDS — IA só sugere; state machine valida; nenhuma ação cria
+  pipeline ou decide elegibilidade. Checklist obrigatório por fase.
 
-## R4 - Custo de token / chamadas de IA (MÉDIO)
+## R4 — Acoplamento com a engine (MÉDIO)
 
-Texto livre pode disparar muitas chamadas de IA.
+Endpoints internos de status de sessão podem não existir; introspecção de estados
+e emissão de falhas dependem da engine.
 
-- Mitigação: ordem de interpretação econômica (quick reply → intents → heurística
-  → IA), limites por sessão configuráveis, fallback `quick_replies_only`.
-  Aba Frases/Falhas existe para resolver por match direto.
+- Mitigação: Fase 0 (reconciliação) bloqueante; painel consome endpoints da engine
+  em vez de escrever direto; decisões 0.2/0.3 antes de codar.
 
-## R5 - LGPD / exposição de dados sensíveis (ALTO)
+## R5 — Apagar/alterar histórico ou auditoria (ALTO)
 
-Conversas contêm dados pessoais; lista admin pode vazar mais do que o necessário.
+Mutação acidental de mensagens/auditoria quebraria rastreabilidade.
 
-- Mitigação: mostrar apenas nome curto/ID; nunca CPF/hash; RBAC restrito; acesso
-  logado. Sugestões de IA não viram verdade sem confirmação humana.
+- Mitigação: histórico e `assistant_admin_audit` são **append-only**; nenhum
+  endpoint de delete/edit de mensagem; testes garantem ausência dessas rotas.
 
-## R6 - Regressão no admin existente (MÉDIO)
+## R6 — Identificação tratada como autenticação (MÉDIO/ALTO)
 
-Nova rota/menu e novo serviço podem afetar navegação e o `http.ts` compartilhado.
+Sem OTP, o vínculo `candidate_id` por CPF/WhatsApp é fraco; o painel poderia exibir
+dados de candidatura a quem não é o dono.
 
-- Mitigação: página isolada (`CandidateAssistantAdminPage`), serviço dedicado,
-  sem alterar serviços existentes. Smoke do admin após integração (OP-6E-6.4).
-  Não tocar páginas/serviços de candidaturas, pipeline, pré-admissão.
+- Mitigação: sinalizar `identifier_unresolved`; não tratar identificação como
+  login; RBAC restrito; **OTP é a próxima proteção recomendada** (abaixo).
 
-## R7 - Escopo "vazar" para áreas proibidas (ALTO, processo)
+## R7 — Regressão no admin existente (MÉDIO)
 
-Tentação de já mexer em candidate-portal, bot real, WhatsApp, matching ou
-pré-admissão.
+Nova rota/menu/serviço afetando navegação e `http.ts` compartilhado.
 
-- Mitigação: escopo explícito no DESIGN_BRIEF; WhatsApp é placeholder
-  desabilitado; nenhuma integração com matching/pré-admissão; revisão de PR checa
-  fronteiras.
+- Mitigação: página isolada (`CandidateAssistantAdminPage`), serviço dedicado, sem
+  alterar serviços existentes; smoke do admin após integração.
 
-## R8 - Edição de fluxo conflitar com a lógica de OP-6B (MÉDIO)
+## R8 — Vazamento de escopo para áreas proibidas (ALTO, processo)
 
-Editar conteúdo de estado pode parecer que se pode editar a transição.
+Mexer em candidate-portal, engine, pipeline, CandidateApplication, WhatsApp,
+matching ou pré-admissão.
 
-- Mitigação: UI e API só editam texto/quick replies/ativo; `next_states` é
-  read-only; decisão F0.3 sobre quem é dono do conteúdo.
+- Mitigação: escopo explícito no DESIGN_BRIEF; WhatsApp desabilitado; revisão de PR
+  checa fronteiras; painel só lê a engine.
 
-## R9 - "Falhas" sem fechamento de ciclo (BAIXO/MÉDIO)
+## R9 — Configuração inválida derrubar o chat (MÉDIO)
+
+Limite de tentativas/expiração/fallback mal configurado quebra a conversa pública.
+
+- Mitigação: validação no PATCH settings; rejeitar valores perigosos; `channels_enabled`
+  não aceita whatsapp nesta fase; mudança auditada e reversível.
+
+## R10 — Falhas sem fechamento de ciclo (BAIXO/MÉDIO)
 
 Falhas acumulam sem virar melhoria.
 
-- Mitigação: ação "mapear falha → intenção" já no slice F2, alimentando F3;
-  métrica de ocorrências para priorizar.
-
-## R10 - Auditoria incompleta (MÉDIO)
-
-Ações admin sem rastro quebram o princípio de "tudo auditável".
-
-- Mitigação: auditoria transversal (OP-6E-6.1) em toda mutação, com diff
-  antes/depois; preferir reuso da infra de AuditLogs existente.
+- Mitigação: ação "classificar → criar frase conhecida" (OP-6H-2/3); métrica de
+  ocorrências para priorizar.
 
 ## Resumo
 
-| Risco | Severidade | Principal mitigação |
+| Risco | Severidade | Mitigação principal |
 | --- | --- | --- |
-| R1 Schema OP-6B instável | Alto | Fase 0 bloqueante, consumir endpoints |
-| R2 Dono da sessão | Médio | OP-6B único escritor |
+| R1 PII | Alto | Máscara + sanitização + log de acesso |
+| R2 Reprogramar fluxo | Alto | Só conteúdo; topologia read-only |
 | R3 IA fora do papel | Alto | AI_GUARDS + checklist |
-| R4 Custo de token | Médio | Quick replies + limites |
-| R5 LGPD | Alto | Mínimo necessário + RBAC + log |
-| R6 Regressão admin | Médio | Página/serviço isolados + smoke |
-| R7 Vazamento de escopo | Alto | Escopo explícito + revisão |
-| R8 Edição de fluxo | Médio | Só conteúdo, transição read-only |
-| R9 Falhas sem ciclo | Baixo/Médio | Mapear no F2 |
-| R10 Auditoria | Médio | Auditoria transversal |
+| R4 Acoplamento engine | Médio | Fase 0 + consumir endpoints |
+| R5 Apagar histórico/auditoria | Alto | Append-only, sem delete |
+| R6 Identificação ≠ auth | Médio/Alto | OTP + RBAC + flag unresolved |
+| R7 Regressão admin | Médio | Página/serviço isolados + smoke |
+| R8 Vazamento de escopo | Alto | Escopo explícito + revisão |
+| R9 Config inválida | Médio | Validação + auditoria + reversível |
+| R10 Falhas sem ciclo | Baixo/Médio | Classificar → frase conhecida |
+
+## Próxima proteção recomendada (OTP)
+
+Antes de qualquer ação que exponha candidatura a partir de identificação no chat,
+exigir **OTP** (código enviado ao CPF/WhatsApp informado) para confirmar a posse do
+identificador. Só então tratar `candidate_id` como vínculo forte. O painel deve, até
+lá, marcar sessões identificadas como "não verificadas" e restringir o que exibe.
 
 ## Próxima fase implementável
 
-**OP-6B** deve entregar o Conversation Engine (tabelas + endpoints de conversa).
-Em seguida, **OP-6E-F0 (reconciliação)** e então **OP-6E-F1 (Conversas, leitura)**
-tornam-se a primeira fatia implementável.
+**OP-6H-1 (Conversas read-only)** após a Fase 0 (reconciliação). É a primeira fatia
+de valor, puramente leitura sobre a engine, sem novas tabelas obrigatórias.
