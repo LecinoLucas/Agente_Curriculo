@@ -387,7 +387,10 @@ async def test_otp_for_unknown_candidate_still_issued_and_verifiable(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    """Anti-enumeration: late OTP is issued even when no candidate matches."""
+    """OP-6F.5: for an unresolved lead, OTP is issued after the lead collection
+    states (COLLECT_LEAD_NAME → COLLECT_LEAD_WHATSAPP → COLLECT_LGPD_CONSENT →
+    CONFIRM_APPLICATION → VERIFY_OTP). Anti-enumeration still holds: the reply is
+    identical regardless of whether the candidate existed."""
     await _location(db_session)
     session_id = await _start(client)
     payload = await _send(client, session_id, VALID_CPF)
@@ -398,12 +401,17 @@ async def test_otp_for_unknown_candidate_still_issued_and_verifiable(
     await _send(client, session_id, "Frentista")
     await _send(client, session_id, "night")
     await _send(client, session_id, "continue")
-    await _send(client, session_id, "skip_resume")
+    # OP-6F.5: unresolved lead enters COLLECT_LEAD_* path.
+    after_resume = await _send(client, session_id, "skip_resume")
+    assert after_resume["current_state"] == "COLLECT_LEAD_NAME"
+    await _send(client, session_id, "Maria da Silva")
+    await _send(client, session_id, "11987654321")
+    await _send(client, session_id, "aceito")
     confirm = await _send(client, session_id, "confirm")
     assert confirm["current_state"] == "VERIFY_OTP"
 
     otp = await _latest_otp(db_session, session_id)
-    assert otp.candidate_id is None
+    assert otp.candidate_id is None  # no pre-existing candidate
 
     code = await _extract_code(db_session, session_id)
     verify = await _send(client, session_id, code)
@@ -413,4 +421,5 @@ async def test_otp_for_unknown_candidate_still_issued_and_verifiable(
 
     session = await db_session.get(ConversationSessionModel, UUID(session_id))
     assert session is not None
-    assert session.candidate_id is None
+    # OP-6F.5: Candidate created and linked after successful OTP.
+    assert session.candidate_id is not None

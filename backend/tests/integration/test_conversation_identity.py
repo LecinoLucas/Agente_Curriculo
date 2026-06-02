@@ -467,7 +467,12 @@ async def test_identify_with_unknown_whatsapp_does_not_link_or_reveal(
     assert session is not None
     assert session.candidate_id is None
     assert session.context_json["identifier_unresolved"] is True
-    assert WHATSAPP not in json.dumps(session.context_json)
+    # OP-6F.5: lead_whatsapp is stored as an internal context key (stripped from
+    # public API) so OTP and Candidate creation can proceed later. It must NOT
+    # appear in the public context (asserted above via public_context).
+    # The raw DB context will contain it; that's expected and controlled.
+    assert "lead_whatsapp" in session.context_json  # internal key, used for OTP
+    assert "lead_whatsapp" not in public_context     # not exposed via API
 
 
 async def test_identify_with_invalid_input_stays_in_identify(

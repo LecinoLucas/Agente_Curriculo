@@ -80,6 +80,21 @@ _INVALID_UNIT_MESSAGE = (
 )
 _INVALID_FUNCTION_MESSAGE = "Não consegui entender a função desejada. Digite o nome da função."
 _INVALID_SHIFT_MESSAGE = "Não consegui entender o turno. Escolha uma das opções disponíveis."
+_COLLECT_LEAD_NAME_MESSAGE = "Para continuar sua candidatura, me diga seu nome completo."
+_COLLECT_LEAD_WHATSAPP_MESSAGE = (
+    "Agora me informe seu WhatsApp com DDD para o RH poder falar com você."
+)
+_COLLECT_LGPD_MESSAGE = (
+    "Você autoriza o uso dos seus dados para participar do processo seletivo?"
+)
+_LGPD_REJECTED_MESSAGE = (
+    "Tudo bem. Sem essa autorização, não consigo continuar sua candidatura por aqui."
+)
+_INVALID_NAME_MESSAGE = "Por favor, informe seu nome completo (nome e sobrenome)."
+_INVALID_WHATSAPP_MESSAGE = (
+    "Não consegui identificar o número. "
+    "Digite seu WhatsApp com DDD (10 ou 11 dígitos)."
+)
 _SAFE_RESUME_CONTEXT_KEYS = frozenset(
     {
         "location_hint",
@@ -90,7 +105,16 @@ _SAFE_RESUME_CONTEXT_KEYS = frozenset(
         "resume_choice",
     }
 )
-_UNSAFE_RESUME_STATES = {"IDENTIFY", "VERIFY_OTP", "DONE"}
+# States that are unsafe to resume into: the conversation restarts from CHOOSE_LOCATION.
+# Lead-collection states are always unsafe (partially-collected data must not be resumed).
+_UNSAFE_RESUME_STATES = {
+    "IDENTIFY",
+    "VERIFY_OTP",
+    "COLLECT_LEAD_NAME",
+    "COLLECT_LEAD_WHATSAPP",
+    "COLLECT_LGPD_CONSENT",
+    "DONE",
+}
 
 
 @dataclass(frozen=True)
@@ -176,6 +200,12 @@ class ConversationService:
                 content,
                 candidate_message,
             )
+        elif conversation.current_state == "COLLECT_LEAD_NAME":
+            prompt = self._handle_collect_lead_name(conversation, context, content)
+        elif conversation.current_state == "COLLECT_LEAD_WHATSAPP":
+            prompt = self._handle_collect_lead_whatsapp(conversation, context, content)
+        elif conversation.current_state == "COLLECT_LGPD_CONSENT":
+            prompt = self._handle_collect_lgpd_consent(conversation, context, content)
         else:
             invalid_prompt = await self._invalid_prompt_if_needed(
                 conversation,
@@ -191,6 +221,16 @@ class ConversationService:
                     context,
                     content,
                 )
+            elif conversation.current_state == "COLLECT_RESUME" and self._is_unresolved_lead(
+                conversation, context
+            ):
+                # Unresolved lead: collect name/WhatsApp/consent before confirming.
+                self._merge_context(
+                    context,
+                    self._state_update("COLLECT_RESUME", content),
+                )
+                conversation.current_state = "COLLECT_LEAD_NAME"
+                prompt = prompt_for("COLLECT_LEAD_NAME", context)
             else:
                 self._merge_context(
                     context,
@@ -200,7 +240,7 @@ class ConversationService:
                 prompt = prompt_for(conversation.current_state, context)
 
         conversation.context_json = context
-        if conversation.current_state == "DONE":
+        if conversation.current_state == "DONE" and conversation.status == "active":
             conversation.status = "completed"
         conversation.updated_at = datetime.now(UTC)
 
@@ -298,6 +338,11 @@ class ConversationService:
             context.pop("pending_application_id", None)
             context.pop("pending_application_status", None)
             context.pop("application_in_progress", None)
+            # For WhatsApp leads: store normalized digits as an internal key so
+            # we can issue OTP and create the Candidate later without re-asking.
+            # This key is stripped from public API responses (_public_context).
+            if identifier_type == "whatsapp":
+                context["lead_whatsapp"] = normalized
         else:
             context.pop("identifier_unresolved", None)
             context["pending_candidate_id"] = str(candidate_id)
@@ -465,6 +510,14 @@ class ConversationService:
             context.pop("pending_application_status", None)
             context.pop("resumed_from_session_id", None)
             context.pop("application_in_progress", None)
+            # Lead registration: create Candidate + Application after verified OTP.
+            if (
+                conversation.candidate_id is None
+                and context.get("lead_mode")
+                and context.get("lgpd_consent")
+                and context.get("lead_name")
+            ):
+                await self._create_lead_candidate_and_application(conversation, context)
             conversation.current_state = "DONE"
             return prompt_for("DONE", context)
 
@@ -648,6 +701,150 @@ class ConversationService:
             check_digit(digits[:9], 10) == int(digits[9])
             and check_digit(digits[:10], 11) == int(digits[10])
         )
+
+    # ------------------------------------------------------------------
+    # Lead-registration helpers (OP-6F.5)
+    #
+    # These states only activate for sessions where no existing Candidate was
+    # found (identifier_unresolved=True). They collect minimal data, verify via
+    # OTP, then create a Candidate + CandidateApplication. No pipeline is created.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_unresolved_lead(
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+    ) -> bool:
+        return (
+            conversation.candidate_id is None
+            and bool(context.get("lead_mode"))
+            and bool(context.get("identifier_unresolved"))
+        )
+
+    @staticmethod
+    def _is_valid_lead_name(name: str) -> bool:
+        stripped = name.strip()
+        if len(stripped) < 3:
+            return False
+        alpha_count = sum(1 for c in stripped if c.isalpha())
+        # Must have at least 3 letters; at minimum a first + last initial/name.
+        if alpha_count < 3:
+            return False
+        words = stripped.split()
+        return len(words) >= 2
+
+    @staticmethod
+    def _normalize_phone_digits(content: str) -> str | None:
+        digits = re.sub(r"\D", "", content)
+        # Drop Brazilian country code prefix.
+        if len(digits) > 11 and digits.startswith("55"):
+            digits = digits[2:]
+        if 10 <= len(digits) <= 11:
+            return digits
+        return None
+
+    def _handle_collect_lead_name(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+    ) -> ConversationPrompt:
+        if not self._is_valid_lead_name(content):
+            return ConversationPrompt(
+                state="COLLECT_LEAD_NAME",
+                content=_INVALID_NAME_MESSAGE,
+            )
+        context["lead_name"] = content.strip()
+        identifier_type = context.get("identifier_type")
+        if identifier_type == "whatsapp" and context.get("lead_whatsapp"):
+            # WhatsApp already captured at IDENTIFY — skip COLLECT_LEAD_WHATSAPP.
+            conversation.current_state = "COLLECT_LGPD_CONSENT"
+            return prompt_for("COLLECT_LGPD_CONSENT", context)
+        conversation.current_state = "COLLECT_LEAD_WHATSAPP"
+        return prompt_for("COLLECT_LEAD_WHATSAPP", context)
+
+    def _handle_collect_lead_whatsapp(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+    ) -> ConversationPrompt:
+        digits = self._normalize_phone_digits(content)
+        if digits is None:
+            return ConversationPrompt(
+                state="COLLECT_LEAD_WHATSAPP",
+                content=_INVALID_WHATSAPP_MESSAGE,
+            )
+        # Internal key — stripped from public context.
+        context["lead_whatsapp"] = digits
+        conversation.current_state = "COLLECT_LGPD_CONSENT"
+        return prompt_for("COLLECT_LGPD_CONSENT", context)
+
+    def _handle_collect_lgpd_consent(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+    ) -> ConversationPrompt:
+        normalized = content.strip().casefold()
+        if normalized in {"aceito", "sim", "yes", "accept", "ok", "concordo"}:
+            context["lgpd_consent"] = True
+            conversation.current_state = "CONFIRM_APPLICATION"
+            return prompt_for("CONFIRM_APPLICATION", context)
+        if normalized in {"nao_aceito", "não aceito", "nao", "não", "no", "recuso"}:
+            context["lgpd_consent"] = False
+            context.pop("lead_name", None)
+            context.pop("lead_whatsapp", None)
+            conversation.current_state = "DONE"
+            conversation.status = "cancelled"
+            return ConversationPrompt(state="DONE", content=_LGPD_REJECTED_MESSAGE)
+        # Ambiguous — re-ask with quick replies.
+        return prompt_for("COLLECT_LGPD_CONSENT", context)
+
+    async def _create_lead_candidate_and_application(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+    ) -> None:
+        """Create a minimal Candidate (and CandidateApplication) for an OTP-verified lead.
+
+        Checks for an existing Candidate by phone before creating to prevent
+        duplicates. No pipeline is created. The `lead_name` and `lead_whatsapp`
+        keys are removed from context after use.
+        """
+        lead_name: str = str(context.get("lead_name") or "").strip() or "Lead"
+        lead_whatsapp: str | None = context.get("lead_whatsapp")
+
+        # Duplicate prevention: link existing Candidate if phone already exists.
+        if lead_whatsapp:
+            existing = await self._session.scalar(
+                sa.select(CandidateModel).where(
+                    CandidateModel.phone == lead_whatsapp,
+                    CandidateModel.deleted_at.is_(None),
+                )
+            )
+            if existing is not None:
+                conversation.candidate_id = existing.id
+                context.pop("lead_name", None)
+                context.pop("lead_whatsapp", None)
+                await self._sync_application(conversation)
+                return
+
+        now = datetime.now(UTC)
+        candidate = CandidateModel(
+            full_name=lead_name,
+            phone=lead_whatsapp,
+            application_source="bot",
+            lgpd_consent_at=now,
+            lgpd_consent_version="v1.0",
+        )
+        self._session.add(candidate)
+        await self._session.flush()
+
+        conversation.candidate_id = candidate.id
+        context.pop("lead_name", None)
+        context.pop("lead_whatsapp", None)
+        await self._sync_application(conversation)
 
     # ------------------------------------------------------------------
     # CandidateApplication integration
@@ -1113,6 +1310,9 @@ class ConversationService:
             "pending_application_id",
             "pending_application_status",
             "resumed_from_session_id",
+            # Lead-registration: PII stored temporarily; never exposed via API.
+            "lead_name",
+            "lead_whatsapp",
         }
         return {key: value for key, value in context.items() if key not in internal_keys}
 

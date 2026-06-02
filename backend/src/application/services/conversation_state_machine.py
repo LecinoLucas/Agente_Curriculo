@@ -10,6 +10,10 @@ ConversationState = Literal[
     "CHOOSE_SHIFT",
     "SHOW_JOBS",
     "COLLECT_RESUME",
+    # Lead-registration states (only visited for unresolved/new leads).
+    "COLLECT_LEAD_NAME",
+    "COLLECT_LEAD_WHATSAPP",
+    "COLLECT_LGPD_CONSENT",
     "CONFIRM_APPLICATION",
     "DONE",
 ]
@@ -31,6 +35,10 @@ STATE_TRANSITIONS: dict[ConversationState, ConversationState] = {
     "CHOOSE_SHIFT": "SHOW_JOBS",
     "SHOW_JOBS": "COLLECT_RESUME",
     "COLLECT_RESUME": "CONFIRM_APPLICATION",
+    # Lead-registration chain; service may skip COLLECT_LEAD_WHATSAPP for WhatsApp leads.
+    "COLLECT_LEAD_NAME": "COLLECT_LEAD_WHATSAPP",
+    "COLLECT_LEAD_WHATSAPP": "COLLECT_LGPD_CONSENT",
+    "COLLECT_LGPD_CONSENT": "CONFIRM_APPLICATION",
     "CONFIRM_APPLICATION": "DONE",
     "DONE": "DONE",
 }
@@ -118,6 +126,30 @@ def prompt_for(state: str, context: dict[str, Any] | None = None) -> Conversatio
             quick_replies=(
                 ("send_resume", "Enviar currículo"),
                 ("skip_resume", "Continuar sem currículo"),
+            ),
+        )
+    if coerced_state == "COLLECT_LEAD_NAME":
+        return ConversationPrompt(
+            state="COLLECT_LEAD_NAME",
+            content="Para continuar sua candidatura, me diga seu nome completo.",
+        )
+    if coerced_state == "COLLECT_LEAD_WHATSAPP":
+        return ConversationPrompt(
+            state="COLLECT_LEAD_WHATSAPP",
+            content=(
+                "Agora me informe seu WhatsApp com DDD "
+                "para o RH poder falar com você."
+            ),
+        )
+    if coerced_state == "COLLECT_LGPD_CONSENT":
+        return ConversationPrompt(
+            state="COLLECT_LGPD_CONSENT",
+            content=(
+                "Você autoriza o uso dos seus dados para participar do processo seletivo?"
+            ),
+            quick_replies=(
+                ("aceito", "Aceito"),
+                ("nao_aceito", "Não aceito"),
             ),
         )
     if coerced_state == "CONFIRM_APPLICATION":

@@ -221,29 +221,49 @@ async def test_confirmation_sets_status_submitted(
     assert application.status == "submitted"
 
 
-async def test_no_candidate_id_does_not_create_application(
+async def test_unresolved_lead_collects_data_and_creates_candidate_and_application(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _location(db_session)
+    """OP-6F.5: an unresolved lead who provides name/WhatsApp/LGPD and verifies OTP
+    should result in a new Candidate and CandidateApplication with no pipeline."""
+    location = await _location(db_session)
     session_id = await _start(client)  # anonymous web chat (public flow)
 
-    # Valid but unknown CPF → lead mode. Collecting preferences must not create
-    # a CandidateApplication because no candidate_id has been verified/linked.
+    # Valid CPF not in DB → lead mode.
     await _send(client, session_id, "52998224725")
+
+    # Collect intake preferences — no application until identity is confirmed.
     for content in ["Peritoró", "any_in_location", "Frentista", "night"]:
         await _send(client, session_id, content)
 
-    count_before_confirm = await db_session.scalar(
+    count_before_lead_info = await db_session.scalar(
         sa.select(sa.func.count()).select_from(CandidateApplicationModel)
     )
-    assert count_before_confirm == 0
+    assert count_before_lead_info == 0
 
     await _send(client, session_id, "continue")
-    await _send(client, session_id, "skip_resume")
+    # COLLECT_RESUME → COLLECT_LEAD_NAME (lead mode active).
+    after_resume = await _send(client, session_id, "skip_resume")
+    assert after_resume["current_state"] == "COLLECT_LEAD_NAME"
+
+    # Collect name.
+    after_name = await _send(client, session_id, "Maria da Silva")
+    assert after_name["current_state"] == "COLLECT_LEAD_WHATSAPP"
+
+    # Collect WhatsApp.
+    after_wa = await _send(client, session_id, "11987654321")
+    assert after_wa["current_state"] == "COLLECT_LGPD_CONSENT"
+
+    # Accept LGPD.
+    after_lgpd = await _send(client, session_id, "aceito")
+    assert after_lgpd["current_state"] == "CONFIRM_APPLICATION"
+
+    # Confirm.
     confirm = await _send(client, session_id, "confirm")
     assert confirm["current_state"] == "VERIFY_OTP"
 
+    # Verify OTP.
     otp = await db_session.scalar(
         sa.select(ConversationOtpModel)
         .where(ConversationOtpModel.session_id == UUID(session_id))
@@ -257,17 +277,32 @@ async def test_no_candidate_id_does_not_create_application(
         f"{i:06d}" for i in range(1_000_000)
         if _sha256(f"{sid}:{i:06d}".encode()).hexdigest() == otp.otp_hash
     )
-    await _send(client, session_id, code)
+    done = await _send(client, session_id, code)
+    assert done["current_state"] == "DONE"
 
-    count = await db_session.scalar(
-        sa.select(sa.func.count()).select_from(CandidateApplicationModel)
-    )
-    assert count == 0
-
+    # Candidate and Application should now exist.
     session = await db_session.get(ConversationSessionModel, UUID(session_id))
     assert session is not None
-    assert session.candidate_id is None
-    assert session.application_id is None
+    assert session.candidate_id is not None
+    assert session.application_id is not None
+
+    candidate = await db_session.get(CandidateModel, session.candidate_id)
+    assert candidate is not None
+    assert candidate.full_name == "Maria da Silva"
+    assert candidate.phone == "11987654321"
+    assert candidate.lgpd_consent_at is not None
+    assert candidate.lgpd_consent_version == "v1.0"
+
+    apps = await _applications_for(db_session, session.candidate_id)
+    assert len(apps) == 1
+    assert apps[0].preferred_location_group_id == location.id
+    assert apps[0].status in ("submitted", "started")
+
+    # No pipeline.
+    pipeline_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateJobPipelineModel)
+    )
+    assert pipeline_count == 0
 
 
 async def test_application_integration_never_creates_pipeline(
