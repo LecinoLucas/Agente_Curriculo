@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import {
   AlertCircle,
   ArrowLeft,
@@ -1161,6 +1162,8 @@ export function CandidaturasPage() {
     return candidates.filter((c) => c.active_job_title === jobFilter);
   }, [candidates, jobFilter]);
 
+  const debouncedSearch = useDebouncedValue(search, 350);
+
   const load = useCallback(async (currentPage: number, currentSearch: string) => {
     setLoading(true);
     setError(null);
@@ -1192,8 +1195,8 @@ export function CandidaturasPage() {
   }, []);
 
   useEffect(() => {
-    void load(page, search);
-  }, [load, page, search]);
+    void load(page, debouncedSearch);
+  }, [load, page, debouncedSearch]);
 
   function handleSearchChange(value: string) {
     setSearch(value);

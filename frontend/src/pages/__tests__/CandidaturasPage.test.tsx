@@ -393,7 +393,10 @@ describe("CandidaturasPage — Phase 7 UX", () => {
     await screen.findByTestId("row-cand-1");
     fireEvent.change(screen.getByTestId("search-input"), { target: { value: "sem resultado" } });
 
-    expect(await screen.findByTestId("filtered-empty-state")).toHaveTextContent(/nenhum resultado/i);
+    // waitFor timeout > debounce delay (350ms) so the timer fires before the assertion times out.
+    expect(
+      await screen.findByTestId("filtered-empty-state", undefined, { timeout: 2000 }),
+    ).toHaveTextContent(/nenhum resultado/i);
   });
 
   it("drawer mostra resumo e próxima ação", async () => {
