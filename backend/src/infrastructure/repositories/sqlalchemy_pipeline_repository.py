@@ -345,6 +345,7 @@ class SQLAlchemyPipelineRepository:
         entered_to: datetime | None = None,
         updated_from: datetime | None = None,
         updated_to: datetime | None = None,
+        limit: int | None = None,
     ) -> list[dict]:
         # Non-correlated scalar — runs once, resolved before the main query.
         active_score_version = (
@@ -600,6 +601,7 @@ class SQLAlchemyPipelineRepository:
                 *conditions,
             )
             .order_by(CandidateJobPipelineModel.updated_at.desc())
+            .limit(limit)
         )
         return [dict(row) for row in result.mappings().all()]
 

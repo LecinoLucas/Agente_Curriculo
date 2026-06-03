@@ -624,6 +624,8 @@ export type PipelineColumn = {
 export type JobPipelineBoard = {
   job_id: string;
   columns: PipelineColumn[];
+  // True when the backend capped the result at PIPELINE_BOARD_MAX_ROWS.
+  truncated?: boolean;
 };
 
 export type PipelineBoardFilters = {

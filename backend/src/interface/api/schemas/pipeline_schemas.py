@@ -87,6 +87,8 @@ class PipelineColumnResponse(BaseModel):
 class PipelineBoardResponse(BaseModel):
     job_id: UUID
     columns: list[PipelineColumnResponse]
+    # True when the result was capped by PIPELINE_BOARD_MAX_ROWS setting.
+    truncated: bool = False
 
 
 class PipelineBoardFilters(BaseModel):

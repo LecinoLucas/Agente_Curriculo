@@ -124,6 +124,7 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
     MATCHING_AUTO_FANOUT_LIMIT: int = 25
+    PIPELINE_BOARD_MAX_ROWS: int = 500
 
     # Monitoring
     SENTRY_DSN: str = ""

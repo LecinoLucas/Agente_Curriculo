@@ -33,6 +33,7 @@ from src.application.services.pre_admission_service import PreAdmissionService
 from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
     SQLAlchemyBehavioralAssignmentRepository,
 )
+from src.core.settings import settings
 from src.domain.exceptions import ValidationException
 from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest,
@@ -384,6 +385,8 @@ class PipelineService:
         self,
         job_id: UUID,
         filters: PipelineBoardFilters | None = None,
+        *,
+        max_rows: int | None = None,
     ) -> list[JobMatchCandidateResponse]:
         await self._ensure_active_job(job_id)
         normalized_filters = filters or PipelineBoardFilters()
@@ -394,6 +397,7 @@ class PipelineService:
             entered_to=normalized_filters.entered_to,
             updated_from=normalized_filters.updated_from,
             updated_to=normalized_filters.updated_to,
+            limit=max_rows,
         )
         return [self._row_to_match_response(row) for row in rows]
 
@@ -403,7 +407,13 @@ class PipelineService:
         filters: PipelineBoardFilters | None = None,
     ) -> PipelineBoardResponse:
         _t0 = time.perf_counter()
-        matches = await self.list_job_matches(job_id, filters)
+        max_rows = settings.PIPELINE_BOARD_MAX_ROWS
+        # Fetch one extra row to distinguish "exactly max_rows" from "more than max_rows".
+        # This avoids a false positive when the real count equals the limit exactly.
+        matches = await self.list_job_matches(job_id, filters, max_rows=max_rows + 1)
+        truncated = len(matches) > max_rows
+        if truncated:
+            matches = matches[:max_rows]
         by_stage: dict[str, list[JobMatchCandidateResponse]] = {stage: [] for stage in KANBAN_STAGES}
         for item in matches:
             by_stage[item.stage].append(item)
@@ -412,6 +422,8 @@ class PipelineService:
             "pipeline.board.query_timing",
             job_id=str(job_id),
             candidate_count=len(matches),
+            truncated=truncated,
+            max_rows=max_rows,
             stage_counts={stage: len(candidates) for stage, candidates in by_stage.items() if candidates},
             duration_ms=round(_duration_ms, 2),
         )
@@ -424,7 +436,7 @@ class PipelineService:
             )
             for stage in KANBAN_STAGES
         ]
-        return PipelineBoardResponse(job_id=job_id, columns=columns)
+        return PipelineBoardResponse(job_id=job_id, columns=columns, truncated=truncated)
 
     @staticmethod
     def _validate_board_filters(filters: PipelineBoardFilters) -> None:
