@@ -144,4 +144,71 @@ describe('conversationsService', () => {
 
     await expect(conversationsService.createConversation()).rejects.toThrow(/conexão/i);
   });
+
+  describe('uploadResume', () => {
+    it('resolves without throwing on a 200 ok response', async () => {
+      const fetchMock = vi.fn(async () => new Response('{"message":"ok"}', { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+      const { conversationsService } = await import('../conversationsService');
+
+      await expect(
+        conversationsService.uploadResume('sess-1', new FormData()),
+      ).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE}/conversations/sess-1/resume`,
+        expect.objectContaining({ method: 'POST', credentials: 'include' }),
+      );
+    });
+
+    it('propagates backend detail message on 400 error', async () => {
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ detail: 'Arquivo muito grande (máx 10MB)' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const { conversationsService, HttpError } = await import('../conversationsService');
+
+      const err = await conversationsService
+        .uploadResume('sess-1', new FormData())
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(HttpError);
+      expect((err as InstanceType<typeof HttpError>).message).toBe('Arquivo muito grande (máx 10MB)');
+      expect((err as InstanceType<typeof HttpError>).status).toBe(400);
+    });
+
+    it('propagates error.message from backend on non-ok response', async () => {
+      const fetchMock = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: { message: 'Tipo de arquivo não permitido' } }), {
+            status: 422,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const { conversationsService } = await import('../conversationsService');
+
+      await expect(
+        conversationsService.uploadResume('sess-1', new FormData()),
+      ).rejects.toThrow('Tipo de arquivo não permitido');
+    });
+
+    it('falls back to generic Erro {status} when backend returns no parseable body', async () => {
+      const fetchMock = vi.fn(
+        async () => new Response('not json', { status: 500 }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const { conversationsService, HttpError } = await import('../conversationsService');
+
+      const err = await conversationsService
+        .uploadResume('sess-1', new FormData())
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(HttpError);
+      expect((err as InstanceType<typeof HttpError>).message).toBe('Erro 500');
+    });
+  });
 });

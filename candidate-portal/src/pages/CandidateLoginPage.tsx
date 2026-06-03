@@ -129,7 +129,7 @@ export function CandidateLoginPage() {
         }
       }
     };
-  });
+  }, [navigate, setGoogleError]);
 
   // Load Google Identity Services script and render the official button.
   useEffect(() => {

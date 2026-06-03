@@ -67,7 +67,7 @@ export interface ConversationTurn {
   options: ConversationOption[];
 }
 
-export type ConversationMessageType = 'text' | 'quick_reply' | 'system';
+export type ConversationMessageType = 'text' | 'quick_reply' | 'system' | 'event';
 
 // ---- Low-level request helper ----
 
@@ -135,5 +135,28 @@ export const conversationsService = {
   /** GET /conversations/{id}/messages — full message history (used to repaint on resume). */
   listConversationMessages(conversationId: string): Promise<ConversationMessage[]> {
     return request<ConversationMessage[]>(`/conversations/${conversationId}/messages`);
+  },
+
+  /** POST /conversations/{id}/resume — upload a resume file. */
+  uploadResume: async (sessionId: string, formData: FormData): Promise<void> => {
+    const response = await fetch(`${BASE_URL}/conversations/${sessionId}/resume`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      let message = `Erro ${response.status}`;
+      try {
+        const json = (await response.json()) as {
+          detail?: unknown;
+          error?: { message?: unknown };
+        };
+        if (json?.error?.message) message = String(json.error.message);
+        else if (json?.detail) message = String(json.detail);
+      } catch {
+        /* ignore parse error — keep generic message */
+      }
+      throw new HttpError(response.status, message);
+    }
   },
 };

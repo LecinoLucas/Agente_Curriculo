@@ -157,5 +157,52 @@ class TestSeniorityPenalty:
         assert _calculate_seniority_score(None, "senior") == Decimal("50.00")
 
 
+# ── Payload completeness (B-CRIT-03 regression) ────────────────────────────
+
+
+class TestComputeSkillScoresPayload:
+    """Verify _compute_skill_scores returns all expected keys exactly once.
+
+    Guards against duplicate dict keys silently overwriting scores
+    (B-CRIT-03 from AUDIT-FAIL-PERF-1).
+    """
+
+    EXPECTED_KEYS = {
+        "priority_score_weighted",
+        "complementary_score_weighted",
+        "complementary_score_raw_weighted",
+        "priority_strong_coverage",
+        "priority_matched",
+        "complementary_matched",
+        "eliminatory_matched",
+        "matched_priority_skill_names",
+        "matched_complementary_skill_names",
+        "matched_eliminatory_skill_names",
+        "missing_complementary_skill_names",
+        "missing_eliminatory_skill_names",
+        "complementary_bonus_cap_slots",
+        "matched_skill_names",
+        "missing_skill_names",
+        "partial_matches",
+        "has_any_strong_priority",
+        "weak_evidence_priority_skills",
+        "skill_evidence_details",
+        "eliminatory_score_weighted",
+    }
+
+    def test_all_expected_keys_present(self):
+        result = _compute_skill_scores([_row("Python")], {"python"})
+        assert self.EXPECTED_KEYS == set(result.keys())
+
+    def test_no_extra_keys(self):
+        result = _compute_skill_scores([], set())
+        extra = set(result.keys()) - self.EXPECTED_KEYS
+        assert not extra, f"Unexpected extra keys: {extra}"
+
+    def test_key_count_equals_expected(self):
+        result = _compute_skill_scores([_row("Python"), _row("React", mandatory=False)], {"python"})
+        assert len(result) == len(self.EXPECTED_KEYS)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -48,6 +48,7 @@ logger = structlog.get_logger(__name__)
 
 from src.domain.entities.user import User
 from src.domain.entities.user import UserRole
+from src.domain.exceptions import ValidationException
 from src.application.services.audit_service import AuditService
 from src.application.services.analysis_match_store import AnalysisMatchStore
 from src.application.services.analysis_ranking_refresh_service import (
@@ -502,16 +503,6 @@ def _compute_skill_scores(
         "weak_evidence_priority_skills": weak_evidence_priority_skills,
         "skill_evidence_details": skill_evidence_details,
         "eliminatory_score_weighted": eliminatory_score_weighted,
-        "priority_score_weighted": priority_score_weighted,
-        "complementary_score_weighted": complementary_score_weighted,
-        "complementary_score_raw_weighted": complementary_score_raw_weighted,
-        "priority_strong_coverage": priority_strong_coverage,
-        "priority_matched": len(matched_priority_skill_names),
-        "complementary_matched": sum(1 for s in complementary_scores if s >= Decimal("0.8")),
-        "matched_priority_skill_names": matched_priority_skill_names,
-        "matched_complementary_skill_names": matched_complementary_skill_names,
-        "missing_complementary_skill_names": missing_complementary_skill_names,
-        "complementary_bonus_cap_slots": complementary_bonus_cap_slots,
     }
 
 
@@ -520,7 +511,7 @@ async def _safe_session_flush(session: object | None) -> None:
     if not callable(flush_fn):
         return
     try:
-        await _maybe_await(flush_fn())
+        await flush_fn()
     except Exception:
         logger.debug("analysis_service.session_flush_unavailable", exc_info=True)
 
