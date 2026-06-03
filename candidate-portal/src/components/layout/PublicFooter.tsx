@@ -27,7 +27,7 @@ export function PublicFooter() {
             <ul className="space-y-2.5">
               <li>
                 <Link
-                  to="/"
+                  to="/vagas"
                   className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
                   Ver vagas

@@ -100,7 +100,7 @@ export function LoginPage() {
     <div className="min-h-screen w-full relative overflow-x-hidden font-sans text-foreground selection:bg-[#8a1c31]/10 selection:text-[#8a1c31] flex flex-col bg-[#FDFBF7]">
       
       {/* Main Container - Locked height on desktop to prevent scrollbars */}
-      <main className="w-full max-w-[1440px] mx-auto flex-1 flex flex-col lg:flex-row relative z-10">
+      <main className="w-full max-w-[1440px] xl:max-w-[1600px] 2xl:max-w-[1800px] mx-auto flex-1 flex flex-col lg:flex-row relative z-10">
         
         {/* Left Column - Hero */}
         <div className="hidden lg:flex w-full lg:w-[50%] flex-col justify-between py-8 px-10 xl:pl-16 xl:pr-8 relative h-full shrink-0 z-10 overflow-hidden">
@@ -142,61 +142,59 @@ export function LoginPage() {
           </div>
           
           {/* Institutional Content */}
-          <div className="max-w-[460px] my-auto py-4">
+          <div className="max-w-[460px] xl:max-w-[540px] 2xl:max-w-[640px] my-auto py-4">
              {/* Badge */}
-             <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-[#FDF0EE]/85 border border-[#e8dcdc]/60 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-widest text-[#751227] shadow-sm">
-               <Sparkles className="h-3 w-3" />
+             <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-[#FDF0EE]/85 border border-[#e8dcdc]/60 px-3 py-1.5 text-[9px] xl:text-[10px] 2xl:text-[11px] font-extrabold uppercase tracking-widest text-[#751227] shadow-sm">
+               <Sparkles className="h-3 w-3 xl:h-3.5 xl:w-3.5" />
                MARAJÓ RH AI SYSTEM
              </div>
 
              {/* Headline */}
-             <h1 className="font-serif-display text-[38px] xl:text-[48px] font-bold tracking-tight text-[#1a0509] leading-[1.1] mb-5">
+             <h1 className="font-serif-display text-[38px] lg:text-[44px] xl:text-[50px] 2xl:text-[62px] font-bold tracking-tight text-[#1a0509] leading-[1.1] mb-5">
                Recrutamento com mais contexto, menos retrabalho.
              </h1>
 
-             {/* Subtitle */}
-             <p className="text-[14px] font-medium text-[#5c4a4d] leading-relaxed mb-6">
+             <p className="text-[14px] xl:text-[16px] 2xl:text-[18px] font-medium text-[#5c4a4d] leading-relaxed mb-6">
                Centralize vagas, candidatos, pipeline e decisões em uma plataforma inteligente que transforma dados em contratações de qualidade.
              </p>
 
-             {/* Benefit Stacked Container */}
-             <div className="bg-white/80 border border-[#e8dcdc] backdrop-blur-sm rounded-2xl p-5 shadow-sm space-y-4">
-               {/* Benefit 1 */}
-               <div className="flex items-start gap-3.5">
-                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
-                   <Users className="h-4.5 w-4.5" />
-                 </div>
-                 <div className="flex flex-col justify-center">
-                   <h4 className="text-[12px] font-bold text-[#3d0815] leading-tight">Pipeline organizado</h4>
-                   <p className="text-[10px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
-                     Acompanhe cada etapa do processo seletivo com total visibilidade.
-                   </p>
-                 </div>
-               </div>
-               {/* Benefit 2 */}
-               <div className="flex items-start gap-3.5">
-                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
-                   <BarChart className="h-4.5 w-4.5" />
-                 </div>
-                 <div className="flex flex-col justify-center">
-                   <h4 className="text-[12px] font-bold text-[#3d0815] leading-tight">Decisões orientadas por IA</h4>
-                   <p className="text-[10px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
-                     Insights inteligentes para avaliar candidatos com mais precisão.
-                   </p>
-                 </div>
-               </div>
-               {/* Benefit 3 */}
-               <div className="flex items-start gap-3.5">
-                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
-                   <ShieldCheck className="h-4.5 w-4.5" />
-                 </div>
-                 <div className="flex flex-col justify-center">
-                   <h4 className="text-[12px] font-bold text-[#3d0815] leading-tight">Segurança e conformidade</h4>
-                   <p className="text-[10px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
-                     Proteção de dados e aderência à LGPD em todas as etapas.
-                   </p>
-                 </div>
-               </div>
+             <div className="bg-white/80 border border-[#e8dcdc] backdrop-blur-sm rounded-2xl p-5 xl:p-6 2xl:p-8 shadow-sm space-y-4 2xl:space-y-6">
+                {/* Benefit 1 */}
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-9 w-9 xl:h-10 xl:w-10 2xl:h-12 2xl:w-12 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
+                    <Users className="h-4.5 w-4.5 xl:h-5 xl:w-5 2xl:h-6 2xl:w-6" />
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <h4 className="text-[12px] xl:text-[14px] 2xl:text-[16px] font-bold text-[#3d0815] leading-tight">Pipeline organizado</h4>
+                    <p className="text-[10px] xl:text-[11px] 2xl:text-[13px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
+                      Acompanhe cada etapa do processo seletivo com total visibilidade.
+                    </p>
+                  </div>
+                </div>
+                {/* Benefit 2 */}
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-9 w-9 xl:h-10 xl:w-10 2xl:h-12 2xl:w-12 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
+                    <BarChart className="h-4.5 w-4.5 xl:h-5 xl:w-5 2xl:h-6 2xl:w-6" />
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <h4 className="text-[12px] xl:text-[14px] 2xl:text-[16px] font-bold text-[#3d0815] leading-tight">Decisões orientadas por IA</h4>
+                    <p className="text-[10px] xl:text-[11px] 2xl:text-[13px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
+                      Insights inteligentes para avaliar candidatos com mais precisão.
+                    </p>
+                  </div>
+                </div>
+                {/* Benefit 3 */}
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-9 w-9 xl:h-10 xl:w-10 2xl:h-12 2xl:w-12 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
+                    <ShieldCheck className="h-4.5 w-4.5 xl:h-5 xl:w-5 2xl:h-6 2xl:w-6" />
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <h4 className="text-[12px] xl:text-[14px] 2xl:text-[16px] font-bold text-[#3d0815] leading-tight">Segurança e conformidade</h4>
+                    <p className="text-[10px] xl:text-[11px] 2xl:text-[13px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
+                      Proteção de dados e aderência à LGPD em todas as etapas.
+                    </p>
+                  </div>
+                </div>
              </div>
           </div>
           
@@ -204,8 +202,8 @@ export function LoginPage() {
         </div>
 
         {/* Dashboard Graphic Mock - Center/Left position, rotated and translucent */}
-        <div className="hidden xl:block absolute left-[44%] top-[50%] -translate-y-1/2 w-[440px] pointer-events-none transform -rotate-[3deg] z-0 opacity-30 select-none transition-all duration-300">
-           <div className="w-[440px] flex flex-col gap-4">
+        <div className="hidden xl:block absolute left-[44%] xl:left-[45%] 2xl:left-[47%] top-[50%] -translate-y-1/2 w-[440px] 2xl:w-[500px] pointer-events-none transform -rotate-[3deg] z-0 opacity-30 select-none transition-all duration-300">
+           <div className="w-[440px] 2xl:w-[500px] flex flex-col gap-4">
               {/* Decoration dots */}
               <div className="flex gap-1.5 mb-1 pl-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#8a1c31]/30"></div>
@@ -320,9 +318,9 @@ export function LoginPage() {
           </div>
 
           {/* Login Card */}
-          <div className="w-full max-w-[380px] overflow-hidden rounded-[1.75rem] border border-[#7A1830]/25 bg-[#fffaf8] shadow-[0_24px_70px_-24px_rgba(74,14,26,0.55)] flex flex-col relative transition-all duration-300 ease-out hover:border-[#8a1c31]/45 hover:shadow-[0_28px_80px_-24px_rgba(74,14,26,0.68)]">
+          <div className="w-full max-w-[380px] xl:max-w-[420px] 2xl:max-w-[460px] overflow-hidden rounded-[1.75rem] border border-[#7A1830]/25 bg-[#fffaf8] shadow-[0_24px_70px_-24px_rgba(74,14,26,0.55)] flex flex-col relative transition-all duration-300 ease-out hover:border-[#8a1c31]/45 hover:shadow-[0_28px_80px_-24px_rgba(74,14,26,0.68)]">
             <div className="h-1.5 w-full bg-gradient-to-r from-[#4A0E1A] via-[#8a1c31] to-[#C1121F]" />
-            <div className="p-6 xl:p-7">
+            <div className="p-6 xl:p-8 2xl:p-10">
             
             {/* Mobile Branding (Visible only on mobile, required by E2E tests) */}
             <div className="lg:hidden flex items-center justify-center gap-2 mb-5">
@@ -336,18 +334,18 @@ export function LoginPage() {
 
             {/* Circular Logo at Top Center */}
             <div className="flex flex-col items-center text-center mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4A0E1A] to-[#8a1c31] text-lg font-serif-display font-bold text-white shadow-[0_14px_30px_-16px_rgba(74,14,26,0.9)] mb-3">
+              <div className="flex h-12 w-12 xl:h-14 xl:w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4A0E1A] to-[#8a1c31] text-lg xl:text-xl font-serif-display font-bold text-white shadow-[0_14px_30px_-16px_rgba(74,14,26,0.9)] mb-3">
                 RA
               </div>
-              <h2 className="text-[24px] xl:text-[26px] font-serif-display font-bold tracking-tight text-[#1a0509]">Acessar plataforma</h2>
-              <p className="text-[12px] font-medium text-[#74676a] mt-1.5 leading-relaxed px-2">
+              <h2 className="text-[24px] xl:text-[28px] 2xl:text-[32px] font-serif-display font-bold tracking-tight text-[#1a0509]">Acessar plataforma</h2>
+              <p className="text-[12px] xl:text-[13px] 2xl:text-[14px] font-medium text-[#74676a] mt-1.5 leading-relaxed px-2">
                 Entre com sua conta corporativa para continuar no painel de recrutamento.
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 xl:gap-4">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="email" className="text-[11px] font-bold text-[#1a0509]">
+                <label htmlFor="email" className="text-[11px] xl:text-[12px] 2xl:text-[13px] font-bold text-[#1a0509]">
                   E-mail
                 </label>
                 <div className="relative flex items-center">
@@ -360,17 +358,17 @@ export function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="seu@email.com"
-                    className="h-11 w-full bg-white border border-[#d9c6c8] rounded-xl pl-11 pr-4 text-[13px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
+                    className="h-11 xl:h-12 2xl:h-13 w-full bg-white border border-[#d9c6c8] rounded-xl pl-11 pr-4 text-[13px] xl:text-[14px] 2xl:text-[15px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
                   />
                 </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="password" className="text-[11px] font-bold text-[#1a0509]">
+                  <label htmlFor="password" className="text-[11px] xl:text-[12px] 2xl:text-[13px] font-bold text-[#1a0509]">
                     Senha
                   </label>
-                  <Link to="#" className="text-[11px] font-bold text-[#8a1c31] hover:text-[#5c091d] transition-colors">
+                  <Link to="#" className="text-[11px] xl:text-[12px] 2xl:text-[13px] font-bold text-[#8a1c31] hover:text-[#5c091d] transition-colors">
                     Esqueceu a senha?
                   </Link>
                 </div>
@@ -384,12 +382,12 @@ export function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="h-11 w-full bg-white border border-[#d9c6c8] rounded-xl pl-11 pr-12 text-[13px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
+                    className="h-11 xl:h-12 2xl:h-13 w-full bg-white border border-[#d9c6c8] rounded-xl pl-11 pr-12 text-[13px] xl:text-[14px] 2xl:text-[15px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((c) => !c)}
-                    className="absolute right-4 text-[#a8a1a3] hover:text-[#1a0509] transition-colors outline-none h-8 w-8 flex items-center justify-center"
+                    className="absolute right-4 text-[#a8a1a3] hover:text-[#1a0509] transition-colors outline-none h-8 w-8 xl:h-9 xl:w-9 flex items-center justify-center"
                     aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                   >
                     {showPassword ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
@@ -407,9 +405,9 @@ export function LoginPage() {
               <Button 
                 type="submit" 
                 disabled={loading} 
-                className="h-11 w-full mt-2 text-[13px] font-extrabold tracking-wide bg-gradient-to-r from-[#4A0E1A] via-[#7A1830] to-[#C1121F] hover:brightness-105 text-white rounded-xl flex items-center justify-center gap-2 shadow-[0_16px_34px_-18px_rgba(74,14,26,0.95)] hover:shadow-[0_18px_40px_-18px_rgba(74,14,26,1)] transition-all duration-300"
+                className="h-11 xl:h-12 2xl:h-13 w-full mt-2 text-[13px] xl:text-[14px] 2xl:text-[15px] font-extrabold tracking-wide bg-gradient-to-r from-[#4A0E1A] via-[#7A1830] to-[#C1121F] hover:brightness-105 text-white rounded-xl flex items-center justify-center gap-2 shadow-[0_16px_34px_-18px_rgba(74,14,26,0.95)] hover:shadow-[0_18px_40px_-18px_rgba(74,14,26,1)] transition-all duration-300"
               >
-                {!loading && <ArrowRightToLine className="h-4 w-4" />}
+                {!loading && <ArrowRightToLine className="h-4 w-4 xl:h-4.5 xl:w-4.5" />}
                 {loading ? "Entrando no painel…" : "Entrar no painel"}
               </Button>
             </form>
@@ -428,8 +426,8 @@ export function LoginPage() {
               />
             </div>
 
-            <div className="flex items-start gap-2.5 text-[10px] leading-snug text-[#74676a] font-medium mt-4 bg-[#F7E9E8] border border-[#e4caca] p-3 rounded-xl">
-              <Shield className="h-4.5 w-4.5 text-[#8a1c31] shrink-0" />
+            <div className="flex items-start gap-2.5 text-[10px] xl:text-[11px] 2xl:text-[12px] leading-snug text-[#74676a] font-medium mt-4 xl:mt-5 bg-[#F7E9E8] border border-[#e4caca] p-3 xl:p-4 rounded-xl">
+              <Shield className="h-4.5 w-4.5 xl:h-5 xl:w-5 text-[#8a1c31] shrink-0" />
               <p>
                 <strong className="text-[#3d0815] font-bold block mb-0.5">Acesso restrito a colaboradores autorizados.</strong>
                 Ao continuar, você concorda com as políticas da empresa.

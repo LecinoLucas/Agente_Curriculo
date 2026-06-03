@@ -150,6 +150,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     items: [
       { to: "/candidato/portal", label: "Portal do Candidato (Preview)", caption: "Visualização do candidato", roles: ADMIN_ONLY_ROLES },
       { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: JOB_MANAGEMENT_ROLES },
+      { to: "/demo-2", label: "Demo 2", caption: "Apresentação RH IA", roles: JOB_MANAGEMENT_ROLES },
     ],
   },
 ];
@@ -179,6 +180,7 @@ const ICON_MAP: Record<string, any> = {
   "/admin/ai-provider-credentials": KeyRound,
   "/candidato/portal": User,
   "/demo-rh": FlaskConical,
+  "/demo-2": Sparkles,
   "Central RH": ClipboardList,
   "Recrutamento": Briefcase,
   "Avaliações": GraduationCap,

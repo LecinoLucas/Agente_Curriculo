@@ -15,12 +15,7 @@ const GOOGLE_CLIENT_ID: string =
   (import.meta as ImportMeta & { env?: Record<string, string> }).env
     ?.VITE_GOOGLE_CLIENT_ID ?? '';
 
-export function shouldShowDevCandidateLogin(env: {
-  DEV?: boolean;
-  VITE_ENABLE_DEV_CANDIDATE_LOGIN?: string;
-}) {
-  return Boolean(env.DEV) && env.VITE_ENABLE_DEV_CANDIDATE_LOGIN === 'true';
-}
+
 
 export function shouldEnableGoogleLogin(
   clientId: string,
@@ -34,11 +29,7 @@ export function shouldEnableGoogleLogin(
   return true;
 }
 
-const SHOW_DEV_CANDIDATE_LOGIN = shouldShowDevCandidateLogin(
-  (import.meta as ImportMeta & {
-    env?: { DEV?: boolean; VITE_ENABLE_DEV_CANDIDATE_LOGIN?: string };
-  }).env ?? {},
-);
+
 
 declare global {
   interface Window {
@@ -84,10 +75,7 @@ export function CandidateLoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [devEmail, setDevEmail] = useState('dev-candidato@local.test');
-  const [devName, setDevName] = useState('Candidato Teste');
-  const [devLoading, setDevLoading] = useState(false);
-  const [devError, setDevError] = useState('');
+
 
   // ── Google login ──────────────────────────────────────────────────────────
   const googleButtonRef = useRef<HTMLDivElement>(null);
@@ -103,6 +91,7 @@ export function CandidateLoginPage() {
   );
 
   // Keep callback ref fresh without re-triggering the GSI load effect.
+  // navigate and setGoogleError are stable refs (React guarantees), so [] is safe.
   useEffect(() => {
     googleCallbackRef.current = async (response: { credential: string }) => {
       const idToken = response.credential;
@@ -191,32 +180,7 @@ export function CandidateLoginPage() {
     }
   }
 
-  async function handleDevLogin(e: React.FormEvent) {
-    e.preventDefault();
-    const cleanEmail = devEmail.trim().toLowerCase();
-    const cleanName = devName.trim();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setDevError('Informe um e-mail válido para o acesso de desenvolvimento.');
-      return;
-    }
-    setDevLoading(true);
-    setDevError('');
-    try {
-      await candidateAuthService.devLoginCandidate({
-        email: cleanEmail,
-        ...(cleanName ? { name: cleanName } : {}),
-      });
-      navigate('/minha-area');
-    } catch (err) {
-      if (err instanceof HttpError) {
-        setDevError(`Dev-login indisponível (${err.status}). Verifique APP_ENV e ENABLE_DEV_CANDIDATE_LOGIN.`);
-      } else {
-        setDevError(err instanceof Error ? err.message : 'Não foi possível concluir o dev-login.');
-      }
-    } finally {
-      setDevLoading(false);
-    }
-  }
+
 
   return (
     <AuthAccessLayout>
@@ -314,69 +278,12 @@ export function CandidateLoginPage() {
               </div>
             )}
 
-            {SHOW_DEV_CANDIDATE_LOGIN && (
-              <form
-                onSubmit={(e) => void handleDevLogin(e)}
-                className="mt-5 rounded-lg border border-amber-200 bg-amber-50/70 p-4"
-              >
-                <div className="mb-3">
-                  <h2 className="text-sm font-bold text-amber-950">
-                    Acesso rápido de desenvolvimento
-                  </h2>
-                  <p className="mt-1 text-xs leading-relaxed text-amber-800">
-                    Use apenas em ambiente local para testar a área do candidato.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label htmlFor="dev-login-email" className="block text-xs font-semibold text-amber-950 mb-1.5">
-                      E-mail do candidato de teste
-                    </label>
-                    <input
-                      id="dev-login-email"
-                      type="email"
-                      value={devEmail}
-                      onChange={(e) => setDevEmail(e.target.value)}
-                      disabled={devLoading}
-                      className="w-full rounded-lg border border-amber-200 bg-white py-2 px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-700/20 disabled:bg-amber-50 disabled:text-gray-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="dev-login-name" className="block text-xs font-semibold text-amber-950 mb-1.5">
-                      Nome, opcional
-                    </label>
-                    <input
-                      id="dev-login-name"
-                      type="text"
-                      value={devName}
-                      onChange={(e) => setDevName(e.target.value)}
-                      disabled={devLoading}
-                      className="w-full rounded-lg border border-amber-200 bg-white py-2 px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-700/20 disabled:bg-amber-50 disabled:text-gray-400"
-                    />
-                  </div>
-
-                  {devError && (
-                    <div role="alert" className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2.5">
-                      <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
-                      <p className="text-sm text-red-700">{devError}</p>
-                    </div>
-                  )}
-
-                  <Button type="submit" fullWidth loading={devLoading}>
-                    Entrar como candidato de teste
-                  </Button>
-                </div>
-              </form>
-            )}
-
             {/* ── Recovery and new candidate CTAs ──────────────────────── */}
             <div className="mt-6 pt-5 border-t border-gray-100">
               <p className="text-sm text-gray-500">
                 Novo candidato?{' '}
                 <Link
-                  to="/"
+                  to="/vagas"
                   className="rounded-sm font-medium text-primary-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-700 focus-visible:ring-offset-2"
                 >
                   Veja as vagas abertas

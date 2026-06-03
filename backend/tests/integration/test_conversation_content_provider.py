@@ -6,6 +6,7 @@ rows are absent, inactive, or contain invalid data.
 """
 from __future__ import annotations
 
+import json
 from uuid import UUID
 
 import pytest
@@ -13,6 +14,7 @@ import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.assistant_content_provider import AssistantContentProvider
 from src.application.services.assistant_settings_catalog import (
     seed_assistant_configuration,
 )
@@ -27,7 +29,6 @@ from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_model import (
     ConversationSessionModel,
 )
-from src.infrastructure.database.models.conversation_otp_model import ConversationOtpModel
 from src.infrastructure.database.models.operational_master_model import (
     LocationGroupModel,
 )
@@ -37,7 +38,7 @@ pytestmark = pytest.mark.asyncio
 VALID_CPF = "52998224725"
 OTHER_VALID_CPF = "16899535009"
 WHATSAPP = "11999998888"
-CUSTOM_LOCATION_PROMPT = "Em qual localidade você prefere trabalhar, qual posto ?"
+CUSTOM_LOCATION_PROMPT = "Em qual cidade ou localidade você quer trabalhar?"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -87,24 +88,6 @@ async def _candidate_with_cpf(db: AsyncSession, cpf: str = VALID_CPF) -> Candida
     await db.commit()
     await db.refresh(cand)
     return cand
-
-
-async def _extract_otp(db: AsyncSession, session_id: str) -> str:
-    from hashlib import sha256
-
-    otp = await db.scalar(
-        sa.select(ConversationOtpModel)
-        .where(ConversationOtpModel.session_id == UUID(session_id))
-        .order_by(ConversationOtpModel.created_at.desc())
-        .limit(1)
-    )
-    assert otp is not None
-    sid = UUID(session_id)
-    for i in range(1_000_000):
-        code = f"{i:06d}"
-        if sha256(f"{sid}:{code}".encode()).hexdigest() == otp.otp_hash:
-            return code
-    raise AssertionError("OTP not found")
 
 
 # ── DB content overrides bot response ─────────────────────────────────────────
@@ -371,6 +354,107 @@ async def test_engine_uses_db_quick_replies_when_active(
     assert "Manhã (personalizado)" in labels
 
 
+async def test_db_quick_reply_label_renders_location_hint(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+    await _location(db_session, "goiania")
+
+    session_id = await _start(client)
+    await _send(client, session_id, VALID_CPF)
+    r = await _send(client, session_id, "goiania")
+
+    assert r["current_state"] == "CHOOSE_UNIT_OR_ANY"
+    assert r["assistant_message"] == (
+        "Encontrei goiania. Você prefere um posto específico "
+        "ou qualquer posto da localidade?"
+    )
+    assert r["quick_replies"][0] == {
+        "value": "any_in_location",
+        "label": "Qualquer posto em goiania",
+    }
+    labels = [qr["label"] for qr in r["quick_replies"]]
+    assert all("{" not in label and "}" not in label for label in labels)
+
+
+async def test_db_quick_reply_missing_placeholder_uses_safe_fallback(
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+
+    prompt = await AssistantContentProvider(db_session).prompt_for_state(
+        "CHOOSE_UNIT_OR_ANY",
+        {},
+    )
+
+    labels = dict(prompt.quick_replies)
+    assert labels["any_in_location"] == "Qualquer posto em sua localidade"
+    assert "{" not in labels["any_in_location"]
+    assert "}" not in labels["any_in_location"]
+
+
+async def test_db_quick_reply_with_disallowed_placeholder_is_ignored(
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+
+    await db_session.execute(
+        sa.update(AssistantQuickReplyModel)
+        .where(
+            AssistantQuickReplyModel.state == "CHOOSE_UNIT_OR_ANY",
+            AssistantQuickReplyModel.value == "any_in_location",
+        )
+        .values(label="Qualquer posto para {cpf}")
+    )
+    await db_session.commit()
+
+    prompt = await AssistantContentProvider(db_session).prompt_for_state(
+        "CHOOSE_UNIT_OR_ANY",
+        {"location_hint": "Peritoró", "cpf": VALID_CPF},
+    )
+
+    values = [value for value, _label in prompt.quick_replies]
+    serialized = json.dumps(
+        [{"value": value, "label": label} for value, label in prompt.quick_replies],
+        ensure_ascii=False,
+    )
+    assert "any_in_location" not in values
+    assert "choose_unit" in values
+    assert "{cpf}" not in serialized
+    assert VALID_CPF not in serialized
+
+
+async def test_db_quick_reply_does_not_render_sensitive_context_value(
+    db_session: AsyncSession,
+):
+    await _seed(db_session)
+
+    prompt = await AssistantContentProvider(db_session).prompt_for_state(
+        "CHOOSE_UNIT_OR_ANY",
+        {
+            "location_hint": VALID_CPF,
+            "phone": WHATSAPP,
+            "context_json": {"cpf": VALID_CPF, "phone": WHATSAPP},
+        },
+    )
+
+    serialized = json.dumps(
+        {
+            "content": prompt.content,
+            "quick_replies": [
+                {"value": value, "label": label}
+                for value, label in prompt.quick_replies
+            ],
+        },
+        ensure_ascii=False,
+    )
+    assert "Qualquer posto em sua localidade" in serialized
+    assert VALID_CPF not in serialized
+    assert WHATSAPP not in serialized
+    assert "context_json" not in serialized
+
+
 async def test_inactive_quick_replies_not_returned(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -495,20 +579,20 @@ async def test_lead_registration_flow_still_works_with_db_content(
     after_lgpd = await _send(client, session_id, "aceito")
     assert after_lgpd["current_state"] == "CONFIRM_APPLICATION"
 
-    otp_r = await _send(client, session_id, "confirm")
-    assert otp_r["current_state"] == "VERIFY_OTP"
-    code = await _extract_otp(db_session, session_id)
-    done = await _send(client, session_id, code)
+    # OP-6F.6: confirmation finalizes directly — no OTP step.
+    done = await _send(client, session_id, "confirm")
     assert done["current_state"] == "DONE"
 
     session = await db_session.get(ConversationSessionModel, UUID(session_id))
     assert session is not None and session.candidate_id is not None
 
 
-async def test_verify_otp_continues_to_work(
+async def test_confirm_finalizes_without_otp_with_db_content(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
+    """OP-6F.6: a known candidate confirms straight to DONE even with seeded DB
+    content — the confirmation step never enters VERIFY_OTP."""
     await _seed(db_session)
     await _location(db_session)
 
@@ -529,10 +613,7 @@ async def test_verify_otp_continues_to_work(
              "night", "continue", "skip_resume", "confirm"]
     for step in steps:
         r = await _send(client, session_id, step)
-    assert r["current_state"] == "VERIFY_OTP"
-    code = await _extract_otp(db_session, session_id)
-    done = await _send(client, session_id, code)
-    assert done["current_state"] == "DONE"
+    assert r["current_state"] == "DONE"
 
 
 # ── Pipeline is never created ─────────────────────────────────────────────────

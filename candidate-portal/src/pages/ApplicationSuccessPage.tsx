@@ -81,7 +81,7 @@ export function ApplicationSuccessPage() {
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
-            <Link to="/">
+            <Link to="/vagas">
               <Button fullWidth variant="secondary">
                 Ver mais vagas
               </Button>

@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "npm run dev:all",
 
-    "dev:full": "./scripts/dev-full.sh",
+    "dev:full": "bash scripts/dev-full.sh",
     "dev:user": "./scripts/dev-user.sh",
     "dev:backend": "npm run backend",
     "dev:staff": "npm run frontend",
@@ -19,7 +19,7 @@
     "backend:seed-jobs": "cd backend && .venv/bin/python scripts/seed_jobs.py",
     "backend:seed-scoring": "cd backend && .venv/bin/python scripts/seed_scoring_version.py",
 
-    "backend": "sh -c 'cd backend && .venv/bin/uvicorn src.interface.api.main:app --reload --reload-dir src --reload-dir scripts --reload-exclude \".venv/*\" --reload-exclude \"tests/*\" --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --no-access-log --log-level warning'",
+    "backend": "sh -c 'cd backend && .venv/bin/uvicorn src.interface.api.main:app --reload --reload-dir src --reload-dir scripts --reload-exclude \".venv/*\" --reload-exclude \"tests/*\" --host ${BACKEND_HOST:-0.0.0.0} --port ${BACKEND_PORT:-8000} --no-access-log --log-level warning'",
 
     "backend:health": "sh -c 'printf \"aguardando backend em http://127.0.0.1:%s\\n\" \"${BACKEND_PORT:-8000}\"; until response=$(curl -fsS http://127.0.0.1:${BACKEND_PORT:-8000}/health 2>/dev/null); do sleep 1; done; printf \"backend pronto | %s\\n\" \"$response\"; case \"$response\" in *\"\\\"connected\\\":true\"*) ;; *) exit 1 ;; esac'",
 

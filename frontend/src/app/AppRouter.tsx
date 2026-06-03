@@ -122,6 +122,10 @@ const DemoRhPage = lazy(() =>
   import("../pages/DemoRhPage").then((m) => ({ default: m.DemoRhPage }))
 );
 
+const Demo2Page = lazy(() =>
+  import("../pages/Demo2Page").then((m) => ({ default: m.Demo2Page }))
+);
+
 const AnalisesIaPage = lazy(() =>
   import("../pages/AnalisesIaPage").then((m) => ({
     default: m.AnalisesIaPage,
@@ -418,6 +422,11 @@ export function AppRouter() {
         <Route
           path="demo-rh"
           element={protectedPage(<DemoRhPage />, JOB_MANAGEMENT_ROLES)}
+        />
+
+        <Route
+          path="demo-2"
+          element={protectedPage(<Demo2Page />, JOB_MANAGEMENT_ROLES)}
         />
       </Route>
 

@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Send, Sparkles, AlertCircle, RefreshCw, RotateCcw, Loader2 } from 'lucide-react';
+import {
+  Send,
+  Sparkles,
+  AlertCircle,
+  RefreshCw,
+  RotateCcw,
+  Loader2,
+  UploadCloud,
+  File as FileIcon,
+  X,
+} from 'lucide-react';
 import { CandidatePortalLayout } from '../components/layout/CandidatePortalLayout';
 import { Button } from '../components/ui/Button';
 import {
@@ -22,7 +32,7 @@ const STATE_LABELS: Record<string, string> = {
   CHOOSE_FUNCTION: 'Escolhendo a função',
   CHOOSE_SHIFT: 'Escolhendo o turno',
   SHOW_JOBS: 'Vagas para você',
-  COLLECT_RESUME: 'Seu currículo',
+  AWAITING_RESUME_UPLOAD: 'Seu currículo',
   CONFIRM_APPLICATION: 'Confirmando',
   DONE: 'Tudo certo!',
 };
@@ -205,14 +215,19 @@ export function CandidatePortal2Page() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [resumed, setResumed] = useState(false);
   const [otpHelpShown, setOtpHelpShown] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const sessionIdRef = useRef<string | null>(null);
   const lastFailedRef = useRef<FailedPayload | null>(null);
   const initStartedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isOtpState = currentState === 'VERIFY_OTP';
+  const isAwaitingResumeState = currentState === 'AWAITING_RESUME_UPLOAD';
 
   // Create a brand-new backend session and reset the chat to its opening turn.
   async function createFreshSession() {
@@ -273,6 +288,9 @@ export function CandidatePortal2Page() {
     setOptions([]);
     setCurrentState(null);
     setPhase('loading');
+    setUploading(false);
+    setUploadError(null);
+    setSelectedFile(null);
     try {
       await createFreshSession();
     } catch {
@@ -290,8 +308,10 @@ export function CandidatePortal2Page() {
   // Keep the latest message in view. (scrollTo is optional — absent in jsdom.)
   useEffect(() => {
     const el = scrollRef.current;
-    el?.scrollTo?.({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages, options]);
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, options, phase, sendError, otpHelpShown, uploadError]);
 
   async function performSend(payload: FailedPayload) {
     const sessionId = sessionIdRef.current;
@@ -327,6 +347,65 @@ export function CandidatePortal2Page() {
     setOptions([]); // a reply was chosen/typed — consume the current quick replies
     setInput('');
     void performSend({ content: trimmed, type });
+  }
+
+  function sendEvent(eventName: string) {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId || sending || uploading) return;
+    void performSend({ content: eventName, type: 'event' });
+  }
+
+  function handleFileSelect(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError('Tipo de arquivo inválido. Apenas PDF, DOC, e DOCX são permitidos.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      // 10MB
+      setUploadError('Arquivo muito grande. O tamanho máximo é 10MB.');
+      return;
+    }
+
+    setSelectedFile(file);
+    setUploadError(null);
+  }
+
+  async function handleUploadResume() {
+    const sessionId = sessionIdRef.current;
+    if (!selectedFile || !sessionId) return;
+
+    setUploading(true);
+    setUploadError(null);
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      await conversationsService.uploadResume(sessionId, formData);
+      setSelectedFile(null);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `local-upload-success-${Date.now()}`,
+          role: 'assistant',
+          content: 'Currículo enviado com sucesso.',
+        },
+      ]);
+      sendEvent('resume_uploaded');
+    } catch (error) {
+      setUploadError('Falha no upload. Tente novamente.');
+    } finally {
+      setUploading(false);
+    }
   }
 
   function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
@@ -424,58 +503,51 @@ export function CandidatePortal2Page() {
   // ---- Render ----
 
   return (
-    <CandidatePortalLayout maxWidth="content">
-      <div className="mx-auto flex max-w-content flex-col">
-        {/* Header */}
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
-            <Sparkles className="h-6 w-6 text-primary-700" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-extrabold text-gray-900">Assistente de vagas</h1>
-            <p className="text-sm text-gray-500">{stateLabel(currentState)}</p>
+    <CandidatePortalLayout maxWidth="content" hideFooter fullHeight>
+      <div className="flex flex-1 flex-col overflow-hidden pb-4 pt-4 sm:pb-6 sm:pt-6">
+        {/* Compact Header */}
+        <div className="mb-4 flex items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-50">
+              <Sparkles className="h-5 w-5 text-primary-700" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">Assistente de vagas</h1>
+              <p className="text-xs text-gray-500 truncate">{stateLabel(currentState)}</p>
+            </div>
           </div>
           {phase === 'ready' && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => void restartConversation()}
-              className="flex-shrink-0"
-              aria-label="Começar nova conversa"
+              className="flex-shrink-0 h-9 px-3"
+              aria-label="Recomeçar"
             >
-              <RotateCcw className="h-4 w-4" />
-              <span className="hidden sm:inline">Começar nova conversa</span>
+              <RotateCcw className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Recomeçar</span>
             </Button>
           )}
         </div>
 
-        {/* Resumed-session feedback */}
-        {phase === 'ready' && resumed && (
-          <div className="mb-3 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-            <RefreshCw className="h-4 w-4 flex-shrink-0 text-primary-700" />
-            <span>Continuamos de onde você parou.</span>
-          </div>
-        )}
-
-        {/* Chat surface */}
-        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white shadow-card">
-          {/* Messages */}
+        {/* Main Content Area */}
+        <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card">
+          {/* Messages Scroll Area */}
           <div
             ref={scrollRef}
-            className="min-h-[180px] space-y-3 overflow-y-auto p-4 sm:min-h-[200px]"
-            style={{ maxHeight: '44vh' }}
+            className="flex-1 overflow-y-auto p-4 space-y-4"
             aria-live="polite"
           >
             {phase === 'loading' && (
-              <div className="flex h-40 flex-col items-center justify-center text-gray-400">
-                <Loader2 className="mb-2 h-6 w-6 animate-spin" />
+              <div className="flex h-full flex-col items-center justify-center text-gray-400">
+                <Loader2 className="mb-2 h-8 w-8 animate-spin" />
                 <p className="text-sm">Iniciando o assistente…</p>
               </div>
             )}
 
             {phase === 'init-error' && (
-              <div className="flex h-40 flex-col items-center justify-center text-center">
-                <AlertCircle className="mb-3 h-8 w-8 text-primary-700" />
+              <div className="flex h-full flex-col items-center justify-center text-center p-6">
+                <AlertCircle className="mb-3 h-10 w-10 text-primary-700" />
                 <p className="text-base font-semibold text-gray-700">{INIT_ERROR}</p>
                 <button
                   onClick={() => void startConversation()}
@@ -487,139 +559,253 @@ export function CandidatePortal2Page() {
               </div>
             )}
 
-            {phase === 'ready' &&
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={message.role === 'candidate' ? 'flex justify-end' : 'flex justify-start'}
-                >
-                  <div
-                    className={[
-                      'max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm sm:text-base',
-                      message.role === 'candidate'
-                        ? 'bg-primary-700 text-white'
-                        : 'bg-gray-100 text-gray-900',
-                    ].join(' ')}
-                  >
-                    {message.content}
+            {phase === 'ready' && (
+              <>
+                {resumed && (
+                  <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-1.5 text-xs text-gray-600 mb-2">
+                    <RefreshCw className="h-3.5 w-3.5 text-primary-700" />
+                    <span>Retomamos sua conversa</span>
                   </div>
-                </div>
-              ))}
+                )}
+                
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={message.role === 'candidate' ? 'flex justify-end' : 'flex justify-start'}
+                  >
+                    <div
+                      className={[
+                        'max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm sm:text-base shadow-sm',
+                        message.role === 'candidate'
+                          ? 'bg-primary-700 text-white rounded-br-none'
+                          : 'bg-gray-100 text-gray-900 rounded-bl-none',
+                      ].join(' ')}
+                    >
+                      {message.content}
+                    </div>
+                  </div>
+                ))}
+                
+                {sending && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 text-gray-400 rounded-2xl rounded-bl-none px-4 py-2.5">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
-          {/* Quick replies */}
-          {phase === 'ready' && options.length > 0 && (
-            <div className="flex flex-col gap-2 border-t border-gray-100 p-4">
-              {options.map((option) => (
-                <Button
-                  key={option.value}
-                  variant="outline"
-                  size="lg"
-                  fullWidth
+          {/* Interaction Controls */}
+          <div className="border-t border-gray-100 bg-gray-50/50">
+            {phase === 'ready' && isAwaitingResumeState && (
+              <div className="p-3 sm:p-4">
+                {!selectedFile ? (
+                  <>
+                    <p className="text-sm text-center text-gray-600 mb-3">
+                      Envie seu currículo em PDF, DOC, ou DOCX (max 10MB).
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="primary"
+                        size="md"
+                        className="flex-1"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                      >
+                        <UploadCloud className="h-4 w-4 mr-2" />
+                        Selecionar currículo
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="md"
+                        className="bg-white flex-1"
+                        onClick={() =>
+                          submitCandidateReply(
+                            'skip_resume',
+                            'quick_reply',
+                            'Continuar sem currículo',
+                          )
+                        }
+                        disabled={uploading}
+                      >
+                        Continuar sem currículo
+                      </Button>
+                    </div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    />
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <div className="flex items-center gap-2 text-sm text-gray-700 mb-3 p-2 border border-gray-200 rounded-md bg-gray-50 w-full">
+                      <FileIcon className="h-5 w-5 text-gray-500 shrink-0" />
+                      <span className="truncate flex-1">{selectedFile.name}</span>
+                      <button
+                        onClick={() => setSelectedFile(null)}
+                        className="p-1 text-gray-500 hover:text-gray-700 shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      className="w-full"
+                      onClick={handleUploadResume}
+                      loading={uploading}
+                    >
+                      Enviar currículo
+                    </Button>
+                  </div>
+                )}
+                {uploadError && (
+                  <div className="px-4 pb-2 pt-2 text-xs font-medium text-red-800 text-center">
+                    {uploadError}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Quick replies */}
+            {phase === 'ready' && options.length > 0 && (
+              <div className="flex flex-wrap gap-2 p-3 sm:p-4">
+                {options.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant="outline"
+                    size="md"
+                    className="bg-white hover:bg-gray-50 text-gray-700 border-gray-200 flex-1 min-w-[140px] sm:flex-none sm:min-w-0"
+                    disabled={sending}
+                    onClick={() => handleQuickReply(option)}
+                  >
+                    {optionDisplayLabel(option, currentState)}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {/* OTP step helpers */}
+            {phase === 'ready' && isOtpState && (
+              <div className="flex flex-col gap-2 p-3 sm:p-4">
+                {!otpHelpShown ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="bg-white flex-1"
+                      onClick={focusCodeInput}
+                    >
+                      Digitar código
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="bg-white flex-1"
+                      onClick={showOtpHelp}
+                    >
+                      Não recebi
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => void restartConversation()}
+                    >
+                      Trocar dados
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="bg-white flex-1"
+                      onClick={focusCodeInput}
+                    >
+                      Tentar digitar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => void restartConversation()}
+                    >
+                      Trocar dados
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Send error */}
+            {sendError && (
+              <div className="flex items-center justify-between gap-3 bg-red-50 px-4 py-2 border-t border-red-100">
+                <p className="text-xs font-medium text-red-800">{sendError}</p>
+                <button
+                  onClick={handleRetrySend}
                   disabled={sending}
-                  onClick={() => handleQuickReply(option)}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-red-700 uppercase tracking-wider hover:text-red-900 disabled:opacity-50"
                 >
-                  {optionDisplayLabel(option, currentState)}
+                  <RefreshCw className="h-3 w-3" />
+                  Repetir
+                </button>
+              </div>
+            )}
+
+            {/* Input Form */}
+            {phase === 'ready' && !isAwaitingResumeState && (
+              <form onSubmit={handleFormSubmit} className="flex items-center gap-2 p-3 sm:p-4">
+                <div className="relative flex-1">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={handleInputChange}
+                    placeholder={
+                      isOtpState
+                        ? OTP_PLACEHOLDER
+                        : identifierMode
+                          ? IDENTIFIER_GUIDANCE[identifierMode].placeholder
+                          : 'Escreva sua resposta…'
+                    }
+                    inputMode={isOtpState || identifierMode ? 'numeric' : undefined}
+                    maxLength={
+                      isOtpState
+                        ? 6
+                        : identifierMode === 'cpf'
+                          ? 14
+                          : identifierMode === 'whatsapp'
+                            ? 15
+                            : undefined
+                    }
+                    aria-label="Sua mensagem"
+                    disabled={sending}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-700/10 disabled:opacity-60 sm:text-base shadow-sm"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="rounded-xl h-[46px] w-[46px] p-0 flex items-center justify-center shrink-0"
+                  loading={sending}
+                  disabled={!canSubmit}
+                >
+                  <Send className="h-5 w-5" />
+                  <span className="sr-only">Enviar</span>
                 </Button>
-              ))}
-            </div>
-          )}
-
-          {/* OTP step — friendly quick actions for lay candidates */}
-          {phase === 'ready' && isOtpState && (
-            <div className="flex flex-col gap-2 border-t border-gray-100 p-4">
-              {!otpHelpShown ? (
-                <>
-                  <p className="text-sm text-gray-500">
-                    Digite o código de 6 dígitos no campo abaixo ou escolha uma opção:
-                  </p>
-                  <Button variant="outline" size="lg" fullWidth onClick={focusCodeInput}>
-                    Digitar código
-                  </Button>
-                  <Button variant="outline" size="lg" fullWidth onClick={showOtpHelp}>
-                    Não recebi o código
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    fullWidth
-                    onClick={() => void restartConversation()}
-                  >
-                    Trocar CPF/WhatsApp
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="outline" size="lg" fullWidth onClick={focusCodeInput}>
-                    Tentar digitar o código
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    fullWidth
-                    onClick={() => void restartConversation()}
-                  >
-                    Trocar CPF/WhatsApp
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Send error */}
-          {sendError && (
-            <div className="flex items-center justify-between gap-3 border-t border-gray-100 bg-primary-50 px-4 py-2.5">
-              <p className="text-sm text-primary-800">{sendError}</p>
-              <button
-                onClick={handleRetrySend}
-                disabled={sending}
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-700 underline hover:text-primary-800 disabled:opacity-50"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Tentar de novo
-              </button>
-            </div>
-          )}
-
-          {/* Input */}
-          {phase === 'ready' && (
-            <form onSubmit={handleFormSubmit} className="flex items-center gap-2 border-t border-gray-100 p-3">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={handleInputChange}
-                placeholder={
-                  isOtpState
-                    ? OTP_PLACEHOLDER
-                    : identifierMode
-                      ? IDENTIFIER_GUIDANCE[identifierMode].placeholder
-                      : 'Escreva sua resposta…'
-                }
-                inputMode={isOtpState || identifierMode ? 'numeric' : undefined}
-                maxLength={
-                  isOtpState
-                    ? 6
-                    : identifierMode === 'cpf'
-                      ? 14
-                      : identifierMode === 'whatsapp'
-                        ? 15
-                        : undefined
-                }
-                aria-label="Sua mensagem"
-                disabled={sending}
-                className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-700/20 disabled:opacity-60 sm:text-base"
-              />
-              <Button type="submit" size="lg" loading={sending} disabled={!canSubmit}>
-                <Send className="h-4 w-4" />
-                <span className="sr-only">Enviar</span>
-              </Button>
-            </form>
-          )}
+              </form>
+            )}
+          </div>
         </div>
 
-        <p className="mt-3 text-center text-xs text-gray-400">
-          O assistente ajuda você a encontrar uma vaga. É rápido e simples.
+        <p className="mt-3 text-center text-[10px] uppercase tracking-widest font-semibold text-gray-400">
+          Experiência Segura e Protegida
         </p>
       </div>
     </CandidatePortalLayout>

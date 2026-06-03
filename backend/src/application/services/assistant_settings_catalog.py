@@ -100,7 +100,7 @@ STATE_CONTENT_SEED: tuple[AssistantStateContentSeed, ...] = (
     ),
     AssistantStateContentSeed(
         state="CHOOSE_LOCATION",
-        prompt_text="Em qual localidade você prefere trabalhar?",
+        prompt_text="Em qual cidade ou localidade você quer trabalhar?",
         fallback_text=(
             "Não encontrei essa localidade. Digite o nome da cidade ou localidade novamente."
         ),

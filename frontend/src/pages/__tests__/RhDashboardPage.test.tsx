@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 import { ProtectedRoute } from "../../app/ProtectedRoute";
 import { RhDashboardPage } from "../RhDashboardPage";
@@ -78,6 +79,20 @@ function renderPage() {
   );
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname}</span>;
+}
+
+function renderPageWithLocation() {
+  return render(
+    <MemoryRouter initialEntries={["/rh"]}>
+      <RhDashboardPage />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseAuth.mockReturnValue({
@@ -93,22 +108,49 @@ describe("RhDashboardPage", () => {
     renderPage();
 
     expect(await screen.findByText("Candidatos novos")).toBeInTheDocument();
-    expect(screen.getByText("Central RH")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Central RH" })).toBeInTheDocument();
     expect(screen.getByText("Veja o que precisa de atenção hoje.")).toBeInTheDocument();
 
-    expect(screen.getByText("Entrevistas de hoje")).toBeInTheDocument();
+    expect(screen.getByText("Entrevistas hoje")).toBeInTheDocument();
     expect(screen.getByText("Aguardando decisão")).toBeInTheDocument();
     expect(screen.getByText("Pré-admissões pendentes")).toBeInTheDocument();
     expect(screen.getByText("Admitidos no mês")).toBeInTheDocument();
   });
 
+  it("renderiza filtros, ações rápidas e menu lateral", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Pendências do dia")).toBeInTheDocument();
+    expect(screen.getByText("Todas")).toBeInTheDocument();
+    expect(screen.getByText("Entrevistas")).toBeInTheDocument();
+    expect(screen.getByText("Decisões")).toBeInTheDocument();
+    expect(screen.getAllByText("Pré-admissão").length).toBeGreaterThan(0);
+
+    for (const label of ["Abrir Candidaturas", "Abrir Agenda", "Abrir Pipeline", "Abrir Pré-admissão"]) {
+      expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
+    }
+
+    for (const label of [
+      "Dashboard",
+      "Candidaturas",
+      "Agenda",
+      "Pipeline",
+      "Pré-admissão",
+      "Segurança",
+      "Configurações",
+      "Relatórios",
+    ]) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    }
+  });
+
   it("mostra pendências do dia com próxima ação", async () => {
     renderPage();
 
-    expect(await screen.findByText("Ana Silva")).toBeInTheDocument();
-    expect(screen.getByText("Analista de RH")).toBeInTheDocument();
-    expect(screen.getByText("Entrevista hoje")).toBeInTheDocument();
-    expect(screen.getByText("Entrevista hoje às 14:00")).toBeInTheDocument();
+    expect((await screen.findAllByText("Ana Silva")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Analista de RH").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Entrevista hoje").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Entrevista hoje às 14:00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Registrar decisão").length).toBeGreaterThan(0);
   });
 
@@ -121,15 +163,31 @@ describe("RhDashboardPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Nenhuma pendência para hoje")).toBeInTheDocument();
-    expect(screen.getByText("Não há candidatos, entrevistas ou decisões pedindo ação neste momento.")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhuma pendência para hoje.")).toBeInTheDocument();
+    expect(screen.getByText("Tudo certo por enquanto.")).toBeInTheDocument();
   });
 
-  it("mantém atalho para candidaturas", async () => {
+  it("testa clique nas ações rápidas usando rotas reais", async () => {
+    const user = userEvent.setup();
+    renderPageWithLocation();
+
+    const quickActions = (await screen.findByRole("heading", { name: "Ações rápidas" })).closest("section");
+    expect(quickActions).not.toBeNull();
+
+    const link = await within(quickActions as HTMLElement).findByRole("link", { name: "Abrir Candidaturas" });
+    expect(link).toHaveAttribute("href", "/candidaturas");
+
+    await user.click(link);
+    expect(screen.getByTestId("location")).toHaveTextContent("/candidaturas");
+  });
+
+  it("mostra estado de erro amigável", async () => {
+    mockGetDashboard.mockRejectedValue(new Error("network down"));
+
     renderPage();
 
-    const link = await screen.findByRole("link", { name: "Abrir Candidaturas" });
-    expect(link).toHaveAttribute("href", "/candidaturas");
+    expect(await screen.findByText("Não conseguimos carregar a Central RH agora.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tentar novamente" })).toBeInTheDocument();
   });
 
   it("candidate não acessa a rota protegida", async () => {

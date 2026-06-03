@@ -207,7 +207,7 @@ export function ApplicationFormPage() {
     <CandidatePortalLayout maxWidth="page">
       {/* Breadcrumb */}
       <nav className="mb-5 flex items-center gap-1.5 text-sm text-gray-500">
-        <Link to="/" className="hover:text-primary-700 transition-colors">Vagas</Link>
+        <Link to="/vagas" className="hover:text-primary-700 transition-colors">Vagas</Link>
         <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
         <Link to={`/vagas/${identifier}`} className="hover:text-primary-700 transition-colors">
           {job?.title ?? 'Vaga'}
@@ -570,7 +570,7 @@ export function ApplicationFormPage() {
                         Recuperar ou criar senha
                       </Link>
                       <Link
-                        to="/"
+                        to="/vagas"
                         className="inline-flex h-9 items-center justify-center rounded-lg bg-white px-3 text-sm font-semibold text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50"
                       >
                         Ver vagas abertas

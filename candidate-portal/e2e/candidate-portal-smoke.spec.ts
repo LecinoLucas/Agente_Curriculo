@@ -155,49 +155,6 @@ test.describe('candidate-portal smoke E2E', () => {
     ).toBeVisible();
   });
 
-  test('dev-login opcional cria cookie HttpOnly e carrega /me e /me/applications', async ({ page, context }) => {
-    test.skip(
-      !DEV_CANDIDATE_LOGIN_ENABLED,
-      'Defina VITE_ENABLE_DEV_CANDIDATE_LOGIN=true ou E2E_DEV_CANDIDATE_LOGIN=1 para rodar o smoke de dev-login.',
-    );
-
-    const diagnostics = captureApiDiagnostics(page, [
-      ['/auth/dev-login', 'auth/dev-login'],
-      ['/candidate-portal/me/applications', 'candidate-portal/me/applications'],
-      ['/candidate-portal/me', 'candidate-portal/me'],
-    ]);
-
-    await page.goto('/login');
-    await expect(page.getByText('Acesso rápido de desenvolvimento')).toBeVisible();
-    await page.getByLabel('E-mail do candidato de teste').fill(DEV_CANDIDATE_EMAIL);
-    await page.getByLabel('Nome, opcional').fill(DEV_CANDIDATE_NAME);
-
-    const loginResponsePromise = waitForApiResponse(page, '/auth/dev-login');
-    const meResponsePromise = waitForExactApiPath(page, '/candidate-portal/me');
-    const applicationsResponsePromise = waitForApiResponse(page, '/candidate-portal/me/applications');
-
-    await page.getByRole('button', { name: 'Entrar como candidato de teste' }).click();
-    const loginResponse = await loginResponsePromise;
-    assertOkResponse(loginResponse, diagnostics, 'Falha no POST /auth/dev-login');
-
-    await expect(page).toHaveURL(/\/minha-area$/);
-    const [meResponse, applicationsResponse] = await Promise.all([
-      meResponsePromise,
-      applicationsResponsePromise,
-    ]);
-    assertOkResponse(meResponse, diagnostics, 'Falha no GET /candidate-portal/me');
-    assertOkResponse(
-      applicationsResponse,
-      diagnostics,
-      'Falha no GET /candidate-portal/me/applications',
-    );
-
-    const cookies = await context.cookies(PUBLIC_API_BASE_URL);
-    const sessionCookie = cookies.find((cookie) => cookie.name === 'candidate_portal_token');
-    expect(Boolean(sessionCookie), 'cookie candidate_portal_token deve existir').toBe(true);
-    expect(sessionCookie?.httpOnly, 'cookie de sessão deve ser HttpOnly').toBe(true);
-    await expect(page.getByText('Área do candidato')).toBeVisible();
-  });
 
   test('candidatura duplicada 409 mostra CTAs seguros', async ({ page }) => {
     test.skip(

@@ -10,6 +10,9 @@ from src.infrastructure.repositories.sqlalchemy_candidate_application_repository
 from src.infrastructure.repositories.sqlalchemy_conversation_repository import (
     SQLAlchemyConversationRepository,
 )
+from src.infrastructure.repositories.sqlalchemy_resume_repository import (
+    SQLAlchemyResumeRepository,
+)
 from src.interface.api.dependencies import get_db
 from src.interface.api.rate_limiting import rate_limit_conversation_messages
 from src.interface.api.schemas.conversation_schemas import (
@@ -28,6 +31,7 @@ def _service(db: AsyncSession) -> ConversationService:
         SQLAlchemyConversationRepository(db),
         db,
         SQLAlchemyCandidateApplicationRepository(db),
+        SQLAlchemyResumeRepository(db),
     )
 
 

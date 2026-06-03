@@ -16,6 +16,7 @@ ConversationState = Literal[
     "CHOOSE_SHIFT",
     "SHOW_JOBS",
     "COLLECT_RESUME",
+    "AWAITING_RESUME_UPLOAD",
     "COLLECT_LEAD_NAME",
     "COLLECT_LEAD_WHATSAPP",
     "COLLECT_LGPD_CONSENT",
@@ -26,6 +27,7 @@ ConversationStatus = Literal["active", "completed", "abandoned", "cancelled"]
 ConversationMessageRole = Literal["candidate", "assistant", "system"]
 ConversationMessageDirection = Literal["inbound", "outbound", "system"]
 ConversationMessageType = Literal["text", "quick_reply", "system"]
+ConversationMessageCreateType = Literal["text", "quick_reply", "system", "event"]
 
 
 class ConversationCreateRequest(APISchemaModel):
@@ -35,7 +37,7 @@ class ConversationCreateRequest(APISchemaModel):
 
 class ConversationMessageCreateRequest(APISchemaModel):
     content: str = Field(..., min_length=1, max_length=4000)
-    message_type: ConversationMessageType = "text"
+    message_type: ConversationMessageCreateType = "text"
 
 
 class ConversationQuickReplyResponse(APISchemaModel):

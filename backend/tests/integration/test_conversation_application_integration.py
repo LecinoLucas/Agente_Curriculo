@@ -19,12 +19,12 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_model import ConversationSessionModel
-from src.infrastructure.database.models.conversation_otp_model import ConversationOtpModel
 from src.infrastructure.database.models.operational_master_model import (
     LocationGroupModel,
     OperationalGroupModel,
     OperationalUnitModel,
 )
+from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 
 pytestmark = pytest.mark.asyncio
 
@@ -225,8 +225,9 @@ async def test_unresolved_lead_collects_data_and_creates_candidate_and_applicati
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    """OP-6F.5: an unresolved lead who provides name/WhatsApp/LGPD and verifies OTP
-    should result in a new Candidate and CandidateApplication with no pipeline."""
+    """OP-6F.6: an unresolved lead who provides name/WhatsApp/LGPD and confirms
+    should result in a new Candidate and CandidateApplication with no pipeline,
+    without any OTP step."""
     location = await _location(db_session)
     session_id = await _start(client)  # anonymous web chat (public flow)
 
@@ -259,26 +260,10 @@ async def test_unresolved_lead_collects_data_and_creates_candidate_and_applicati
     after_lgpd = await _send(client, session_id, "aceito")
     assert after_lgpd["current_state"] == "CONFIRM_APPLICATION"
 
-    # Confirm.
+    # Confirm — finalizes directly without an OTP step.
     confirm = await _send(client, session_id, "confirm")
-    assert confirm["current_state"] == "VERIFY_OTP"
-
-    # Verify OTP.
-    otp = await db_session.scalar(
-        sa.select(ConversationOtpModel)
-        .where(ConversationOtpModel.session_id == UUID(session_id))
-        .order_by(ConversationOtpModel.created_at.desc())
-        .limit(1)
-    )
-    assert otp is not None
-    from hashlib import sha256 as _sha256
-    sid = UUID(session_id)
-    code = next(
-        f"{i:06d}" for i in range(1_000_000)
-        if _sha256(f"{sid}:{i:06d}".encode()).hexdigest() == otp.otp_hash
-    )
-    done = await _send(client, session_id, code)
-    assert done["current_state"] == "DONE"
+    assert confirm["current_state"] == "DONE"
+    assert "registrada" in confirm["assistant_message"].lower()
 
     # Candidate and Application should now exist.
     session = await db_session.get(ConversationSessionModel, UUID(session_id))
@@ -297,8 +282,104 @@ async def test_unresolved_lead_collects_data_and_creates_candidate_and_applicati
     assert len(apps) == 1
     assert apps[0].preferred_location_group_id == location.id
     assert apps[0].status in ("submitted", "started")
+    assert apps[0].lgpd_consent_at is not None
+    assert apps[0].lgpd_consent_version == "v1.0"
 
     # No pipeline.
+    pipeline_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateJobPipelineModel)
+    )
+    assert pipeline_count == 0
+
+
+async def test_confirming_unresolved_lead_with_pending_resume_creates_public_resume(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        "src.application.services.conversation_service.write_resume_file",
+        lambda _key, _content: None,
+    )
+    monkeypatch.setattr(
+        "src.application.services.conversation_service.enqueue_resume_extraction",
+        lambda _version_id: None,
+    )
+
+    await _location(db_session)
+    session_id = await _start(client)
+
+    await _send(client, session_id, "52998224725")
+    for content in ["Peritoró", "any_in_location", "Frentista", "night", "continue"]:
+        await _send(client, session_id, content)
+
+    awaiting_upload = await _send(client, session_id, "send_resume")
+    assert awaiting_upload["current_state"] == "AWAITING_RESUME_UPLOAD"
+
+    pending_resume = tmp_path / "portal-resume.pdf"
+    pending_resume.write_bytes(b"%PDF-1.4 portal resume")
+    session = await db_session.get(ConversationSessionModel, UUID(session_id))
+    assert session is not None
+    session.context_json = {
+        **(session.context_json or {}),
+        "pending_resume_path": str(pending_resume),
+        "pending_resume_filename": "portal-resume.pdf",
+    }
+    await db_session.commit()
+
+    uploaded = await client.post(
+        f"/api/v1/conversations/{session_id}/messages",
+        json={"content": "resume_uploaded", "message_type": "event"},
+    )
+    assert uploaded.status_code == 200
+    assert uploaded.json()["current_state"] == "COLLECT_LEAD_NAME"
+
+    for content in ["Maria com Currículo", "11987654322", "aceito"]:
+        await _send(client, session_id, content)
+
+    confirm = await client.post(
+        f"/api/v1/conversations/{session_id}/messages",
+        json={"content": "confirm", "message_type": "quick_reply"},
+    )
+    assert confirm.status_code == 200
+    assert confirm.json()["current_state"] == "DONE"
+
+    session = await db_session.get(ConversationSessionModel, UUID(session_id))
+    assert session is not None
+    assert session.candidate_id is not None
+    assert session.application_id is not None
+    assert "pending_resume_path" not in (session.context_json or {})
+
+    candidate = await db_session.get(CandidateModel, session.candidate_id)
+    assert candidate is not None
+    assert candidate.full_name == "Maria com Currículo"
+    assert candidate.phone == "11987654322"
+    assert candidate.lgpd_consent_at is not None
+    assert candidate.lgpd_consent_version == "v1.0"
+
+    application = await db_session.get(CandidateApplicationModel, session.application_id)
+    assert application is not None
+    assert application.candidate_id == candidate.id
+    assert application.status == "submitted"
+    assert application.lgpd_consent_at is not None
+    assert application.lgpd_consent_version == "v1.0"
+
+    resume = await db_session.scalar(
+        sa.select(ResumeModel).where(ResumeModel.candidate_id == candidate.id)
+    )
+    assert resume is not None
+    assert resume.created_by is None
+
+    version = await db_session.scalar(
+        sa.select(ResumeVersionModel).where(ResumeVersionModel.resume_id == resume.id)
+    )
+    assert version is not None
+    assert version.uploaded_by is None
+    assert version.original_file_name == "portal-resume.pdf"
+    assert version.file_size_bytes == len(b"%PDF-1.4 portal resume")
+    assert pending_resume.exists() is False
+
     pipeline_count = await db_session.scalar(
         sa.select(sa.func.count()).select_from(CandidateJobPipelineModel)
     )

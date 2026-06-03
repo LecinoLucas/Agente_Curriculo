@@ -1,11 +1,14 @@
-"""OP-6F.5 — Lead registration flow in the Conversation Engine.
+"""OP-6F.5 / OP-6F.6 — Lead registration flow in the Conversation Engine.
 
 Tests the path for a new (unresolved) lead:
   IDENTIFY → ... → COLLECT_LEAD_NAME → COLLECT_LEAD_WHATSAPP → COLLECT_LGPD_CONSENT
-  → CONFIRM_APPLICATION → VERIFY_OTP → DONE (Candidate + CandidateApplication created).
+  → CONFIRM_APPLICATION → DONE (Candidate + CandidateApplication created).
+
+OP-6F.6 removed the mandatory OTP step: confirmation finalizes directly. LGPD
+consent remains the gate before a new Candidate is created.
 
 Security guarantees tested:
-- No Candidate created before OTP is verified.
+- No Candidate created before confirmation.
 - No Candidate created without LGPD consent.
 - No CandidateApplication created before Candidate.
 - PII (full WhatsApp/CPF) not in public API responses.
@@ -15,7 +18,6 @@ Security guarantees tested:
 from __future__ import annotations
 
 import json
-from hashlib import sha256
 from uuid import UUID
 
 import pytest
@@ -31,7 +33,6 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_model import ConversationSessionModel
-from src.infrastructure.database.models.conversation_otp_model import ConversationOtpModel
 from src.infrastructure.database.models.operational_master_model import LocationGroupModel
 
 pytestmark = pytest.mark.asyncio
@@ -68,24 +69,10 @@ async def _send(client: AsyncClient, session_id: str, content: str) -> dict:
         f"/api/v1/conversations/{session_id}/messages",
         json={"content": content},
     )
+    if response.status_code != 200:
+        print(f"DEBUG: _send failed with {response.status_code}: {response.text}")
     assert response.status_code == 200
     return response.json()
-
-
-async def _extract_otp_code(db_session: AsyncSession, session_id: str) -> str:
-    otp = await db_session.scalar(
-        sa.select(ConversationOtpModel)
-        .where(ConversationOtpModel.session_id == UUID(session_id))
-        .order_by(ConversationOtpModel.created_at.desc())
-        .limit(1)
-    )
-    assert otp is not None, "No OTP found"
-    sid = UUID(session_id)
-    for i in range(1_000_000):
-        code = f"{i:06d}"
-        if sha256(f"{sid}:{code}".encode()).hexdigest() == otp.otp_hash:
-            return code
-    raise AssertionError("OTP not found in range")
 
 
 async def _drive_to_lead_name(
@@ -109,13 +96,14 @@ async def _complete_lead_registration(
     whatsapp: str = UNKNOWN_WHATSAPP,
 ) -> dict:
     """Complete COLLECT_LEAD_NAME → COLLECT_LEAD_WHATSAPP → COLLECT_LGPD_CONSENT
-    → CONFIRM_APPLICATION → VERIFY_OTP → DONE."""
+    → CONFIRM_APPLICATION → DONE.
+
+    OP-6F.6: confirmation finalizes directly, with no OTP step.
+    """
     await _send(client, session_id, name)
     await _send(client, session_id, whatsapp)
     await _send(client, session_id, "aceito")
-    await _send(client, session_id, "confirm")
-    code = await _extract_otp_code(db_session, session_id)
-    return await _send(client, session_id, code)
+    return await _send(client, session_id, "confirm")
 
 
 # ── State routing ─────────────────────────────────────────────────────────────
@@ -179,6 +167,42 @@ async def test_whatsapp_lead_skips_collect_lead_whatsapp(
 
     after_name = await _send(client, session_id, LEAD_NAME)
     assert after_name["current_state"] == "COLLECT_LGPD_CONSENT"
+
+
+async def test_whatsapp_lead_completes_without_otp(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """OP-6F.6: a new lead identified by an unknown WhatsApp completes the whole
+    flow without any OTP step, creating a Candidate using the WhatsApp captured
+    at IDENTIFY."""
+    await _location(db_session)
+    session_id = await _start(client)
+
+    r = await _send(client, session_id, UNKNOWN_WHATSAPP)
+    assert r["current_state"] == "CHOOSE_LOCATION"
+
+    for content in ["Peritoró", "any_in_location", "Frentista", "night", "continue"]:
+        await _send(client, session_id, content)
+    await _send(client, session_id, "skip_resume")
+
+    after_name = await _send(client, session_id, LEAD_NAME)
+    assert after_name["current_state"] == "COLLECT_LGPD_CONSENT"
+
+    after_lgpd = await _send(client, session_id, "aceito")
+    assert after_lgpd["current_state"] == "CONFIRM_APPLICATION"
+
+    done = await _send(client, session_id, "confirm")
+    assert done["current_state"] == "DONE"
+    assert "registrada" in done["assistant_message"].lower()
+
+    session = await db_session.get(ConversationSessionModel, UUID(session_id))
+    assert session is not None
+    assert session.candidate_id is not None
+    candidate = await db_session.get(CandidateModel, session.candidate_id)
+    assert candidate is not None
+    assert candidate.phone == UNKNOWN_WHATSAPP
+    assert candidate.lgpd_consent_at is not None
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -258,31 +282,40 @@ async def test_not_accepted_lgpd_cancels_session(
     assert session.status == "cancelled"
 
 
-async def test_wrong_otp_does_not_create_candidate(
+async def test_confirm_finalizes_without_otp_step(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
+    """OP-6F.6: confirming goes straight to DONE — no VERIFY_OTP, no 6-digit code."""
     await _location(db_session)
     session_id = await _start(client)
     await _drive_to_lead_name(client, session_id)
     await _send(client, session_id, LEAD_NAME)
     await _send(client, session_id, UNKNOWN_WHATSAPP)
-    await _send(client, session_id, "aceito")
-    await _send(client, session_id, "confirm")
+    after_lgpd = await _send(client, session_id, "aceito")
+    assert after_lgpd["current_state"] == "CONFIRM_APPLICATION"
 
-    # Send wrong OTP.
-    await _send(client, session_id, "000000")
-
-    count = await db_session.scalar(
+    # No Candidate yet — only created on confirmation.
+    count_before = await db_session.scalar(
         sa.select(sa.func.count()).select_from(CandidateModel)
     )
-    assert count == 0
+    assert count_before == 0
+
+    confirm = await _send(client, session_id, "confirm")
+    assert confirm["current_state"] == "DONE"
+    assert "código" not in confirm["assistant_message"].lower()
+    assert "registrada" in confirm["assistant_message"].lower()
+
+    count_after = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateModel)
+    )
+    assert count_after == 1
 
 
 # ── Candidate + Application creation ─────────────────────────────────────────
 
 
-async def test_correct_otp_creates_candidate_with_lgpd_consent(
+async def test_confirm_creates_candidate_with_lgpd_consent(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
@@ -305,7 +338,7 @@ async def test_correct_otp_creates_candidate_with_lgpd_consent(
     assert candidate.lgpd_consent_version == "v1.0"
 
 
-async def test_correct_otp_creates_application_with_collected_data(
+async def test_confirm_creates_application_with_collected_data(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
@@ -346,9 +379,9 @@ async def test_application_creation_is_idempotent(
     candidate_id = session_1.candidate_id
     assert candidate_id is not None
 
-    # Second session with the same WhatsApp (should link, not duplicate).
+    # Second session with a different CPF but same WhatsApp (should link, not duplicate).
     session_id_2 = await _start(client)
-    await _drive_to_lead_name(client, session_id_2, identifier=UNKNOWN_CPF)
+    await _drive_to_lead_name(client, session_id_2, identifier="74075191028")
     await _complete_lead_registration(client, db_session, session_id_2)
 
     count = await db_session.scalar(
@@ -428,7 +461,7 @@ async def test_public_context_never_exposes_full_cpf_or_phone(
     assert UNKNOWN_WHATSAPP not in serialized
 
 
-async def test_no_candidate_created_before_otp(
+async def test_no_candidate_created_before_confirm(
     client: AsyncClient,
     db_session: AsyncSession,
 ):

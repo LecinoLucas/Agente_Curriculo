@@ -324,18 +324,18 @@ describe('CandidatePortal2Page', () => {
 
     render(<CandidatePortal2Page />);
 
-    expect(await screen.findByText('Continuamos de onde você parou.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Começar nova conversa' })).toBeTruthy();
+    expect(await screen.findByText('Retomamos sua conversa')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Recomeçar' })).toBeTruthy();
     expect(conversationsService.createConversation).not.toHaveBeenCalled();
   });
 
-  it('"Começar nova conversa" clears the stored session id and creates a new one', async () => {
+  it('"Recomeçar" clears the stored session id and creates a new one', async () => {
     render(<CandidatePortal2Page />);
     await screen.findByText('Em qual cidade você procura vaga?');
 
     expect(conversationsService.createConversation).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Começar nova conversa' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Recomeçar' }));
 
     await screen.findByText('Em qual cidade você procura vaga?');
     expect(conversationStorage.clear).toHaveBeenCalled();
@@ -357,21 +357,21 @@ describe('CandidatePortal2Page', () => {
     expect(field.value).toBe('123456');
   });
 
-  it('"Não recebi o código" shows local help and never sends an OTP attempt', async () => {
+  it('"Não recebi" shows local help and never sends an OTP attempt', async () => {
     vi.mocked(conversationsService.createConversation).mockResolvedValue(OTP_TURN);
 
     render(<CandidatePortal2Page />);
     await screen.findByText(OTP_SESSION.assistant_message);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Não recebi o código' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Não recebi' }));
 
     expect(
       await screen.findByText(
         'Sem problema. Confira o CPF/WhatsApp informado ou comece de novo.',
       ),
     ).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Tentar digitar o código' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Começar de novo' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tentar digitar' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Trocar dados' })).toBeTruthy();
     expect(conversationsService.sendConversationMessage).not.toHaveBeenCalled();
   });
 
@@ -412,7 +412,7 @@ describe('CandidatePortal2Page', () => {
     expect(conversationsService.sendConversationMessage).toHaveBeenCalledWith('sess-1', '123456', 'text');
   });
 
-  it('"Trocar CPF/WhatsApp" in VERIFY_OTP restarts with a fresh session', async () => {
+  it('"Trocar dados" in VERIFY_OTP restarts with a fresh session', async () => {
     vi.mocked(conversationsService.createConversation)
       .mockResolvedValueOnce(OTP_TURN)
       .mockResolvedValueOnce(IDENTIFY_TURN);
@@ -420,7 +420,7 @@ describe('CandidatePortal2Page', () => {
     render(<CandidatePortal2Page />);
     await screen.findByText(OTP_SESSION.assistant_message);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Trocar CPF/WhatsApp' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Trocar dados' }));
 
     await screen.findByText(IDENTIFY_SESSION.assistant_message);
     expect(conversationStorage.clear).toHaveBeenCalled();

@@ -10,6 +10,7 @@ ConversationState = Literal[
     "CHOOSE_SHIFT",
     "SHOW_JOBS",
     "COLLECT_RESUME",
+    "AWAITING_RESUME_UPLOAD",
     # Lead-registration states (only visited for unresolved/new leads).
     "COLLECT_LEAD_NAME",
     "COLLECT_LEAD_WHATSAPP",
@@ -35,6 +36,7 @@ STATE_TRANSITIONS: dict[ConversationState, ConversationState] = {
     "CHOOSE_SHIFT": "SHOW_JOBS",
     "SHOW_JOBS": "COLLECT_RESUME",
     "COLLECT_RESUME": "CONFIRM_APPLICATION",
+    "AWAITING_RESUME_UPLOAD": "CONFIRM_APPLICATION",
     # Lead-registration chain; service may skip COLLECT_LEAD_WHATSAPP for WhatsApp leads.
     "COLLECT_LEAD_NAME": "COLLECT_LEAD_WHATSAPP",
     "COLLECT_LEAD_WHATSAPP": "COLLECT_LGPD_CONSENT",
@@ -79,7 +81,7 @@ def prompt_for(state: str, context: dict[str, Any] | None = None) -> Conversatio
     if coerced_state == "CHOOSE_LOCATION":
         return ConversationPrompt(
             state="CHOOSE_LOCATION",
-            content="Em qual localidade você prefere trabalhar?",
+            content="Em qual cidade ou localidade você quer trabalhar?",
         )
     if coerced_state == "CHOOSE_UNIT_OR_ANY":
         location_hint = str(context.get("location_hint") or "essa localidade")
@@ -127,6 +129,12 @@ def prompt_for(state: str, context: dict[str, Any] | None = None) -> Conversatio
                 ("send_resume", "Enviar currículo"),
                 ("skip_resume", "Continuar sem currículo"),
             ),
+        )
+    if coerced_state == "AWAITING_RESUME_UPLOAD":
+        return ConversationPrompt(
+            state="AWAITING_RESUME_UPLOAD",
+            content="Por favor, anexe seu currículo.",
+            quick_replies=(("skip_resume", "Continuar sem currículo"),),
         )
     if coerced_state == "COLLECT_LEAD_NAME":
         return ConversationPrompt(

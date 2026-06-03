@@ -92,6 +92,16 @@ class Settings(BaseSettings):
     GEMINI_CONCURRENCY_WAIT_TIMEOUT_SECONDS: float = 30.0
     GEMINI_CONCURRENCY_RETRY_INTERVAL_MS: int = 200
     GEMINI_CONCURRENCY_SLOT_TTL_SECONDS: int = 300
+
+    # Candidate assistant intent parser (OP-7A).
+    # The parser only INTERPRETS free-text candidate messages into structured
+    # intent. It never controls the conversation flow, hires/rejects, mutates
+    # applications, or creates pipelines — the deterministic state machine stays
+    # the authority. Disabled by default so the assistant remains fully
+    # deterministic until the AI layer is explicitly turned on per environment.
+    ASSISTANT_INTENT_AI_ENABLED: bool = False
+    ASSISTANT_INTENT_AI_TIMEOUT_SECONDS: float = 6.0
+    ASSISTANT_INTENT_AI_MIN_CONFIDENCE: float = 0.65
     SKILL_CATALOG_SOURCE: str = "database"
     SKILL_CATALOG_COMPARE_ON_MATCH: bool = False
     ERP_INTEGRATION_MODE: str = "dry_run"
@@ -103,7 +113,11 @@ class Settings(BaseSettings):
     FILE_SCAN_FAIL_CLOSED: bool = True
     CLAMAV_HOST: str = "127.0.0.1"
     CLAMAV_PORT: int = 3310
-    ALLOWED_RESUME_MIME_TYPES: Annotated[list[str], NoDecode] = ["application/pdf"]
+    ALLOWED_RESUME_MIME_TYPES: Annotated[list[str], NoDecode] = [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]
     ALLOWED_DOCUMENT_MIME_TYPES: Annotated[list[str], NoDecode] = [
         "application/pdf",
         "image/jpeg",

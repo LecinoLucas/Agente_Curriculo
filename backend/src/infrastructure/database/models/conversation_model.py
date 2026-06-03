@@ -19,6 +19,10 @@ CONVERSATION_STATES = (
     "CHOOSE_SHIFT",
     "SHOW_JOBS",
     "COLLECT_RESUME",
+    "AWAITING_RESUME_UPLOAD",
+    "COLLECT_LEAD_NAME",
+    "COLLECT_LEAD_WHATSAPP",
+    "COLLECT_LGPD_CONSENT",
     "CONFIRM_APPLICATION",
     "DONE",
 )
@@ -38,8 +42,9 @@ class ConversationSessionModel(Base):
             "current_state IN ("
             "'IDENTIFY', 'VERIFY_OTP', 'CHOOSE_LOCATION', "
             "'CHOOSE_UNIT_OR_ANY', 'CHOOSE_FUNCTION', 'CHOOSE_SHIFT', 'SHOW_JOBS', "
-            "'COLLECT_RESUME', 'COLLECT_LEAD_NAME', 'COLLECT_LEAD_WHATSAPP', "
-            "'COLLECT_LGPD_CONSENT', 'CONFIRM_APPLICATION', 'DONE'"
+            "'COLLECT_RESUME', 'AWAITING_RESUME_UPLOAD', 'COLLECT_LEAD_NAME', "
+            "'COLLECT_LEAD_WHATSAPP', 'COLLECT_LGPD_CONSENT', 'CONFIRM_APPLICATION', "
+            "'DONE'"
             ")",
             name="ck_conversation_sessions_current_state",
         ),

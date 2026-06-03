@@ -283,3 +283,103 @@ async def test_conversation_flow_does_not_create_pipeline(
         sa.select(sa.func.count()).select_from(CandidateJobPipelineModel)
     )
     assert pipeline_count == 0
+
+
+async def test_resume_uploaded_event_advances_without_persisting_invalid_message_type(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+    for content in [
+        "11999998888",
+        "Peritoró",
+        "any_in_location",
+        "Frentista",
+        "night",
+        "continue",
+        "send_resume",
+    ]:
+        response = await client.post(
+            f"/api/v1/conversations/{session_id}/messages",
+            json={"content": content},
+        )
+        assert response.status_code == 200
+
+    response = await client.post(
+        f"/api/v1/conversations/{session_id}/messages",
+        json={"content": "resume_uploaded", "message_type": "event"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["current_state"] == "COLLECT_LEAD_NAME"
+    assert "nome completo" in payload["assistant_message"].lower()
+
+    event_message = await db_session.scalar(
+        sa.select(ConversationMessageModel)
+        .where(
+            ConversationMessageModel.session_id == UUID(session_id),
+            ConversationMessageModel.content == "resume_uploaded",
+        )
+        .order_by(ConversationMessageModel.created_at.desc())
+        .limit(1)
+    )
+    assert event_message is not None
+    assert event_message.message_type == "system"
+
+
+# Minimal but structurally valid PDF (header + xref + trailer), accepted by the
+# resume upload validator's magic-byte/MIME checks.
+_MINIMAL_PDF = (
+    b"%PDF-1.4\n"
+    b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+    b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+    b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n"
+    b"xref\n0 4\n0000000000 65535 f \n"
+    b"trailer<</Root 1 0 R/Size 4>>\nstartxref\n0\n%%EOF\n"
+)
+
+
+def test_resume_upload_route_registered_at_canonical_path():
+    """Regression: the upload router must mount at exactly
+    /api/v1/conversations/{session_id}/resume — never a doubled /api/v1 prefix.
+    """
+    from fastapi.routing import APIRoute
+
+    from src.interface.api.main import app
+
+    fapp = app
+    while not hasattr(fapp, "routes"):
+        fapp = fapp.app  # unwrap middleware layers
+
+    resume_paths = {
+        route.path
+        for route in fapp.routes
+        if isinstance(route, APIRoute) and route.path.endswith("/resume")
+    }
+    assert "/api/v1/conversations/{session_id}/resume" in resume_paths
+    assert "/api/v1/api/v1/conversations/{session_id}/resume" not in resume_paths
+
+
+async def test_resume_upload_accepts_valid_pdf(client: AsyncClient):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+
+    response = await client.post(
+        f"/api/v1/conversations/{session_id}/resume",
+        files={"file": ("cv.pdf", _MINIMAL_PDF, "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert "uploaded successfully" in response.json()["message"].lower()
+
+
+async def test_resume_upload_unknown_session_returns_clear_404(client: AsyncClient):
+    response = await client.post(
+        f"/api/v1/conversations/{uuid4()}/resume",
+        files={"file": ("cv.pdf", _MINIMAL_PDF, "application/pdf")},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation session not found"

@@ -61,7 +61,7 @@ export function PublicJobPage() {
       <CandidatePortalLayout>
         <div className="py-20 text-center">
           <p className="text-xl font-bold text-gray-500">Vaga não encontrada</p>
-          <Link to="/" className="mt-4 inline-block text-sm text-primary-700 hover:underline">
+          <Link to="/vagas" className="mt-4 inline-block text-sm text-primary-700 hover:underline">
             Ver todas as vagas
           </Link>
         </div>
@@ -75,7 +75,7 @@ export function PublicJobPage() {
         <div className="flex flex-col items-center py-20 text-center">
           <AlertCircle className="mb-3 h-8 w-8 text-red-400" />
           <p className="text-base font-semibold text-gray-700">{error}</p>
-          <Link to="/" className="mt-4 inline-block text-sm text-primary-700 hover:underline">
+          <Link to="/vagas" className="mt-4 inline-block text-sm text-primary-700 hover:underline">
             Ver todas as vagas
           </Link>
         </div>
@@ -90,7 +90,7 @@ export function PublicJobPage() {
     <CandidatePortalLayout maxWidth="page">
       {/* Breadcrumb */}
       <nav className="mb-5 flex items-center gap-1.5 text-sm text-gray-500">
-        <Link to="/" className="hover:text-primary-700 transition-colors">
+        <Link to="/vagas" className="hover:text-primary-700 transition-colors">
           Todas as vagas
         </Link>
         <ChevronRight className="h-3.5 w-3.5 text-gray-400" />

@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { useAuth } from "../features/auth/useAuth";
@@ -117,6 +118,12 @@ function createButtonLabel(activeTab: TabKey) {
   return "Nova filial/posto";
 }
 
+function titleDescription(activeTab: TabKey) {
+  if (activeTab === "groups") return "Grupos internos usados por RH e Protheus.";
+  if (activeTab === "locations") return "Base de localidades usada para orientar operação e candidato.";
+  return "Cadastro principal das unidades reais usadas na operação.";
+}
+
 function findGroup(groups: OperationalGroup[], id: string) {
   return groups.find((group) => group.id === id);
 }
@@ -140,14 +147,14 @@ function SummaryTile({
   icon: ReactNode;
 }) {
   return (
-    <div className="min-h-[96px] rounded-xl border border-border bg-surface px-4 py-4 shadow-sm">
+    <div className="rounded-xl border border-border bg-surface px-4 py-3 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-text-muted">{label}</span>
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-muted text-[hsl(var(--primary))]">
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-text-muted">{label}</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]">
           {icon}
         </span>
       </div>
-      <p className="mt-3 text-2xl font-semibold tracking-normal text-text">{value}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-text">{value}</p>
     </div>
   );
 }
@@ -158,6 +165,8 @@ function Toolbar({
   placeholder,
   activeFilter,
   setActiveFilter,
+  hasActiveFilters,
+  onClearFilters,
   children,
 }: {
   search: string;
@@ -165,36 +174,53 @@ function Toolbar({
   placeholder: string;
   activeFilter: ActiveFilter;
   setActiveFilter: (value: ActiveFilter) => void;
+  hasActiveFilters: boolean;
+  onClearFilters: () => void;
   children?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-surface-muted/45 px-3 py-2.5">
-      <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-          <label className="relative block min-w-0 flex-1 xl:max-w-[320px]">
-            <span className="sr-only">Buscar</span>
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={placeholder}
-              className="h-8 rounded-lg border-border/80 bg-surface pl-8 pr-3 text-sm shadow-none"
-            />
-          </label>
-          <label className="block sm:w-[128px] xl:w-[124px]">
+    <div className="flex flex-col gap-2 rounded-xl border border-border/70 bg-surface px-3 py-3 md:flex-row md:items-start md:justify-between">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+        <label className="relative block min-w-0 flex-1">
+          <span className="sr-only">Buscar</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={placeholder}
+            className="h-9 rounded-lg border-border/80 bg-surface pl-8 pr-3 text-sm shadow-none"
+          />
+        </label>
+      </div>
+      <div className="flex flex-col gap-2 md:items-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+          <label className="block sm:w-[120px]">
             <span className="sr-only">Status</span>
             <Select
               value={activeFilter}
               onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
-              className="h-8 rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
+              className="h-9 rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
             >
               <option value="all">Status</option>
               <option value="active">Ativos</option>
               <option value="inactive">Inativos</option>
             </Select>
           </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">{children}</div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 xl:justify-end">{children}</div>
+        {hasActiveFilters ? (
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClearFilters}
+              className="h-7 px-2 text-xs text-text-muted hover:text-text"
+            >
+              Limpar filtros
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -559,6 +585,23 @@ export function EstruturaOperacionalPage() {
 
   const activeGroups = useMemo(() => groups.filter((item) => item.is_active), [groups]);
   const activeLocations = useMemo(() => locations.filter((item) => item.is_active), [locations]);
+  const currentTab = TABS.find((tab) => tab.key === activeTab) ?? TABS[0];
+
+  function resetFilters() {
+    setSearch("");
+    setActiveFilter("all");
+    setLocationType("");
+    setUnitType("");
+    setUnitGroupId("");
+    setUnitLocationId("");
+  }
+
+  const hasActiveFilters =
+    search.trim().length > 0 ||
+    activeFilter !== "all" ||
+    (activeTab === "locations" && locationType !== "") ||
+    (activeTab === "units" &&
+      (unitType !== "" || unitGroupId !== "" || unitLocationId !== ""));
 
   async function saveGroup(payload: CreateOperationalGroupPayload) {
     setSaving(true);
@@ -647,19 +690,17 @@ export function EstruturaOperacionalPage() {
     }
   }
 
-  const currentTab = TABS.find((tab) => tab.key === activeTab) ?? TABS[0];
-
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 pb-12 sm:px-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 pb-12 sm:px-6">
       <PageHeader
         title="Estrutura Operacional"
-        subtitle="Cadastro mestre de grupos, localidades e filiais/postos para operação RH e Protheus."
+        subtitle="Cadastros mestres de grupos, localidades e filiais/postos usados pela operação."
         actions={
           <Button
             type="button"
             variant="secondary"
             onClick={reloadAll}
-            className="min-h-11 gap-2"
+            className="h-10 gap-2"
           >
             <RefreshCw className="h-4 w-4" />
             Atualizar
@@ -668,52 +709,61 @@ export function EstruturaOperacionalPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryTile label="Filiais/Postos" value={units.length} icon={<Store className="h-5 w-5" />} />
-        <SummaryTile label="Localidades" value={locations.length} icon={<MapPin className="h-5 w-5" />} />
-        <SummaryTile label="Grupos" value={groups.length} icon={<Building2 className="h-5 w-5" />} />
+        <SummaryTile label="Filiais/Postos" value={units.length} icon={<Store className="h-4 w-4" />} />
+        <SummaryTile label="Localidades" value={locations.length} icon={<MapPin className="h-4 w-4" />} />
+        <SummaryTile label="Grupos" value={groups.length} icon={<Building2 className="h-4 w-4" />} />
       </div>
 
-      <div className="rounded-xl border border-border bg-surface px-3 py-3 shadow-sm">
-        <div role="tablist" aria-label="Cadastros da estrutura operacional" className="flex flex-col gap-2 sm:flex-row">
-          {TABS.map((tab) => {
-            const selected = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                onClick={() => {
-                  setActiveTab(tab.key);
-                  setSearch("");
-                  setActiveFilter("all");
-                }}
-                className={[
-                  "min-h-11 flex-1 rounded-lg px-4 py-2.5 text-left transition",
-                  selected
-                    ? "bg-[hsl(var(--primary))] text-white shadow-sm"
-                    : "text-text-muted hover:bg-surface-muted hover:text-text",
-                ].join(" ")}
-              >
-                <span className="block text-sm font-semibold">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <p className="mt-3 text-sm text-text-muted">{currentTab.description}</p>
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          const nextTab = value as TabKey;
+          setActiveTab(nextTab);
+          resetFilters();
+        }}
+      >
+        <TabsList
+          aria-label="Cadastros da estrutura operacional"
+          className="grid h-auto w-full grid-cols-1 gap-1 rounded-xl bg-surface-muted/70 p-1 sm:grid-cols-3"
+        >
+          {TABS.map((tab) => (
+            <TabsTrigger
+              key={tab.key}
+              value={tab.key}
+              className="h-auto min-h-[42px] justify-start rounded-lg px-3 py-2 text-left text-sm font-semibold data-[state=active]:bg-[hsl(var(--primary))] data-[state=active]:text-white"
+            >
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
-      <section className="space-y-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+      <section className="space-y-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1">
             <h2 className="text-lg font-semibold text-text">{currentTab.label}</h2>
-            <p className="text-sm text-text-muted">{currentTab.description}</p>
+            <p className="text-sm text-text-muted">{titleDescription(activeTab)}</p>
           </div>
-          {!canWrite ? (
-            <p className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-muted">
-              Seu perfil pode visualizar, mas não criar ou editar cadastros.
-            </p>
-          ) : null}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end">
+            {!canWrite ? (
+              <p className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-muted">
+                Seu perfil pode visualizar, mas não criar ou editar cadastros.
+              </p>
+            ) : (
+              <Button
+                type="button"
+                onClick={() =>
+                  setModal({
+                    type: activeTab === "groups" ? "group" : activeTab === "locations" ? "location" : "unit",
+                  })
+                }
+                className="h-10 gap-2 px-4 shadow-none"
+              >
+                <Plus className="h-4 w-4" />
+                {createButtonLabel(activeTab)}
+              </Button>
+            )}
+          </div>
         </div>
 
         <Toolbar
@@ -728,13 +778,15 @@ export function EstruturaOperacionalPage() {
           }
           activeFilter={activeFilter}
           setActiveFilter={setActiveFilter}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={() => resetFilters()}
         >
           {activeTab === "locations" ? (
             <Select
               aria-label="Tipo de localidade"
               value={locationType}
               onChange={(event) => setLocationType(event.target.value as "" | LocationGroupType)}
-              className="h-8 min-w-[132px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
+              className="h-9 min-w-[140px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
             >
               <option value="">Tipo</option>
               {Object.entries(LOCATION_TYPE_LABELS).map(([value, label]) => (
@@ -751,7 +803,7 @@ export function EstruturaOperacionalPage() {
                 aria-label="Grupo da filial"
                 value={unitGroupId}
                 onChange={(event) => setUnitGroupId(event.target.value)}
-                className="h-8 min-w-[132px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
+                className="h-9 min-w-[148px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
               >
                 <option value="">Grupo</option>
                 {groups.map((group) => (
@@ -764,7 +816,7 @@ export function EstruturaOperacionalPage() {
                 aria-label="Localidade da filial"
                 value={unitLocationId}
                 onChange={(event) => setUnitLocationId(event.target.value)}
-                className="h-8 min-w-[132px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
+                className="h-9 min-w-[156px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
               >
                 <option value="">Localidade</option>
                 {locations.map((location) => (
@@ -777,7 +829,7 @@ export function EstruturaOperacionalPage() {
                 aria-label="Tipo de filial"
                 value={unitType}
                 onChange={(event) => setUnitType(event.target.value as "" | OperationalUnitType)}
-                className="h-8 min-w-[120px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
+                className="h-9 min-w-[120px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
               >
                 <option value="">Tipo</option>
                 {Object.entries(UNIT_TYPE_LABELS).map(([value, label]) => (
@@ -789,16 +841,6 @@ export function EstruturaOperacionalPage() {
             </>
           ) : null}
 
-          {canWrite ? (
-            <Button
-              type="button"
-              onClick={() => setModal({ type: activeTab === "groups" ? "group" : activeTab === "locations" ? "location" : "unit" })}
-              className="h-8 rounded-lg gap-1.5 px-3 text-sm shadow-none"
-            >
-              <Plus className="h-4 w-4" />
-              {createButtonLabel(activeTab)}
-            </Button>
-          ) : null}
         </Toolbar>
 
         {activeTab === "groups" ? (
@@ -1005,11 +1047,11 @@ function RowActions({
 
   return (
     <div className="flex justify-end gap-2">
-      <Button type="button" variant="secondary" size="sm" onClick={onEdit} className="gap-1.5">
+      <Button type="button" variant="secondary" size="sm" onClick={onEdit} className="h-8 gap-1.5 px-2.5">
         <Pencil className="h-3.5 w-3.5" />
         Editar
       </Button>
-      <Button type="button" variant="secondary" size="sm" onClick={onToggle} className="gap-1.5">
+      <Button type="button" variant="secondary" size="sm" onClick={onToggle} className="h-8 gap-1.5 px-2.5">
         {isActive ? <XCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
         {isActive ? "Inativar" : "Reativar"}
       </Button>

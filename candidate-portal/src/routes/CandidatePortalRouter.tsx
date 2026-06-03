@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { PublicHomePage } from '../pages/PublicHomePage';
 import { PublicJobsPage } from '../pages/PublicJobsPage';
 import { PublicJobPage } from '../pages/PublicJobPage';
 import { ApplicationFormPage } from '../pages/ApplicationFormPage';
@@ -26,8 +27,8 @@ export function CandidatePortalRouter() {
     <BrowserRouter>
       <Routes>
         {/* Public job pages */}
-        <Route path="/" element={<PublicJobsPage />} />
-        <Route path="/vagas" element={<Navigate to="/" replace />} />
+        <Route path="/" element={<PublicHomePage />} />
+        <Route path="/vagas" element={<PublicJobsPage />} />
         <Route path="/vagas/:identifier" element={<PublicJobPage />} />
 
         {/* Institutional pages */}

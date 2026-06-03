@@ -43,7 +43,7 @@ function InstitutionalPage({
                 Consulte vagas abertas ou acompanhe uma candidatura já enviada.
               </p>
               <div className="mt-4 flex flex-col gap-2.5">
-                <Link to="/">
+                <Link to="/vagas">
                   <Button fullWidth variant="outline" size="sm">
                     Ver vagas
                     <ArrowRight className="h-3.5 w-3.5" />

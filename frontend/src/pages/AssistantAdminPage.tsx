@@ -1922,7 +1922,9 @@ function FlowPanel() {
   const [selectedState, setSelectedState] = useState<string | null>(null);
 
   const loadFlow = useCallback(() => {
-    void statesState.run(() => assistantAdminService.listAssistantStates());
+    void statesState
+      .run(() => assistantAdminService.listAssistantStates())
+      .catch(() => undefined);
     void contentsState.run(() => assistantAdminService.listStateContents()).then(
       (data) => { if (data) setContents(data); },
       () => undefined
@@ -1931,7 +1933,9 @@ function FlowPanel() {
       (data) => { if (data) setQuickReplies(data); },
       () => undefined
     );
-    void settingsState.run(() => assistantAdminService.listAssistantSettings());
+    void settingsState
+      .run(() => assistantAdminService.listAssistantSettings())
+      .catch(() => undefined);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -1977,8 +1981,8 @@ function FlowPanel() {
             A edição altera apenas o conteúdo salvo.
           </p>
           <p className="text-text-muted">
-            A engine ainda não usa estes textos em produção. A topologia do fluxo
-            (estados e transições) não pode ser alterada.
+            A engine usa estes textos nos estados editáveis com fallback seguro.
+            A topologia do fluxo (estados e transições) não pode ser alterada.
           </p>
         </div>
       </div>

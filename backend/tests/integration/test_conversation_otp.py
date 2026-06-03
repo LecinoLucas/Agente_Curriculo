@@ -1,16 +1,20 @@
-"""OP-6F.2/OP-6F.4 — OTP verification tests for the Conversation Engine.
+"""OP-6F.2/OP-6F.4/OP-6F.6 — OTP verification tests for the Conversation Engine.
 
-Verifies security properties:
-- OTP is not issued on valid identifier input
-- OTP is issued at the later confirmation step
-- Correct code confirms candidate_id
-- Wrong code does not confirm, decrements attempts
-- Consumed OTP cannot be reused
-- Expired OTP triggers re-issue
-- Locked (max attempts) returns to IDENTIFY
-- Public response never exposes OTP, CPF, phone, name, email
-- Session without verified OTP does not create CandidateApplication
-- No pipeline is ever created
+OP-6F.6 removed the mandatory OTP step from the main Portal 2 flow: the
+confirmation step no longer issues an OTP and never routes to VERIFY_OTP. The
+VERIFY_OTP state and the OTP service are kept in the codebase for forward
+compatibility (real delivery will be handled in a later phase), so they are
+still exercised here — but *in isolation*, by placing a session into VERIFY_OTP
+directly rather than reaching it through the public flow.
+
+Verifies:
+- IDENTIFY never issues an OTP.
+- The main confirmation step never issues an OTP / never enters VERIFY_OTP.
+- In isolation: correct code confirms candidate_id and advances to DONE.
+- Wrong code does not confirm and decrements attempts.
+- Consumed/expired/locked behave correctly.
+- Public response never exposes OTP, CPF, phone, name, email.
+- No pipeline is ever created.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.conversation_otp_service import ConversationOtpService
 from src.infrastructure.database.models.candidate_application_model import (
     CandidateApplicationModel,
 )
@@ -54,14 +59,6 @@ async def _candidate_with_cpf(
         cpf_hash=sha256(cpf.encode()).hexdigest(),
         cpf_last4=cpf[-4:],
     )
-    db_session.add(candidate)
-    await db_session.commit()
-    await db_session.refresh(candidate)
-    return candidate
-
-
-async def _candidate_with_phone(db_session: AsyncSession) -> CandidateModel:
-    candidate = CandidateModel(full_name="Pessoa Candidata", phone=WHATSAPP)
     db_session.add(candidate)
     await db_session.commit()
     await db_session.refresh(candidate)
@@ -134,7 +131,37 @@ async def _drive_to_confirm_application(
         await _send(client, session_id, content)
 
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
+async def _enter_verify_otp(
+    db_session: AsyncSession,
+    session_id: str,
+    *,
+    candidate_id: UUID | None = None,
+    identifier_type: str = "cpf",
+) -> None:
+    """Place the session into VERIFY_OTP with a freshly issued OTP.
+
+    OP-6F.6: VERIFY_OTP is no longer reachable from the public flow, so tests
+    that exercise the (retained) OTP machinery set it up directly. The client
+    and db_session share the same AsyncSession, so this state is visible to the
+    next API call.
+    """
+    session = await db_session.get(ConversationSessionModel, UUID(session_id))
+    assert session is not None
+    session.current_state = "VERIFY_OTP"
+    ctx = dict(session.context_json or {})
+    ctx["identifier_type"] = identifier_type
+    ctx["lead_mode"] = True
+    session.context_json = ctx
+    service = ConversationOtpService(db_session)
+    await service.issue_otp(
+        session_id=UUID(session_id),
+        candidate_id=candidate_id,
+        identifier_type=identifier_type,
+    )
+    await db_session.flush()
+
+
+# ── IDENTIFY / main flow never issues OTP ──────────────────────────────────────
 
 
 async def test_identify_does_not_issue_otp_and_advances_to_location(
@@ -167,10 +194,11 @@ async def test_identify_does_not_issue_otp_for_whatsapp(
     assert otp_count == 0
 
 
-async def test_confirm_application_issues_late_otp(
+async def test_confirm_application_does_not_issue_otp(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
+    """OP-6F.6: the confirmation step finalizes directly — no OTP, no VERIFY_OTP."""
     await _candidate_with_cpf(db_session)
     await _location(db_session)
     session_id = await _start(client)
@@ -178,13 +206,16 @@ async def test_confirm_application_issues_late_otp(
 
     payload = await _send(client, session_id, "confirm")
 
-    assert payload["current_state"] == "VERIFY_OTP"
-    assert "código" in payload["assistant_message"].lower()
-    assert payload["quick_replies"] == []
+    assert payload["current_state"] == "DONE"
+    assert "código" not in payload["assistant_message"].lower()
 
-    otp = await _latest_otp(db_session, session_id)
-    assert otp.consumed_at is None
-    assert otp.attempts == 0
+    otp_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(ConversationOtpModel)
+    )
+    assert otp_count == 0
+
+
+# ── OTP machinery exercised in isolation (VERIFY_OTP set up directly) ──────────
 
 
 async def test_correct_otp_links_candidate_and_advances(
@@ -192,10 +223,8 @@ async def test_correct_otp_links_candidate_and_advances(
     db_session: AsyncSession,
 ):
     candidate = await _candidate_with_cpf(db_session)
-    await _location(db_session)
     session_id = await _start(client)
-    await _drive_to_confirm_application(client, session_id, VALID_CPF)
-    await _send(client, session_id, "confirm")
+    await _enter_verify_otp(db_session, session_id, candidate_id=candidate.id)
 
     code = await _extract_code(db_session, session_id)
     verify = await _send(client, session_id, code)
@@ -215,11 +244,9 @@ async def test_wrong_otp_does_not_verify_and_stays_in_verify_otp(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _candidate_with_cpf(db_session)
-    await _location(db_session)
+    candidate = await _candidate_with_cpf(db_session)
     session_id = await _start(client)
-    await _drive_to_confirm_application(client, session_id, VALID_CPF)
-    await _send(client, session_id, "confirm")
+    await _enter_verify_otp(db_session, session_id, candidate_id=candidate.id)
 
     payload = await _send(client, session_id, "000000")  # deliberately wrong
 
@@ -239,23 +266,20 @@ async def test_otp_consumed_cannot_be_reused(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _candidate_with_cpf(db_session)
-    await _candidate_with_cpf(db_session, OTHER_VALID_CPF)
-    await _location(db_session)
+    candidate = await _candidate_with_cpf(db_session)
+    other = await _candidate_with_cpf(db_session, OTHER_VALID_CPF)
     session_id = await _start(client)
-    await _drive_to_confirm_application(client, session_id, VALID_CPF)
-    await _send(client, session_id, "confirm")
+    await _enter_verify_otp(db_session, session_id, candidate_id=candidate.id)
 
     code = await _extract_code(db_session, session_id)
     await _send(client, session_id, code)  # consume it
 
-    # Start a new session and try the same code (cross-session replay attempt)
+    # Start a new session and try the same code (cross-session replay attempt).
     session_id2 = await _start(client)
-    await _drive_to_confirm_application(client, session_id2, OTHER_VALID_CPF)
-    await _send(client, session_id2, "confirm")
+    await _enter_verify_otp(db_session, session_id2, candidate_id=other.id)
     payload2 = await _send(client, session_id2, code)
 
-    # The code belongs to session_id, not session_id2 → the hash won't match
+    # The code belongs to session_id, not session_id2 → the hash won't match.
     assert payload2["current_state"] == "VERIFY_OTP"
 
 
@@ -263,16 +287,14 @@ async def test_expired_otp_triggers_reissue(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _candidate_with_cpf(db_session)
-    await _location(db_session)
+    candidate = await _candidate_with_cpf(db_session)
     session_id = await _start(client)
-    await _drive_to_confirm_application(client, session_id, VALID_CPF)
-    await _send(client, session_id, "confirm")
+    await _enter_verify_otp(db_session, session_id, candidate_id=candidate.id)
 
     # Manually expire the OTP. Use naive UTC so SQLite comparisons work.
     otp = await _latest_otp(db_session, session_id)
     otp.expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=1)
-    await db_session.commit()
+    await db_session.flush()
 
     payload = await _send(client, session_id, "123456")  # any code
 
@@ -293,16 +315,14 @@ async def test_max_attempts_returns_to_identify(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _candidate_with_cpf(db_session)
-    await _location(db_session)
+    candidate = await _candidate_with_cpf(db_session)
     session_id = await _start(client)
-    await _drive_to_confirm_application(client, session_id, VALID_CPF)
-    await _send(client, session_id, "confirm")
+    await _enter_verify_otp(db_session, session_id, candidate_id=candidate.id)
 
     # Exhaust attempts.
     otp = await _latest_otp(db_session, session_id)
     otp.attempts = otp.max_attempts  # pre-fill to trigger lock on next submission
-    await db_session.commit()
+    await db_session.flush()
 
     payload = await _send(client, session_id, "000000")
 
@@ -318,48 +338,40 @@ async def test_response_never_exposes_otp_cpf_phone_or_name(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _candidate_with_cpf(db_session)
-    await _location(db_session)
+    candidate = await _candidate_with_cpf(db_session)
     session_id = await _start(client)
 
-    # IDENTIFY
-    identify_payload = await _send(client, session_id, VALID_CPF)
+    # IDENTIFY never leaks the CPF / candidate name / OTP fields.
     import json
+
+    identify_payload = await _send(client, session_id, VALID_CPF)
     serialized = json.dumps(identify_payload)
     assert VALID_CPF not in serialized
     assert "Pessoa Candidata" not in serialized
     assert "otp_hash" not in serialized
     assert "otp_code" not in serialized
 
-    await _send(client, session_id, "Peritoró")
-    await _send(client, session_id, "any_in_location")
-    await _send(client, session_id, "Frentista")
-    await _send(client, session_id, "night")
-    await _send(client, session_id, "continue")
-    await _send(client, session_id, "skip_resume")
-    await _send(client, session_id, "confirm")
-
-    # Wrong VERIFY_OTP attempt
+    # A wrong VERIFY_OTP attempt likewise never leaks the CPF or OTP hash.
+    await _enter_verify_otp(db_session, session_id, candidate_id=candidate.id)
     wrong_payload = await _send(client, session_id, "000000")
     wrong_serialized = json.dumps(wrong_payload)
     assert VALID_CPF not in wrong_serialized
     assert "otp_hash" not in wrong_serialized
 
 
-async def test_session_without_verified_otp_does_not_create_application(
+async def test_session_without_application_data_does_not_create_application(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    """A candidate whose OTP was never verified must not get a CandidateApplication."""
+    """A bare IDENTIFY (no intake data) must not get a CandidateApplication."""
     await _candidate_with_cpf(db_session)
     await _location(db_session)
     session_id = await _start(client)
 
-    # Enter IDENTIFY and submit location data before the late OTP.
     await _send(client, session_id, VALID_CPF)
     await _send(client, session_id, "Peritoró")
 
-    # No application should have been created because identity is not yet verified.
+    # No application: the silently-resolved candidate is only linked on confirm.
     count = await db_session.scalar(
         sa.select(sa.func.count()).select_from(CandidateApplicationModel)
     )
@@ -370,12 +382,9 @@ async def test_otp_flow_creates_no_pipeline(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _candidate_with_cpf(db_session)
-    await _location(db_session)
+    candidate = await _candidate_with_cpf(db_session)
     session_id = await _start(client)
-
-    await _drive_to_confirm_application(client, session_id, VALID_CPF)
-    await _send(client, session_id, "confirm")
+    await _enter_verify_otp(db_session, session_id, candidate_id=candidate.id)
     code = await _extract_code(db_session, session_id)
     await _send(client, session_id, code)
 
@@ -383,45 +392,3 @@ async def test_otp_flow_creates_no_pipeline(
         sa.select(sa.func.count()).select_from(CandidateJobPipelineModel)
     )
     assert pipeline_count == 0
-
-
-async def test_otp_for_unknown_candidate_still_issued_and_verifiable(
-    client: AsyncClient,
-    db_session: AsyncSession,
-):
-    """OP-6F.5: for an unresolved lead, OTP is issued after the lead collection
-    states (COLLECT_LEAD_NAME → COLLECT_LEAD_WHATSAPP → COLLECT_LGPD_CONSENT →
-    CONFIRM_APPLICATION → VERIFY_OTP). Anti-enumeration still holds: the reply is
-    identical regardless of whether the candidate existed."""
-    await _location(db_session)
-    session_id = await _start(client)
-    payload = await _send(client, session_id, VALID_CPF)
-
-    assert payload["current_state"] == "CHOOSE_LOCATION"
-    await _send(client, session_id, "Peritoró")
-    await _send(client, session_id, "any_in_location")
-    await _send(client, session_id, "Frentista")
-    await _send(client, session_id, "night")
-    await _send(client, session_id, "continue")
-    # OP-6F.5: unresolved lead enters COLLECT_LEAD_* path.
-    after_resume = await _send(client, session_id, "skip_resume")
-    assert after_resume["current_state"] == "COLLECT_LEAD_NAME"
-    await _send(client, session_id, "Maria da Silva")
-    await _send(client, session_id, "11987654321")
-    await _send(client, session_id, "aceito")
-    confirm = await _send(client, session_id, "confirm")
-    assert confirm["current_state"] == "VERIFY_OTP"
-
-    otp = await _latest_otp(db_session, session_id)
-    assert otp.candidate_id is None  # no pre-existing candidate
-
-    code = await _extract_code(db_session, session_id)
-    verify = await _send(client, session_id, code)
-
-    assert verify["current_state"] == "DONE"
-    assert verify["session"]["context"].get("identity_verified") is True
-
-    session = await db_session.get(ConversationSessionModel, UUID(session_id))
-    assert session is not None
-    # OP-6F.5: Candidate created and linked after successful OTP.
-    assert session.candidate_id is not None

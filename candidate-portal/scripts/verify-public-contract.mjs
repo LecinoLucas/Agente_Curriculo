@@ -48,6 +48,7 @@ assert.equal(/href=["']#["']|to=["']#["']|href:\s*["']#["']/.test(sourceWithLink
 
 const expectedLinks = [
   "href: '/'",
+  "href: '/vagas'",
   "href: '/sobre-nos'",
   "href: '/unidades'",
   "href: '/duvidas-frequentes'",
@@ -227,7 +228,7 @@ assert.ok(
 
 // Login must offer new candidate CTA to job listing
 assert.ok(
-  login.includes('to="/"') || login.includes("href: '/'"),
+  login.includes('to="/vagas"') || login.includes("href: '/vagas'"),
   'Login page must link to job listing for new candidates',
 );
 

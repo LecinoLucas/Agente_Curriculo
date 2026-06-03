@@ -22,7 +22,6 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_model import ConversationSessionModel
-from src.infrastructure.database.models.conversation_otp_model import ConversationOtpModel
 from src.infrastructure.database.models.operational_master_model import (
     LocationGroupModel,
     OperationalGroupModel,
@@ -175,28 +174,6 @@ async def _send(client: AsyncClient, session_id: str, content: str) -> dict:
     return response.json()
 
 
-async def _extract_otp_code(db_session: AsyncSession, session_id: str) -> str:
-    """Retrieve the plaintext OTP by brute-forcing 6-digit codes against the stored hash.
-
-    This helper is only used in tests. In production no code is ever stored in plain
-    text; here we recover it by trying all 000000-999999 codes against the hash.
-    """
-    from hashlib import sha256
-    otp = await db_session.scalar(
-        sa.select(ConversationOtpModel)
-        .where(ConversationOtpModel.session_id == UUID(session_id))
-        .order_by(ConversationOtpModel.created_at.desc())
-        .limit(1)
-    )
-    assert otp is not None, "No OTP found for session"
-    sid = UUID(session_id)
-    for i in range(1_000_000):
-        code = f"{i:06d}"
-        if sha256(f"{sid}:{code}".encode()).hexdigest() == otp.otp_hash:
-            return code
-    raise AssertionError("OTP code not found in 0-999999 range")
-
-
 async def _complete_identify(
     client: AsyncClient,
     session_id: str,
@@ -233,7 +210,7 @@ async def test_identify_with_existing_cpf_advances_as_unverified_lead(
     identify_payload = await _send(client, session_id, VALID_CPF)
     assert identify_payload["current_state"] == "CHOOSE_LOCATION"
     assert identify_payload["assistant_message"] == (
-        "Certo. Em qual localidade você prefere trabalhar?"
+        "Certo. Em qual cidade ou localidade você quer trabalhar?"
     )
     assert identify_payload["session"]["context"]["identifier_type"] == "cpf"
     assert identify_payload["session"]["context"]["cpf_last4"] == VALID_CPF[-4:]
@@ -437,7 +414,8 @@ async def test_identify_with_existing_cpf_started_application_without_location_a
 
     assert payload["current_state"] == "CHOOSE_LOCATION"
     assert payload["assistant_message"] == (
-        "Você já tem uma candidatura em andamento. Em qual localidade você prefere trabalhar?"
+        "Você já tem uma candidatura em andamento. "
+        "Em qual cidade ou localidade você quer trabalhar?"
     )
     response_blob = json.dumps(payload, ensure_ascii=False)
     assert "Pessoa Candidata" not in response_blob
@@ -460,7 +438,7 @@ async def test_identify_with_existing_cpf_started_application_without_location_a
     continue_payload = await _send(client, session_id, "vamos")
     assert continue_payload["current_state"] == "CHOOSE_LOCATION"
     assert continue_payload["assistant_message"] == (
-        "Em qual localidade você prefere trabalhar?"
+        "Em qual cidade ou localidade você quer trabalhar?"
     )
     assert "Não encontrei essa localidade" not in continue_payload["assistant_message"]
 
@@ -603,7 +581,8 @@ async def test_identify_with_existing_whatsapp_active_application_asks_location_
 
     assert payload["current_state"] == "CHOOSE_LOCATION"
     assert payload["assistant_message"] == (
-        "Você já tem uma candidatura em andamento. Em qual localidade você prefere trabalhar?"
+        "Você já tem uma candidatura em andamento. "
+        "Em qual cidade ou localidade você quer trabalhar?"
     )
     assert payload["session"]["context"]["identity_verified"] is False
     response_blob = json.dumps(payload, ensure_ascii=False)
@@ -617,7 +596,7 @@ async def test_identify_with_existing_whatsapp_active_application_asks_location_
     assert f"WhatsApp informado com final {WHATSAPP[-3:]}" in messages_blob
 
 
-async def test_resumed_active_application_is_reused_after_late_otp(
+async def test_resumed_active_application_is_reused_on_confirm(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
@@ -643,12 +622,10 @@ async def test_resumed_active_application_is_reused_after_late_otp(
     )
     assert count_before == 1
 
+    # OP-6F.6: confirmation finalizes directly, without an OTP step. The existing
+    # active application is reused (not duplicated).
     confirm = await _send(client, session_id, "confirm")
-    assert confirm["current_state"] == "VERIFY_OTP"
-
-    code = await _extract_otp_code(db_session, session_id)
-    verified = await _send(client, session_id, code)
-    assert verified["current_state"] == "DONE"
+    assert confirm["current_state"] == "DONE"
 
     count_after = await db_session.scalar(
         sa.select(sa.func.count()).select_from(CandidateApplicationModel)
@@ -708,7 +685,7 @@ async def test_identify_with_unknown_cpf_does_not_link_or_reveal(
 
     assert payload["current_state"] == "CHOOSE_LOCATION"
     assert payload["assistant_message"] == (
-        "Certo. Em qual localidade você prefere trabalhar?"
+        "Certo. Em qual cidade ou localidade você quer trabalhar?"
     )
     assert "identifier_unresolved" not in payload["session"]["context"]
     assert payload["session"]["context"]["lead_mode"] is True
@@ -729,7 +706,7 @@ async def test_identify_with_unknown_whatsapp_does_not_link_or_reveal(
 
     assert payload["current_state"] == "CHOOSE_LOCATION"
     assert payload["assistant_message"] == (
-        "Certo. Em qual localidade você prefere trabalhar?"
+        "Certo. Em qual cidade ou localidade você quer trabalhar?"
     )
     public_context = payload["session"]["context"]
     assert public_context["identifier_type"] == "whatsapp"
@@ -792,7 +769,7 @@ async def test_full_cpf_never_stored_in_context(
     assert VALID_CPF not in json.dumps(session.context_json)
 
 
-async def test_resolved_candidate_creates_application_only_after_late_otp(
+async def test_resolved_candidate_creates_application_on_confirm(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
@@ -807,13 +784,11 @@ async def test_resolved_candidate_creates_application_only_after_late_otp(
     )
     assert count_before == 0
 
+    # OP-6F.6: confirmation links the silently-resolved candidate without an OTP
+    # step and creates the application directly.
     confirm = await _send(client, session_id, "confirm")
-    assert confirm["current_state"] == "VERIFY_OTP"
-    assert "código" in confirm["assistant_message"].lower()
-
-    code = await _extract_otp_code(db_session, session_id)
-    verified = await _send(client, session_id, code)
-    assert verified["current_state"] == "DONE"
+    assert confirm["current_state"] == "DONE"
+    assert "registrada" in confirm["assistant_message"].lower()
 
     result = await db_session.execute(
         sa.select(CandidateApplicationModel).where(
@@ -828,7 +803,6 @@ async def test_resolved_candidate_creates_application_only_after_late_otp(
     session = await db_session.get(ConversationSessionModel, UUID(session_id))
     assert session is not None
     assert session.candidate_id == candidate.id
-    assert session.context_json.get("identity_verified") is True
 
 
 async def test_unresolved_session_does_not_create_application(

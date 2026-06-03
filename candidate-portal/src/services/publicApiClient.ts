@@ -4,25 +4,66 @@ const { VITE_PUBLIC_API_BASE_URL, VITE_API_URL } =
   (import.meta as ImportMeta & {
     env?: { VITE_PUBLIC_API_BASE_URL?: string; VITE_API_URL?: string };
   }).env ?? {};
-const BASE_URL =
+const RAW_BASE_URL =
   VITE_PUBLIC_API_BASE_URL ??
   (VITE_API_URL ? `${VITE_API_URL}/public` : 'http://localhost:8000/api/v1/public');
 
-// Dev-only guard: the session cookie (candidate_portal_token) is SameSite=Lax and
-// host-only. If the portal page and the API are served from different hosts
-// (e.g. page on 192.168.1.88 but API on localhost), the browser sets the cookie
-// but never re-sends it on fetch() — every /me call then returns 401.
-// We warn loudly in development so this environment trap is caught early.
-// No token, cookie, or secret is ever logged here — only hostnames.
+const LOCALHOST_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+/**
+ * Keep the API host aligned with the host the portal page is served from.
+ *
+ * The candidate session lives in a cookie (candidate_portal_token) that is
+ * HttpOnly, host-only and SameSite=Lax. When the page and the API are served
+ * from different hosts (e.g. the portal opened on http://127.0.0.1:5174 but the
+ * API pinned to http://localhost:8000), the browser treats the API call as
+ * cross-site, so it sets the cookie on login but never re-sends it on the
+ * fetch() to /me — every authenticated request then returns 401.
+ *
+ * In development we therefore rewrite ONLY the hostname of a local API base
+ * (localhost/127.0.0.1) to match window.location.hostname, so the session
+ * cookie stays same-host and is actually sent. Scheme, port and path are kept.
+ * A non-local (intentionally remote) API base is never rewritten, and the
+ * behaviour is a no-op in production builds.
+ *
+ * Exported for testing.
+ */
+export function alignApiHostToPage(
+  rawBase: string,
+  pageHost: string | null,
+  isDev: boolean,
+): string {
+  if (!isDev || !pageHost) return rawBase;
+  try {
+    const url = new URL(rawBase);
+    if (LOCALHOST_HOSTS.has(url.hostname) && pageHost !== url.hostname) {
+      url.hostname = pageHost;
+      const aligned = url.toString();
+      // URL.toString() can append a trailing slash; preserve the original shape.
+      return aligned.endsWith('/') && !rawBase.endsWith('/')
+        ? aligned.slice(0, -1)
+        : aligned;
+    }
+  } catch {
+    /* URL inválida — ignorar; usar a base original */
+  }
+  return rawBase;
+}
+
+const ENV = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env;
+const PAGE_HOST = typeof window === 'undefined' ? null : window.location.hostname;
+const BASE_URL = alignApiHostToPage(RAW_BASE_URL, PAGE_HOST, Boolean(ENV?.DEV));
+
+// Residual guard: if the API host is intentionally remote (not localhost-class)
+// and still differs from the page host, the SameSite=Lax session cookie cannot
+// be sent and /me will return 401. We warn (hostnames only — never tokens).
 (() => {
-  const env = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env;
-  if (!env?.DEV || typeof window === 'undefined') return;
+  if (!ENV?.DEV || !PAGE_HOST) return;
   try {
     const apiHost = new URL(BASE_URL).hostname;
-    const pageHost = window.location.hostname;
-    if (apiHost && pageHost && apiHost !== pageHost) {
+    if (apiHost && apiHost !== PAGE_HOST) {
       console.warn(
-        `[candidate-portal] Host inconsistente: página em "${pageHost}" mas API em "${apiHost}". ` +
+        `[candidate-portal] Host inconsistente: página em "${PAGE_HOST}" mas API em "${apiHost}". ` +
           'O cookie de sessão (SameSite=Lax) NÃO será enviado para a API e /me retornará 401. ' +
           'Use o MESMO host para o portal e a API (ex.: ambos em localhost).',
       );

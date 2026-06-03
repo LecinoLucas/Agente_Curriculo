@@ -68,9 +68,9 @@ export function AuthAccessLayout({
 }: AuthAccessLayoutProps) {
   return (
     <CandidatePortalLayout maxWidth="page">
-      <div className="mx-auto grid w-full max-w-5xl grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(390px,430px)] lg:gap-8">
+      <div className="mx-auto grid w-full max-w-5xl lg:max-w-6xl xl:max-w-7xl grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(390px,460px)] xl:grid-cols-[minmax(0,1fr)_minmax(420px,500px)] lg:gap-8 xl:gap-10">
         <aside
-          className="relative hidden min-h-[640px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-10 py-9 shadow-card lg:flex lg:flex-col"
+          className="relative hidden min-h-[640px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-10 py-9 xl:px-12 xl:py-10 shadow-card lg:flex lg:flex-col"
           aria-label="Portal do candidato Marajó"
         >
           <div
@@ -93,23 +93,23 @@ export function AuthAccessLayout({
             <p className="mt-10 text-xs font-bold uppercase tracking-[0.18em] text-primary-700">
               Portal do candidato
             </p>
-            <h2 className="mt-3 max-w-md text-4xl font-extrabold leading-tight text-gray-950">
+            <h2 className="mt-3 max-w-md xl:max-w-xl text-4xl xl:text-5xl font-extrabold leading-tight text-gray-950">
               {heroTitle}
             </h2>
-            <p className="mt-4 max-w-sm text-base leading-relaxed text-gray-600">
+            <p className="mt-4 max-w-sm xl:max-w-md text-base xl:text-lg leading-relaxed text-gray-600">
               {heroSubtitle}
             </p>
           </div>
 
           <ul className="relative z-10 mt-8 space-y-3">
             {HERO_BENEFITS.map(({ Icon, title, subtitle }) => (
-              <li key={title} className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-card">
-                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50">
-                  <Icon className="h-4 w-4 text-primary-700" aria-hidden="true" />
+              <li key={title} className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white/95 p-3 xl:p-4 shadow-card">
+                <span className="flex h-9 w-9 xl:h-10 xl:w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50">
+                  <Icon className="h-4 w-4 xl:h-5 xl:w-5 text-primary-700" aria-hidden="true" />
                 </span>
                 <span>
-                  <span className="block text-sm font-semibold leading-snug text-gray-900">{title}</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-gray-500">{subtitle}</span>
+                  <span className="block text-sm xl:text-base font-semibold leading-snug text-gray-900">{title}</span>
+                  <span className="mt-0.5 block text-xs xl:text-sm leading-relaxed text-gray-500">{subtitle}</span>
                 </span>
               </li>
             ))}
@@ -120,7 +120,7 @@ export function AuthAccessLayout({
           </div>
         </aside>
 
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-card sm:p-8 lg:p-9">
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-card sm:p-8 lg:p-10 xl:p-12">
           <div className="mb-8 flex items-center gap-1 lg:hidden">
             <span className="text-xl font-extrabold tracking-tight text-primary-700">Marajó</span>
             <span className="text-xl font-extrabold tracking-tight text-gray-950">RH</span>

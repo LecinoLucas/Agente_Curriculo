@@ -64,11 +64,16 @@ function renderWithRouter(element: React.ReactElement) {
   return renderToString(React.createElement(MemoryRouter, null, element));
 }
 
+function plainText(html: string) {
+  return html.replace(/<!-- -->/g, '');
+}
+
 describe('/minha-area real data UI', () => {
   it('renders loading state', () => {
     const html = renderToString(React.createElement(CandidateHomeLoading));
 
-    expect(html).toContain('animate-spin');
+    expect(html).toContain('bg-gray-100');
+    expect(html).toContain('h-96');
   });
 
   it('renders honest empty state when API returns no applications', () => {
@@ -76,8 +81,9 @@ describe('/minha-area real data UI', () => {
       React.createElement(CandidateHomeContent, { profile, applications: [] }),
     );
 
-    expect(html).toContain('Nenhuma candidatura ativa');
-    expect(html).toContain('0');
+    expect(html).toContain('Você ainda não possui candidaturas.');
+    expect(html).toContain('Encontrar vaga com assistente');
+    expect(html).not.toContain('Candidaturas reais');
   });
 
   it('renders applications returned by the API', () => {
@@ -90,6 +96,49 @@ describe('/minha-area real data UI', () => {
     expect(html).toContain('Comparecer à agenda retornada pela API');
   });
 
+  it('renders the candidate greeting and authenticated sidebar menu', () => {
+    const html = renderWithRouter(
+      React.createElement(CandidateHomeContent, { profile, applications }),
+    );
+
+    expect(plainText(html)).toContain('Olá, Pessoa');
+    expect(html).toContain('Início');
+    expect(html).toContain('Minhas candidaturas');
+    expect(html).toContain('Avaliações');
+    expect(html).toContain('Documentos');
+    expect(html).toContain('Mensagens');
+    expect(html).toContain('Meu perfil');
+  });
+
+  it('renders pending assessment action when returned by the API', () => {
+    const assessmentApplication: CandidateApplication = {
+      ...applications[0],
+      nextAction: 'Responder avaliação comportamental',
+      currentStage: 'assessment',
+      currentStageLabel: 'Avaliação',
+    };
+
+    const html = renderWithRouter(
+      React.createElement(CandidateHomeContent, {
+        profile,
+        applications: [assessmentApplication],
+      }),
+    );
+
+    expect(html).toContain('Responder avaliação comportamental');
+    expect(plainText(html)).toContain('Etapa atual: Avaliação');
+  });
+
+  it('keeps Ver vagas links and Sair action available', () => {
+    const html = renderWithRouter(
+      React.createElement(CandidateHomeContent, { profile, applications }),
+    );
+
+    expect(html).toContain('href="/vagas"');
+    expect(html).toContain('Ver vagas');
+    expect(html).toContain('Sair');
+  });
+
   it('does not render fixed product numbers unrelated to the API list', () => {
     const html = renderWithRouter(
       React.createElement(CandidateHomeContent, { profile, applications }),
@@ -97,6 +146,14 @@ describe('/minha-area real data UI', () => {
 
     expect(html).not.toContain(['80', '%'].join(''));
     expect(html).not.toContain(['4', ' candidaturas'].join(''));
+  });
+
+  it('does not render the old development quick access block', () => {
+    const html = renderWithRouter(
+      React.createElement(CandidateHomeContent, { profile, applications }),
+    );
+
+    expect(html).not.toContain('Acesso rápido de desenvolvimento');
   });
 
   it('detects expired session errors for login flow', () => {

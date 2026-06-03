@@ -12,10 +12,9 @@ Safety guarantees
 * Every quick-reply value loaded from DB is validated against
   ``ALLOWED_QUICK_REPLY_VALUES[state]`` before being accepted; unknown values
   are silently discarded.
-* Placeholders embedded in DB texts are not rendered here; they are rendered
-  later by the same call-sites that already render the hardcoded templates
-  (e.g. ``location_hint``).  The provider only ensures the text strings are
-  non-empty after stripping.
+* Placeholders embedded in DB prompts and quick-reply labels are rendered only
+  when allowed for the state.  Missing/unsafe placeholder values use a safe
+  fallback instead of exposing raw placeholders or sensitive context.
 * State-machine topology (transitions, which states exist) is NEVER read from
   the DB and NEVER modified.
 * Settings (``assistant_settings``) are intentionally kept out of the read
@@ -31,7 +30,11 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.assistant_settings_catalog import (
+    ALLOWED_PLACEHOLDERS,
     ALLOWED_QUICK_REPLY_VALUES,
+    CPF_PATTERN,
+    EMAIL_PATTERN,
+    PHONE_PATTERN,
     PLACEHOLDER_PATTERN,
 )
 from src.application.services.conversation_state_machine import (
@@ -61,23 +64,69 @@ _LEAD_STATES = frozenset(
     {"COLLECT_LEAD_NAME", "COLLECT_LEAD_WHATSAPP", "COLLECT_LGPD_CONSENT"}
 )
 
+_PLACEHOLDER_FALLBACKS = {
+    "location_hint": "sua localidade",
+}
+
 
 def _is_valid_text(text: str | None) -> bool:
     """A non-empty string after stripping is the only validity condition."""
     return bool(text and text.strip())
 
 
-def _render(template: str, context: dict[str, Any]) -> str:
-    """Substitute {key} placeholders from *context*.
+def _contains_sensitive_text(text: str) -> bool:
+    return bool(
+        EMAIL_PATTERN.search(text)
+        or CPF_PATTERN.search(text)
+        or PHONE_PATTERN.search(text)
+    )
 
-    Unknown placeholders are left as-is so they remain visible in logs.
+
+def _placeholder_value(key: str, context: dict[str, Any]) -> str:
+    fallback = _PLACEHOLDER_FALLBACKS.get(key, "")
+    value = context.get(key)
+    if value is None or isinstance(value, dict | list | tuple | set):
+        return fallback
+
+    rendered = str(value).strip()
+    if not rendered or _contains_sensitive_text(rendered):
+        return fallback
+
+    return rendered
+
+
+def _render_allowed(
+    state: str,
+    template: str,
+    context: dict[str, Any],
+) -> str | None:
+    """Substitute only placeholders allowed for *state*.
+
+    Returns ``None`` when the template contains a placeholder outside the
+    state's catalogue or when the rendered text would contain static PII.
     """
+    allowed = set(ALLOWED_PLACEHOLDERS.get(state, ()))
+    found = set(PLACEHOLDER_PATTERN.findall(template))
+    unknown = found - allowed
+    if unknown:
+        return None
+
     def _replace(m: re.Match[str]) -> str:  # type: ignore[type-arg]
         key = m.group(1)
-        val = context.get(key)
-        return str(val) if val is not None else m.group(0)
+        return _placeholder_value(key, context)
 
-    return PLACEHOLDER_PATTERN.sub(_replace, template)
+    rendered = PLACEHOLDER_PATTERN.sub(_replace, template)
+    if _contains_sensitive_text(rendered):
+        return None
+
+    return rendered
+
+
+def _safe_context_for_state(state: str, context: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: _placeholder_value(key, context)
+        for key in ALLOWED_PLACEHOLDERS.get(state, ())
+    }
 
 
 class AssistantContentProvider:
@@ -113,11 +162,12 @@ class AssistantContentProvider:
         hardcoded ones are used.
         """
         ctx = context or {}
+        safe_ctx = _safe_context_for_state(state, ctx)
 
         if state in _SENSITIVE_STATES or state in _LEAD_STATES:
-            return prompt_for(state, ctx)
+            return prompt_for(state, safe_ctx)
 
-        hardcoded = prompt_for(state, ctx)
+        hardcoded = prompt_for(state, safe_ctx)
 
         # ── Load state content ────────────────────────────────────────────
         try:
@@ -139,12 +189,12 @@ class AssistantContentProvider:
             return hardcoded
 
         # Render placeholders in the DB text (e.g. {location_hint}).
-        prompt_text = _render(row.prompt_text, ctx)
+        prompt_text = _render_allowed(state, row.prompt_text, safe_ctx)
         if not _is_valid_text(prompt_text):
             return hardcoded
 
         # ── Load quick replies ────────────────────────────────────────────
-        db_quick_replies = await self._load_quick_replies(state)
+        db_quick_replies = await self._load_quick_replies(state, safe_ctx)
 
         # Fall back to hardcoded quick replies if the DB returned nothing valid.
         quick_replies = db_quick_replies if db_quick_replies else hardcoded.quick_replies
@@ -156,7 +206,9 @@ class AssistantContentProvider:
         )
 
     async def _load_quick_replies(
-        self, state: str
+        self,
+        state: str,
+        context: dict[str, Any],
     ) -> tuple[tuple[str, str], ...]:
         """Load active, catalogue-valid quick replies for *state* from DB.
 
@@ -199,6 +251,13 @@ class AssistantContentProvider:
                 continue
             if not _is_valid_text(row.label):
                 continue
-            valid.append((row.value, row.label))
+            label = _render_allowed(state, row.label, context)
+            if not _is_valid_text(label):
+                _logger.warning(
+                    "assistant_content_provider.quick_reply.invalid_label",
+                    extra={"state": state, "value": row.value},
+                )
+                continue
+            valid.append((row.value, label))
 
         return tuple(valid)

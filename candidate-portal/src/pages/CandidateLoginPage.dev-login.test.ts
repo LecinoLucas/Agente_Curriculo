@@ -17,30 +17,6 @@ describe('CandidateLoginPage dev-login', () => {
     }));
   }
 
-  it('enables the dev-login block only for dev builds with the explicit flag', async () => {
-    mockAuthLayout();
-    const { shouldShowDevCandidateLogin } = await import('./CandidateLoginPage');
-
-    expect(
-      shouldShowDevCandidateLogin({
-        DEV: true,
-        VITE_ENABLE_DEV_CANDIDATE_LOGIN: 'true',
-      }),
-    ).toBe(true);
-    expect(
-      shouldShowDevCandidateLogin({
-        DEV: true,
-        VITE_ENABLE_DEV_CANDIDATE_LOGIN: 'false',
-      }),
-    ).toBe(false);
-    expect(
-      shouldShowDevCandidateLogin({
-        DEV: false,
-        VITE_ENABLE_DEV_CANDIDATE_LOGIN: 'true',
-      }),
-    ).toBe(false);
-  });
-
   it('disables Google login on 127.0.0.1 in dev to avoid GSI origin 403', async () => {
     mockAuthLayout();
     const { shouldEnableGoogleLogin } = await import('./CandidateLoginPage');
@@ -57,9 +33,7 @@ describe('CandidateLoginPage dev-login', () => {
     expect(shouldEnableGoogleLogin('', { DEV: true }, 'localhost')).toBe(false);
   });
 
-  it('does not render the dev-login block when the flag is disabled', async () => {
-    vi.stubEnv('DEV', true);
-    vi.stubEnv('VITE_ENABLE_DEV_CANDIDATE_LOGIN', 'false');
+  it('renders the login page correctly without dev tools', async () => {
     mockAuthLayout();
     const { CandidateLoginPage } = await import('./CandidateLoginPage');
 

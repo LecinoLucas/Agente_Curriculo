@@ -1,8 +1,11 @@
+import os
 import re
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.admin_assistant_failure_service import AssistantFailureRecorder
 from src.application.services.admin_assistant_service import sanitise_assistant_text
 from src.application.services.assistant_content_provider import AssistantContentProvider
+from src.application.services.candidate_assistant_intent_service import (
+    CandidateAssistantIntentService,
+    CandidateIntent,
+)
 from src.application.services.conversation_otp_service import ConversationOtpService
 from src.application.services.conversation_state_machine import (
     ConversationPrompt,
@@ -17,6 +24,7 @@ from src.application.services.conversation_state_machine import (
     next_state,
     prompt_for,
 )
+from src.core.settings import settings
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.infrastructure.database.models.assistant_failure_model import AssistantFailureModel
 from src.infrastructure.database.models.candidate_application_model import (
@@ -36,13 +44,18 @@ from src.infrastructure.database.models.operational_master_model import (
     LocationGroupModel,
     OperationalUnitModel,
 )
+from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_candidate_application_repository import (
     SQLAlchemyCandidateApplicationRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_conversation_repository import (
     SQLAlchemyConversationRepository,
 )
+from src.infrastructure.repositories.sqlalchemy_resume_repository import (
+    SQLAlchemyResumeRepository,
+)
 from src.infrastructure.security.cpf_identity import derive_cpf_identity
+from src.infrastructure.storage.resume_files import write_resume_file
 from src.interface.api.schemas.conversation_schemas import (
     ConversationCreateRequest,
     ConversationMessageCreateRequest,
@@ -51,6 +64,7 @@ from src.interface.api.schemas.conversation_schemas import (
     ConversationSessionResponse,
     ConversationTurnResponse,
 )
+from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
 
 # Context keys that signal the candidate has started providing real intake data.
 # The CandidateApplication is only created once at least one is present, so a bare
@@ -120,7 +134,69 @@ _UNSAFE_RESUME_STATES = {
     "COLLECT_LEAD_WHATSAPP",
     "COLLECT_LGPD_CONSENT",
     "DONE",
+    "AWAITING_RESUME_UPLOAD",
 }
+
+# OP-7A — states where the AI intent parser may interpret a free-text message.
+# IDENTIFY/VERIFY_OTP (security/anti-enumeration), the lead name/WhatsApp states
+# (deterministic validation) and DONE are intentionally excluded: the AI must
+# never run there. The mapping below pairs each AI-eligible state with the intents
+# it accepts; anything else degrades to the deterministic flow.
+_AI_INTENTS_BY_STATE: dict[str, tuple[str, ...]] = {
+    "CHOOSE_LOCATION": ("choose_location", "talk_to_hr", "help", "unclear"),
+    "CHOOSE_UNIT_OR_ANY": (
+        "choose_any_unit",
+        "choose_unit",
+        "talk_to_hr",
+        "help",
+        "unclear",
+    ),
+    "CHOOSE_FUNCTION": ("choose_function", "talk_to_hr", "help", "unclear"),
+    "CHOOSE_SHIFT": ("choose_shift", "talk_to_hr", "help", "unclear"),
+    "COLLECT_RESUME": ("skip_resume", "upload_resume", "talk_to_hr", "help", "unclear"),
+    "COLLECT_LGPD_CONSENT": ("accept_lgpd", "reject_lgpd", "talk_to_hr", "help", "unclear"),
+    "CONFIRM_APPLICATION": (
+        "confirm_application",
+        "cancel",
+        "review",
+        "talk_to_hr",
+        "help",
+        "unclear",
+    ),
+}
+
+# Quick-reply / button values and deterministically-recognized words. When the
+# candidate's message is exactly one of these, it is a button click (or already
+# unambiguous), so the AI parser is skipped to save tokens and latency.
+_AI_CONTROL_TOKENS = frozenset(
+    {
+        "cpf",
+        "whatsapp",
+        "any_in_location",
+        "choose_unit",
+        "send_resume",
+        "skip_resume",
+        "confirm",
+        "review",
+        "aceito",
+        "nao_aceito",
+        "morning",
+        "afternoon",
+        "night",
+        "any",
+        "continue",
+        "resume_uploaded",
+        "qualquer",
+        "escolher",
+        "vamos",
+        "sim",
+        "ok",
+        "manha",
+        "manhã",
+        "tarde",
+        "noite",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -148,13 +224,16 @@ class ConversationService:
         repository: SQLAlchemyConversationRepository,
         session: AsyncSession,
         application_repository: SQLAlchemyCandidateApplicationRepository,
+        resume_repository: SQLAlchemyResumeRepository,
     ):
         self._repository = repository
         self._session = session
         self._application_repository = application_repository
+        self._resume_repo = resume_repository
         self._otp_service = ConversationOtpService(session)
         self._failure_recorder = AssistantFailureRecorder(session)
         self._content_provider = AssistantContentProvider(session)
+        self._intent_service = CandidateAssistantIntentService()
 
     async def _prompt_for(
         self,
@@ -198,18 +277,40 @@ class ConversationService:
     ) -> ConversationTurnResponse:
         conversation = await self._get_session(session_id)
         if conversation.status != "active":
-            raise ValidationException("Sessão de conversa não está ativa.")
+            raise ValidationException("Sessão de conversa não ativa.")
 
         content = body.content.strip()
+        stored_message_type = "system" if body.message_type == "event" else body.message_type
         candidate_message = await self._add_candidate_message(
             conversation,
             content=content,
-            message_type=body.message_type,
+            message_type=stored_message_type,
         )
 
         context = dict(conversation.context_json or {})
 
-        if conversation.current_state == "IDENTIFY":
+        # OP-7A — interpret free-text input with AI BEFORE the deterministic
+        # dispatch. The parser only canonicalizes the message into a token the
+        # state machine already understands; it never changes the state itself.
+        if body.message_type != "event":
+            content = await self._maybe_ai_canonicalize(
+                conversation,
+                context,
+                content,
+                candidate_message,
+            )
+
+        if body.message_type == "event" and content == "resume_uploaded":
+            context["resume_uploaded"] = True
+            self._merge_context(context, self._state_update(conversation.current_state, content))
+            if self._is_unresolved_lead(conversation, context):
+                conversation.current_state = "COLLECT_LEAD_NAME"
+                prompt = prompt_for("COLLECT_LEAD_NAME", context)
+            else:
+                conversation.current_state = "CONFIRM_APPLICATION"
+                prompt = await self._prompt_for(conversation.current_state, context)
+
+        elif conversation.current_state == "IDENTIFY":
             # Lead-mode identification step. Resolves (or not) a candidate_id
             # silently, stores only safe markers, and advances without OTP.
             prompt = await self._handle_identify(
@@ -247,16 +348,39 @@ class ConversationService:
                     context,
                     content,
                 )
-            elif conversation.current_state == "COLLECT_RESUME" and self._is_unresolved_lead(
-                conversation, context
-            ):
-                # Unresolved lead: collect name/WhatsApp/consent before confirming.
-                self._merge_context(
-                    context,
-                    self._state_update("COLLECT_RESUME", content),
-                )
-                conversation.current_state = "COLLECT_LEAD_NAME"
-                prompt = prompt_for("COLLECT_LEAD_NAME", context)  # lead state: hardcoded
+            elif conversation.current_state in {"COLLECT_RESUME", "AWAITING_RESUME_UPLOAD"}:
+                resume_choice = self._normalize(content)
+                if resume_choice == "send_resume":
+                    conversation.current_state = "AWAITING_RESUME_UPLOAD"
+                    prompt = prompt_for("AWAITING_RESUME_UPLOAD", context)
+                elif resume_choice == "skip_resume":
+                    self._merge_context(
+                        context,
+                        self._state_update(conversation.current_state, content),
+                    )
+                    if self._is_unresolved_lead(conversation, context):
+                        conversation.current_state = "COLLECT_LEAD_NAME"
+                        prompt = prompt_for("COLLECT_LEAD_NAME", context)
+                    else:
+                        conversation.current_state = "CONFIRM_APPLICATION"
+                        prompt = await self._prompt_for(conversation.current_state, context)
+                elif conversation.current_state == "COLLECT_RESUME":  # Fallback for old clients
+                    if self._is_unresolved_lead(conversation, context):
+                        self._merge_context(
+                            context,
+                            self._state_update("COLLECT_RESUME", content),
+                        )
+                        conversation.current_state = "COLLECT_LEAD_NAME"
+                        prompt = prompt_for("COLLECT_LEAD_NAME", context)  # lead state: hardcoded
+                    else:
+                        self._merge_context(
+                            context,
+                            self._state_update(conversation.current_state, content),
+                        )
+                        conversation.current_state = next_state(conversation.current_state)
+                        prompt = await self._prompt_for(conversation.current_state, context)
+                else:
+                    prompt = prompt_for("AWAITING_RESUME_UPLOAD", context)
             else:
                 self._merge_context(
                     context,
@@ -367,6 +491,8 @@ class ConversationService:
             # This key is stripped from public API responses (_public_context).
             if identifier_type == "whatsapp":
                 context["lead_whatsapp"] = normalized
+            if identifier_type == "cpf":
+                context["lead_cpf"] = normalized
         else:
             context.pop("identifier_unresolved", None)
             context["pending_candidate_id"] = str(candidate_id)
@@ -617,32 +743,54 @@ class ConversationService:
         context: dict[str, Any],
         content: str,
     ) -> ConversationPrompt:
+        # OP-6F.6: the confirmation step no longer issues an OTP. A simple LGPD
+        # consent (collected earlier for new leads) is the only gate before a
+        # Candidate is created. Existing candidates resolved at IDENTIFY are linked
+        # silently. No pipeline / login / token is ever created here.
         confirmation = self._normalize(content)
         if confirmation != "confirm":
             self._merge_context(context, self._state_update("CONFIRM_APPLICATION", content))
             conversation.current_state = next_state("CONFIRM_APPLICATION")
             return await self._prompt_for(conversation.current_state, context)
 
-        if conversation.candidate_id is not None or context.get("identity_verified") is True:
-            context["confirmation"] = "confirm"
-            conversation.current_state = "DONE"
-            return await self._prompt_for("DONE", context)
+        context["confirmation"] = "confirm"
 
+        # Identity already known (preset candidate or previously verified): finalize.
+        if conversation.candidate_id is not None or context.get("identity_verified") is True:
+            await self._commit_pending_resume(conversation, context)
+            conversation.current_state = "DONE"
+            return self._application_registered_prompt()
+
+        # Existing candidate resolved silently at IDENTIFY: link without OTP. The
+        # subsequent _sync_application reuses any pending/resumed application.
         pending_candidate_id = self._uuid_from_context(context.get("pending_candidate_id"))
-        context["pending_confirmation"] = "confirm"
-        context["otp_purpose"] = "confirm_application"
-        await self._otp_service.issue_otp(
-            session_id=conversation.id,
-            candidate_id=pending_candidate_id,
-            identifier_type=str(context.get("identifier_type") or "cpf"),
-        )
-        conversation.current_state = "VERIFY_OTP"
+        if pending_candidate_id is not None:
+            conversation.candidate_id = pending_candidate_id
+            await self._commit_pending_resume(conversation, context)
+            context.pop("pending_candidate_id", None)
+            context.pop("possible_candidate_id", None)
+            conversation.current_state = "DONE"
+            return self._application_registered_prompt()
+
+        # New lead: only create a Candidate when LGPD consent and a name are present.
+        if (
+            context.get("lead_mode")
+            and context.get("lgpd_consent")
+            and context.get("lead_name")
+        ):
+            await self._create_lead_candidate_and_application(conversation, context)
+            conversation.current_state = "DONE"
+            return self._application_registered_prompt()
+
+        # New lead without LGPD consent / required data: never create a Candidate.
+        conversation.current_state = "DONE"
+        return ConversationPrompt(state="DONE", content=_LGPD_REJECTED_MESSAGE)
+
+    @staticmethod
+    def _application_registered_prompt() -> ConversationPrompt:
         return ConversationPrompt(
-            state="VERIFY_OTP",
-            content=(
-                "Para confirmar suas informações, enviamos um código de verificação. "
-                "Digite o código de 6 dígitos para continuar."
-            ),
+            state="DONE",
+            content="Pronto, sua candidatura foi registrada para análise do RH.",
         )
 
     async def _handle_verify_otp(
@@ -868,6 +1016,98 @@ class ConversationService:
         return normalized in {"vamos", "sim", "continuar", "ok"}
 
     # ------------------------------------------------------------------
+    # OP-7A — AI intent interpretation
+    #
+    # A thin, optional layer: when enabled, it rewrites a free-text candidate
+    # message into a deterministic token (e.g. "qualquer posto em goiania" →
+    # "any_in_location") that the existing state-machine handlers already accept.
+    # It never changes the state, creates pipelines, mutates applications, or
+    # touches IDENTIFY/VERIFY_OTP. On any failure it returns the original content
+    # unchanged so the deterministic flow always wins.
+    # ------------------------------------------------------------------
+    async def _maybe_ai_canonicalize(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+        candidate_message: ConversationMessageModel,
+    ) -> str:
+        if not settings.ASSISTANT_INTENT_AI_ENABLED:
+            return content
+        state = conversation.current_state
+        allowed_intents = _AI_INTENTS_BY_STATE.get(state)
+        if not allowed_intents:
+            return content
+        if self._is_ai_control_token(content):
+            return content
+
+        prompt = prompt_for(state, context)
+        try:
+            intent = await self._intent_service.interpret(
+                state=state,
+                message=content,
+                allowed_intents=allowed_intents,
+                quick_replies=prompt.quick_replies,
+            )
+        except Exception:
+            # Defensive: the service already swallows provider errors, but never
+            # let intent parsing break the conversation.
+            return content
+
+        if intent is None:
+            return content
+
+        # Observability only (no PII): record which intent the AI resolved.
+        candidate_message.interpreted_intent = intent.intent
+
+        token = self._intent_to_token(state, intent)
+        if token is None:
+            return content
+        return token
+
+    @staticmethod
+    def _is_ai_control_token(content: str) -> bool:
+        normalized = ConversationService._normalize(content)
+        return normalized is not None and normalized in _AI_CONTROL_TOKENS
+
+    @staticmethod
+    def _intent_to_token(state: str, intent: CandidateIntent) -> str | None:
+        """Map a validated intent to a deterministic token, or None to fall back.
+
+        The token is fed back through the unchanged state-machine handlers, so any
+        location/unit/function/shift value still passes the existing deterministic
+        validation (unresolved values simply produce the normal invalid prompt).
+        """
+        name = intent.intent
+        if state == "CHOOSE_LOCATION" and name == "choose_location":
+            return ConversationService._clean_text(intent.location_hint)
+        if state == "CHOOSE_UNIT_OR_ANY":
+            if name == "choose_any_unit":
+                return "any_in_location"
+            if name == "choose_unit":
+                return ConversationService._clean_text(intent.unit_hint)
+        if state == "CHOOSE_FUNCTION" and name == "choose_function":
+            return ConversationService._clean_text(intent.desired_function)
+        if state == "CHOOSE_SHIFT" and name == "choose_shift":
+            return ConversationService._shift_value(intent.desired_shift or "")
+        if state == "COLLECT_RESUME":
+            if name == "skip_resume":
+                return "skip_resume"
+            if name == "upload_resume":
+                return "send_resume"
+        if state == "COLLECT_LGPD_CONSENT":
+            if name == "accept_lgpd":
+                return "aceito"
+            if name == "reject_lgpd":
+                return "nao_aceito"
+        if state == "CONFIRM_APPLICATION":
+            if name == "confirm_application":
+                return "confirm"
+            if name == "review":
+                return "review"
+        return None
+
+    # ------------------------------------------------------------------
     # Lead-registration helpers (OP-6F.5)
     #
     # These states only activate for sessions where no existing Candidate was
@@ -966,6 +1206,62 @@ class ConversationService:
         # Ambiguous — re-ask with quick replies.
         return prompt_for("COLLECT_LGPD_CONSENT", context)
 
+    async def _commit_pending_resume(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+    ) -> None:
+        pending_resume_path = context.get("pending_resume_path")
+        if not pending_resume_path or not conversation.candidate_id:
+            return
+
+        try:
+            with open(pending_resume_path, "rb") as f:
+                file_bytes = f.read()
+        except FileNotFoundError:
+            return
+
+        file_name = context.get("pending_resume_filename", "resume.pdf")
+
+        resume_id = uuid4()
+        resume = await self._resume_repo.create_resume(
+            ResumeModel(
+                id=resume_id,
+                candidate_id=conversation.candidate_id,
+                title=f"Currículo via Chat - {datetime.now(UTC).isoformat()}",
+                status="active",
+                current_version=1,
+                created_by=None,
+            )
+        )
+        version_id = uuid4()
+        s3_key = f"resumes/{conversation.candidate_id}/{resume_id}/v1_chat.pdf"
+        version = await self._resume_repo.create_version(
+            ResumeVersionModel(
+                id=version_id,
+                resume_id=resume.id,
+                version_number=1,
+                s3_bucket="resume-ai-dev-uploads",
+                s3_key=s3_key,
+                original_file_name=file_name,
+                file_size_bytes=len(file_bytes),
+                file_hash_sha256=sha256(file_bytes).hexdigest(),
+                mime_type="application/octet-stream",  # This will be updated by the extraction
+                extraction_status="pending",
+                uploaded_by=None,
+                uploaded_at=datetime.now(UTC),
+            )
+        )
+        write_resume_file(version.s3_key, file_bytes)
+        enqueue_resume_extraction(version.id)
+
+        with suppress(OSError):
+            os.remove(pending_resume_path)
+
+        context.pop("pending_resume_path", None)
+        context.pop("pending_resume_filename", None)
+        conversation.context_json = context
+
     async def _create_lead_candidate_and_application(
         self,
         conversation: ConversationSessionModel,
@@ -974,11 +1270,24 @@ class ConversationService:
         """Create a minimal Candidate (and CandidateApplication) for an OTP-verified lead.
 
         Checks for an existing Candidate by phone before creating to prevent
-        duplicates. No pipeline is created. The `lead_name` and `lead_whatsapp`
-        keys are removed from context after use.
+        duplicates. No pipeline is created. The `lead_name`, `lead_whatsapp` and
+        `lead_cpf` keys are removed from context after use.
         """
         lead_name: str = str(context.get("lead_name") or "").strip() or "Lead"
         lead_whatsapp: str | None = context.get("lead_whatsapp")
+        lead_cpf: str | None = context.get("lead_cpf")
+
+        # Duplicate prevention by CPF (highest priority identity).
+        if lead_cpf:
+            existing_id = await self._resolve_candidate_id_by_cpf(lead_cpf)
+            if existing_id is not None:
+                conversation.candidate_id = existing_id
+                await self._commit_pending_resume(conversation, context)
+                context.pop("lead_name", None)
+                context.pop("lead_whatsapp", None)
+                context.pop("lead_cpf", None)
+                await self._sync_application(conversation)
+                return
 
         # Duplicate prevention: link existing Candidate if phone already exists.
         if lead_whatsapp:
@@ -990,8 +1299,10 @@ class ConversationService:
             )
             if existing is not None:
                 conversation.candidate_id = existing.id
+                await self._commit_pending_resume(conversation, context)
                 context.pop("lead_name", None)
                 context.pop("lead_whatsapp", None)
+                context.pop("lead_cpf", None)
                 await self._sync_application(conversation)
                 return
 
@@ -999,6 +1310,7 @@ class ConversationService:
         candidate = CandidateModel(
             full_name=lead_name,
             phone=lead_whatsapp,
+            cpf=lead_cpf,
             application_source="bot",
             lgpd_consent_at=now,
             lgpd_consent_version="v1.0",
@@ -1007,8 +1319,10 @@ class ConversationService:
         await self._session.flush()
 
         conversation.candidate_id = candidate.id
+        await self._commit_pending_resume(conversation, context)
         context.pop("lead_name", None)
         context.pop("lead_whatsapp", None)
+        context.pop("lead_cpf", None)
         await self._sync_application(conversation)
 
     # ------------------------------------------------------------------
@@ -1030,6 +1344,8 @@ class ConversationService:
             return
 
         fields = await self._derive_application_sync(conversation)
+        lgpd_consent_at = datetime.now(UTC) if context.get("lgpd_consent") is True else None
+        lgpd_consent_version = "v1.0" if context.get("lgpd_consent") is True else None
 
         if not already_linked:
             application = CandidateApplicationModel(
@@ -1042,6 +1358,8 @@ class ConversationService:
                 accepts_any_unit_in_location=fields.accepts_any_unit_in_location,
                 desired_job_area=fields.desired_job_area,
                 desired_shift=fields.desired_shift,
+                lgpd_consent_at=lgpd_consent_at,
+                lgpd_consent_version=lgpd_consent_version,
             )
             application = await self._application_repository.create_application(application)
             conversation.application_id = application.id
@@ -1061,6 +1379,9 @@ class ConversationService:
         application.accepts_any_unit_in_location = fields.accepts_any_unit_in_location
         application.desired_job_area = fields.desired_job_area
         application.desired_shift = fields.desired_shift
+        if lgpd_consent_at is not None and application.lgpd_consent_at is None:
+            application.lgpd_consent_at = lgpd_consent_at
+            application.lgpd_consent_version = lgpd_consent_version
         application.updated_at = datetime.now(UTC)
         await self._application_repository.update_application(application)
 
@@ -1291,8 +1612,13 @@ class ConversationService:
             return {"desired_shift": ConversationService._shift_value(content) or content}
         if current_state == "SHOW_JOBS":
             return {"show_jobs_ack": content}
-        if current_state == "COLLECT_RESUME":
-            return {"resume_choice": content}
+        if current_state == "COLLECT_RESUME" or current_state == "AWAITING_RESUME_UPLOAD":
+            choice = ConversationService._normalize(content)
+            if choice == "send_resume" or content == "resume_uploaded":
+                return {"resume_choice": "send_resume"}
+            if choice == "skip_resume":
+                return {"resume_choice": "skip_resume"}
+            return {"resume_choice": "skipped_fallback"}
         if current_state == "CONFIRM_APPLICATION":
             return {"confirmation": content}
         return {}
@@ -1515,6 +1841,9 @@ class ConversationService:
             # Lead-registration: PII stored temporarily; never exposed via API.
             "lead_name",
             "lead_whatsapp",
+            "lead_cpf",
+            "pending_resume_path",
+            "pending_resume_filename",
         }
         return {key: value for key, value in context.items() if key not in internal_keys}
 

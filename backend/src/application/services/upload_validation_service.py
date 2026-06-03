@@ -33,12 +33,18 @@ class UploadValidationPolicy:
     max_size_bytes: int
 
 
+# Reusable constants for long MIME type strings
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
 MIME_EXTENSIONS: dict[str, set[str]] = {
     "application/pdf": {".pdf"},
     "image/jpeg": {".jpg", ".jpeg"},
     "image/png": {".png"},
     "application/vnd.ms-excel": {".xls"},
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {".xlsx"},
+    _XLSX_MIME: {".xlsx"},
+    "application/msword": {".doc"},
+    _DOCX_MIME: {".docx"},
 }
 
 PRIMARY_EXTENSION: dict[str, str] = {
@@ -46,7 +52,9 @@ PRIMARY_EXTENSION: dict[str, str] = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "application/vnd.ms-excel": ".xls",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    _XLSX_MIME: ".xlsx",
+    "application/msword": ".doc",
+    _DOCX_MIME: ".docx",
 }
 
 PDF_SUSPICIOUS_MARKERS = (
@@ -93,8 +101,8 @@ def validate_upload(
     if normalized_content_type not in policy.allowed_mime_types:
         raise UploadValidationError("Tipo de arquivo não permitido")
 
-    allowed_extensions = MIME_EXTENSIONS[normalized_content_type]
-    if submitted_extension not in allowed_extensions:
+    allowed_extensions = MIME_EXTENSIONS.get(normalized_content_type)
+    if allowed_extensions is None or submitted_extension not in allowed_extensions:
         raise UploadValidationError("Extensão de arquivo não permitida para o tipo informado")
 
     detected_mime_type = _detect_mime_type(content)
@@ -111,7 +119,11 @@ def validate_upload(
     )
     active_scanner = scanner or get_file_scanner()
     try:
-        active_scanner.scan(file_name=validated.file_name, content=validated.content, mime_type=validated.mime_type)
+        active_scanner.scan(
+            file_name=validated.file_name,
+            content=validated.content,
+            mime_type=validated.mime_type,
+        )
     except FileScanError as exc:
         raise UploadValidationError(str(exc)) from exc
     return validated
@@ -150,9 +162,13 @@ def _detect_mime_type(content: bytes) -> str | None:
     if content.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
     if content.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
-        return "application/vnd.ms-excel"
-    if content.startswith(b"PK\x03\x04") and _looks_like_xlsx(content):
-        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        # Could be .doc, .xls, etc. For now, assume .doc if policy allows.
+        return "application/msword"
+    if content.startswith(b"PK\x03\x04"):
+        if _looks_like_docx(content):
+            return _DOCX_MIME
+        if _looks_like_xlsx(content):
+            return _XLSX_MIME
     return None
 
 
@@ -174,10 +190,23 @@ def _validate_content_by_type(mime_type: str, content: bytes) -> None:
         raise UploadValidationError("Conteúdo enviado não parece ser um JPG válido")
 
 
+def _looks_like_docx(content: bytes) -> bool:
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            names = set(archive.namelist())
+            has_content_types = "[Content_Types].xml" in names
+            has_word_folder = any(name.startswith("word/") for name in names)
+            return has_content_types and has_word_folder
+    except zipfile.BadZipFile:
+        return False
+
+
 def _looks_like_xlsx(content: bytes) -> bool:
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             names = set(archive.namelist())
-            return "[Content_Types].xml" in names and any(name.startswith("xl/") for name in names)
+            has_content_types = "[Content_Types].xml" in names
+            has_xl_folder = any(name.startswith("xl/") for name in names)
+            return has_content_types and has_xl_folder
     except zipfile.BadZipFile:
         return False

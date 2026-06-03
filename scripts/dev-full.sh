@@ -1,8 +1,8 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-set -eu
+set -Eeuo pipefail
 
-ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_DIR="$ROOT_DIR/backend"
 CANDIDATE_PORTAL_DIR="$ROOT_DIR/candidate-portal"
@@ -11,13 +11,99 @@ FRONTEND_DEPS_STAMP="$FRONTEND_DIR/node_modules/.deps-stamp"
 BACKEND_DEPS_STAMP="$BACKEND_DIR/.venv/.deps-stamp"
 CANDIDATE_PORTAL_DEPS_STAMP="$CANDIDATE_PORTAL_DIR/node_modules/.deps-stamp"
 
-# Comandos manuais (rodar apenas quando necessario):
-# Migrations:  cd backend && alembic upgrade head
-# Reset banco: npm run backend:bootstrap
-# Seed admin:  cd backend && python scripts/seed_admin.py
-# Seed vagas:  cd backend && python scripts/seed_jobs.py
-# Seed AI:     cd backend && python scripts/seed_ai_models.py
-# Seed score:  cd backend && python scripts/seed_scoring.py
+DEV_MODE=${DEV_MODE:-local}
+DEV_HOST=${DEV_HOST:-}
+DEV_PUBLIC_HOST=${DEV_PUBLIC_HOST:-}
+INCLUDE_CANDIDATE_PORTAL=${INCLUDE_CANDIDATE_PORTAL:-true}
+INCLUDE_CELERY=${INCLUDE_CELERY:-true}
+BACKEND_PORT=${BACKEND_PORT:-8000}
+FRONTEND_PORT=${FRONTEND_PORT:-5173}
+CANDIDATE_PORTAL_PORT=${CANDIDATE_PORTAL_PORT:-5174}
+
+usage() {
+  cat <<'EOF'
+Uso:
+  npm run dev:full
+  npm run dev:full -- --network
+  npm run dev:full -- --host 0.0.0.0
+  DEV_HOST=0.0.0.0 npm run dev:full
+
+Opcoes:
+  --local              Bind local em 127.0.0.1 (padrao)
+  --network           Bind em 0.0.0.0 e usa o IP da LAN para URLs/API
+  --host <host>       127.0.0.1 para local ou 0.0.0.0 para network
+  --public-host <ip>  IP/host mostrado para outros dispositivos na LAN
+  --no-candidate      Nao sobe candidate-portal
+  --no-celery         Nao sobe worker Celery
+
+Este modo network e somente para LAN/desenvolvimento, nao para producao.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --local)
+      DEV_MODE=local
+      shift
+      ;;
+    --network)
+      DEV_MODE=network
+      DEV_HOST=0.0.0.0
+      shift
+      ;;
+    --host)
+      DEV_HOST=${2:-}
+      if [ -z "$DEV_HOST" ]; then
+        echo "[ERROR] --host exige um valor." >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --host=*)
+      DEV_HOST=${1#--host=}
+      shift
+      ;;
+    --public-host)
+      DEV_PUBLIC_HOST=${2:-}
+      if [ -z "$DEV_PUBLIC_HOST" ]; then
+        echo "[ERROR] --public-host exige um valor." >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --public-host=*)
+      DEV_PUBLIC_HOST=${1#--public-host=}
+      shift
+      ;;
+    --no-candidate)
+      INCLUDE_CANDIDATE_PORTAL=false
+      shift
+      ;;
+    --no-celery)
+      INCLUDE_CELERY=false
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[ERROR] Opcao desconhecida: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [ -n "$DEV_HOST" ] && [ "$DEV_HOST" != "127.0.0.1" ] && [ "$DEV_HOST" != "localhost" ]; then
+  DEV_MODE=network
+fi
+
+if [ "$DEV_MODE" = "network" ]; then
+  BIND_HOST=${DEV_HOST:-0.0.0.0}
+else
+  BIND_HOST=${DEV_HOST:-127.0.0.1}
+fi
 
 print_section() {
   printf '\n== %s ==\n' "$1"
@@ -36,23 +122,42 @@ print_error() {
 }
 
 get_local_ip() {
-  if command -v ipconfig >/dev/null 2>&1; then
-    ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || printf '127.0.0.1'
-  elif command -v hostname >/dev/null 2>&1; then
-    hostname -I 2>/dev/null | awk '{print $1}'
-  else
-    printf '127.0.0.1'
+  if [ -n "$DEV_PUBLIC_HOST" ]; then
+    printf '%s\n' "$DEV_PUBLIC_HOST"
+    return 0
   fi
+
+  if command -v ipconfig >/dev/null 2>&1; then
+    for iface in en0 en1 en2; do
+      ipconfig getifaddr "$iface" 2>/dev/null && return 0
+    done
+  fi
+
+  if command -v ip >/dev/null 2>&1; then
+    ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' && return 0
+    ip -4 addr show scope global 2>/dev/null | awk '/inet / {sub("/.*", "", $2); print $2; exit}' && return 0
+  fi
+
+  if command -v ifconfig >/dev/null 2>&1; then
+    ifconfig 2>/dev/null | awk '/inet / && $2 != "127.0.0.1" {print $2; exit}' && return 0
+  fi
+
+  if command -v hostname >/dev/null 2>&1; then
+    hostname -I 2>/dev/null | awk '{print $1}' && return 0
+  fi
+
+  return 1
 }
 
 needs_install() {
-  stamp_file=$1
+  local stamp_file=$1
   shift
 
   if [ ! -f "$stamp_file" ]; then
     return 0
   fi
 
+  local dependency_file
   for dependency_file in "$@"; do
     if [ -f "$dependency_file" ] && [ "$dependency_file" -nt "$stamp_file" ]; then
       return 0
@@ -90,8 +195,27 @@ ensure_frontend_dependencies() {
   print_ok "Dependencias do frontend prontas"
 }
 
+ensure_candidate_portal_dependencies() {
+  if [ "$INCLUDE_CANDIDATE_PORTAL" != "true" ]; then
+    print_info "Candidate portal omitido por INCLUDE_CANDIDATE_PORTAL=false"
+    return 0
+  fi
+
+  if [ ! -d "$CANDIDATE_PORTAL_DIR/node_modules" ] || needs_install "$CANDIDATE_PORTAL_DEPS_STAMP" "$CANDIDATE_PORTAL_DIR/package.json" "$CANDIDATE_PORTAL_DIR/package-lock.json"; then
+    print_info "Instalando dependencias do candidate-portal"
+    cd "$CANDIDATE_PORTAL_DIR"
+    npm ci --prefer-offline --no-audit
+    mkdir -p "$CANDIDATE_PORTAL_DIR/node_modules"
+    touch "$CANDIDATE_PORTAL_DEPS_STAMP"
+    print_ok "Dependencias do candidate-portal instaladas"
+    return 0
+  fi
+
+  print_ok "Dependencias do candidate-portal prontas"
+}
+
 ensure_backend_dependencies() {
-   if [ ! -d "$BACKEND_DIR/.venv" ]; then
+  if [ ! -d "$BACKEND_DIR/.venv" ]; then
     print_info "Criando ambiente virtual do backend"
     cd "$BACKEND_DIR"
     python3 -m venv .venv
@@ -114,168 +238,113 @@ ensure_backend_dependencies() {
   print_ok "Dependencias do backend prontas"
 }
 
-ensure_candidate_portal_dependencies() {
-  if [ ! -d "$CANDIDATE_PORTAL_DIR/node_modules" ] || needs_install "$CANDIDATE_PORTAL_DEPS_STAMP" "$CANDIDATE_PORTAL_DIR/package.json" "$CANDIDATE_PORTAL_DIR/package-lock.json"; then
-    print_info "Instalando dependencias do candidate-portal"
-    cd "$CANDIDATE_PORTAL_DIR"
-    npm ci --prefer-offline --no-audit
-    mkdir -p "$CANDIDATE_PORTAL_DIR/node_modules"
-    touch "$CANDIDATE_PORTAL_DEPS_STAMP"
-    print_ok "Dependencias do candidate-portal instaladas"
-    return 0
-  fi
-
-  print_ok "Dependencias do candidate-portal prontas"
-}
-
-read_frontend_api_url() {
-  if [ -n "${VITE_API_URL:-}" ]; then
-    printf '%s\n' "$VITE_API_URL"
-    return 0
-  fi
-
-  if [ -n "${VITE_API_BASE_URL:-}" ]; then
-    printf '%s\n' "$VITE_API_BASE_URL"
-    return 0
-  fi
-
-  for file in \
-    "$FRONTEND_DIR/.env.development.local" \
-    "$FRONTEND_DIR/.env.local" \
-    "$FRONTEND_DIR/.env.development" \
-    "$FRONTEND_DIR/.env"
-  do
-    if [ -f "$file" ]; then
-      value=$(grep "^VITE_API_URL=" "$file" 2>/dev/null | tail -n 1 | cut -d'=' -f2)
-      if [ -n "$value" ]; then
-        printf '%s\n' "$value"
-        return 0
-      fi
-
-      value=$(grep "^VITE_API_BASE_URL=" "$file" 2>/dev/null | tail -n 1 | cut -d'=' -f2)
-      if [ -n "$value" ]; then
-        printf '%s\n' "$value"
-        return 0
-      fi
-    fi
-  done
-
-  printf '%s\n' "http://127.0.0.1:8000"
-}
-
-read_frontend_port() {
-  if [ -n "${FRONTEND_PORT:-}" ]; then
-    printf '%s\n' "$FRONTEND_PORT"
-    return 0
-  fi
-
-  port=$(grep "port:[[:space:]]*[0-9]" "$FRONTEND_DIR/vite.config.ts" 2>/dev/null | sed -E 's/.*port:[[:space:]]*([0-9]+).*/\1/' | head -n 1)
-  if [ -n "$port" ]; then
-    printf '%s\n' "$port"
-    return 0
-  fi
-
-  printf '%s\n' "5173"
-}
-
-read_candidate_portal_port() {
-  if [ -n "${CANDIDATE_PORTAL_PORT:-}" ]; then
-    printf '%s\n' "$CANDIDATE_PORTAL_PORT"
-    return 0
-  fi
-
-  port=$(grep "port:[[:space:]]*[0-9]" "$CANDIDATE_PORTAL_DIR/vite.config.ts" 2>/dev/null | sed -E 's/.*port:[[:space:]]*([0-9]+).*/\1/' | head -n 1)
-  if [ -n "$port" ]; then
-    printf '%s\n' "$port"
-    return 0
-  fi
-
-  printf '%s\n' "5174"
-}
-
-extract_port() {
-  url=$1
-  port=$(printf '%s\n' "$url" | sed -E 's#^[a-zA-Z]+://[^/:]+:([0-9]+).*$#\1#')
-  [ "$port" != "$url" ] && printf '%s\n' "$port" || printf '%s\n' "8000"
-}
-
 port_is_free() {
-  port=$1
-
+  local port=$1
   if command -v lsof >/dev/null 2>&1; then
     [ -z "$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)" ]
     return $?
   fi
-
-  if [ "$(uname)" != "Darwin" ] && command -v fuser >/dev/null 2>&1; then
-    ! fuser "$port/tcp" >/dev/null 2>&1
-    return $?
-  fi
-
   return 0
 }
 
 print_port_owner() {
-  port=$1
-
+  local port=$1
   if command -v lsof >/dev/null 2>&1; then
     lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
-  elif [ "$(uname)" != "Darwin" ] && command -v fuser >/dev/null 2>&1; then
-    fuser -v "$port/tcp" 2>/dev/null || true
   else
-    printf 'Instale lsof ou fuser para diagnosticar a porta %s.\n' "$port"
+    printf 'Instale lsof para diagnosticar a porta %s.\n' "$port"
   fi
 }
 
 require_port_free() {
-  port=$1
-  label=$2
+  local port=$1
+  local label=$2
 
   if ! port_is_free "$port"; then
     print_error "$label precisa da porta $port, mas ela ja esta em uso."
     print_port_owner "$port" >&2
-    print_error "Pare esse processo explicitamente ou use: npm run dev:ports"
+    print_error "Pare esse processo explicitamente ou use portas alternativas por BACKEND_PORT/FRONTEND_PORT/CANDIDATE_PORTAL_PORT."
     exit 1
   fi
 }
 
-wait_for_port_listening() {
-  port=$1
-  timeout=${2:-30}
-  elapsed=0
+wait_for_http() {
+  local url=$1
+  local label=$2
+  local timeout=${3:-30}
+  local elapsed=0
 
+  print_info "Verificando $label em $url..."
   while [ "$elapsed" -lt "$timeout" ]; do
-    if ! port_is_free "$port"; then
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      print_ok "$label acessivel: $url"
       return 0
     fi
-
     sleep 1
     elapsed=$((elapsed + 1))
   done
 
-  print_error "Porta $port nao abriu dentro de ${timeout}s"
+  print_error "$label nao acessivel em $url."
+  print_error "Verifique host, porta, firewall ou CORS."
+  exit 1
+}
+
+wait_for_backend_health() {
+  local url=$1
+  local timeout=${2:-30}
+  local elapsed=0
+  local response=""
+
+  print_info "Verificando backend em $url..."
+  while [ "$elapsed" -lt "$timeout" ]; do
+    response=$(curl -fsS "$url" 2>/dev/null || true)
+    if [[ "$response" == *'"status":"ok"'* && "$response" == *'"connected":true'* ]]; then
+      print_ok "Backend saudavel: $url"
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  print_error "Backend nao acessivel na rede. Verifique host, porta, firewall ou CORS."
+  [ -n "$response" ] && print_error "Ultima resposta: $response"
   exit 1
 }
 
 check_redis() {
-  if command -v redis-cli >/dev/null 2>&1; then
-    if redis-cli ping >/dev/null 2>&1; then
-      print_ok "Redis disponivel"
-      return 0
-    fi
+  if [ "$INCLUDE_CELERY" != "true" ]; then
+    print_info "Redis/Celery omitidos por INCLUDE_CELERY=false"
+    return 0
   fi
+
+  if command -v redis-cli >/dev/null 2>&1 && redis-cli ping >/dev/null 2>&1; then
+    print_ok "Redis disponivel"
+    return 0
+  fi
+
   print_error "Redis nao esta rodando. Inicie com: redis-server --daemonize yes"
   exit 1
 }
 
-CHILD_PIDS=""
+json_origin_list() {
+  local json="["
+  local sep=""
+  local origin
+  for origin in "$@"; do
+    json="${json}${sep}\"${origin}\""
+    sep=","
+  done
+  json="${json}]"
+  printf '%s\n' "$json"
+}
+
+CHILD_PIDS=()
 CLEANUP_DONE=0
 
-# Mata o PID + descendentes recursivamente. Bottom-up: filhos primeiro,
-# depois o pai. Sinal configurável (TERM ou KILL).
 kill_tree() {
-  signal=$1
-  root=$2
+  local signal=$1
+  local root=$2
+  local descendants child
 
   if ! kill -0 "$root" 2>/dev/null; then
     return 0
@@ -287,58 +356,32 @@ kill_tree() {
       kill_tree "$signal" "$child"
     done
   fi
-  kill -"$signal" "$root" 2>/dev/null || true
+
+  kill "-$signal" "$root" 2>/dev/null || true
 }
 
 cleanup() {
-  # Idempotente: trap pode disparar várias vezes (EXIT depois de INT, etc.).
   if [ "$CLEANUP_DONE" -eq 1 ]; then
     return 0
   fi
   CLEANUP_DONE=1
-
   print_info "Encerrando servicos..."
-
-  # 1) SIGTERM nos filhos rastreados + descendentes (Celery prefork,
-  #    concurrently → vite/uvicorn). Targeting por PID é mais confiável que
-  #    pattern matching: cobre workers cujo cmdline não inclui "-A ...".
-  for pid in $CHILD_PIDS; do
+  local pid
+  for pid in "${CHILD_PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
       printf '[..] SIGTERM em PID %s e descendentes\n' "$pid"
       kill_tree TERM "$pid"
     fi
   done
-
-  # 2) Aguarda até 5s pelo encerramento gracioso.
-  elapsed=0
-  while [ "$elapsed" -lt 5 ]; do
-    still_alive=""
-    for pid in $CHILD_PIDS; do
-      if kill -0 "$pid" 2>/dev/null; then
-        still_alive="$still_alive $pid"
-      fi
-    done
-    if [ -z "$still_alive" ]; then
-      break
-    fi
-    sleep 1
-    elapsed=$((elapsed + 1))
-  done
-
-  # 3) SIGKILL fallback nos remanescentes (PIDs rastreados).
-  for pid in $CHILD_PIDS; do
+  sleep 2
+  for pid in "${CHILD_PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
       printf '[!!] SIGKILL fallback em PID %s\n' "$pid"
       kill_tree KILL "$pid"
     fi
   done
-
   print_ok "Shutdown concluido."
 }
-
-# ─────────────────────────────────────────
-# ENTRYPOINT
-# ─────────────────────────────────────────
 
 if [ ! -f "$BACKEND_DIR/.env" ]; then
   print_error "Arquivo $BACKEND_DIR/.env nao encontrado."
@@ -346,35 +389,53 @@ if [ ! -f "$BACKEND_DIR/.env" ]; then
   exit 1
 fi
 
-RAW_API_URL=$(read_frontend_api_url)
-BACKEND_PORT=$(extract_port "$RAW_API_URL")
-FRONTEND_PORT=$(read_frontend_port)
-CANDIDATE_PORTAL_PORT=$(read_candidate_portal_port)
-LOCAL_IP=$(get_local_ip)
+LAN_HOST=""
+if [ "$DEV_MODE" = "network" ]; then
+  print_info "Modo network ativado. Detectando IP da LAN..."
+  LAN_HOST=$(get_local_ip || true)
+  if [ -z "$LAN_HOST" ] || [ "$LAN_HOST" = "127.0.0.1" ] || [ "$LAN_HOST" = "localhost" ]; then
+    print_error "Nao foi possivel detectar um IP de rede valido."
+    print_error "Informe manualmente: DEV_PUBLIC_HOST=192.168.x.x npm run dev:full -- --network"
+    exit 1
+  fi
+  print_ok "IP da LAN: $LAN_HOST"
+fi
 
-EXPECTED_API_URL="http://localhost:$BACKEND_PORT"
+PUBLIC_HOST="127.0.0.1"
+if [ "$DEV_MODE" = "network" ]; then
+  PUBLIC_HOST="$LAN_HOST"
+fi
+
+BACKEND_LOCAL_URL="http://127.0.0.1:${BACKEND_PORT}"
+FRONTEND_LOCAL_URL="http://127.0.0.1:${FRONTEND_PORT}"
+PORTAL_LOCAL_URL="http://127.0.0.1:${CANDIDATE_PORTAL_PORT}"
+BACKEND_PUBLIC_URL="http://${PUBLIC_HOST}:${BACKEND_PORT}"
+FRONTEND_PUBLIC_URL="http://${PUBLIC_HOST}:${FRONTEND_PORT}"
+PORTAL_PUBLIC_URL="http://${PUBLIC_HOST}:${CANDIDATE_PORTAL_PORT}"
+API_V1_URL="${BACKEND_PUBLIC_URL}/api/v1"
 
 print_section "Ambiente"
-printf 'frontend local       : http://localhost:%s\n' "$FRONTEND_PORT"
-printf 'frontend rede        : http://%s:%s\n' "$LOCAL_IP" "$FRONTEND_PORT"
-printf 'candidate portal local : http://localhost:%s\n' "$CANDIDATE_PORTAL_PORT"
-printf 'candidate portal rede  : http://%s:%s\n' "$LOCAL_IP" "$CANDIDATE_PORTAL_PORT"
-printf 'backend local        : http://127.0.0.1:%s\n' "$BACKEND_PORT"
-printf 'backend rede         : http://%s:%s\n' "$LOCAL_IP" "$BACKEND_PORT"
-printf 'api url              : %s\n' "$EXPECTED_API_URL"
+printf 'Modo             : %s\n' "$DEV_MODE"
+printf 'Bind host        : %s\n' "$BIND_HOST"
+printf 'Backend local    : %s\n' "$BACKEND_LOCAL_URL"
+printf 'Frontend local   : %s\n' "$FRONTEND_LOCAL_URL"
+printf 'Portal local     : %s\n' "$PORTAL_LOCAL_URL"
+if [ "$DEV_MODE" = "network" ]; then
+  printf 'Backend network  : %s\n' "$BACKEND_PUBLIC_URL"
+  printf 'Frontend network : %s\n' "$FRONTEND_PUBLIC_URL"
+  printf 'Portal network   : %s\n' "$PORTAL_PUBLIC_URL"
+fi
+printf 'VITE_API_URL     : %s\n' "$API_V1_URL"
+printf 'Uso              : LAN/dev apenas; nao exponha estas portas na internet.\n'
 
 print_section "Dependencias"
-(
-  ensure_root_dependencies &
-  ensure_frontend_dependencies &
-  ensure_candidate_portal_dependencies &
-  wait
-)
-
+ensure_root_dependencies
+ensure_frontend_dependencies
+ensure_candidate_portal_dependencies
 ensure_backend_dependencies
 
 if [ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ]; then
-  print_error "uvicorn nao encontrado em $BACKEND_DIR/.venv/bin/uvicorn mesmo apos instalar dependencias."
+  print_error "uvicorn nao encontrado em $BACKEND_DIR/.venv/bin/uvicorn."
   exit 1
 fi
 
@@ -384,82 +445,121 @@ check_redis
 print_section "Portas"
 require_port_free "$BACKEND_PORT" "Backend"
 require_port_free "$FRONTEND_PORT" "Frontend staff/admin"
-require_port_free "$CANDIDATE_PORTAL_PORT" "Candidate portal"
-print_ok "Portas 8000/5173/5174 verificadas sem encerrar processos existentes"
+if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
+  require_port_free "$CANDIDATE_PORTAL_PORT" "Candidate portal"
+fi
+print_ok "Portas necessarias estao livres."
 
-export FRONTEND_PORT
+ORIGINS=(
+  "http://localhost:${FRONTEND_PORT}"
+  "http://127.0.0.1:${FRONTEND_PORT}"
+  "http://localhost:${CANDIDATE_PORTAL_PORT}"
+  "http://127.0.0.1:${CANDIDATE_PORTAL_PORT}"
+)
+if [ "$DEV_MODE" = "network" ]; then
+  ORIGINS+=(
+    "http://${LAN_HOST}:${FRONTEND_PORT}"
+    "http://${LAN_HOST}:${CANDIDATE_PORTAL_PORT}"
+  )
+fi
+
 export BACKEND_PORT
+export FRONTEND_PORT
 export CANDIDATE_PORTAL_PORT
-export HOST="0.0.0.0"
-export VITE_API_BASE_URL="${VITE_API_BASE_URL:-$EXPECTED_API_URL}"
-export VITE_API_URL="${VITE_API_URL:-$EXPECTED_API_URL/api/v1}"
-export VITE_PUBLIC_API_BASE_URL="${VITE_PUBLIC_API_BASE_URL:-$EXPECTED_API_URL/api/v1/public}"
-DEV_FULL_FAIL_ON_WORKER_EXIT="${DEV_FULL_FAIL_ON_WORKER_EXIT:-false}"
-export DEV_FULL_FAIL_ON_WORKER_EXIT
+export BACKEND_HOST="$BIND_HOST"
+export VITE_API_URL="$API_V1_URL"
+export VITE_API_BASE_URL="$BACKEND_PUBLIC_URL"
+export VITE_PUBLIC_API_BASE_URL="${API_V1_URL}/public"
+export VITE_CANDIDATE_PORTAL_URL="$PORTAL_PUBLIC_URL"
+export CORS_ORIGINS
+CORS_ORIGINS=$(json_origin_list "${ORIGINS[@]}")
 
-# EXIT garante limpeza em qualquer saída (inclusive set -e ou wait
-# retornando porque algum filho morreu). HUP cobre o caso do terminal
-# fechar sem propagar TERM via concurrently.
+print_section "Config dinamica"
+printf 'CORS_ORIGINS     : %s\n' "$CORS_ORIGINS"
+printf 'VITE_API_BASE_URL: %s\n' "$VITE_API_BASE_URL"
+printf 'VITE_PUBLIC_API_BASE_URL: %s\n' "$VITE_PUBLIC_API_BASE_URL"
+
 trap cleanup EXIT INT TERM HUP
 
 print_section "Servicos"
-print_info "Subindo frontend, candidate-portal, backend e worker Celery"
-if [ "$DEV_FULL_FAIL_ON_WORKER_EXIT" = "true" ]; then
-  print_info "Worker Celery esta configurado como CRITICO (falha no worker derruba o ambiente)."
-else
-  print_info "Worker Celery esta configurado como AUXILIAR (falha no worker NAO derruba o ambiente)."
-fi
-
-cd "$BACKEND_DIR"
-.venv/bin/celery -A src.infrastructure.queue.celery_app worker \
-  --queues=analysis,matching,document_ai,extraction,behavioral_ai \
-  --loglevel=warning \
-  --concurrency=2 &
-CELERY_PID=$!
-CHILD_PIDS="$CHILD_PIDS $CELERY_PID"
-print_ok "Worker Celery iniciado (PID $CELERY_PID)"
-
-cd "$ROOT_DIR"
-npm run --silent dev:backend &
+print_info "Subindo backend FastAPI..."
+(
+  cd "$BACKEND_DIR"
+  .venv/bin/uvicorn src.interface.api.main:app \
+    --reload \
+    --reload-dir src \
+    --reload-dir scripts \
+    --reload-exclude ".venv/*" \
+    --reload-exclude "tests/*" \
+    --host "$BIND_HOST" \
+    --port "$BACKEND_PORT" \
+    --no-access-log \
+    --log-level warning
+) &
 BACKEND_PID=$!
-CHILD_PIDS="$CHILD_PIDS $BACKEND_PID"
+CHILD_PIDS+=("$BACKEND_PID")
 print_ok "Backend iniciado (PID $BACKEND_PID)"
 
-npm run --silent dev:staff &
+print_info "Subindo frontend staff/admin..."
+(
+  cd "$FRONTEND_DIR"
+  npm run --silent dev -- --host "$BIND_HOST" --port "$FRONTEND_PORT" --strictPort
+) &
 STAFF_PID=$!
-CHILD_PIDS="$CHILD_PIDS $STAFF_PID"
+CHILD_PIDS+=("$STAFF_PID")
 print_ok "Frontend staff iniciado (PID $STAFF_PID)"
 
-cd "$ROOT_DIR"
-npm run --silent dev:candidate &
-CANDIDATE_PORTAL_PID=$!
-CHILD_PIDS="$CHILD_PIDS $CANDIDATE_PORTAL_PID"
-print_ok "Candidate portal iniciado (PID $CANDIDATE_PORTAL_PID)"
+if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
+  print_info "Subindo candidate-portal..."
+  (
+    cd "$CANDIDATE_PORTAL_DIR"
+    npm run --silent dev -- --host "$BIND_HOST" --port "$CANDIDATE_PORTAL_PORT" --strictPort
+  ) &
+  CANDIDATE_PORTAL_PID=$!
+  CHILD_PIDS+=("$CANDIDATE_PORTAL_PID")
+  print_ok "Candidate portal iniciado (PID $CANDIDATE_PORTAL_PID)"
+else
+  print_info "Candidate portal nao incluido."
+fi
 
-wait_for_port_listening "$BACKEND_PORT" 30
-wait_for_port_listening "$FRONTEND_PORT" 30
-wait_for_port_listening "$CANDIDATE_PORTAL_PORT" 30
-print_ok "Servicos respondendo nas portas configuradas"
+if [ "$INCLUDE_CELERY" = "true" ]; then
+  print_info "Subindo worker Celery..."
+  (
+    cd "$BACKEND_DIR"
+    .venv/bin/celery -A src.infrastructure.queue.celery_app worker \
+      --queues=analysis,matching,document_ai,extraction,behavioral_ai \
+      --loglevel=warning \
+      --concurrency=2
+  ) &
+  CELERY_PID=$!
+  CHILD_PIDS+=("$CELERY_PID")
+  print_ok "Worker Celery iniciado (PID $CELERY_PID)"
+fi
 
-# Loop de monitoramento: frontend/backend são críticos; Celery é auxiliar por
-# padrão para que falhas operacionais da fila de IA não derrubem o dev-full.
+print_section "Verificacao"
+wait_for_backend_health "${BACKEND_PUBLIC_URL}/health" 45
+wait_for_http "$FRONTEND_PUBLIC_URL" "Frontend staff/admin" 45
+if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
+  wait_for_http "$PORTAL_PUBLIC_URL" "Candidate portal" 45
+fi
+
+print_section "Pronto"
+printf 'Backend          : %s\n' "$BACKEND_LOCAL_URL"
+printf 'Frontend         : %s\n' "$FRONTEND_LOCAL_URL"
+printf 'Candidate Portal : %s\n' "$PORTAL_LOCAL_URL"
+if [ "$DEV_MODE" = "network" ]; then
+  printf 'Backend network  : %s\n' "$BACKEND_PUBLIC_URL"
+  printf 'Frontend network : %s\n' "$FRONTEND_PUBLIC_URL"
+  printf 'Portal network   : %s\n' "$PORTAL_PUBLIC_URL"
+fi
+printf 'API dos frontends: %s\n' "$API_V1_URL"
+
 while true; do
-  for pid in $CHILD_PIDS; do
+  for pid in "${CHILD_PIDS[@]}"; do
     if ! kill -0 "$pid" 2>/dev/null; then
-      if [ "$pid" = "$CELERY_PID" ] && [ "$DEV_FULL_FAIL_ON_WORKER_EXIT" != "true" ]; then
-        print_error "Worker Celery PID $pid encerrou; frontend/backend continuam ativos."
-        new_child_pids=""
-        for other_pid in $CHILD_PIDS; do
-          if [ "$other_pid" != "$pid" ]; then
-            new_child_pids="$new_child_pids $other_pid"
-          fi
-        done
-        CHILD_PIDS="$new_child_pids"
-        continue
-      fi
-      print_error "Filho PID $pid encerrou prematuramente; iniciando shutdown."
+      print_error "Processo filho PID $pid encerrou inesperadamente. Encerrando o ambiente..."
       exit 1
     fi
   done
-  sleep 1
+  sleep 5
 done

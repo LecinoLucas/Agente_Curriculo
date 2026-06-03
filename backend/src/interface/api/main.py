@@ -53,6 +53,7 @@ from src.interface.api.routers import (
     collaboration,
     communications,
     conversations,
+    conversation_upload,
     dashboard,
     decision_summary,
     document_ai,
@@ -137,6 +138,7 @@ app.include_router(candidaturas.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(communications.router, prefix=_PREFIX)
 app.include_router(conversations.router, prefix=_PREFIX)
+app.include_router(conversation_upload.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)
 app.include_router(analyses.router, prefix=_PREFIX)
 app.include_router(applications.router, prefix=_PREFIX)
