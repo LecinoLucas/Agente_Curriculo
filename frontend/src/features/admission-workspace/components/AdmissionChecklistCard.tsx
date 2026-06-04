@@ -25,7 +25,7 @@ type AdmissionChecklistCardProps = {
 function ChecklistStatusDot({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
     approved: "bg-[hsl(var(--success))]",
-    received: "bg-[hsl(var(--success))]",
+    received: "bg-[hsl(var(--warning))]",
     rejected: "bg-[hsl(var(--danger))]",
     not_required: "bg-[hsl(var(--text-muted))]",
     pending: "bg-[hsl(var(--warning))]",

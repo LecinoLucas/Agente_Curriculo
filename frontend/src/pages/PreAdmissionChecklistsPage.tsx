@@ -5,10 +5,12 @@ import {
   ArrowUp,
   Copy,
   FilePlus2,
+  LayoutTemplate,
   Loader2,
   Plus,
   Save,
   ShieldCheck,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 
@@ -48,11 +50,151 @@ const EMPTY_DOCUMENT_DRAFT: DocumentDraft = {
   max_file_size_mb: 10,
 };
 
+// ─── Template kits (modelos prontos) ────────────────────────────────────────
+
+type TemplateKitDocument = {
+  document_key: string;
+  title: string;
+  candidate_description: string;
+  is_required: boolean;
+};
+
+type TemplateKit = {
+  id: string;
+  name: string;
+  description: string;
+  admission_type: string;
+  documents: TemplateKitDocument[];
+};
+
+const TEMPLATE_KITS: TemplateKit[] = [
+  {
+    id: "clt",
+    name: "CLT — Padrão",
+    description: "Documentos essenciais para contratação CLT formal",
+    admission_type: "CLT",
+    documents: [
+      { document_key: "rg", title: "RG (Registro Geral)", candidate_description: "Envie frente e verso do RG em imagem clara e sem cortes.", is_required: true },
+      { document_key: "cpf", title: "CPF", candidate_description: "Foto ou digitalização do CPF.", is_required: true },
+      { document_key: "ctps", title: "Carteira de Trabalho (CTPS)", candidate_description: "Envie as páginas de identificação e contratos anteriores.", is_required: true },
+      { document_key: "foto_3x4", title: "Foto 3×4 recente", candidate_description: "Foto recente em fundo branco, tamanho 3×4.", is_required: true },
+      { document_key: "titulo_eleitor", title: "Título de Eleitor", candidate_description: "Frente e verso do título de eleitor.", is_required: true },
+      { document_key: "certidao_estado_civil", title: "Certidão de nascimento ou casamento", candidate_description: "Certidão de nascimento (solteiro) ou certidão de casamento.", is_required: true },
+      { document_key: "comprovante_residencia", title: "Comprovante de residência", candidate_description: "Conta de água, luz ou gás dos últimos 90 dias.", is_required: true },
+      { document_key: "pis_pasep", title: "PIS / NIS / PASEP", candidate_description: "Número do PIS, NIS ou PASEP.", is_required: true },
+      { document_key: "dados_bancarios", title: "Dados bancários", candidate_description: "Banco, agência e conta corrente para depósito do salário.", is_required: true },
+      { document_key: "escolaridade", title: "Certificado de escolaridade", candidate_description: "Diploma ou certificado do maior nível de escolaridade concluído.", is_required: false },
+      { document_key: "aso", title: "Atestado de Saúde Ocupacional (ASO)", candidate_description: "ASO admissional emitido pelo médico do trabalho.", is_required: true },
+    ],
+  },
+  {
+    id: "estagio",
+    name: "Estágio",
+    description: "Documentos para formalização de contrato de estágio supervisionado",
+    admission_type: "Estágio",
+    documents: [
+      { document_key: "rg", title: "RG (Registro Geral)", candidate_description: "Frente e verso do RG.", is_required: true },
+      { document_key: "cpf", title: "CPF", candidate_description: "Foto ou digitalização do CPF.", is_required: true },
+      { document_key: "comprovante_matricula", title: "Comprovante de matrícula", candidate_description: "Comprovante emitido pela instituição de ensino (máx. 90 dias).", is_required: true },
+      { document_key: "foto_3x4", title: "Foto 3×4 recente", candidate_description: "Foto recente em fundo branco.", is_required: true },
+      { document_key: "certidao_estado_civil", title: "Certidão de nascimento ou casamento", candidate_description: "Certidão de nascimento (solteiro) ou certidão de casamento.", is_required: true },
+      { document_key: "comprovante_residencia", title: "Comprovante de residência", candidate_description: "Conta de água, luz ou gás dos últimos 90 dias.", is_required: true },
+      { document_key: "dados_bancarios", title: "Dados bancários", candidate_description: "Banco, agência e conta corrente para crédito da bolsa-auxílio.", is_required: true },
+      { document_key: "aso", title: "Atestado de Saúde Ocupacional (ASO)", candidate_description: "ASO admissional emitido pelo médico do trabalho.", is_required: true },
+    ],
+  },
+  {
+    id: "aprendiz",
+    name: "Jovem Aprendiz",
+    description: "Documentos para contratação de menor aprendiz (Lei 10.097/2000)",
+    admission_type: "Aprendiz",
+    documents: [
+      { document_key: "rg", title: "RG (Registro Geral)", candidate_description: "Frente e verso do RG.", is_required: true },
+      { document_key: "cpf", title: "CPF", candidate_description: "Foto ou digitalização do CPF.", is_required: true },
+      { document_key: "certidao_nascimento", title: "Certidão de nascimento", candidate_description: "Certidão de nascimento (original ou cópia autenticada).", is_required: true },
+      { document_key: "comprovante_matricula", title: "Comprovante de matrícula", candidate_description: "Comprovante de matrícula em escola ou curso profissionalizante.", is_required: true },
+      { document_key: "foto_3x4", title: "Foto 3×4 recente", candidate_description: "Foto recente em fundo branco.", is_required: true },
+      { document_key: "comprovante_residencia", title: "Comprovante de residência", candidate_description: "Conta de água, luz ou gás dos últimos 90 dias.", is_required: true },
+      { document_key: "dados_bancarios", title: "Dados bancários", candidate_description: "Banco, agência e conta corrente para crédito.", is_required: true },
+      { document_key: "autorizacao_responsavel", title: "Autorização do responsável legal", candidate_description: "Declaração assinada pelo responsável (obrigatório para menores de 18 anos).", is_required: true },
+      { document_key: "aso", title: "Atestado de Saúde Ocupacional (ASO)", candidate_description: "ASO admissional emitido pelo médico do trabalho.", is_required: true },
+    ],
+  },
+];
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function TemplateKitCard({
+  kit,
+  installingId,
+  disabled,
+  onInstall,
+}: {
+  kit: TemplateKit;
+  installingId: string | null;
+  disabled: boolean;
+  onInstall: (kit: TemplateKit) => void;
+}) {
+  const isInstalling = installingId === kit.id;
+  const visibleDocs = kit.documents.slice(0, 5);
+  const remainingCount = kit.documents.length - visibleDocs.length;
+
+  return (
+    <article
+      className="flex flex-col rounded-[28px] border border-border bg-white p-5 shadow-sm"
+      data-testid={`kit-card-${kit.id}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold text-text">{kit.name}</p>
+          <p className="mt-1 text-sm text-text-muted">{kit.description}</p>
+        </div>
+        <Badge variant="outline" className="shrink-0">{kit.admission_type}</Badge>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {visibleDocs.map((doc) => (
+          <span
+            key={doc.document_key}
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+              doc.is_required
+                ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border border-border bg-surface-muted/50 text-text-muted"
+            }`}
+          >
+            {doc.title}
+          </span>
+        ))}
+        {remainingCount > 0 ? (
+          <span className="inline-flex items-center rounded-full border border-border bg-surface-muted/50 px-2.5 py-1 text-xs text-text-muted">
+            +{remainingCount} mais
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          disabled={disabled || installingId !== null}
+          onClick={() => onInstall(kit)}
+          data-testid={`install-kit-${kit.id}`}
+        >
+          {isInstalling ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="mr-2 h-4 w-4" />
+          )}
+          {isInstalling ? "Criando..." : "Usar este modelo"}
+        </Button>
+      </div>
+    </article>
+  );
 }
 
 function TemplateItemEditor({
@@ -241,6 +383,8 @@ export function PreAdmissionChecklistsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [documentDraft, setDocumentDraft] = useState<DocumentDraft>(EMPTY_DOCUMENT_DRAFT);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [showKitsGallery, setShowKitsGallery] = useState(false);
+  const [installingKitId, setInstallingKitId] = useState<string | null>(null);
 
   const selectedTemplateSummary = useMemo(
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
@@ -469,6 +613,36 @@ export function PreAdmissionChecklistsPage() {
     }
   }
 
+  async function handleInstallKit(kit: TemplateKit) {
+    try {
+      setInstallingKitId(kit.id);
+      const created = await preAdmissionChecklistTemplatesService.createTemplate({
+        name: kit.name,
+        description: kit.description,
+        admission_type: kit.admission_type,
+        is_active: true,
+        is_default: templates.length === 0,
+      });
+      for (const doc of kit.documents) {
+        await preAdmissionChecklistTemplatesService.createItem(created.id, {
+          document_key: doc.document_key,
+          title: doc.title,
+          candidate_description: doc.candidate_description,
+          is_required: doc.is_required,
+          accepted_file_types: ["application/pdf", "image/jpeg", "image/png"],
+          max_file_size_mb: 10,
+        });
+      }
+      toast.success(`Checklist "${kit.name}" criado com ${kit.documents.length} documentos.`);
+      setShowKitsGallery(false);
+      await loadTemplates(created.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao criar checklist a partir do modelo.");
+    } finally {
+      setInstallingKitId(null);
+    }
+  }
+
   if (loading && templates.length === 0) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-sm text-text-muted">
@@ -490,12 +664,58 @@ export function PreAdmissionChecklistsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowKitsGallery((prev) => !prev)}
+            data-testid="show-kits-gallery-btn"
+          >
+            <LayoutTemplate className="mr-2 h-4 w-4" />
+            Modelos prontos
+          </Button>
           <Button type="button" onClick={() => setShowCreateForm((current) => !current)}>
             <Plus className="mr-2 h-4 w-4" />
             Novo checklist
           </Button>
         </div>
       </header>
+
+      {(showKitsGallery || (templates.length === 0 && !loading)) ? (
+        <section
+          className="rounded-[28px] border border-border bg-[linear-gradient(135deg,rgba(4,120,87,0.04),rgba(15,23,42,0.02))] p-5"
+          data-testid="template-kits-gallery"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Modelos prontos</p>
+              <h3 className="mt-1 text-base font-semibold text-text">Começar a partir de um modelo</h3>
+              <p className="mt-1 text-sm text-text-muted">
+                Clique em "Usar este modelo" para criar um checklist completo com os documentos mais comuns para cada tipo de contratação.
+              </p>
+            </div>
+            {templates.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowKitsGallery(false)}
+                className="shrink-0 text-sm text-text-muted hover:text-text"
+              >
+                Fechar
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            {TEMPLATE_KITS.map((kit) => (
+              <TemplateKitCard
+                key={kit.id}
+                kit={kit}
+                installingId={installingKitId}
+                disabled={saving}
+                onInstall={(k) => void handleInstallKit(k)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {showCreateForm ? (
         <section className="rounded-[28px] border border-border bg-white p-5 shadow-sm" data-testid="checklist-create-form">

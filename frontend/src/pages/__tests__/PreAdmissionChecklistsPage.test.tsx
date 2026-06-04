@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within, act } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "../../app/ProtectedRoute";
@@ -221,6 +221,81 @@ describe("PreAdmissionChecklistsPage", () => {
 
     expect(await screen.findByText(/o nome do checklist é obrigatório/i)).toBeInTheDocument();
     expect(createTemplateMock).not.toHaveBeenCalled();
+  });
+
+  it("mostra galeria de modelos prontos quando não há checklists", async () => {
+    listTemplatesMock.mockResolvedValue([]);
+
+    renderPage();
+
+    expect(await screen.findByTestId("template-kits-gallery")).toBeInTheDocument();
+    expect(screen.getByTestId("kit-card-clt")).toBeInTheDocument();
+    expect(screen.getByTestId("kit-card-estagio")).toBeInTheDocument();
+    expect(screen.getByTestId("kit-card-aprendiz")).toBeInTheDocument();
+    expect(screen.getByText("CLT — Padrão")).toBeInTheDocument();
+  });
+
+  it("botão Modelos prontos abre e fecha a galeria de kits", async () => {
+    renderPage();
+
+    await screen.findByText("Checklist CLT");
+    expect(screen.queryByTestId("template-kits-gallery")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("show-kits-gallery-btn"));
+    expect(await screen.findByTestId("template-kits-gallery")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /fechar/i }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("template-kits-gallery")).not.toBeInTheDocument();
+    });
+  });
+
+  it("instalar modelo cria o checklist e todos os seus itens", async () => {
+    listTemplatesMock.mockResolvedValue([]);
+    createTemplateMock.mockResolvedValue({
+      ...baseTemplate,
+      id: "template-clt",
+      name: "CLT — Padrão",
+      admission_type: "CLT",
+      is_default: true,
+    });
+    createItemMock.mockResolvedValue({
+      id: "item-new",
+      template_id: "template-clt",
+      document_key: "rg",
+      title: "RG (Registro Geral)",
+      candidate_description: "",
+      is_required: true,
+      accepted_file_types: ["application/pdf"],
+      max_file_size_mb: 10,
+      display_order: 0,
+      is_active: true,
+      created_at: "2026-05-26T10:00:00Z",
+      updated_at: "2026-05-26T10:10:00Z",
+    });
+    listTemplatesMock.mockResolvedValueOnce([]).mockResolvedValue([{
+      ...baseTemplate,
+      id: "template-clt",
+      name: "CLT — Padrão",
+    }]);
+
+    renderPage();
+
+    const installBtn = await screen.findByTestId("install-kit-clt");
+    await act(async () => {
+      fireEvent.click(installBtn);
+    });
+
+    await waitFor(() => {
+      expect(createTemplateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "CLT — Padrão", admission_type: "CLT", is_default: true }),
+      );
+    });
+
+    // All 11 CLT documents created
+    await waitFor(() => {
+      expect(createItemMock).toHaveBeenCalledTimes(11);
+    });
   });
 
   it("não mostra a tela para perfil candidato", async () => {

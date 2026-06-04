@@ -28,6 +28,7 @@ export function AdmissionCasePage() {
     <AdmissionCaseWorkspacePanel
       caseId={caseId}
       integrationHref={integrationHref}
+      openPageHref="/admitidos"
     />
   );
 }

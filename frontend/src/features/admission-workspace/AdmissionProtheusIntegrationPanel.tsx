@@ -8,7 +8,7 @@ import {
   Send,
   ShieldAlert,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { EmptyState } from "@/components/common/EmptyState";
@@ -167,6 +167,12 @@ export function AdmissionProtheusIntegrationPanel({
   const readyForExport = Boolean(workspace?.summary.ready_for_export);
   const workspaceHref = useMemo(() => `/admission/cases/${caseId}`, [caseId]);
 
+  // Always-current workspace ref — used inside effects/callbacks to avoid stale closures
+  // without creating new callback refs on every workspace update.
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
+  const prevReadyForExportRef = useRef<boolean | null>(null);
+
   const loadWorkspace = useCallback(async () => {
     if (providedWorkspace) return providedWorkspace;
 
@@ -232,13 +238,27 @@ export function AdmissionProtheusIntegrationPanel({
   );
 
   const reload = useCallback(async () => {
-    const currentWorkspace = providedWorkspace ?? (await loadWorkspace());
+    const currentWorkspace = workspaceRef.current ?? (await loadWorkspace());
     await loadPackageState(currentWorkspace);
-  }, [loadPackageState, loadWorkspace, providedWorkspace]);
+  }, [loadPackageState, loadWorkspace]);
 
+  // Full-mode only: load workspace once on mount (no-op when workspace is provided by parent).
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (!providedWorkspace) {
+      void loadWorkspace();
+    }
+    // caseId is stable while mounted; providedWorkspace is null in full mode and won't change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load package state only when ready_for_export transitions (false→true or null→value).
+  // Using prevRef avoids redundant getPackageByCaseId+listErpAttempts calls every time
+  // the parent workspace is rebuilt after a document action.
+  useEffect(() => {
+    if (prevReadyForExportRef.current === readyForExport) return;
+    prevReadyForExportRef.current = readyForExport;
+    void loadPackageState(workspaceRef.current);
+  }, [readyForExport, loadPackageState]);
 
   const latestAttempt = useMemo(() => getLatestExportAttempt(attempts), [attempts]);
   const latestErrorSummary = latestAttempt?.error_summary;

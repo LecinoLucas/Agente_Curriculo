@@ -287,6 +287,7 @@ function renderPage(caseId = "case-42") {
           path="/admission/cases/:caseId/integration"
           element={<div>Página de integração Protheus</div>}
         />
+        <Route path="/admitidos" element={<div>Lista de admitidos</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -426,9 +427,9 @@ describe("AdmissionCasePage", () => {
     expect(await screen.findByText("Pendências principais")).toBeInTheDocument();
   });
 
-  it("renderiza 'Resumo do caso'", async () => {
+  it("renderiza 'Informações do caso'", async () => {
     renderPage();
-    expect(await screen.findByText("Resumo do caso")).toBeInTheDocument();
+    expect(await screen.findByText("Informações do caso")).toBeInTheDocument();
   });
 
   it("renderiza 'Documentos enviados'", async () => {
@@ -477,16 +478,17 @@ describe("AdmissionCasePage", () => {
     expect(elements.length).toBeGreaterThan(0);
   });
 
-  it("renderiza título 'Admissão de {nome}'", async () => {
+  it("renderiza nome do candidato como título principal", async () => {
     renderPage();
-    expect(await screen.findByText("Admissão de Larissa Oliveira")).toBeInTheDocument();
+    // h1 now shows candidate.name directly (redesign)
+    const heading = await screen.findByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent("Larissa Oliveira");
   });
 
-  it("renderiza subtítulo correto", async () => {
+  it("renderiza seção de próxima ação no header", async () => {
     renderPage();
-    expect(
-      await screen.findByText("Checklist documental e preparação para integração"),
-    ).toBeInTheDocument();
+    // The command strip shows "Próxima ação:" when next_actions exist
+    expect(await screen.findByText("Próxima ação:")).toBeInTheDocument();
   });
 
   it("clique em 'Abrir integração Protheus' (habilitado) navega para /integration", async () => {
@@ -678,7 +680,8 @@ describe("AdmissionCasePage", () => {
     );
     renderPage();
 
-    expect(await screen.findByText("Admissão de Larissa Oliveira")).toBeInTheDocument();
+    // Header still shows candidate name even when documents fail to load
+    expect(await screen.findByText("Larissa Oliveira")).toBeInTheDocument();
     expect(await screen.findByText("Documentos enviados")).toBeInTheDocument();
     expect(
       await screen.findAllByText(/Não foi possível carregar documentos e checklist\./i),
@@ -694,5 +697,276 @@ describe("AdmissionCasePage", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Caso admissional não informado")).toBeInTheDocument();
+  });
+
+  // ── C-01: botão de voltar ────────────────────────────────────────────────────
+
+  it("C-01: exibe link de voltar apontando para /admitidos", async () => {
+    renderPage();
+    const backLink = await screen.findByRole("link", { name: "Voltar" });
+    expect(backLink).toBeInTheDocument();
+    expect(backLink).toHaveAttribute("href", "/admitidos");
+  });
+
+  it("C-01: clicar no botão de voltar navega para /admitidos", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const backLink = await screen.findByRole("link", { name: "Voltar" });
+    await user.click(backLink);
+    await screen.findByText("Lista de admitidos");
+  });
+
+  // ── C-02: dot de status do checklist ────────────────────────────────────────
+
+  it("C-02: item 'received' não usa a mesma classe CSS de 'approved'", async () => {
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      checklist: {
+        ...mockWorkspace.checklist,
+        items: [
+          {
+            id: "item-approved",
+            title: "Documento aprovado",
+            status: "approved",
+            required: true,
+            position: 1,
+            updated_at: "2025-05-23T14:02:00Z",
+            updated_by_name: "Ana Paula",
+            document_id: "doc-1",
+          },
+          {
+            id: "item-received",
+            title: "Documento recebido",
+            status: "received",
+            required: true,
+            position: 2,
+            updated_at: "2025-05-23T14:03:00Z",
+            updated_by_name: null,
+            document_id: "doc-2",
+          },
+        ],
+        total: 2,
+        approved: 1,
+        pending: 1,
+        blocked: 0,
+      },
+    });
+
+    renderPage();
+
+    // Wait for the checklist to load
+    await screen.findByText("Documento aprovado");
+
+    // Find dots by their rounded-full class inside the checklist section
+    const dots = document.querySelectorAll(
+      "#admission-checklist-section .rounded-full.h-2.w-2",
+    );
+
+    const approvedDot = Array.from(dots).find(
+      (el) => el.closest("[data-checklist-item-id='item-approved']") !== null ||
+               el.parentElement?.textContent?.includes("") // any dot in row with "Documento aprovado"
+    );
+
+    // The simplest assertion: the two dots have DIFFERENT classes.
+    // approved → --success; received → --warning (not --success)
+    expect(dots.length).toBeGreaterThanOrEqual(2);
+    const dotClasses = Array.from(dots).map((d) => d.className);
+    const hasSuccess = dotClasses.some((c) => c.includes("success"));
+    const hasWarning = dotClasses.some((c) => c.includes("warning"));
+    expect(hasSuccess).toBe(true);   // approved item has success dot
+    expect(hasWarning).toBe(true);   // received item has warning dot (not success)
+
+    // No dot should combine both — each dot is exactly one color
+    for (const cls of dotClasses) {
+      expect(cls).not.toMatch(/success.*warning|warning.*success/);
+    }
+  });
+
+  // ── PA-FIX-1A: layout reorganization ────────────────────────────────────────
+
+  it("PA-FIX-1A: 'Pendências principais' aparece antes do 'Checklist admissional' no DOM", async () => {
+    renderPage();
+
+    const blockers = await screen.findByText("Pendências principais");
+    const checklist = await screen.findByText("Checklist admissional");
+
+    // compareDocumentPosition: DOCUMENT_POSITION_FOLLOWING (4) means 'blockers' comes before 'checklist'
+    expect(
+      blockers.compareDocumentPosition(checklist) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("PA-FIX-1A: 'Próximas ações' aparece antes de 'Documentos enviados' no DOM", async () => {
+    renderPage();
+
+    const nextActions = await screen.findByText("Próximas ações");
+    const documents = await screen.findByText("Documentos enviados");
+
+    expect(
+      nextActions.compareDocumentPosition(documents) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("PA-FIX-1A: header não mostra bloco 'Vaga ativa' duplicado", async () => {
+    renderPage();
+
+    // Wait for candidate name to appear in the new operational header
+    await screen.findByText("Larissa Oliveira");
+
+    // "Vaga ativa" label must not be present
+    expect(screen.queryByText("Vaga ativa")).not.toBeInTheDocument();
+
+    // Job title appears only once (in the candidate block of the header)
+    const jobTitleElements = screen.getAllByText("Assistente Administrativo");
+    expect(jobTitleElements.length).toBe(1);
+  });
+
+  // ── PA-FIX-1B: confirmação "Marcar pronto" ───────────────────────────────────
+
+  it("PA-FIX-1B: clicar 'Marcar pronto' exibe confirmação inline em vez de disparar ação imediatamente", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("mark-ready-btn"));
+
+    // Confirmation dialog should appear
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByText("Confirmar liberação para exportação?")).toBeInTheDocument();
+    expect(screen.getByTestId("mark-ready-confirm-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("mark-ready-cancel-btn")).toBeInTheDocument();
+
+    // onMarkReady (backend call) must NOT have been called yet
+    expect(admissionWorkspaceService.markCaseReadyForExport).not.toHaveBeenCalled();
+  });
+
+  it("PA-FIX-1B: cancelar confirmação não chama backend e volta ao botão original", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("mark-ready-btn"));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("mark-ready-cancel-btn"));
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mark-ready-btn")).toBeInTheDocument();
+    expect(admissionWorkspaceService.markCaseReadyForExport).not.toHaveBeenCalled();
+  });
+
+  it("PA-FIX-1B: confirmar chama markCaseReadyForExport", async () => {
+    vi.mocked(admissionWorkspaceService.markCaseReadyForExport).mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("mark-ready-btn"));
+    await user.click(screen.getByTestId("mark-ready-confirm-btn"));
+
+    await waitFor(() => {
+      expect(admissionWorkspaceService.markCaseReadyForExport).toHaveBeenCalledWith("case-42");
+    });
+  });
+
+  it("PA-FIX-1B: caso já pronto não exibe botão clicável nem confirmação", async () => {
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      summary: { ...mockWorkspace.summary, ready_for_export: true },
+    });
+    renderPage();
+
+    // The button renders as disabled — clicking it must not open the confirmation
+    const btn = await screen.findByTestId("mark-ready-btn");
+    expect(btn).toBeDisabled();
+
+    // No alertdialog present
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  // ── PA-FIX-2: redução de reloads redundantes ─────────────────────────────────
+
+  it("PA-FIX-2: aprovar documento não chama getEvents", async () => {
+    const user = userEvent.setup();
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [{ ...mockWorkspace.documents[0], status: "uploaded", reviewed_at: null, reviewed_by_name: null, approved_at: null }],
+    });
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+
+    await waitFor(() => {
+      expect(approvePreAdmissionDocument).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      // overview and documents reload
+      expect(admissionWorkspaceService.getOverview).toHaveBeenCalled();
+      expect(admissionWorkspaceService.getDocuments).toHaveBeenCalled();
+    });
+
+    // Events must NOT reload after approve — only on full reloadSections or markReady
+    const overviewCallCount = vi.mocked(admissionWorkspaceService.getOverview).mock.calls.length;
+    const eventsCallCount = vi.mocked(admissionWorkspaceService.getEvents).mock.calls.length;
+    // getEvents was called on initial load (1 time), but must not be called again after approve
+    expect(eventsCallCount).toBe(1);
+    // getOverview fired at least 2 times (initial + post-approve reload)
+    expect(overviewCallCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("PA-FIX-2: rejeitar documento não chama getEvents", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-request-correction-doc-1"));
+    const dialog = await screen.findByRole("dialog", { name: /Solicitar correção/i });
+    await user.type(within(dialog).getByTestId("admission-public-reason"), "Documento ilegível.");
+    await user.click(within(dialog).getByRole("button", { name: "Solicitar correção" }));
+
+    await waitFor(() => {
+      expect(rejectPreAdmissionDocument).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(admissionWorkspaceService.getOverview).toHaveBeenCalled();
+      expect(admissionWorkspaceService.getDocuments).toHaveBeenCalled();
+    });
+
+    const eventsCallCount = vi.mocked(admissionWorkspaceService.getEvents).mock.calls.length;
+    expect(eventsCallCount).toBe(1);
+  });
+
+  it("PA-FIX-2: marcar pronto chama getEvents (mudança de estado do caso)", async () => {
+    vi.mocked(admissionWorkspaceService.markCaseReadyForExport).mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("mark-ready-btn"));
+    await user.click(screen.getByTestId("mark-ready-confirm-btn"));
+
+    await waitFor(() => {
+      expect(admissionWorkspaceService.markCaseReadyForExport).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("PA-FIX-2: botão 'Recarregar workspace' chama os três endpoints", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Checklist admissional");
+
+    const initialOverviewCalls = vi.mocked(admissionWorkspaceService.getOverview).mock.calls.length;
+    const initialDocsCalls = vi.mocked(admissionWorkspaceService.getDocuments).mock.calls.length;
+    const initialEventsCalls = vi.mocked(admissionWorkspaceService.getEvents).mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: /recarregar workspace/i }));
+
+    await waitFor(() => {
+      expect(admissionWorkspaceService.getOverview).toHaveBeenCalledTimes(initialOverviewCalls + 1);
+      expect(admissionWorkspaceService.getDocuments).toHaveBeenCalledTimes(initialDocsCalls + 1);
+      expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(initialEventsCalls + 1);
+    });
   });
 });

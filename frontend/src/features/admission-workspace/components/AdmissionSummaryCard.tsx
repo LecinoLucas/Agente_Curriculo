@@ -1,21 +1,15 @@
 import {
   CalendarDays,
-  CheckCircle2,
   Clock,
-  Loader2,
-  ShieldAlert,
   UserRound,
 } from "lucide-react";
 
 import type { AdmissionCaseWorkspace } from "../../../types/domain";
 import { AdmissionSectionCard } from "./AdmissionSectionCard";
-import { caseStatusLabel, formatDate, formatDateTime } from "../utils";
+import { formatDate, formatDateTime } from "../utils";
 
 type AdmissionSummaryCardProps = {
   workspace: AdmissionCaseWorkspace;
-  onMarkReady: () => void;
-  submitting: boolean;
-  actionMessage?: string | null;
 };
 
 type MiniCardProps = {
@@ -47,77 +41,31 @@ function MiniCard({ icon, label, value }: MiniCardProps) {
 
 export function AdmissionSummaryCard({
   workspace,
-  onMarkReady,
-  submitting,
-  actionMessage,
 }: AdmissionSummaryCardProps) {
-  const { summary, case: caseData } = workspace;
+  const { summary } = workspace;
 
   return (
-    <AdmissionSectionCard title="Resumo do caso">
-      <div className="space-y-4">
-        {/* 2x2 mini card grid */}
-        <div className="grid grid-cols-2 gap-2.5">
-          <MiniCard
-            icon={
-              summary.ready_for_export ? (
-                <CheckCircle2 className="h-4 w-4 text-success" />
-              ) : (
-                <ShieldAlert className="h-4 w-4 text-warning" />
-              )
-            }
-            label="Status do caso"
-            value={caseStatusLabel(caseData.status)}
-          />
-          <MiniCard
-            icon={<CalendarDays className="h-4 w-4" />}
-            label="Data de criação"
-            value={formatDate(summary.created_at)}
-          />
-          <MiniCard
-            icon={<UserRound className="h-4 w-4" />}
-            label="Responsável"
-            value={summary.responsible_name ?? "—"}
-          />
-          <MiniCard
-            icon={<Clock className="h-4 w-4" />}
-            label="Última atualização"
-            value={
-              <span className="leading-snug">
-                {formatDateTime(summary.last_update_at)}
-              </span>
-            }
-          />
-        </div>
-
-        {/* Action message */}
-        {actionMessage ? (
-          <div className="rounded-xl border border-[hsl(var(--warning))]/30 bg-warning-soft px-3 py-2.5 text-sm text-text">
-            {actionMessage}
-          </div>
-        ) : null}
-
-        {/* Mark ready button */}
-        <button
-          type="button"
-          onClick={onMarkReady}
-          disabled={submitting || summary.ready_for_export}
-          className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-60"
-        >
-          {summary.ready_for_export ? (
-            <>
-              <CheckCircle2 className="h-4 w-4" />
-              Caso pronto para exportação
-            </>
-          ) : submitting ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Validando caso...
-            </>
-          ) : (
-            "Marcar pronto para exportação"
-          )}
-        </button>
+    <AdmissionSectionCard title="Informações do caso">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        <MiniCard
+          icon={<CalendarDays className="h-4 w-4" />}
+          label="Criação do caso"
+          value={formatDate(summary.created_at)}
+        />
+        <MiniCard
+          icon={<UserRound className="h-4 w-4" />}
+          label="Responsável"
+          value={summary.responsible_name ?? "—"}
+        />
+        <MiniCard
+          icon={<Clock className="h-4 w-4" />}
+          label="Última atualização"
+          value={
+            <span className="leading-snug">
+              {formatDateTime(summary.last_update_at)}
+            </span>
+          }
+        />
       </div>
     </AdmissionSectionCard>
   );

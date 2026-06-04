@@ -251,10 +251,11 @@ export function AdmissionCaseWorkspacePanel({
         );
       } finally {
         setLoadingActionKey(null);
-        await Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
+        // Events are not actionable on checklist-item changes; reload manually if needed.
+        await Promise.all([loadOverview(), loadDocuments()]);
       }
     },
-    [loadDocuments, loadEvents, loadOverview],
+    [loadDocuments, loadOverview],
   );
 
   const handleApproveDocument = useCallback(
@@ -274,10 +275,11 @@ export function AdmissionCaseWorkspacePanel({
         );
       } finally {
         setLoadingActionKey(null);
-        await Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
+        // Events are informational; reload overview+docs to reflect status changes.
+        await Promise.all([loadOverview(), loadDocuments()]);
       }
     },
-    [loadDocuments, loadEvents, loadOverview],
+    [loadDocuments, loadOverview],
   );
 
   const handleRejectDocument = useCallback(
@@ -302,10 +304,11 @@ export function AdmissionCaseWorkspacePanel({
         throw requestError;
       } finally {
         setLoadingActionKey(null);
-        await Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
+        // Events are informational; reload overview+docs to reflect status changes.
+        await Promise.all([loadOverview(), loadDocuments()]);
       }
     },
-    [loadDocuments, loadEvents, loadOverview],
+    [loadDocuments, loadOverview],
   );
 
   const handleDownloadDocument = useCallback(
@@ -388,18 +391,29 @@ export function AdmissionCaseWorkspacePanel({
       className="admission-cockpit space-y-5"
       data-page="admission-case-workspace"
     >
-      {/* Header: breadcrumb + title + horizontal summary bar */}
-      <AdmissionCaseHeader workspace={workspace} openPageHref={openPageHref} />
+      {/* Header: candidate identity + status + progress + CTA */}
+      <AdmissionCaseHeader
+        workspace={workspace}
+        openPageHref={openPageHref}
+        integrationHref={resolvedIntegrationHref}
+        onMarkReady={handleMarkReady}
+        submitting={loadingActionKey === "case:mark-ready"}
+        actionMessage={summaryMessage}
+      />
 
       {/* ─── Main 2-column grid ─────────────────────────────────────────── */}
       {/*
-          LEFT  (larger): Checklist admissional + Pendências principais
-          RIGHT (smaller): Resumo do caso + Documentos enviados + Próximas ações + Histórico recente
+          LEFT  (larger): Pendências principais → Checklist admissional
+          RIGHT (smaller): Resumo → Próximas ações → Documentos → Histórico → ERP
       */}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,1fr)]">
 
-        {/* ── Left column ─────────────────────────────────────────────── */}
+        {/* ── Left column — urgent items first, then full checklist ─── */}
         <div className="space-y-5">
+          <AdmissionBlockersCard
+            blockers={workspace.main_blockers}
+            onOpenChecklist={openChecklist}
+          />
           {documentsLoading && !documentsPayload ? (
             <SectionLoadingState title="Checklist admissional" />
           ) : documentsError && !documentsPayload ? (
@@ -416,19 +430,15 @@ export function AdmissionCaseWorkspacePanel({
               onReviewDocument={openDocuments}
             />
           )}
-          <AdmissionBlockersCard
-            blockers={workspace.main_blockers}
-            onOpenChecklist={openChecklist}
-          />
         </div>
 
-        {/* ── Right column (sticky on xl) ──────────────────────────────── */}
+        {/* ── Right column — status → next actions → docs → history → ERP */}
         <div className="admission-side-rail space-y-5">
-          <AdmissionSummaryCard
-            workspace={workspace}
-            onMarkReady={handleMarkReady}
-            submitting={loadingActionKey === "case:mark-ready"}
-            actionMessage={summaryMessage}
+          <AdmissionSummaryCard workspace={workspace} />
+          <AdmissionNextActionsCard
+            actions={workspace.next_actions}
+            integrationHref={resolvedIntegrationHref}
+            onOpenChecklist={openChecklist}
           />
           {documentsLoading && !documentsPayload ? (
             <SectionLoadingState title="Documentos enviados" />
@@ -448,16 +458,6 @@ export function AdmissionCaseWorkspacePanel({
               onDownload={handleDownloadDocument}
             />
           )}
-          <AdmissionNextActionsCard
-            actions={workspace.next_actions}
-            integrationHref={resolvedIntegrationHref}
-            onOpenChecklist={openChecklist}
-          />
-          <AdmissionProtheusIntegrationPanel
-            caseId={caseId}
-            variant="embedded"
-            workspace={workspace}
-          />
           {eventsLoading && !eventsPage ? (
             <SectionLoadingState title="Histórico recente" />
           ) : eventsError && !eventsPage ? (
@@ -469,6 +469,11 @@ export function AdmissionCaseWorkspacePanel({
           ) : (
             <AdmissionRecentEventsCard events={workspace.recent_events} />
           )}
+          <AdmissionProtheusIntegrationPanel
+            caseId={caseId}
+            variant="embedded"
+            workspace={workspace}
+          />
         </div>
       </div>
 
