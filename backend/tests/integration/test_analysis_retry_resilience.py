@@ -15,6 +15,7 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     PromptTemplateModel,
 )
+from src.infrastructure.database.models.audit_model import AuditLogModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -267,6 +268,17 @@ async def test_force_request_with_valid_extracted_text_creates_pending_analysis(
     assert result.enqueue_required is True
     assert str(result.status) == "pending"
     assert result.analysis_id != analysis.id
+    audit_event = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == result.analysis_id,
+            AuditLogModel.action == "analysis_requested",
+        )
+    )
+    assert audit_event is not None
+    assert audit_event.metadata_["provider"] == "gemini"
+    assert audit_event.metadata_["model"].startswith("gemini-")
+    assert audit_event.metadata_["prompt_version"] == 1
+    assert audit_event.metadata_["extraction_ready"] is True
 
 
 @pytest.mark.asyncio

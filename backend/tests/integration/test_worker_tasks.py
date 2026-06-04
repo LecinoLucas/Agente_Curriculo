@@ -7,28 +7,30 @@ import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.entities.user import User, UserRole
+from src.application.ports.ai_service import AIAnalysisResponse
 from src.core.settings import settings
+from src.domain.entities.user import User, UserRole
 from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
     AnalysisResultModel,
     PromptTemplateModel,
 )
+from src.infrastructure.database.models.audit_model import AuditLogModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
-from src.application.ports.ai_service import AIAnalysisResponse
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 from src.interface.workers.analysis_tasks import (
-    AnalysisErrorClassification,
     PROMPT_INSTRUCTION,
     TEMPORARY_RETRY_MESSAGE,
-    _process_analysis_async,
+    AnalysisErrorClassification,
+    AnalysisFailureDetails,
     _mark_analysis_failed,
     _mark_analysis_retry_scheduled,
+    _process_analysis_async,
 )
 from src.interface.workers.matching_tasks import _match_analysis_to_job_async
 from tests.conftest import TestSessionFactory
@@ -227,7 +229,14 @@ async def test_process_analysis_uses_current_worker_prompt_and_persists_prompt_v
             captured["max_tokens"] = request.max_tokens
             captured["temperature"] = request.temperature
             return AIAnalysisResponse(
-                content='{"personal_info":{"name":"Ana","email":"ana@example.com","phone":null,"location":"Sao Paulo"},"experience":[],"skills":[{"name":"Python","proficiency":"advanced"}],"leadership":{"has_management":false,"has_project_lead":false,"has_mentoring":false,"has_cross_team":false},"education":[],"languages":[],"employment_gaps":[],"cv_quality_score":{"total":80}}',
+                content=(
+                    '{"personal_info":{"name":"Ana","email":"ana@example.com",'
+                    '"phone":null,"location":"Sao Paulo"},"experience":[],'
+                    '"skills":[{"name":"Python","proficiency":"advanced"}],'
+                    '"leadership":{"has_management":false,"has_project_lead":false,'
+                    '"has_mentoring":false,"has_cross_team":false},"education":[],'
+                    '"languages":[],"employment_gaps":[],"cv_quality_score":{"total":80}}'
+                ),
                 input_tokens=10,
                 output_tokens=20,
                 cache_read_tokens=0,
@@ -238,7 +247,10 @@ async def test_process_analysis_uses_current_worker_prompt_and_persists_prompt_v
     def fake_create(provider: str, model_id: str):
         return FakeAIService()
 
-    monkeypatch.setattr("src.interface.workers.analysis_tasks._provider_api_key_is_configured", lambda provider: True)
+    monkeypatch.setattr(
+        "src.interface.workers.analysis_tasks._provider_api_key_is_configured",
+        lambda provider: True,
+    )
     monkeypatch.setattr("src.interface.workers.analysis_tasks._real_ai_calls_allowed", lambda: True)
     monkeypatch.setattr("src.infrastructure.ai.factory.AIServiceFactory.create", fake_create)
 
@@ -247,7 +259,10 @@ async def test_process_analysis_uses_current_worker_prompt_and_persists_prompt_v
     assert result["status"] == "completed"
     assert captured["system_prompt"] == PROMPT_INSTRUCTION
     assert "Python FastAPI PostgreSQL" in captured["prompt_template"]
-    assert captured["max_tokens"] == min(settings.AI_MAX_TOKENS, settings.AI_ANALYSIS_MAX_OUTPUT_TOKENS)
+    assert captured["max_tokens"] == min(
+        settings.AI_MAX_TOKENS,
+        settings.AI_ANALYSIS_MAX_OUTPUT_TOKENS,
+    )
     assert captured["temperature"] == float(prompt.temperature)
 
     persisted_result = await db_session.scalar(
@@ -255,6 +270,37 @@ async def test_process_analysis_uses_current_worker_prompt_and_persists_prompt_v
     )
     assert persisted_result is not None
     assert persisted_result.prompt_version_used.startswith("7:")
+
+    audit_rows = (
+        (
+            await db_session.execute(
+                sa.select(AuditLogModel).where(
+                    AuditLogModel.resource_id == analysis.id,
+                    AuditLogModel.action.in_(
+                        [
+                            "ai_analysis_started",
+                            "ai_analysis_completed",
+                            "sensitive_output_sanitized",
+                        ]
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    audit_by_action = {row.action: row for row in audit_rows}
+    assert "ai_analysis_started" in audit_by_action
+    assert "ai_analysis_completed" in audit_by_action
+    assert "sensitive_output_sanitized" in audit_by_action
+    completed_metadata = audit_by_action["ai_analysis_completed"].metadata_
+    assert completed_metadata["provider"] == "anthropic"
+    assert completed_metadata["model"] == ai_model.model_id
+    assert completed_metadata["prompt_version"].startswith("7:")
+    assert completed_metadata["used_real_ai"] is True
+    assert completed_metadata["duration_ms"] == 123
+    assert completed_metadata["sensitive_output_detected"] is True
+    assert "ana@example.com" not in str(completed_metadata)
 
 
 @pytest.mark.asyncio
@@ -338,6 +384,15 @@ async def test_analysis_retry_and_failure_state_are_persisted(
     assert refreshed.failure_reason == TEMPORARY_RETRY_MESSAGE
     assert refreshed.failed_at is None
     assert refreshed.next_retry_at is not None
+    retry_event = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == analysis.id,
+            AuditLogModel.action == "ai_analysis_retry_scheduled",
+        )
+    )
+    assert retry_event is not None
+    assert retry_event.metadata_["provider_error_type"] == "temporary"
+    assert retry_event.metadata_["retry_count"] == 1
 
     await _mark_analysis_failed(
         analysis_id=str(analysis.id),
@@ -358,6 +413,122 @@ async def test_analysis_retry_and_failure_state_are_persisted(
     assert refreshed.failure_reason == "provider timeout after max retries"
     assert refreshed.failed_at is not None
     assert refreshed.next_retry_at is None
+    failed_event = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == analysis.id,
+            AuditLogModel.action == "ai_analysis_failed",
+        )
+    )
+    assert failed_event is not None
+    assert failed_event.metadata_["provider_error_type"] == "provider_error"
+    assert failed_event.metadata_["failure_reason"] == "provider timeout after max retries"
+
+
+@pytest.mark.asyncio
+async def test_payload_invalid_audit_preserves_ai_response_code_without_sensitive_data(
+    db_session: AsyncSession,
+):
+    candidate = await _create_active_user(
+        db_session,
+        "candidate-payload-invalid@test.com",
+        "password123",
+        UserRole.CANDIDATE,
+    )
+    candidate_profile = CandidateModel(
+        user_id=candidate.id,
+        full_name="Candidate Payload Invalid",
+        email="candidate-payload-invalid@test.com",
+        created_by=candidate.id,
+    )
+    db_session.add(candidate_profile)
+    await db_session.flush()
+    resume_version_id = await _create_completed_resume_version(
+        db_session,
+        candidate_id=candidate_profile.id,
+        uploaded_by=candidate.id,
+        label="payload-invalid",
+    )
+    ai_model = AIModelModel(
+        provider="gemini",
+        model_id=f"gemini-payload-invalid-{uuid4()}",
+        model_name="Gemini Payload Invalid Test",
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        name=f"payload_invalid_prompt_{uuid4()}",
+        version=3,
+        template_type="full_analysis",
+        user_prompt_template="Analyze resume",
+        is_active=True,
+        created_by=candidate.id,
+    )
+    db_session.add_all([ai_model, prompt])
+    await db_session.flush()
+    analysis = AnalysisModel(
+        id=uuid4(),
+        resume_version_id=resume_version_id,
+        ai_model_id=ai_model.id,
+        prompt_template_id=prompt.id,
+        status="processing",
+        requested_by=candidate.id,
+        worker_claim_id="task-payload-invalid",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db_session.add(analysis)
+    await db_session.commit()
+
+    await _mark_analysis_failed(
+        analysis_id=str(analysis.id),
+        task_id="task-payload-invalid",
+        error="ai_response_missing_required_fields: missing; fields=education",
+        retry_count=0,
+        attempts=1,
+        classification=AnalysisErrorClassification(
+            provider_error_type="payload_invalid",
+            is_temporary=False,
+        ),
+        failure_details=AnalysisFailureDetails(
+            raw_llm_response='{"summary":"ana@example.com CPF 529.982.247-25"}',
+            prompt_version_used="3:gemini_minimal_compact_v2",
+            provider="gemini",
+            model_id=ai_model.model_id,
+            ai_response_validation_error="ai_response_missing_required_fields",
+            ai_response_validation_fields=["education"],
+            sensitive_output_detected=True,
+        ),
+        expected_worker_claim_id="task-payload-invalid",
+        sessionmaker=TestSessionFactory,
+    )
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "failed"
+    assert analysis.provider_error_type == "payload_invalid"
+    assert analysis.failure_reason.startswith("ai_response_missing_required_fields")
+
+    persisted_result = await db_session.scalar(
+        sa.select(AnalysisResultModel).where(AnalysisResultModel.analysis_id == analysis.id)
+    )
+    assert persisted_result is not None
+    assert "ana@example.com" not in (persisted_result.raw_llm_response or "")
+    assert "529.982.247-25" not in (persisted_result.raw_llm_response or "")
+
+    payload_event = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == analysis.id,
+            AuditLogModel.action == "ai_payload_invalid",
+        )
+    )
+    assert payload_event is not None
+    assert payload_event.metadata_["provider_error_type"] == "payload_invalid"
+    assert (
+        payload_event.metadata_["ai_response_validation_error"]
+        == "ai_response_missing_required_fields"
+    )
+    assert payload_event.metadata_["ai_response_validation_fields"] == ["education"]
+    assert payload_event.metadata_["sensitive_output_detected"] is True
+    assert "ana@example.com" not in str(payload_event.metadata_)
+    assert "529.982.247-25" not in str(payload_event.metadata_)
 
 
 @pytest.mark.asyncio

@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     AI_PROVIDER_TIMEOUT_SECONDS: float = 90.0
     AI_MAX_TOKENS: int = 4000
     AI_MAX_RETRIES: int = 3
+    AI_ANALYSIS_MAX_RETRIES: int = 3
     AI_ANALYSIS_MAX_OUTPUT_TOKENS: int = 1200
     AI_ANALYSIS_MAX_RESUME_CHARS: int = 4500
     AI_ANALYSIS_MAX_JOB_CHARS: int = 1800
@@ -115,8 +116,6 @@ class Settings(BaseSettings):
     CLAMAV_PORT: int = 3310
     ALLOWED_RESUME_MIME_TYPES: Annotated[list[str], NoDecode] = [
         "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ]
     ALLOWED_DOCUMENT_MIME_TYPES: Annotated[list[str], NoDecode] = [
         "application/pdf",

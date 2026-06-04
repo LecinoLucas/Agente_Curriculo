@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand, RequestAnalysisResult
 from src.application.services.ai_limit_override_service import AILimitOverrideService
+from src.core.analysis_observability import record_analysis_audit_event
 from src.core.resume_text_quality import is_extracted_text_useful
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.domain.services.analysis_versioning import AnalysisVersioningService
@@ -337,6 +338,25 @@ class RequestAnalysisUseCase:
         )
         try:
             await self._analysis_repo.save(analysis)
+            await record_analysis_audit_event(
+                self._analysis_repo.session,
+                action="analysis_requested",
+                resource_id=analysis.id,
+                user_id=command.requested_by,
+                metadata={
+                    "resume_version_id": command.resume_version_id,
+                    "job_id": command.job_id,
+                    "ai_model_id": active_model.id,
+                    "provider": active_model.provider,
+                    "model": active_model.model_id,
+                    "prompt_template_id": active_prompt.id,
+                    "prompt_version": active_prompt.version,
+                    "status": analysis.status,
+                    "force_reanalyze": command.force_reanalyze,
+                    "allow_pending_resume_extraction": command.allow_pending_resume_extraction,
+                    "extraction_ready": extraction_ready,
+                },
+            )
         except IntegrityError:
             existing_by_key = await self._analysis_repo.find_by_idempotency_key(idempotency_key)
             if existing_by_key is None:

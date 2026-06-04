@@ -16,6 +16,7 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     PromptTemplateModel,
 )
+from src.infrastructure.database.models.audit_model import AuditLogModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
@@ -357,6 +358,16 @@ async def test_extraction_task_fails_low_quality_text_without_enqueueing_analysi
     assert analysis.status == "failed"
     assert analysis.failure_reason == LOW_QUALITY_FAILURE_REASON
     assert analysis.provider_error_type == LOW_QUALITY_FAILURE_REASON
+    audit_event = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == version_id,
+            AuditLogModel.action == "extraction_failed",
+        )
+    )
+    assert audit_event is not None
+    assert audit_event.resource_type == "resume_version"
+    assert audit_event.metadata_["failure_reason"] == LOW_QUALITY_FAILURE_REASON
+    assert audit_event.metadata_["text_quality_status"] == "low_quality"
 
 
 @pytest.mark.asyncio
@@ -409,6 +420,15 @@ async def test_extraction_task_processes_resume(
     assert version.extraction_status == "completed"
     assert "Ana Souza" in (version.extracted_text or "")
     assert (version.word_count or 0) > 0
+    audit_event = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == UUID(version_id),
+            AuditLogModel.action == "extraction_completed",
+        )
+    )
+    assert audit_event is not None
+    assert audit_event.metadata_["extraction_used_ocr"] is False
+    assert audit_event.metadata_["text_quality_status"] == "useful"
 
     status_resp = await client.get(
         f"/api/v1/resumes/{resume_id}/extraction-status",

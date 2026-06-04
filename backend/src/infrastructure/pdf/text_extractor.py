@@ -28,7 +28,6 @@ class ExtractedPdfText:
     used_ocr: bool
 
 
-MIN_TEXT_CHARS_FOR_SUCCESS = 80
 MAX_OCR_PAGES = 5
 OCR_DPI = 200
 
@@ -100,7 +99,8 @@ def _extract_with_ocr(
             extra={"error": str(exc)},
         )
         raise PdfTextExtractionError(
-            "OCR indisponível. Instale pdf2image e pytesseract ou envie um PDF com texto selecionável."
+            "OCR indisponível. Instale pdf2image e pytesseract ou envie um PDF "
+            "com texto selecionável."
         ) from exc
 
     try:

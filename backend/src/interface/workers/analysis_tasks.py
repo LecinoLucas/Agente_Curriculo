@@ -15,6 +15,8 @@ from src.application.services.ai_usage_log_service import (
     safe_persist_ai_usage_log,
 )
 from src.core.ai_response_redactor import redact_ai_response_text
+from src.core.ai_sensitive_guardrails import contains_sensitive_text
+from src.core.analysis_observability import record_analysis_audit_event
 from src.core.log_sanitizer import sanitize_log_text
 from src.core.settings import settings
 from src.infrastructure.ai.gemini_adapter import AIProviderRateLimitedError
@@ -84,6 +86,9 @@ class AnalysisFailureDetails:
     prompt_version_used: str | None = None
     provider: str | None = None
     model_id: str | None = None
+    ai_response_validation_error: str | None = None
+    ai_response_validation_fields: list[str] | None = None
+    sensitive_output_detected: bool = False
 
 
 @dataclass(slots=True)
@@ -640,6 +645,55 @@ def _extract_failure_details(exc: Exception) -> AnalysisFailureDetails | None:
     return None
 
 
+def _analysis_failure_metadata(
+    *,
+    analysis_id: str | UUID,
+    task_id: str | None,
+    error: str,
+    retry_count: int,
+    attempts: int,
+    classification: AnalysisErrorClassification,
+    failure_details: AnalysisFailureDetails | None,
+) -> dict:
+    return {
+        "analysis_id": analysis_id,
+        "task_id": task_id,
+        "failure_reason": _build_final_failure_reason(
+            classification=classification,
+            error=error,
+        ),
+        "provider_error_type": classification.provider_error_type,
+        "provider_status_code": classification.status_code,
+        "retry_count": min(retry_count, _configured_analysis_max_retries()),
+        "max_retries": _configured_analysis_max_retries(),
+        "attempts": attempts,
+        "provider": failure_details.provider if failure_details else None,
+        "model": failure_details.model_id if failure_details else None,
+        "prompt_version": failure_details.prompt_version_used if failure_details else None,
+        "duration_ms": failure_details.processing_time_ms if failure_details else None,
+        "used_real_ai": bool(
+            failure_details
+            and (
+                int(failure_details.input_tokens or 0)
+                + int(failure_details.output_tokens or 0)
+                + int(failure_details.cache_read_tokens or 0)
+                + int(failure_details.cache_write_tokens or 0)
+            )
+            > 0
+        ),
+        "payload_invalid": classification.provider_error_type == "payload_invalid",
+        "ai_response_validation_error": (
+            failure_details.ai_response_validation_error if failure_details else None
+        ),
+        "ai_response_validation_fields": (
+            failure_details.ai_response_validation_fields if failure_details else None
+        ),
+        "sensitive_output_detected": (
+            failure_details.sensitive_output_detected if failure_details else False
+        ),
+    }
+
+
 def _normalize_real_ai_result(
     result: tuple,
     *,
@@ -931,6 +985,28 @@ async def _process_analysis_with_session(
         prompt_temperature = float(prompt_tpl.temperature)
         job_id = analysis.job_id
         queue_name = ANALYSIS_QUEUE
+        await record_analysis_audit_event(
+            session,
+            action="ai_analysis_started",
+            resource_id=analysis_uuid,
+            user_id=analysis.requested_by,
+            metadata={
+                "provider": provider,
+                "model": model_id,
+                "prompt_version": prompt_version,
+                "used_real_ai": _real_ai_calls_allowed(),
+                "retry_count": analysis.retry_count,
+                "max_retries": _configured_analysis_max_retries(),
+                "analysis_started_at": analysis.started_at,
+                "task_id": task_id,
+                "worker_id": worker_id,
+                "job_id": job_id,
+                "resume_version_id": version.id,
+                "extraction_used_ocr": None,
+                "text_quality_status": "useful",
+            },
+        )
+        await session.commit()
 
     logger.info(
         "analysis.worker_started",
@@ -1014,6 +1090,8 @@ async def _process_analysis_with_session(
         system_prompt_chars=system_prompt_chars,
         user_prompt_chars=user_prompt_chars,
         prompt_chars_total=prompt_chars_total,
+        provider=provider,
+        model_id=model_id,
         expected_worker_claim_id=task_id,
         sessionmaker=sessionmaker,
     )
@@ -1314,6 +1392,9 @@ async def _run_real_ai_analysis(
                 prompt_version_used=prompt_version_used,
                 provider=provider,
                 model_id=model_id,
+                sensitive_output_detected=contains_sensitive_text(
+                    getattr(exc, "raw_response", None)
+                ),
             ),
         ) from exc
 
@@ -1349,6 +1430,9 @@ async def _run_real_ai_analysis(
                 prompt_version_used=prompt_version_used,
                 provider=provider,
                 model_id=model_id,
+                ai_response_validation_error=parser_error_code,
+                ai_response_validation_fields=parser_error_fields,
+                sensitive_output_detected=contains_sensitive_text(ai_response.content),
             ),
         ) from exc
 
@@ -1372,6 +1456,7 @@ async def _run_real_ai_analysis(
                 prompt_version_used=prompt_version_used,
                 provider=provider,
                 model_id=model_id,
+                sensitive_output_detected=contains_sensitive_text(ai_response.content),
             ),
         ) from exc
 
@@ -1430,6 +1515,8 @@ async def _persist_completed_analysis(
     system_prompt_chars: int | None = None,
     user_prompt_chars: int | None = None,
     prompt_chars_total: int | None = None,
+    provider: str | None = None,
+    model_id: str | None = None,
     expected_worker_claim_id: str | None = None,
     sessionmaker,
 ) -> bool:
@@ -1532,6 +1619,55 @@ async def _persist_completed_analysis(
         analysis.stale_at = None
         analysis.updated_at = now
 
+        total_tokens = (
+            int(input_tokens or 0)
+            + int(output_tokens or 0)
+            + int(cache_read or 0)
+            + int(cache_write or 0)
+        )
+        sensitive_output_detected = contains_sensitive_text(raw_response)
+        completed_metadata = {
+            "provider": provider,
+            "model": model_id,
+            "prompt_version": prompt_version_used,
+            "used_real_ai": total_tokens > 0,
+            "provider_error_type": None,
+            "retry_count": analysis.retry_count,
+            "max_retries": _configured_analysis_max_retries(),
+            "duration_ms": processing_ms,
+            "analysis_started_at": analysis.started_at,
+            "analysis_finished_at": now,
+            "finish_reason": finish_reason,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": cache_read,
+            "cache_write_tokens": cache_write,
+            "max_tokens_used": max_tokens_used,
+            "system_prompt_chars": system_prompt_chars,
+            "user_prompt_chars": user_prompt_chars,
+            "prompt_chars_total": prompt_chars_total,
+            "sensitive_output_detected": sensitive_output_detected,
+            "payload_invalid": False,
+        }
+        await record_analysis_audit_event(
+            session,
+            action="ai_analysis_completed",
+            resource_id=analysis_id,
+            user_id=analysis.requested_by,
+            metadata=completed_metadata,
+        )
+        if sensitive_output_detected:
+            await record_analysis_audit_event(
+                session,
+                action="sensitive_output_sanitized",
+                resource_id=analysis_id,
+                user_id=analysis.requested_by,
+                metadata={
+                    **completed_metadata,
+                    "raw_llm_response_redacted": True,
+                },
+            )
+
         await session.commit()
         return True
 
@@ -1618,6 +1754,46 @@ async def _mark_analysis_retry_scheduled(
                     available_key_count=classification.available_key_count,
                 )
 
+            await record_analysis_audit_event(
+                session,
+                action="ai_analysis_retry_scheduled",
+                resource_id=analysis_uuid,
+                user_id=analysis.requested_by,
+                metadata={
+                    "provider": failure_details.provider if failure_details else None,
+                    "model": failure_details.model_id if failure_details else None,
+                    "prompt_version": (
+                        failure_details.prompt_version_used if failure_details else None
+                    ),
+                    "failure_reason": analysis.failure_reason,
+                    "provider_error_type": classification.provider_error_type,
+                    "provider_status_code": classification.status_code,
+                    "retry_count": analysis.retry_count,
+                    "max_retries": _configured_analysis_max_retries(),
+                    "attempts": attempts,
+                    "retry_in_seconds": countdown_seconds,
+                    "next_retry_at": analysis.next_retry_at,
+                    "duration_ms": (
+                        failure_details.processing_time_ms if failure_details else None
+                    ),
+                    "used_real_ai": bool(
+                        failure_details
+                        and (
+                            int(failure_details.input_tokens or 0)
+                            + int(failure_details.output_tokens or 0)
+                            + int(failure_details.cache_read_tokens or 0)
+                            + int(failure_details.cache_write_tokens or 0)
+                        )
+                        > 0
+                    ),
+                    "payload_invalid": classification.provider_error_type == "payload_invalid",
+                    "sensitive_output_detected": (
+                        failure_details.sensitive_output_detected
+                        if failure_details
+                        else False
+                    ),
+                },
+            )
             await session.commit()
             return True
     except (RuntimeError, sa.exc.SQLAlchemyError):
@@ -1696,6 +1872,30 @@ async def _mark_analysis_failed(
             analysis.stale_at = None
             analysis.updated_at = now
 
+            failure_metadata = _analysis_failure_metadata(
+                analysis_id=analysis_uuid,
+                task_id=task_id,
+                error=error,
+                retry_count=retry_count,
+                attempts=attempts,
+                classification=classification,
+                failure_details=failure_details,
+            )
+            if classification.provider_error_type == "payload_invalid":
+                await record_analysis_audit_event(
+                    session,
+                    action="ai_payload_invalid",
+                    resource_id=analysis_uuid,
+                    user_id=analysis.requested_by,
+                    metadata=failure_metadata,
+                )
+            await record_analysis_audit_event(
+                session,
+                action="ai_analysis_failed",
+                resource_id=analysis_uuid,
+                user_id=analysis.requested_by,
+                metadata=failure_metadata,
+            )
             await session.commit()
             logger.info(
                 "analysis.worker_completed",

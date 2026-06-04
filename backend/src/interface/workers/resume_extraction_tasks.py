@@ -9,6 +9,7 @@ import sqlalchemy as sa
 import structlog
 
 from src.application.services.resume_service import ResumeService
+from src.core.analysis_observability import record_analysis_audit_event
 from src.core.resume_text_quality import LOW_QUALITY_FAILURE_REASON
 from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
@@ -83,7 +84,7 @@ async def _mark_resume_version_failed(
                 word_count=None,
             )
         )
-        await session.execute(
+        analysis_result = await session.execute(
             sa.update(AnalysisModel)
             .where(
                 AnalysisModel.resume_version_id == parsed_resume_version_id,
@@ -101,6 +102,22 @@ async def _mark_resume_version_failed(
                 stale_at=None,
                 updated_at=now,
             )
+        )
+        await record_analysis_audit_event(
+            session,
+            action="extraction_failed",
+            resource_type="resume_version",
+            resource_id=parsed_resume_version_id,
+            metadata={
+                "failure_reason": analysis_failure_reason,
+                "extraction_failure_reason": error_message,
+                "text_quality_status": (
+                    "low_quality"
+                    if analysis_failure_reason == LOW_QUALITY_FAILURE_REASON
+                    else "failed"
+                ),
+                "affected_analysis_count": int(analysis_result.rowcount or 0),
+            },
         )
         await session.commit()
 
@@ -266,6 +283,21 @@ async def _process_resume_extraction_async(
                         updated_at=now,
                     )
                 )
+            await record_analysis_audit_event(
+                session,
+                action="extraction_completed",
+                resource_type="resume_version",
+                resource_id=parsed_resume_version_id,
+                metadata={
+                    "extraction_used_ocr": extracted.used_ocr,
+                    "text_quality_status": "useful",
+                    "page_count": extracted.page_count,
+                    "word_count": extracted.word_count,
+                    "empty_pages": extracted.empty_pages,
+                    "pending_analysis_count": len(pending_analysis_ids),
+                    "prefilled_fields": prefilled_fields,
+                },
+            )
             await session.commit()
 
             for analysis_id in pending_analysis_ids:
