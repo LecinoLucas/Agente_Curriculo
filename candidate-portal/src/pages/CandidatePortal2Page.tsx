@@ -359,13 +359,9 @@ export function CandidatePortal2Page() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
+    const allowedTypes = ['application/pdf'];
     if (!allowedTypes.includes(file.type)) {
-      setUploadError('Tipo de arquivo inválido. Apenas PDF, DOC, e DOCX são permitidos.');
+      setUploadError('Tipo de arquivo inválido. Apenas PDF é permitido.');
       return;
     }
 
@@ -604,7 +600,7 @@ export function CandidatePortal2Page() {
                 {!selectedFile ? (
                   <>
                     <p className="text-sm text-center text-gray-600 mb-3">
-                      Envie seu currículo em PDF, DOC, ou DOCX (max 10MB).
+                      Envie seu currículo em PDF (max 10MB).
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -638,7 +634,7 @@ export function CandidatePortal2Page() {
                       ref={fileInputRef}
                       onChange={handleFileSelect}
                       className="hidden"
-                      accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      accept=".pdf,application/pdf"
                     />
                   </>
                 ) : (

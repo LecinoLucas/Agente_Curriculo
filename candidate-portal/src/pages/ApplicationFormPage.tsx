@@ -446,7 +446,7 @@ export function ApplicationFormPage() {
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Upload do currículo</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Envie seu currículo atualizado em PDF, DOC ou DOCX (máx. 10 MB).
+                  Envie seu currículo atualizado em PDF (máx. 10 MB).
                 </p>
               </div>
 
@@ -463,12 +463,12 @@ export function ApplicationFormPage() {
                     <p className="text-sm font-medium text-gray-600">
                       Clique para selecionar ou arraste aqui
                     </p>
-                    <p className="text-xs text-gray-400">PDF, DOC, DOCX até 10 MB</p>
+                    <p className="text-xs text-gray-400">PDF até 10 MB</p>
                   </>
                 )}
                 <input
                   type="file"
-                  accept=".pdf,.doc,.docx"
+                  accept=".pdf,application/pdf"
                   className="sr-only"
                   onChange={(e) => {
                     const file = e.target.files?.[0] ?? null;
