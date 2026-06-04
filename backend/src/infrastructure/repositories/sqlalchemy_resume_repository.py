@@ -1,5 +1,5 @@
-from uuid import UUID
 from types import SimpleNamespace
+from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,7 +66,11 @@ class SQLAlchemyResumeRepository(BaseSoftDeleteRepository[ResumeModel]):
         )
 
     async def count_summaries(self, candidate_id: UUID | None = None) -> int:
-        query = sa.select(sa.func.count()).select_from(ResumeModel).where(ResumeModel.deleted_at.is_(None))
+        query = (
+            sa.select(sa.func.count())
+            .select_from(ResumeModel)
+            .where(ResumeModel.deleted_at.is_(None))
+        )
         if candidate_id is not None:
             query = query.where(ResumeModel.candidate_id == candidate_id)
         return await self._session.scalar(query) or 0
@@ -128,8 +132,11 @@ class SQLAlchemyResumeRepository(BaseSoftDeleteRepository[ResumeModel]):
             sa.select(
                 ResumeVersionModel.id,
                 ResumeVersionModel.resume_id,
+                ResumeVersionModel.original_file_name,
+                ResumeVersionModel.mime_type,
                 ResumeVersionModel.extraction_status,
                 ResumeVersionModel.extracted_text,
+                ResumeVersionModel.word_count,
             ).where(ResumeVersionModel.id == version_id)
         )
         row = result.mappings().first()

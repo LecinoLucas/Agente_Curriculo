@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
 import sqlalchemy as sa
 import structlog
 
 from src.application.services.resume_service import ResumeService
-from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.core.resume_text_quality import LOW_QUALITY_FAILURE_REASON
 from src.infrastructure.database.models.analysis_model import AnalysisModel
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.pdf.candidate_prefill_extractor import extract_candidate_prefill
 from src.infrastructure.pdf.text_extractor import PdfTextExtractionError, extract_pdf_text
@@ -19,6 +21,8 @@ from src.infrastructure.storage.resume_files import resolve_resume_storage_path
 from src.interface.workers.analysis_dispatcher import ANALYSIS_QUEUE, enqueue_analysis
 
 logger = structlog.get_logger(__name__)
+SUPPORTED_RESUME_EXTRACTION_MIME_TYPES = {"application/pdf"}
+SUPPORTED_RESUME_EXTRACTION_EXTENSIONS = {".pdf"}
 
 
 @celery_app.task(
@@ -64,6 +68,7 @@ async def _mark_resume_version_failed(
     parsed_resume_version_id: UUID,
     error_message: str,
     sessionmaker,
+    analysis_failure_reason: str = "resume_extraction_failed",
 ) -> None:
     async with sessionmaker() as session:
         now = datetime.now(UTC)
@@ -87,8 +92,8 @@ async def _mark_resume_version_failed(
             )
             .values(
                 status="failed",
-                failure_reason="resume_extraction_failed",
-                provider_error_type="resume_extraction_failed",
+                failure_reason=analysis_failure_reason,
+                provider_error_type=analysis_failure_reason,
                 failed_at=now,
                 next_retry_at=None,
                 worker_claim_id=None,
@@ -121,6 +126,24 @@ async def _load_resume_context(
         sa.select(CandidateModel).where(CandidateModel.id == resume.candidate_id)
     )
     return version, resume, candidate
+
+
+def _validate_resume_version_supported_for_extraction(version: ResumeVersionModel) -> None:
+    mime_type = (version.mime_type or "").strip().lower()
+    original_extension = Path(version.original_file_name or "").suffix.lower()
+    storage_extension = Path(version.s3_key or "").suffix.lower()
+    has_pdf_extension = (
+        original_extension in SUPPORTED_RESUME_EXTRACTION_EXTENSIONS
+        or (
+            not original_extension
+            and storage_extension in SUPPORTED_RESUME_EXTRACTION_EXTENSIONS
+        )
+    )
+
+    if mime_type not in SUPPORTED_RESUME_EXTRACTION_MIME_TYPES or not has_pdf_extension:
+        raise PdfTextExtractionError(
+            "Formato de currículo não suportado para extração. Envie um arquivo PDF."
+        )
 
 
 async def _process_resume_extraction_async(
@@ -186,11 +209,18 @@ async def _process_resume_extraction_async(
                 return {"status": "failed", "reason": "resume_file_not_found"}
 
             try:
+                _validate_resume_version_supported_for_extraction(version)
                 extracted = await asyncio.to_thread(extract_pdf_text, content)
             except PdfTextExtractionError as exc:
+                failure_reason = (
+                    LOW_QUALITY_FAILURE_REASON
+                    if str(exc) == LOW_QUALITY_FAILURE_REASON
+                    else "resume_extraction_failed"
+                )
                 await _mark_resume_version_failed(
                     parsed_resume_version_id=parsed_resume_version_id,
                     error_message=str(exc),
+                    analysis_failure_reason=failure_reason,
                     sessionmaker=celery_sessionmaker,
                 )
                 return {"status": "failed", "reason": str(exc)}

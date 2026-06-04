@@ -7,6 +7,11 @@ from io import BytesIO
 
 import pdfplumber
 
+from src.core.resume_text_quality import (
+    LOW_QUALITY_FAILURE_REASON,
+    assess_extracted_text_quality,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,8 +92,8 @@ def _extract_with_ocr(
     dpi: int = OCR_DPI,
 ) -> list[str]:
     try:
-        from pdf2image import convert_from_bytes
         import pytesseract
+        from pdf2image import convert_from_bytes
     except ModuleNotFoundError as exc:
         logger.warning(
             "pdf.ocr_dependencies_missing",
@@ -154,32 +159,58 @@ def extract_pdf_text(content: bytes) -> ExtractedPdfText:
 
     text = _clean_text("\n\n".join(page_texts))
     used_ocr = False
-
-    # OCR is expensive and should run only when no text was extracted.
-    # Short resumes with selectable text must not fail just because they have few characters.
-    should_use_ocr = len(text) == 0
+    quality = assess_extracted_text_quality(text)
+    should_use_ocr = not quality.is_useful
 
     if should_use_ocr:
         logger.info(
             "pdf.low_text_detected_trying_ocr",
             extra={
                 "chars": len(text),
+                "quality_reason": quality.reason,
+                "alpha_words": quality.alpha_word_count,
+                "alpha_ratio": round(quality.alpha_ratio, 3),
                 "page_count": page_count,
                 "empty_pages": empty_pages,
                 "max_ocr_pages": MAX_OCR_PAGES,
             },
         )
 
-        ocr_texts = _extract_with_ocr(content)
-        ocr_text = _clean_text("\n\n".join(ocr_texts))
+        try:
+            ocr_texts = _extract_with_ocr(content)
+        except PdfTextExtractionError as exc:
+            logger.warning(
+                "pdf.ocr_unavailable_after_low_quality_text",
+                extra={
+                    "quality_reason": quality.reason,
+                    "error": str(exc),
+                },
+            )
+            raise PdfTextExtractionError(LOW_QUALITY_FAILURE_REASON) from exc
 
-        if len(ocr_text) > len(text):
+        ocr_text = _clean_text("\n\n".join(ocr_texts))
+        ocr_quality = assess_extracted_text_quality(ocr_text)
+
+        if ocr_quality.is_useful:
             text = ocr_text
             used_ocr = True
             empty_pages = 0
+            quality = ocr_quality
+        else:
+            logger.warning(
+                "pdf.ocr_text_low_quality",
+                extra={
+                    "direct_quality_reason": quality.reason,
+                    "ocr_quality_reason": ocr_quality.reason,
+                    "ocr_chars": len(ocr_text),
+                    "ocr_alpha_words": ocr_quality.alpha_word_count,
+                    "ocr_alpha_ratio": round(ocr_quality.alpha_ratio, 3),
+                },
+            )
+            raise PdfTextExtractionError(LOW_QUALITY_FAILURE_REASON)
 
-    if not text:
-        raise PdfTextExtractionError("Não foi possível extrair texto do PDF.")
+    if not quality.is_useful:
+        raise PdfTextExtractionError(LOW_QUALITY_FAILURE_REASON)
 
     word_count = _count_words(text)
 
