@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, Zap, ArrowRight } from "lucide-react";
+import { Search, X, Zap, ExternalLink } from "lucide-react";
 import type { CandidateListSummary, JobRanking, JobRankingEntry } from "../../types/domain";
 import { candidatesService } from "../../services/candidatesService";
 import { formatContextError } from "../../services/errorMessages";
@@ -9,6 +9,7 @@ import { toast } from "../../shared/utils/toast";
 import { scoreColorClass } from "../candidates/drawer/hooks/useCandidateDecision";
 import { normalizeScorePercent } from "../candidates/utils/scoreFormatting";
 import { buildAnalysisDecisionToast } from "./analysisDispatchFeedback";
+import { PIPELINE_STAGE_LABELS } from "../../shared/status/statusLabels";
 
 interface CandidateSearchModalProps {
   isOpen: boolean;
@@ -77,7 +78,10 @@ export function CandidateSearchModal({
     try {
       const { data } = await candidatesService.listSummaries(1, pageSize, {
         search: q || undefined,
-        link_status_filter: "without_active_job",
+        // When a search term is present, omit the filter so the query is global
+        // (finds any candidate, including those already in other jobs/pipelines).
+        // Without a term the initial list only shows candidates without active jobs.
+        link_status_filter: q ? undefined : "without_active_job",
       });
       // Ignore stale responses from previous requests
       if (version !== fetchVersionRef.current) return;
@@ -428,27 +432,39 @@ export function CandidateSearchModal({
                 </div>
               ) : rankedAvailable.length > 0 ? (
                 <div className="space-y-2">
-                  {rankedAvailable.map((entry) => (
-                    <RankedCandidateRow
-                      key={entry.candidate_id}
-                      entry={entry}
-                      isAdding={addingIds.has(entry.candidate_id)}
-                      isAdded={addedIds.has(entry.candidate_id)}
-                      error={errors[entry.candidate_id]}
-                      onAdd={() => {
-                        const summary = summaryByCandidateId.get(entry.candidate_id);
-                        if (summary) {
-                          const previousProcess = getClosedProcessFromCandidate(summary);
-                          if (previousProcess) {
-                            setPreviousProcessError(null);
-                            setPreviousProcessPrompt(previousProcess);
-                            return;
+                  {rankedAvailable.map((entry) => {
+                    const summary = summaryByCandidateId.get(entry.candidate_id);
+                    return (
+                      <RankedCandidateRow
+                        key={entry.candidate_id}
+                        entry={entry}
+                        activeJobId={activeJobId}
+                        summary={summary}
+                        isAdding={addingIds.has(entry.candidate_id)}
+                        isAdded={addedIds.has(entry.candidate_id)}
+                        error={errors[entry.candidate_id]}
+                        onAdd={() => {
+                          if (summary) {
+                            const previousProcess = getClosedProcessFromCandidate(summary);
+                            if (previousProcess) {
+                              setPreviousProcessError(null);
+                              setPreviousProcessPrompt(previousProcess);
+                              return;
+                            }
                           }
+                          void handleAdd(entry.candidate_id, entry.candidate_name);
+                        }}
+                        onOpen={() =>
+                          onOpenCandidate?.(
+                            entry.candidate_id,
+                            summary?.active_job_id
+                              ? `/pipeline/${summary.active_job_id}?candidateId=${entry.candidate_id}`
+                              : undefined,
+                          )
                         }
-                        void handleAdd(entry.candidate_id, entry.candidate_name);
-                      }}
-                    />
-                  ))}
+                      />
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-xs text-text-muted">
@@ -484,6 +500,7 @@ export function CandidateSearchModal({
                     <OtherCandidateRow
                       key={candidate.id}
                       candidate={candidate}
+                      activeJobId={activeJobId}
                       isAdding={addingIds.has(candidate.id)}
                       isAdded={addedIds.has(candidate.id)}
                       error={errors[candidate.id]}
@@ -535,48 +552,121 @@ export function CandidateSearchModal({
   );
 }
 
-// FIX #5: error tipado como string | undefined em ambos os componentes
+// Shared helper: derives link-status flags from a CandidateListSummary cross-reference.
+// Returns the empty/false state when summary is not available (no data to show).
+function deriveLinkStatus(
+  activeJobId: string,
+  summary: CandidateListSummary | undefined,
+) {
+  const linkedJobId = summary?.active_job_id ?? null;
+  const isInThisJob = linkedJobId !== null && linkedJobId === activeJobId;
+  const isInAnotherJob = linkedJobId !== null && linkedJobId !== activeJobId;
+  const stageLabel = summary?.active_job_stage
+    ? (PIPELINE_STAGE_LABELS[summary.active_job_stage as keyof typeof PIPELINE_STAGE_LABELS]
+        ?? summary.active_job_stage)
+    : null;
+  return { isInThisJob, isInAnotherJob, stageLabel, linkedJobId };
+}
+
 function RankedCandidateRow({
   entry,
+  activeJobId,
+  summary,
   isAdding,
   isAdded,
   error,
   onAdd,
+  onOpen,
 }: {
   entry: JobRankingEntry;
+  activeJobId: string;
+  summary: CandidateListSummary | undefined;
   isAdding: boolean;
   isAdded: boolean;
-  error?: string; // era: string
+  error?: string;
   onAdd: () => void;
+  onOpen: () => void;
 }) {
   const scorePercent = normalizeScorePercent(entry.job_fit_score);
   const scoreClass = scoreColorClass(entry.job_fit_score);
+  const { isInThisJob, isInAnotherJob, stageLabel } = deriveLinkStatus(activeJobId, summary);
+  const canOpenInPipeline = (isInThisJob || isInAnotherJob) && !isAdded;
 
   return (
-    <div className="rounded-lg border border-border/40 bg-surface-muted/20 p-3 hover:border-border/60 transition">
+    <div
+      data-testid={`ranked-row-${entry.candidate_id}`}
+      className={`rounded-lg border p-3 transition ${
+        isInThisJob
+          ? "border-emerald-200/60 bg-emerald-50/20 hover:border-emerald-200/80"
+          : isInAnotherJob
+            ? "border-blue-200/60 bg-blue-50/20 hover:border-blue-200/80"
+            : "border-border/40 bg-surface-muted/20 hover:border-border/60"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm text-text">
+          <p className="font-semibold text-sm text-text leading-snug">
             {entry.candidate_name}
           </p>
-          <div className="mt-1 flex items-center gap-2">
-            <span className={`inline-flex items-center rounded-full border border-current/15 bg-current/5 px-2 py-1 text-xs font-semibold ${scoreClass}`}>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span className={`inline-flex items-center rounded-full border border-current/15 bg-current/5 px-2 py-0.5 text-xs font-semibold ${scoreClass}`}>
               {scorePercent}%
             </span>
+            {isAdded ? (
+              <span
+                data-testid={`ranked-badge-linked-now-${entry.candidate_id}`}
+                className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200"
+              >
+                ✓ Vinculado agora
+              </span>
+            ) : isInThisJob ? (
+              <span
+                data-testid={`ranked-badge-in-job-${entry.candidate_id}`}
+                className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200"
+              >
+                Já vinculado nesta vaga
+              </span>
+            ) : isInAnotherJob ? (
+              <span
+                data-testid={`ranked-badge-in-another-${entry.candidate_id}`}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 ring-1 ring-blue-200"
+              >
+                Em pipeline
+                {summary?.active_job_title && (
+                  <span className="opacity-80">· {summary.active_job_title}</span>
+                )}
+                {stageLabel && (
+                  <span className="opacity-60">· {stageLabel}</span>
+                )}
+              </span>
+            ) : null}
           </div>
         </div>
 
-        <button
-          onClick={onAdd}
-          disabled={isAdding || isAdded}
-          className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition disabled:opacity-50 ${
-            isAdded
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
-          }`}
-        >
-          {isAdding ? "Vinculando…" : isAdded ? "✓ Vinculado" : "Vincular"}
-        </button>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          {canOpenInPipeline && (
+            <button
+              data-testid={`ranked-btn-open-${entry.candidate_id}`}
+              type="button"
+              onClick={onOpen}
+              className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-surface px-2.5 py-1.5 text-xs font-medium text-text-muted transition hover:border-border hover:text-text"
+            >
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              Abrir no pipeline
+            </button>
+          )}
+          {!isInThisJob && !isAdded && (
+            <button
+              data-testid={`ranked-btn-link-${entry.candidate_id}`}
+              type="button"
+              onClick={onAdd}
+              disabled={isAdding}
+              className="inline-flex items-center rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isAdding ? "Vinculando…" : "Vincular"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -588,6 +678,7 @@ function RankedCandidateRow({
 
 function OtherCandidateRow({
   candidate,
+  activeJobId,
   isAdding,
   isAdded,
   error,
@@ -595,75 +686,96 @@ function OtherCandidateRow({
   onOpen,
 }: {
   candidate: CandidateListSummary;
+  activeJobId: string;
   isAdding: boolean;
   isAdded: boolean;
   error?: string;
   onAdd: () => void;
   onOpen: () => void;
 }) {
-  const isLinked = Boolean(candidate.active_job_id);
-  const showOpenAction = isLinked;
+  const { isInThisJob, isInAnotherJob, stageLabel } = deriveLinkStatus(activeJobId, candidate);
+  const canOpenInPipeline = (isInThisJob || isInAnotherJob) && !isAdded;
 
   return (
-    <div className={`rounded-lg border p-3 transition ${
-      isLinked
-        ? "border-blue-200/60 bg-blue-50/30 hover:border-blue-200"
-        : "border-border/40 bg-surface-muted/20 hover:border-border/60"
-    }`}>
+    <div
+      data-testid={`candidate-row-${candidate.id}`}
+      className={`rounded-lg border p-3 transition ${
+        isInThisJob
+          ? "border-emerald-200/60 bg-emerald-50/20 hover:border-emerald-200/80"
+          : isInAnotherJob
+            ? "border-blue-200/60 bg-blue-50/20 hover:border-blue-200/80"
+            : "border-border/40 bg-surface-muted/20 hover:border-border/60"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
+        {/* Left: name, email, status */}
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm text-text">
+          <p className="font-semibold text-sm text-text leading-snug">
             {candidate.full_name}
           </p>
-          <div className="mt-1 space-y-0.5">
-            {candidate.email && (
-              <p className="text-xs text-text-muted">{candidate.email}</p>
-            )}
-            {candidate.active_job_title && (
-              <p className={`text-xs font-medium ${
-                isLinked
-                  ? "text-blue-700"
-                  : "text-text-muted"
-              }`}>
-                {isLinked ? "✓ " : ""}Vaga: {candidate.active_job_title}
-              </p>
-            )}
-            {!candidate.active_job_title && (
-              <p className="text-xs text-amber-600 font-medium">Aguardando vaga</p>
-            )}
+          {candidate.email && (
+            <p className="text-xs text-text-muted mt-0.5">{candidate.email}</p>
+          )}
+
+          {/* Status badge */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {isAdded ? (
+              <span
+                data-testid="badge-linked-now"
+                className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200"
+              >
+                ✓ Vinculado agora
+              </span>
+            ) : isInThisJob ? (
+              <span
+                data-testid="badge-already-in-job"
+                className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200"
+              >
+                Já vinculado nesta vaga
+              </span>
+            ) : isInAnotherJob ? (
+              <span
+                data-testid="badge-in-another-job"
+                className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 ring-1 ring-blue-200"
+              >
+                Em pipeline
+                {candidate.active_job_title && (
+                  <span className="opacity-80">· {candidate.active_job_title}</span>
+                )}
+                {stageLabel && (
+                  <span className="opacity-60">· {stageLabel}</span>
+                )}
+              </span>
+            ) : null}
           </div>
         </div>
 
-        <button
-          onClick={onAdd}
-          disabled={isAdding || isAdded || isLinked}
-          className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition disabled:opacity-50 ${
-            isAdded
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : isLinked
-                ? "border-border/40 bg-surface-muted/10 text-text-muted"
-                : "border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
-          }`}
-        >
-          {isAdding ? "Vinculando…" : isAdded ? "✓ Vinculado" : "Vincular"}
-        </button>
-      </div>
-
-      {showOpenAction && (
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-xs text-blue-700">
-            Gerencie o vínculo atual no workspace.
-          </p>
-          <button
-            onClick={onOpen}
-            className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-200"
-            title="Abrir candidato no workspace"
-          >
-            <ArrowRight className="h-3 w-3" />
-            Ver candidato
-          </button>
+        {/* Right: action buttons */}
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          {canOpenInPipeline && (
+            <button
+              data-testid={`btn-open-pipeline-${candidate.id}`}
+              type="button"
+              onClick={onOpen}
+              className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-surface px-2.5 py-1.5 text-xs font-medium text-text-muted transition hover:border-border hover:text-text"
+            >
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              Abrir no pipeline
+            </button>
+          )}
+          {!isInThisJob && !isAdded && (
+            <button
+              data-testid={`btn-link-${candidate.id}`}
+              type="button"
+              onClick={onAdd}
+              disabled={isAdding}
+              className="inline-flex items-center rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isAdding ? "Vinculando…" : "Vincular"}
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {error && (
         <p className="mt-2 text-xs text-rose-600">{error}</p>

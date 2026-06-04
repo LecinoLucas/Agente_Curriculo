@@ -633,7 +633,7 @@ describe("CandidateSearchModal — listagem inicial e busca", () => {
     });
   });
 
-  it("digitar busca dispara listSummaries com search preenchido e pageSize maior", async () => {
+  it("digitar busca dispara listSummaries com search preenchido, pageSize maior e sem filtro de vínculo (busca global)", async () => {
     const user = userEvent.setup();
     vi.mocked(candidatesService.listSummaries)
       .mockResolvedValueOnce(
@@ -666,13 +666,13 @@ describe("CandidateSearchModal — listagem inicial e busca", () => {
     await waitFor(() => {
       expect(candidatesService.listSummaries).toHaveBeenCalledWith(1, 40, {
         search: "Zelda",
-        link_status_filter: "without_active_job",
+        link_status_filter: undefined,
       });
     });
     expect(await screen.findByText("Zelda Zen")).toBeInTheDocument();
   });
 
-  it("busca não filtra apenas a slice inicial: encontra candidato fora dos primeiros 10", async () => {
+  it("busca não filtra apenas a slice inicial: encontra candidato fora dos primeiros 10 (sem filtro de vínculo)", async () => {
     // Initial fetch retorna 10 candidatos genéricos; a busca por "Zelda" retorna
     // candidato que NÃO estava na lista inicial — provando que a busca foi remota.
     const initialBatch = Array.from({ length: 10 }, (_, i) =>
@@ -828,5 +828,409 @@ describe("CandidateSearchModal — listagem inicial e busca", () => {
     expect(
       screen.getByRole("button", { name: /Criar candidato manualmente/i }),
     ).toBeInTheDocument();
+  });
+});
+
+// ── Global search & candidate link status ─────────────────────────────────────
+
+describe("CandidateSearchModal — status de vínculo e busca global", () => {
+  function makeSummaryFull(overrides: Partial<{
+    id: string;
+    full_name: string;
+    email: string | null;
+    active_job_id: string | null;
+    active_job_title: string | null;
+    active_job_stage: string | null;
+  }>) {
+    return {
+      id: "c-1",
+      full_name: "João Silva",
+      email: "joao@example.com",
+      phone: null,
+      cpf: null,
+      application_source: null,
+      tags: [],
+      created_at: "2026-05-20T10:00:00Z",
+      resume_count: 1,
+      linked_job_count: 0,
+      latest_job_id: null,
+      latest_job_title: null,
+      latest_job_stage: null,
+      latest_relationship_status: null,
+      active_job_id: null,
+      active_job_title: null,
+      active_job_stage: null,
+      active_job_job_fit_score: null,
+      ai_status: null,
+      ...overrides,
+    };
+  }
+
+  function makePage(data: ReturnType<typeof makeSummaryFull>[]) {
+    return { data, total: data.length, page: 1, page_size: 10, total_pages: 1 };
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(pipelineService.getCandidateHistory).mockRejectedValue(new Error("sem histórico"));
+    vi.mocked(pipelineService.addCandidateToJob).mockResolvedValue({
+      candidate_id: "c-1",
+      job_id: "job-current",
+      stage: "entry",
+      candidate_status: "Recebido",
+      status: "active",
+      transition_id: "t-1",
+      updated_at: "2026-06-01T10:00:00Z",
+      analysis: null,
+    });
+  });
+
+  function renderModal(onOpenCandidate = vi.fn()) {
+    return render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-current"
+        activeJobTitle="Vaga Atual"
+        ranking={null}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+        onOpenCandidate={onOpenCandidate}
+      />,
+    );
+  }
+
+  it("candidato disponível mostra botão Vincular e não mostra badge de vínculo", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue(
+      makePage([makeSummaryFull({ active_job_id: null })]),
+    );
+
+    renderModal();
+
+    await screen.findByText("João Silva");
+    expect(screen.getByTestId("btn-link-c-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("badge-already-in-job")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("badge-in-another-job")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-open-pipeline-c-1")).not.toBeInTheDocument();
+  });
+
+  it("candidato já vinculado nesta vaga mostra badge 'Já vinculado nesta vaga' e botão 'Abrir no pipeline'", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue(
+      makePage([makeSummaryFull({ active_job_id: "job-current", active_job_title: "Vaga Atual" })]),
+    );
+
+    renderModal();
+
+    await screen.findByText("João Silva");
+    expect(screen.getByTestId("badge-already-in-job")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-open-pipeline-c-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("btn-link-c-1")).not.toBeInTheDocument();
+  });
+
+  it("candidato em outra vaga mostra badge 'Em pipeline', botão 'Abrir no pipeline' e botão 'Vincular'", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue(
+      makePage([makeSummaryFull({
+        active_job_id: "job-other",
+        active_job_title: "Analista de Dados",
+        active_job_stage: "hr_interview",
+      })]),
+    );
+
+    renderModal();
+
+    await screen.findByText("João Silva");
+    const badge = screen.getByTestId("badge-in-another-job");
+    expect(badge).toBeInTheDocument();
+    expect(badge.textContent).toMatch(/Analista de Dados/);
+    expect(badge.textContent).toMatch(/Entrevista RH/);
+    expect(screen.getByTestId("btn-open-pipeline-c-1")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-link-c-1")).toBeInTheDocument();
+  });
+
+  it("clicar em 'Abrir no pipeline' chama onOpenCandidate com rota /pipeline/:jobId?candidateId=:id", async () => {
+    const onOpenCandidate = vi.fn();
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue(
+      makePage([makeSummaryFull({ active_job_id: "job-other", active_job_title: "Outra Vaga" })]),
+    );
+
+    renderModal(onOpenCandidate);
+
+    await screen.findByText("João Silva");
+    await userEvent.setup().click(screen.getByTestId("btn-open-pipeline-c-1"));
+
+    expect(onOpenCandidate).toHaveBeenCalledWith(
+      "c-1",
+      "/pipeline/job-other?candidateId=c-1",
+    );
+  });
+
+  it("clicar em 'Abrir no pipeline' quando já nesta vaga usa o jobId atual", async () => {
+    const onOpenCandidate = vi.fn();
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue(
+      makePage([makeSummaryFull({ active_job_id: "job-current", active_job_title: "Vaga Atual" })]),
+    );
+
+    renderModal(onOpenCandidate);
+
+    await screen.findByText("João Silva");
+    await userEvent.setup().click(screen.getByTestId("btn-open-pipeline-c-1"));
+
+    expect(onOpenCandidate).toHaveBeenCalledWith(
+      "c-1",
+      "/pipeline/job-current?candidateId=c-1",
+    );
+  });
+
+  it("busca com termo não usa link_status_filter (busca global)", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.listSummaries)
+      .mockResolvedValueOnce(makePage([makeSummaryFull({ full_name: "Alice Alves" })]))
+      .mockResolvedValueOnce(makePage([]));
+
+    renderModal();
+
+    await screen.findByText("Alice Alves");
+    await user.type(screen.getByPlaceholderText(/buscar candidato por nome ou e-mail/i), "João");
+
+    await waitFor(() => {
+      const calls = vi.mocked(candidatesService.listSummaries).mock.calls;
+      const searchCall = calls.find((c) => c[2]?.search === "João");
+      expect(searchCall).toBeDefined();
+      expect(searchCall![2].link_status_filter).toBeUndefined();
+    });
+  });
+
+  it("busca sem termo usa link_status_filter without_active_job (lista inicial)", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue(makePage([]));
+
+    renderModal();
+
+    await waitFor(() => {
+      expect(candidatesService.listSummaries).toHaveBeenCalledWith(1, 10, {
+        search: undefined,
+        link_status_filter: "without_active_job",
+      });
+    });
+  });
+
+  it("candidato em outra vaga sem título mostra badge 'Em pipeline' sem nome de vaga", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue(
+      makePage([makeSummaryFull({ active_job_id: "job-other", active_job_title: null })]),
+    );
+
+    renderModal();
+
+    await screen.findByText("João Silva");
+    const badge = screen.getByTestId("badge-in-another-job");
+    expect(badge).toBeInTheDocument();
+    expect(badge.textContent).toMatch(/Em pipeline/);
+  });
+});
+
+// ── IA Recomenda — status de vínculo via cross-reference ─────────────────────
+
+describe("CandidateSearchModal — IA Recomenda link status", () => {
+  function makeRankingEntry(candidateId: string, candidateName: string) {
+    return {
+      rank: 1,
+      candidate_id: candidateId,
+      candidate_name: candidateName,
+      stage: "",
+      pipeline_status: "",
+      score_breakdown: {} as never,
+      job_fit_score: 85,
+      decision_suggestion: "approved" as const,
+      reason_tags: [],
+      entered_at: null,
+      computed_at: "2026-06-01T10:00:00Z",
+      ranking_summary_text: "",
+      version: "v1",
+    };
+  }
+
+  function makeSummary(overrides: {
+    id: string;
+    full_name: string;
+    active_job_id: string | null;
+    active_job_title?: string | null;
+    active_job_stage?: string | null;
+  }) {
+    return {
+      id: overrides.id,
+      full_name: overrides.full_name,
+      email: null,
+      phone: null,
+      cpf: null,
+      application_source: null,
+      tags: [],
+      created_at: "2026-05-20T10:00:00Z",
+      resume_count: 1,
+      linked_job_count: 0,
+      latest_job_id: null,
+      latest_job_title: null,
+      latest_job_stage: null,
+      latest_relationship_status: null,
+      active_job_id: overrides.active_job_id,
+      active_job_title: overrides.active_job_title ?? null,
+      active_job_stage: overrides.active_job_stage ?? null,
+      active_job_job_fit_score: null,
+      ai_status: null,
+    };
+  }
+
+  function makeRanking(candidateId: string, candidateName: string) {
+    return {
+      job_id: "job-current",
+      total_candidates: 1,
+      threshold_high: 80,
+      threshold_low: 50,
+      score_version: "v1",
+      candidates: [makeRankingEntry(candidateId, candidateName)],
+    };
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(pipelineService.getCandidateHistory).mockRejectedValue(new Error("sem histórico"));
+    vi.mocked(pipelineService.addCandidateToJob).mockResolvedValue({
+      candidate_id: "c-ranked",
+      job_id: "job-current",
+      stage: "entry",
+      candidate_status: "Recebido",
+      status: "active",
+      transition_id: "t-1",
+      updated_at: "2026-06-01T10:00:00Z",
+      analysis: null,
+    });
+  });
+
+  it("recomendado sem summary (sem active_job_id) mostra apenas Vincular sem badge de vínculo", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+    });
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-current"
+        activeJobTitle="Vaga Atual"
+        ranking={makeRanking("c-ranked", "Maria Recomendada")}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Maria Recomendada");
+    expect(screen.getByTestId("ranked-btn-link-c-ranked")).toBeInTheDocument();
+    expect(screen.queryByTestId("ranked-badge-in-job-c-ranked")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ranked-badge-in-another-c-ranked")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ranked-btn-open-c-ranked")).not.toBeInTheDocument();
+  });
+
+  it("recomendado com summary active_job_id === activeJobId mostra 'Já vinculado nesta vaga' e Abrir no pipeline", async () => {
+    const onOpenCandidate = vi.fn();
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue({
+      data: [makeSummary({ id: "c-ranked", full_name: "Maria Recomendada", active_job_id: "job-current" })],
+      total: 1,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+    });
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-current"
+        activeJobTitle="Vaga Atual"
+        ranking={makeRanking("c-ranked", "Maria Recomendada")}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+        onOpenCandidate={onOpenCandidate}
+      />,
+    );
+
+    await screen.findByText("Maria Recomendada");
+    expect(screen.getByTestId("ranked-badge-in-job-c-ranked")).toBeInTheDocument();
+    expect(screen.getByTestId("ranked-btn-open-c-ranked")).toBeInTheDocument();
+    expect(screen.queryByTestId("ranked-btn-link-c-ranked")).not.toBeInTheDocument();
+  });
+
+  it("recomendado em outra vaga mostra badge 'Em pipeline', botão Abrir no pipeline e botão Vincular", async () => {
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue({
+      data: [makeSummary({
+        id: "c-ranked",
+        full_name: "Maria Recomendada",
+        active_job_id: "job-other",
+        active_job_title: "Analista Sênior",
+        active_job_stage: "hr_interview",
+      })],
+      total: 1,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+    });
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-current"
+        activeJobTitle="Vaga Atual"
+        ranking={makeRanking("c-ranked", "Maria Recomendada")}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Maria Recomendada");
+    const badge = screen.getByTestId("ranked-badge-in-another-c-ranked");
+    expect(badge).toBeInTheDocument();
+    expect(badge.textContent).toMatch(/Analista Sênior/);
+    expect(badge.textContent).toMatch(/Entrevista RH/);
+    expect(screen.getByTestId("ranked-btn-open-c-ranked")).toBeInTheDocument();
+    expect(screen.getByTestId("ranked-btn-link-c-ranked")).toBeInTheDocument();
+  });
+
+  it("clicar em Abrir no pipeline no recomendado chama onOpenCandidate com rota correta", async () => {
+    const onOpenCandidate = vi.fn();
+    vi.mocked(candidatesService.listSummaries).mockResolvedValue({
+      data: [makeSummary({ id: "c-ranked", full_name: "Maria Recomendada", active_job_id: "job-other" })],
+      total: 1,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+    });
+
+    render(
+      <CandidateSearchModal
+        isOpen
+        activeJobId="job-current"
+        activeJobTitle="Vaga Atual"
+        ranking={makeRanking("c-ranked", "Maria Recomendada")}
+        rankingLoading={false}
+        onClose={vi.fn()}
+        onAdded={vi.fn()}
+        onCreateNew={vi.fn()}
+        onOpenCandidate={onOpenCandidate}
+      />,
+    );
+
+    await screen.findByText("Maria Recomendada");
+    await userEvent.setup().click(screen.getByTestId("ranked-btn-open-c-ranked"));
+
+    expect(onOpenCandidate).toHaveBeenCalledWith(
+      "c-ranked",
+      "/pipeline/job-other?candidateId=c-ranked",
+    );
   });
 });
