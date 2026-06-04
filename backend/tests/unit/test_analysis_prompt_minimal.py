@@ -17,10 +17,14 @@ from __future__ import annotations
 
 import json
 
-from src.application.services.match_confidence_service import compute_match_confidence
-from src.infrastructure.ai.response_parser import parse_analysis_response
-from src.interface.workers.analysis_tasks import _build_minimal_user_prompt
+import pytest
 
+from src.application.services.match_confidence_service import compute_match_confidence
+from src.infrastructure.ai.response_parser import (
+    AIResponseValidationError,
+    parse_analysis_response,
+)
+from src.interface.workers.analysis_tasks import _build_minimal_user_prompt
 
 # ── Prompt contract ─────────────────────────────────────────────────────────
 
@@ -47,6 +51,15 @@ def test_minimal_prompt_requests_duration_months() -> None:
     prompt = _build_minimal_user_prompt(resume_text="cv", job_context="job")
     assert "duration_months" in prompt
     assert "total_experience_months" in prompt
+
+
+def test_minimal_prompt_declares_antidiscrimination_guardrails() -> None:
+    prompt = _build_minimal_user_prompt(resume_text="cv", job_context="job")
+
+    assert "Ignore dados sensíveis/protegidos" in prompt
+    assert "nunca use idade" in prompt
+    assert "endereço/bairro/distância" in prompt
+    assert "não reprove automaticamente por dado ausente" in prompt
 
 
 def test_minimal_prompt_allows_education_levels_beyond_none() -> None:
@@ -78,7 +91,7 @@ def test_parser_extracts_experience_years_from_minimal_response() -> None:
     assert result["highest_education_level"] == "bachelor"
 
 
-def test_parser_returns_none_when_experiences_array_is_empty() -> None:
+def test_parser_rejects_when_experiences_or_education_are_missing() -> None:
     """When AI omits experiences/education the parser must not invent values.
     This is the failure mode that produced 60% — guard it so we never
     silently substitute a default that looks like a real signal."""
@@ -89,12 +102,12 @@ def test_parser_returns_none_when_experiences_array_is_empty() -> None:
             "skills": ["Python"],
         }
     )
-    result = parse_analysis_response(raw)
-    assert result["total_experience_years"] is None
-    # The parser does fall back to "none" for missing education — that's the
-    # AI's fault, not the parser's. The ranking layer treats "none" as
-    # "missing education" rather than as a real value.
-    assert result["highest_education_level"] == "none"
+    with pytest.raises(AIResponseValidationError) as exc_info:
+        parse_analysis_response(raw)
+
+    assert exc_info.value.code == "ai_response_missing_required_fields"
+    assert "experiences" in exc_info.value.fields
+    assert "education" in exc_info.value.fields
 
 
 # ── Ranking still treats missing data as missing (no silent 60 substitution) ─

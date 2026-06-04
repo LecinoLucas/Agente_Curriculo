@@ -62,11 +62,13 @@ PDF_SUSPICIOUS_MARKERS = (
     b"/launch",
     b"/embeddedfile",
 )
+RESUME_SUPPORTED_MIME_TYPES = {"application/pdf"}
 
 
 def resume_upload_policy() -> UploadValidationPolicy:
+    configured = _known_mime_types(settings.ALLOWED_RESUME_MIME_TYPES)
     return UploadValidationPolicy(
-        allowed_mime_types=_known_mime_types(settings.ALLOWED_RESUME_MIME_TYPES),
+        allowed_mime_types=configured & RESUME_SUPPORTED_MIME_TYPES,
         max_size_bytes=settings.max_upload_size_bytes,
     )
 
@@ -99,14 +101,16 @@ def validate_upload(
 
     normalized_content_type = _normalize_content_type(content_type)
     if normalized_content_type not in policy.allowed_mime_types:
-        raise UploadValidationError("Tipo de arquivo não permitido")
+        raise UploadValidationError(_unsupported_type_message(policy))
 
     allowed_extensions = MIME_EXTENSIONS.get(normalized_content_type)
     if allowed_extensions is None or submitted_extension not in allowed_extensions:
-        raise UploadValidationError("Extensão de arquivo não permitida para o tipo informado")
+        raise UploadValidationError(_unsupported_type_message(policy))
 
     detected_mime_type = _detect_mime_type(content)
     if detected_mime_type != normalized_content_type:
+        if policy.allowed_mime_types == RESUME_SUPPORTED_MIME_TYPES:
+            raise UploadValidationError("Conteúdo enviado não parece ser um PDF válido")
         raise UploadValidationError("Assinatura do arquivo não corresponde ao tipo informado")
 
     _validate_content_by_type(detected_mime_type, content)
@@ -152,6 +156,12 @@ def _known_mime_types(values: list[str]) -> set[str]:
 
 def _normalize_content_type(content_type: str | None) -> str:
     return (content_type or "").split(";", maxsplit=1)[0].strip().lower()
+
+
+def _unsupported_type_message(policy: UploadValidationPolicy) -> str:
+    if policy.allowed_mime_types == RESUME_SUPPORTED_MIME_TYPES:
+        return "Apenas arquivos PDF são permitidos."
+    return "Tipo de arquivo não permitido"
 
 
 def _detect_mime_type(content: bytes) -> str | None:

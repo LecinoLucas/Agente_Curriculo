@@ -21,18 +21,21 @@ from src.application.services.strict_payload import (
     require_list,
     require_non_empty_string,
 )
-from src.infrastructure.database.models.scoring_model import (
-    CandidateJobScoreFactorModel,
-    CandidateJobScoreModel,
-    CandidateJobScoreSnapshotModel,
-    ScoreModelVersionModel,
+from src.core.ai_sensitive_guardrails import sanitize_ranking_payload
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
 )
-from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.profile_analysis_model import (
     CandidateJobMatchModel,
     JobProfileAnalysisModel,
+)
+from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreFactorModel,
+    CandidateJobScoreModel,
+    CandidateJobScoreSnapshotModel,
+    ScoreModelVersionModel,
 )
 
 
@@ -60,7 +63,12 @@ class CandidateRankingScoreStore:
         self._coerce_utc_datetime = coerce_utc_datetime
         self._logger = logger
 
-    async def mark_candidate_stale(self, job_id: UUID, candidate_id: UUID, version_id: UUID) -> None:
+    async def mark_candidate_stale(
+        self,
+        job_id: UUID,
+        candidate_id: UUID,
+        version_id: UUID,
+    ) -> None:
         await self._session.execute(
             sa.update(CandidateJobScoreModel)
             .where(
@@ -188,7 +196,8 @@ class CandidateRankingScoreStore:
             .where(
                 CandidateJobScoreModel.job_id == job_id,
                 CandidateJobScoreModel.version_id == version_id,
-                CandidateJobScoreModel.source_analysis_id == CandidateJobPipelineModel.current_analysis_id,
+                CandidateJobScoreModel.source_analysis_id
+                == CandidateJobPipelineModel.current_analysis_id,
                 CandidateJobScoreModel.final_score.isnot(None),
                 self._json_shape_filter(CandidateJobScoreModel.breakdown, "object"),
                 self._json_shape_filter(CandidateJobScoreModel.reason_codes, "array"),
@@ -276,7 +285,10 @@ class CandidateRankingScoreStore:
         total = sum(counts.values())
         valid = counts["valid"]
         unknown = counts["unknown"]
-        invalid = sum(counts[k] for k in ["no_resume", "empty_resume", "parsing_failed", "invalid_manual"])
+        invalid = sum(
+            counts[k]
+            for k in ["no_resume", "empty_resume", "parsing_failed", "invalid_manual"]
+        )
         filtered = invalid
         return {
             "total_candidates": total,
@@ -321,7 +333,9 @@ class CandidateRankingScoreStore:
                 "factor_key": row.factor_key,
                 "factor_label": row.factor_label,
                 "impact_score": float(Decimal(str(row.impact_score)).quantize(Decimal("0.01"))),
-                "normalized_weight": float(Decimal(str(row.normalized_weight)).quantize(Decimal("0.0001"))),
+                "normalized_weight": float(
+                    Decimal(str(row.normalized_weight)).quantize(Decimal("0.0001"))
+                ),
                 "direction": row.direction,
                 "evidence_json": dict(row.evidence_json or {}),
                 "display_order": row.display_order,
@@ -458,7 +472,9 @@ class CandidateRankingScoreStore:
         current_analysis_created_at = self._coerce_utc_datetime(
             existing.source_analysis_created_at if existing is not None else None
         )
-        incoming_analysis_created_at = self._coerce_utc_datetime(payload["source_analysis_created_at"])
+        incoming_analysis_created_at = self._coerce_utc_datetime(
+            payload["source_analysis_created_at"]
+        )
         incoming_updated_at = self._coerce_utc_datetime(payload["updated_at"])
         if (
             current_analysis_created_at is not None
@@ -495,6 +511,9 @@ class CandidateRankingScoreStore:
             delta_summary=delta_summary,
             breakdown=payload.get("breakdown"),
         )
+        payload = sanitize_ranking_payload(payload)
+        factor_summary = dict(payload["factor_summary_json"] or {})
+        delta_summary = dict(payload["delta_summary_json"] or {})
 
         if self._session.bind is not None and self._session.bind.dialect.name == "postgresql":
             insert_stmt = (
@@ -552,7 +571,8 @@ class CandidateRankingScoreStore:
                 where=sa.or_(
                     CandidateJobScoreModel.source_analysis_created_at.is_(None),
                     excluded.source_analysis_created_at.is_(None),
-                    excluded.source_analysis_created_at >= CandidateJobScoreModel.source_analysis_created_at,
+                    excluded.source_analysis_created_at
+                    >= CandidateJobScoreModel.source_analysis_created_at,
                 ),
             ).returning(
                 CandidateJobScoreModel.final_score,
@@ -599,7 +619,10 @@ class CandidateRankingScoreStore:
                 "monotonicity_decision": "updated",
                 "previous_score": previous_score,
                 "new_score": Decimal(str(returned_row["final_score"])),
-                "ranking_updated_at": self._coerce_utc_datetime(returned_row["updated_at"]) or incoming_updated_at,
+                "ranking_updated_at": (
+                    self._coerce_utc_datetime(returned_row["updated_at"])
+                    or incoming_updated_at
+                ),
                 "factor_summary": factor_summary,
                 "delta_summary": delta_summary,
             }

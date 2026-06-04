@@ -12,15 +12,17 @@ Fluxo completo de requisição de análise:
 """
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
 
 import structlog
 from sqlalchemy.exc import IntegrityError
 
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand, RequestAnalysisResult
 from src.application.services.ai_limit_override_service import AILimitOverrideService
+from src.core.resume_text_quality import is_extracted_text_useful
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.domain.services.analysis_versioning import AnalysisVersioningService
-from src.infrastructure.database.connection import AsyncSessionFactory
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
@@ -33,6 +35,70 @@ logger = structlog.get_logger(__name__)
 _ESTIMATED_WAIT_SECONDS_PER_POSITION = 45  # estimativa conservadora por posição na fila
 _PENDING_STALE_AFTER = timedelta(hours=2)
 _PROCESSING_STALE_AFTER = timedelta(minutes=30)
+_SUPPORTED_ANALYSIS_RESUME_MIME_TYPES = {"application/pdf"}
+_SUPPORTED_ANALYSIS_RESUME_EXTENSIONS = {".pdf"}
+_EXTRACTION_NOT_READY_MESSAGE = (
+    "A extração do currículo ainda não foi concluída. "
+    "Aguarde a extração antes de reprocessar a análise."
+)
+_EXTRACTION_FAILED_MESSAGE = (
+    "A extração do currículo falhou. Envie um novo PDF ou tente extrair novamente."
+)
+_EXTRACTED_TEXT_INVALID_MESSAGE = (
+    "Não foi possível reprocessar: o currículo não possui texto extraído válido."
+)
+_UNSUPPORTED_RESUME_FORMAT_MESSAGE = (
+    "Não foi possível reprocessar: o currículo está em formato não suportado. Envie um novo PDF."
+)
+
+
+class _ResumeAnalysisReadiness(SimpleNamespace):
+    ready: bool
+    pending_extraction: bool
+    message: str | None
+
+
+def _is_supported_resume_format(version) -> bool:
+    mime_type = (getattr(version, "mime_type", "") or "").strip().lower()
+    original_extension = Path(getattr(version, "original_file_name", "") or "").suffix.lower()
+    return (
+        mime_type in _SUPPORTED_ANALYSIS_RESUME_MIME_TYPES
+        and original_extension in _SUPPORTED_ANALYSIS_RESUME_EXTENSIONS
+    )
+
+
+def _resume_analysis_readiness(version) -> _ResumeAnalysisReadiness:
+    if not _is_supported_resume_format(version):
+        return _ResumeAnalysisReadiness(
+            ready=False,
+            pending_extraction=False,
+            message=_UNSUPPORTED_RESUME_FORMAT_MESSAGE,
+        )
+
+    extraction_status = str(getattr(version, "extraction_status", "") or "").lower()
+    if extraction_status == "failed":
+        return _ResumeAnalysisReadiness(
+            ready=False,
+            pending_extraction=False,
+            message=_EXTRACTION_FAILED_MESSAGE,
+        )
+
+    if extraction_status != "completed":
+        return _ResumeAnalysisReadiness(
+            ready=False,
+            pending_extraction=True,
+            message=_EXTRACTION_NOT_READY_MESSAGE,
+        )
+
+    extracted_text = getattr(version, "extracted_text", None)
+    if not is_extracted_text_useful(extracted_text):
+        return _ResumeAnalysisReadiness(
+            ready=False,
+            pending_extraction=False,
+            message=_EXTRACTED_TEXT_INVALID_MESSAGE,
+        )
+
+    return _ResumeAnalysisReadiness(ready=True, pending_extraction=False, message=None)
 
 
 def _is_stale_in_flight_analysis(analysis) -> bool:
@@ -47,7 +113,10 @@ def _is_stale_in_flight_analysis(analysis) -> bool:
             return True
         if analysis.started_at is not None:
             return analysis.started_at < now - _PROCESSING_STALE_AFTER
-        return analysis.updated_at is not None and analysis.updated_at < now - _PROCESSING_STALE_AFTER
+        return (
+            analysis.updated_at is not None
+            and analysis.updated_at < now - _PROCESSING_STALE_AFTER
+        )
     if status == "retry_scheduled":
         return analysis.next_retry_at is not None and analysis.next_retry_at <= now
     return False
@@ -141,33 +210,11 @@ class RequestAnalysisUseCase:
                 reused=True,
                 reason=(
                     "analysis_already_in_progress"
-                    if str(existing.status) in {"waiting_extraction", "pending", "processing", "retry_scheduled"}
+                    if str(existing.status)
+                    in {"waiting_extraction", "pending", "processing", "retry_scheduled"}
                     else "analysis_reused_existing"
                 ),
             )
-
-        if existing and command.force_reanalyze:
-            if str(existing.status) in {"pending", "processing", "retry_scheduled"} and _is_stale_in_flight_analysis(existing):
-                _reset_stale_analysis_for_reenqueue(existing)
-                await self._analysis_repo.save_existing(existing)
-                queue_length = await self._analysis_repo.count_pending()
-                estimated_wait = max(1, queue_length) * _ESTIMATED_WAIT_SECONDS_PER_POSITION
-                return RequestAnalysisResult(
-                    analysis_id=existing.id,
-                    status=existing.status,
-                    estimated_wait_seconds=estimated_wait,
-                    enqueue_required=True,
-                    created=False,
-                    reused=True,
-                    stuck=True,
-                    reason="analysis_stale_requeued",
-                )
-            allowed, reason = AnalysisVersioningService.validate_reanalysis_allowed(
-                existing_status=str(existing.status),
-                force=command.force_reanalyze,
-            )
-            if not allowed:
-                raise ValidationException(reason)
 
         # 3. Reutiliza análise concluída para o mesmo resume_version + vaga (cache)
         latest_completed = await self._analysis_repo.find_latest_completed_for_version(
@@ -200,9 +247,43 @@ class RequestAnalysisUseCase:
                 reason="analysis_existing_completed_reused",
             )
 
-        extraction_ready = str(getattr(version, "extraction_status", "")).lower() == "completed" and bool(
-            (version.extracted_text or "").strip()
-        )
+        resume_readiness = _resume_analysis_readiness(version)
+        extraction_ready = resume_readiness.ready
+        if not extraction_ready and (
+            not command.allow_pending_resume_extraction
+            or not resume_readiness.pending_extraction
+        ):
+            raise ValidationException(
+                resume_readiness.message or _EXTRACTED_TEXT_INVALID_MESSAGE
+            )
+
+        if existing and command.force_reanalyze:
+            in_flight_status = str(existing.status) in {
+                "pending",
+                "processing",
+                "retry_scheduled",
+            }
+            if in_flight_status and _is_stale_in_flight_analysis(existing):
+                _reset_stale_analysis_for_reenqueue(existing)
+                await self._analysis_repo.save_existing(existing)
+                queue_length = await self._analysis_repo.count_pending()
+                estimated_wait = max(1, queue_length) * _ESTIMATED_WAIT_SECONDS_PER_POSITION
+                return RequestAnalysisResult(
+                    analysis_id=existing.id,
+                    status=existing.status,
+                    estimated_wait_seconds=estimated_wait,
+                    enqueue_required=True,
+                    created=False,
+                    reused=True,
+                    stuck=True,
+                    reason="analysis_stale_requeued",
+                )
+            allowed, reason = AnalysisVersioningService.validate_reanalysis_allowed(
+                existing_status=str(existing.status),
+                force=command.force_reanalyze,
+            )
+            if not allowed:
+                raise ValidationException(reason)
 
         logger.info(
             "analysis.cache_miss",
@@ -287,7 +368,8 @@ class RequestAnalysisUseCase:
         if not extraction_ready:
             if not command.allow_pending_resume_extraction:
                 raise ValidationException(
-                    "Currículo ainda em processamento. Faça upload do PDF e aguarde extração antes de solicitar análise."
+                    "Currículo ainda em processamento. Faça upload do PDF e aguarde "
+                    "extração antes de solicitar análise."
                 )
             return RequestAnalysisResult(
                 analysis_id=analysis.id,

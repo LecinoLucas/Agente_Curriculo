@@ -5,6 +5,7 @@ from uuid import UUID
 import sqlalchemy as sa
 import structlog
 
+from src.core.ai_response_redactor import redact_ai_response_text
 from src.infrastructure.database.connection import AsyncSessionFactory
 from src.infrastructure.database.models.analysis_model import AnalysisModel, AnalysisResultModel
 from src.interface.workers.matching_dispatcher import enqueue_published_job_matches
@@ -80,11 +81,6 @@ async def _process_analysis(analysis_id: UUID) -> None:
 
         base = 60 + (analysis_id.int % 35)
         overall = min(98, base)
-        technical = min(99, overall + 3)
-        experience = max(40, overall - 5)
-        education = max(35, overall - 8)
-        communication = min(98, overall + 1)
-        leadership = max(30, overall - 10)
 
         result = await session.scalar(
             sa.select(AnalysisResultModel).where(AnalysisResultModel.analysis_id == analysis_id)
@@ -116,7 +112,9 @@ async def _process_analysis(analysis_id: UUID) -> None:
                     cache_read_tokens=0,
                     cache_write_tokens=0,
                     processing_time_ms=1600,
-                    raw_llm_response='{"status":"ok","source":"dev_mock","note":"ENABLE_DEV_MOCK=true"}',
+                    raw_llm_response=redact_ai_response_text(
+                        '{"status":"ok","source":"dev_mock","note":"ENABLE_DEV_MOCK=true"}'
+                    ),
                     prompt_version_used="dev_mock",
                 )
             )

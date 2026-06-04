@@ -14,6 +14,7 @@ from src.application.services.ai_usage_log_service import (
     AIUsageLogPayload,
     safe_persist_ai_usage_log,
 )
+from src.core.ai_response_redactor import redact_ai_response_text
 from src.core.log_sanitizer import sanitize_log_text
 from src.core.settings import settings
 from src.infrastructure.ai.gemini_adapter import AIProviderRateLimitedError
@@ -31,14 +32,29 @@ MAX_RESUME_PROMPT_CHARS = 2500
 MAX_JOB_PROMPT_CHARS = 700
 MAX_PROMPT_TOTAL_CHARS = 4500
 CLAIM_STALE_AFTER = timedelta(minutes=20)
-PROMPT_INSTRUCTION = "Analise o candidato e retorne JSON válido"
+PROMPT_INSTRUCTION = (
+    "Analise o candidato e retorne JSON válido. Avalie somente critérios "
+    "profissionais objetivos relacionados à vaga: experiência, skills, formação "
+    "quando exigida, certificações, histórico de funções e requisitos declarados. "
+    "Ignore dados sensíveis/protegidos e nunca use idade, data de nascimento, "
+    "gênero, raça/cor/etnia, religião, estado civil, filhos/família, gravidez, "
+    "saúde, deficiência, aparência/foto, endereço/bairro/distância, nacionalidade "
+    "ou orientação sexual como critério. Se esses dados aparecerem no currículo, "
+    "não os mencione em resumo, pontos fortes, lacunas, recomendações ou qualquer "
+    "justificativa. Diferencie informação não informada de ausência comprovada e "
+    "não reprove automaticamente por dado ausente."
+)
 PROMPT_SUSPICIOUS_PATTERNS = (
     r"(?i)ignore\s+previous\s+instructions",
     r"(?i)jailbreak",
     r"(?i)system\s*prompt",
     r"(?i)<script",
 )
-MAX_ANALYSIS_RETRIES = 4
+DEFAULT_ANALYSIS_MAX_RETRIES = 3
+MAX_ANALYSIS_RETRIES = max(
+    0,
+    int(settings.AI_ANALYSIS_MAX_RETRIES or DEFAULT_ANALYSIS_MAX_RETRIES),
+)
 RETRY_BACKOFF_SCHEDULE_SECONDS = {
     1: 15,
     2: 45,
@@ -120,7 +136,11 @@ def _extract_retry_after_from_http_error(error: httpx.HTTPStatusError) -> float 
             pass
 
     sanitized_error = sanitize_log_text(str(error)) or ""
-    match = re.search(r"retry(?:_after_seconds| in)\s*=?\s*([0-9]+(?:\.[0-9]+)?)", sanitized_error, re.IGNORECASE)
+    match = re.search(
+        r"retry(?:_after_seconds| in)\s*=?\s*([0-9]+(?:\.[0-9]+)?)",
+        sanitized_error,
+        re.IGNORECASE,
+    )
     if match:
         try:
             return max(0.0, float(match.group(1)))
@@ -219,7 +239,10 @@ def _classify_analysis_exception(exc: Exception) -> AnalysisErrorClassification:
                 status_code=status_code,
             )
 
-        if isinstance(current, (asyncio.TimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout)):
+        if isinstance(
+            current,
+            TimeoutError | httpx.ReadTimeout | httpx.ConnectTimeout | httpx.PoolTimeout,
+        ):
             return AnalysisErrorClassification(
                 provider_error_type="timeout",
                 is_temporary=True,
@@ -240,6 +263,7 @@ def _classify_analysis_exception(exc: Exception) -> AnalysisErrorClassification:
         "without content parts",
         "missing required fields",
         "payload invalid",
+        "ai_response_",
     )
     if any(marker in message for marker in payload_error_markers):
         return AnalysisErrorClassification(
@@ -277,18 +301,29 @@ def _build_retry_delay_seconds(
     return countdown_seconds
 
 
+def _configured_analysis_max_retries() -> int:
+    return max(
+        0,
+        int(settings.AI_ANALYSIS_MAX_RETRIES or DEFAULT_ANALYSIS_MAX_RETRIES),
+    )
+
+
 def _build_final_failure_reason(
     *,
     classification: AnalysisErrorClassification,
     error: str,
 ) -> str:
     sanitized_error = sanitize_log_text(error) or "Erro não informado."
+    if classification.provider_error_type == "rate_limited":
+        return "provider_rate_limit_exhausted"
     if classification.is_temporary:
         return (
             "Alta demanda no provedor IA após múltiplas tentativas. "
             f"Detalhe técnico: {sanitized_error[:700]}"
         )
     if classification.provider_error_type == "payload_invalid":
+        if sanitized_error.startswith("ai_response_"):
+            return sanitized_error[:1000]
         return f"Payload inválido retornado pelo provedor IA. {sanitized_error[:700]}"
     return sanitized_error[:1000]
 
@@ -361,7 +396,12 @@ def _truncate_with_notice(value: str, max_chars: int) -> str:
 
 def _remove_sensitive_resume_data(value: str) -> str:
     sanitized = value
-    sanitized = re.sub(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "[email_removido]", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(
+        r"\b[\w\.-]+@[\w\.-]+\.\w+\b",
+        "[email_removido]",
+        sanitized,
+        flags=re.IGNORECASE,
+    )
     sanitized = re.sub(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b", "[cpf_removido]", sanitized)
     sanitized = re.sub(
         r"(?:(?:\+?55)\s*)?(?:\(?\d{2}\)?\s*)?(?:9?\d{4})[-\s]?\d{4}",
@@ -374,9 +414,34 @@ def _remove_sensitive_resume_data(value: str) -> str:
 def _extract_relevant_resume_lines(value: str) -> str:
     lines = [line.strip() for line in value.splitlines()]
     section_keywords = {
-        "experience": ("experiencia", "experiência", "experience", "cargo", "empresa", "projeto", "role"),
-        "skills": ("skill", "skills", "habilidade", "habilidades", "competencia", "competências", "stack"),
-        "education": ("formacao", "formação", "educacao", "educação", "education", "curso", "graduacao", "graduação"),
+        "experience": (
+            "experiencia",
+            "experiência",
+            "experience",
+            "cargo",
+            "empresa",
+            "projeto",
+            "role",
+        ),
+        "skills": (
+            "skill",
+            "skills",
+            "habilidade",
+            "habilidades",
+            "competencia",
+            "competências",
+            "stack",
+        ),
+        "education": (
+            "formacao",
+            "formação",
+            "educacao",
+            "educação",
+            "education",
+            "curso",
+            "graduacao",
+            "graduação",
+        ),
     }
     inline_keywords = tuple({kw for values in section_keywords.values() for kw in values})
 
@@ -403,7 +468,12 @@ def _extract_relevant_resume_lines(value: str) -> str:
         if not raw_line:
             continue
         normalized = raw_line.lower()
-        normalized = normalized.replace("ç", "c").replace("ã", "a").replace("á", "a").replace("é", "e")
+        normalized = (
+            normalized.replace("ç", "c")
+            .replace("ã", "a")
+            .replace("á", "a")
+            .replace("é", "e")
+        )
         key = normalized.strip()
 
         if any(term in normalized for term in must_keep_terms):
@@ -495,11 +565,13 @@ def _build_minimal_user_prompt(*, resume_text: str, job_context: str) -> str:
         "Apenas JSON puro e compacto.\n"
         "Retorne EXATAMENTE estes campos (não invente dados; use null/[] quando ausente):\n"
         "{\n"
-        '  "professional_area": "technology|data|administrative|accounting|financial|commercial|operational|leadership|other",\n'
+        '  "professional_area": "technology|data|administrative|accounting|financial|'
+        'commercial|operational|leadership|other",\n'
         '  "seniority_level": "intern|junior|mid|senior|lead|undefined",\n'
         '  "skills": ["maximo 4 skills curtas e normalizadas"],\n'
         '  "experiences": [{"role": "string", "duration_months": "integer >= 0"}],\n'
-        '  "education": [{"level": "none|high_school|technical|bachelor|postgraduate|master|phd", "field": "string|null"}],\n'
+        '  "education": [{"level": "none|high_school|technical|bachelor|postgraduate|'
+        'master|phd", "field": "string|null"}],\n'
         '  "total_experience_months": "integer >= 0"\n'
         "}"
     )
@@ -643,10 +715,7 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
         failure_details = _extract_failure_details(exc)
         classification = _classify_analysis_exception(exc)
         attempt = self.request.retries + 1
-        task_max_retries = max(
-            int(getattr(self, "max_retries", MAX_ANALYSIS_RETRIES) or MAX_ANALYSIS_RETRIES),
-            MAX_ANALYSIS_RETRIES,
-        )
+        task_max_retries = _configured_analysis_max_retries()
 
         logger.exception(
             "analysis.task_failed",
@@ -687,12 +756,12 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
 
         retry_count = self.request.retries + 1
 
-        if retry_count > task_max_retries and classification.provider_error_type != "rate_limited":
+        if retry_count > task_max_retries:
             _run_async(_mark_analysis_failed_async(
                 analysis_id=analysis_id,
                 task_id=task_id,
                 error=error_str,
-                retry_count=self.request.retries,
+                retry_count=task_max_retries,
                 attempts=attempt,
                 classification=classification,
                 failure_details=failure_details,
@@ -718,7 +787,7 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
             provider_error_type=classification.provider_error_type,
         )
 
-        retry_state_persisted = _run_async(_mark_analysis_retry_scheduled_async(
+        _run_async(_mark_analysis_retry_scheduled_async(
             analysis_id=analysis_id,
             task_id=task_id,
             error=error_str,
@@ -729,19 +798,6 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
             failure_details=failure_details,
             expected_worker_claim_id=task_id,
         ))
-
-        if classification.provider_error_type == "rate_limited" and retry_state_persisted:
-            process_analysis.apply_async(
-                args=[analysis_id],
-                countdown=countdown,
-                queue=ANALYSIS_QUEUE,
-            )
-            return {
-                "analysis_id": analysis_id,
-                "status": "retry_scheduled",
-                "provider_error_type": "rate_limited",
-                "retry_in_seconds": countdown,
-            }
 
         raise self.retry(exc=exc, countdown=countdown) from exc
 
@@ -892,7 +948,7 @@ async def _process_analysis_with_session(
         model_id=model_id,
         timeout_seconds=settings.AI_PROVIDER_TIMEOUT_SECONDS,
         max_tokens=prompt_max_tokens,
-        max_retries=MAX_ANALYSIS_RETRIES,
+        max_retries=_configured_analysis_max_retries(),
         job_id=str(job_id) if job_id else None,
     )
 
@@ -1115,7 +1171,10 @@ async def _run_real_ai_analysis(
 ) -> tuple[dict, str, int, int, int, int, int, str, str | None, int, int, int, int]:
     from src.application.ports.ai_service import AIAnalysisRequest
     from src.infrastructure.ai.factory import AIServiceFactory
-    from src.infrastructure.ai.response_parser import parse_analysis_response
+    from src.infrastructure.ai.response_parser import (
+        AIResponseValidationError,
+        parse_analysis_response,
+    )
     from src.infrastructure.database.models.job_model import JobModel
 
     prompt_version_used = f"{prompt_version or 'unknown'}:gemini_minimal_compact_v2"
@@ -1197,7 +1256,7 @@ async def _run_real_ai_analysis(
                 latency_ms=ai_response.processing_time_ms,
             ),
         )
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         await safe_persist_ai_usage_log(
             sessionmaker,
             AIUsageLogPayload(
@@ -1261,14 +1320,20 @@ async def _run_real_ai_analysis(
     try:
         result_fields = parse_analysis_response(ai_response.content)
     except Exception as exc:
+        parser_error_code = (
+            exc.code if isinstance(exc, AIResponseValidationError) else type(exc).__name__
+        )
+        parser_error_fields = exc.fields if isinstance(exc, AIResponseValidationError) else []
         logger.exception(
             "analysis.parse_failed",
             analysis_id=analysis_id,
             response_size_chars=len(ai_response.content or ""),
             parser_error_type=type(exc).__name__,
+            parser_error_code=parser_error_code,
+            parser_error_fields=parser_error_fields,
         )
         raise AnalysisExecutionError(
-            "Failed to parse AI response",
+            sanitize_log_text(str(exc)) or parser_error_code,
             details=AnalysisFailureDetails(
                 finish_reason=ai_response.finish_reason,
                 raw_llm_response=ai_response.content,
@@ -1397,7 +1462,10 @@ async def _persist_completed_analysis(
             await session.rollback()
             return False
 
-        if expected_worker_claim_id is not None and analysis.worker_claim_id != expected_worker_claim_id:
+        if (
+            expected_worker_claim_id is not None
+            and analysis.worker_claim_id != expected_worker_claim_id
+        ):
             logger.warning(
                 "analysis.persist_claim_mismatch",
                 analysis_id=str(analysis_id),
@@ -1434,7 +1502,7 @@ async def _persist_completed_analysis(
             "system_prompt_chars": system_prompt_chars,
             "user_prompt_chars": user_prompt_chars,
             "prompt_chars_total": prompt_chars_total,
-            "raw_llm_response": raw_response,
+            "raw_llm_response": redact_ai_response_text(raw_response),
             "prompt_version_used": prompt_version_used,
         }
 
@@ -1481,8 +1549,8 @@ async def _mark_analysis_retry_scheduled(
     expected_worker_claim_id: str | None = None,
     sessionmaker=None,
 ) -> bool:
-    from src.infrastructure.database.models.analysis_model import AnalysisModel
     from src.infrastructure.database.connection import get_session_factory
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
 
     owns_sessionmaker = sessionmaker is None
     try:
@@ -1502,7 +1570,10 @@ async def _mark_analysis_retry_scheduled(
             if analysis is None:
                 return False
 
-            if expected_worker_claim_id is not None and analysis.worker_claim_id != expected_worker_claim_id:
+            if (
+                expected_worker_claim_id is not None
+                and analysis.worker_claim_id != expected_worker_claim_id
+            ):
                 await session.rollback()
                 return False
 
@@ -1515,7 +1586,7 @@ async def _mark_analysis_retry_scheduled(
 
             analysis.status = "retry_scheduled"
             analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
-            analysis.retry_count = retry_count
+            analysis.retry_count = min(retry_count, _configured_analysis_max_retries())
             analysis.attempts = attempts
             analysis.failure_reason = _retry_failure_reason(classification)
             analysis.failed_at = None
@@ -1533,7 +1604,9 @@ async def _mark_analysis_retry_scheduled(
                 and failure_details is not None
                 and failure_details.model_id
             ):
-                from src.application.services.ai_provider_health_service import AIProviderHealthService
+                from src.application.services.ai_provider_health_service import (
+                    AIProviderHealthService,
+                )
 
                 await AIProviderHealthService(session).record_rate_limited(
                     provider=failure_details.provider,
@@ -1570,8 +1643,8 @@ async def _mark_analysis_failed(
     expected_worker_claim_id: str | None = None,
     sessionmaker=None,
 ) -> bool:
-    from src.infrastructure.database.models.analysis_model import AnalysisModel
     from src.infrastructure.database.connection import get_session_factory
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
 
     owns_sessionmaker = sessionmaker is None
     try:
@@ -1591,7 +1664,10 @@ async def _mark_analysis_failed(
             if analysis is None:
                 return False
 
-            if expected_worker_claim_id is not None and analysis.worker_claim_id != expected_worker_claim_id:
+            if (
+                expected_worker_claim_id is not None
+                and analysis.worker_claim_id != expected_worker_claim_id
+            ):
                 await session.rollback()
                 return False
 
@@ -1605,7 +1681,7 @@ async def _mark_analysis_failed(
             analysis.status = "failed"
             analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
             analysis.queue_name = ANALYSIS_QUEUE
-            analysis.retry_count = retry_count
+            analysis.retry_count = min(retry_count, _configured_analysis_max_retries())
             analysis.attempts = attempts
             analysis.failure_reason = _build_final_failure_reason(
                 classification=classification,
@@ -1820,7 +1896,7 @@ async def _upsert_failure_result(
         "system_prompt_chars": failure_details.system_prompt_chars,
         "user_prompt_chars": failure_details.user_prompt_chars,
         "prompt_chars_total": failure_details.prompt_chars_total,
-        "raw_llm_response": failure_details.raw_llm_response,
+        "raw_llm_response": redact_ai_response_text(failure_details.raw_llm_response),
         "prompt_version_used": failure_details.prompt_version_used,
     }
 
