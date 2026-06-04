@@ -18,12 +18,26 @@ import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
+from src.core.ai_sensitive_guardrails import sanitize_resume_analysis_result
 
 # ── JSON extraction ────────────────────────────────────────────────────────────
 
+
+class AIResponseValidationError(ValueError):
+    """Structured parser failure that can be persisted without raw payload data."""
+
+    def __init__(self, code: str, message: str, *, fields: list[str] | None = None) -> None:
+        self.code = code
+        self.fields = fields or []
+        detail = f"{code}: {message}"
+        if self.fields:
+            detail = f"{detail}; fields={','.join(sorted(self.fields))}"
+        super().__init__(detail)
+
+
 def extract_json(text: str) -> dict[str, Any]:
     if not text or not text.strip():
-        raise ValueError("Empty AI response")
+        raise AIResponseValidationError("ai_response_empty", "empty AI response")
 
     cleaned = text.strip()
 
@@ -33,13 +47,28 @@ def extract_json(text: str) -> dict[str, Any]:
         re.DOTALL | re.IGNORECASE,
     )
     if fence_match:
-        return json.loads(fence_match.group(1))
+        try:
+            parsed = json.loads(fence_match.group(1))
+        except json.JSONDecodeError as exc:
+            raise AIResponseValidationError(
+                "ai_response_invalid_json",
+                "fenced AI response is not valid JSON",
+            ) from exc
+        if isinstance(parsed, dict):
+            return parsed
+        raise AIResponseValidationError(
+            "ai_response_schema_invalid",
+            "AI response JSON must be an object",
+        )
 
     try:
         parsed = json.loads(cleaned)
         if isinstance(parsed, dict):
             return parsed
-        raise ValueError("AI response JSON must be an object")
+        raise AIResponseValidationError(
+            "ai_response_schema_invalid",
+            "AI response JSON must be an object",
+        )
     except json.JSONDecodeError:
         pass
 
@@ -70,12 +99,24 @@ def extract_json(text: str) -> dict[str, Any]:
             elif ch == "}":
                 depth -= 1
                 if depth == 0:
-                    parsed = json.loads(cleaned[start : i + 1])
+                    try:
+                        parsed = json.loads(cleaned[start : i + 1])
+                    except json.JSONDecodeError as exc:
+                        raise AIResponseValidationError(
+                            "ai_response_invalid_json",
+                            "embedded AI response JSON is invalid",
+                        ) from exc
                     if isinstance(parsed, dict):
                         return parsed
-                    raise ValueError("Extracted JSON must be an object")
+                    raise AIResponseValidationError(
+                        "ai_response_schema_invalid",
+                        "extracted JSON must be an object",
+                    )
 
-    raise ValueError(f"No valid JSON in AI response: {cleaned[:300]!r}")
+    raise AIResponseValidationError(
+        "ai_response_invalid_json",
+        "no valid JSON object in AI response",
+    )
 
 
 # ── Basic normalization ────────────────────────────────────────────────────────
@@ -164,6 +205,304 @@ def _dedupe_preserve_case(values: list[Any]) -> list[str]:
         result.append(text)
 
     return result
+
+
+# ── Strict AI payload schema ───────────────────────────────────────────────────
+
+_MINIMAL_REQUIRED_FIELDS = {
+    "professional_area",
+    "seniority_level",
+    "skills",
+    "experiences",
+    "education",
+    "total_experience_months",
+}
+_MINIMAL_OPTIONAL_FIELDS = {
+    "candidate_summary",
+    "summary",
+    "strengths",
+    "weaknesses",
+    "recommendations",
+    "keywords",
+    "cv_quality_score",
+    "communication_quality",
+    "personal_info",
+    "location",
+    "work_model",
+}
+_FULL_REQUIRED_FIELDS = {
+    "summary",
+    "total_experience_months",
+    "experiences",
+    "education",
+    "highest_education_level",
+    "skills",
+    "communication_quality",
+    "strengths",
+    "weaknesses",
+    "recommendations",
+    "keywords",
+}
+_LEGACY_PROFILE_REQUIRED_FIELDS = {
+    "experiences",
+    "skills",
+    "education",
+    "cv_quality_score",
+}
+_FULL_OPTIONAL_FIELDS = {
+    "candidate",
+    "personal_info",
+    "experience",
+    "employment_gaps",
+    "education_field_relevance",
+    "certifications",
+    "skill_categories",
+    "languages",
+    "leadership_indicators",
+    "leadership",
+    "candidate_summary",
+    "cv_quality_score",
+    "location",
+    "work_model",
+}
+_ALLOWED_RESPONSE_FIELDS = (
+    _MINIMAL_REQUIRED_FIELDS
+    | _MINIMAL_OPTIONAL_FIELDS
+    | _FULL_REQUIRED_FIELDS
+    | _FULL_OPTIONAL_FIELDS
+)
+_VALID_SENIORITY_LEVELS = {
+    "intern",
+    "junior",
+    "mid",
+    "senior",
+    "lead",
+    "principal",
+    "undefined",
+}
+_VALID_EDUCATION_LEVELS = {
+    "none",
+    "high_school",
+    "technical",
+    "bachelor",
+    "postgraduate",
+    "master",
+    "phd",
+}
+_QUALITY_SCORE_FIELDS = ("structure", "clarity", "professionalism", "completeness", "total")
+
+
+def _require_list(data: dict[str, Any], field: str, errors: list[str]) -> None:
+    if not isinstance(data.get(field), list):
+        errors.append(field)
+
+
+def _require_non_negative_int(data: dict[str, Any], field: str, errors: list[str]) -> None:
+    parsed = _coerce_int(data.get(field))
+    if parsed is None or parsed < 0:
+        errors.append(field)
+
+
+def _require_string_or_null(data: dict[str, Any], field: str, errors: list[str]) -> None:
+    value = data.get(field)
+    if value is not None and not isinstance(value, str):
+        errors.append(field)
+
+
+def _validate_score_range(value: Any, field: str, errors: list[str]) -> None:
+    score = _coerce_float(value)
+    if score is None or not 0 <= score <= 100:
+        errors.append(field)
+
+
+def _validate_quality_scores(raw: Any, field: str, errors: list[str]) -> None:
+    if raw is None:
+        return
+    if not isinstance(raw, dict):
+        errors.append(field)
+        return
+    for key, value in raw.items():
+        if key not in _QUALITY_SCORE_FIELDS:
+            errors.append(f"{field}.{key}")
+            continue
+        if value is not None:
+            _validate_score_range(value, f"{field}.{key}", errors)
+
+
+def _validate_reason_codes(raw: Any, errors: list[str]) -> None:
+    if raw is None:
+        return
+    if not isinstance(raw, list):
+        errors.append("reason_codes")
+        return
+    for index, item in enumerate(raw):
+        if isinstance(item, str):
+            if not make_id(item):
+                errors.append(f"reason_codes[{index}]")
+            continue
+        if isinstance(item, dict):
+            code = item.get("code") or item.get("reason_code")
+            if not isinstance(code, str) or not make_id(code):
+                errors.append(f"reason_codes[{index}].code")
+            continue
+        errors.append(f"reason_codes[{index}]")
+
+
+def _validate_breakdown(raw: Any, errors: list[str]) -> None:
+    if raw is None:
+        return
+    if not isinstance(raw, dict):
+        errors.append("breakdown")
+        return
+    for key, value in raw.items():
+        if isinstance(value, int | float):
+            if not 0 <= float(value) <= 100:
+                errors.append(f"breakdown.{key}")
+            continue
+        if isinstance(value, str | list | dict) or value is None:
+            continue
+        errors.append(f"breakdown.{key}")
+
+
+def _validate_minimal_skills(raw: Any, errors: list[str]) -> None:
+    if not isinstance(raw, list):
+        errors.append("skills")
+        return
+    for index, item in enumerate(raw):
+        if isinstance(item, str):
+            continue
+        if isinstance(item, dict):
+            name = item.get("name")
+            if name is None or (isinstance(name, str) and not name.strip()):
+                continue
+            if not isinstance(name, str):
+                errors.append(f"skills[{index}].name")
+            continue
+        errors.append(f"skills[{index}]")
+
+
+def _validate_experiences(raw: Any, errors: list[str]) -> None:
+    if not isinstance(raw, list):
+        errors.append("experiences")
+        return
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            errors.append(f"experiences[{index}]")
+            continue
+        role = item.get("role") or item.get("role_title") or item.get("title")
+        if role is not None and not isinstance(role, str):
+            errors.append(f"experiences[{index}].role")
+        duration = item.get("duration_months")
+        if duration is not None:
+            parsed = _coerce_int(duration)
+            if parsed is None or parsed < 0:
+                errors.append(f"experiences[{index}].duration_months")
+
+
+def _validate_education(raw: Any, errors: list[str]) -> None:
+    if not isinstance(raw, list):
+        errors.append("education")
+        return
+    for index, item in enumerate(raw):
+        if isinstance(item, str):
+            if _normalize_degree(item) not in _VALID_EDUCATION_LEVELS:
+                errors.append(f"education[{index}]")
+            continue
+        if not isinstance(item, dict):
+            errors.append(f"education[{index}]")
+            continue
+        raw_level = item.get("level") or item.get("degree")
+        if raw_level is not None and _normalize_degree(raw_level) not in _VALID_EDUCATION_LEVELS:
+            errors.append(f"education[{index}].level")
+
+
+def _validate_minimal_payload(data: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    _require_string_or_null(data, "professional_area", errors)
+    seniority = normalize_text(data.get("seniority_level"))
+    if seniority not in _VALID_SENIORITY_LEVELS:
+        errors.append("seniority_level")
+    _validate_minimal_skills(data.get("skills"), errors)
+    _validate_experiences(data.get("experiences"), errors)
+    _validate_education(data.get("education"), errors)
+    _require_non_negative_int(data, "total_experience_months", errors)
+    return errors
+
+
+def _validate_full_payload(data: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    _require_string_or_null(data, "summary", errors)
+    _require_non_negative_int(data, "total_experience_months", errors)
+    _validate_experiences(data.get("experiences"), errors)
+    _validate_education(data.get("education"), errors)
+    education_level = _normalize_degree(data.get("highest_education_level"))
+    if education_level not in _VALID_EDUCATION_LEVELS:
+        errors.append("highest_education_level")
+    _validate_minimal_skills(data.get("skills"), errors)
+    _validate_quality_scores(data.get("communication_quality"), "communication_quality", errors)
+    _require_list(data, "strengths", errors)
+    _require_list(data, "weaknesses", errors)
+    _require_list(data, "recommendations", errors)
+    _require_list(data, "keywords", errors)
+    return errors
+
+
+def _validate_legacy_profile_payload(data: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    _validate_experiences(data.get("experiences"), errors)
+    _validate_minimal_skills(data.get("skills"), errors)
+    _validate_education(data.get("education"), errors)
+    _validate_quality_scores(data.get("cv_quality_score"), "cv_quality_score", errors)
+    return errors
+
+
+def validate_original_analysis_payload(data: dict[str, Any]) -> None:
+    """Validate raw AI JSON before compatibility normalization."""
+    if not data:
+        raise AIResponseValidationError("ai_response_empty", "empty AI response object")
+
+    unknown_fields = sorted(set(data) - _ALLOWED_RESPONSE_FIELDS - {"reason_codes", "breakdown"})
+    if unknown_fields:
+        raise AIResponseValidationError(
+            "ai_response_schema_invalid",
+            "AI response contains unsupported fields",
+            fields=unknown_fields,
+        )
+
+    missing_minimal = sorted(_MINIMAL_REQUIRED_FIELDS - set(data))
+    missing_full = sorted(_FULL_REQUIRED_FIELDS - set(data))
+    missing_legacy = sorted(_LEGACY_PROFILE_REQUIRED_FIELDS - set(data))
+    is_minimal_candidate = not missing_minimal
+    is_full_candidate = not missing_full
+    is_legacy_candidate = not missing_legacy
+
+    if not is_minimal_candidate and not is_full_candidate and not is_legacy_candidate:
+        expected = min(
+            (missing_minimal, missing_full, missing_legacy),
+            key=len,
+        )
+        raise AIResponseValidationError(
+            "ai_response_missing_required_fields",
+            "AI response does not satisfy a known resume analysis schema",
+            fields=expected,
+        )
+
+    if is_minimal_candidate:
+        errors = _validate_minimal_payload(data)
+    elif is_full_candidate:
+        errors = _validate_full_payload(data)
+    else:
+        errors = _validate_legacy_profile_payload(data)
+    _validate_quality_scores(data.get("cv_quality_score"), "cv_quality_score", errors)
+    _validate_reason_codes(data.get("reason_codes"), errors)
+    _validate_breakdown(data.get("breakdown"), errors)
+
+    if errors:
+        raise AIResponseValidationError(
+            "ai_response_schema_invalid",
+            "AI response fields failed strict validation",
+            fields=errors,
+        )
 
 
 # ── Date / duration helpers ────────────────────────────────────────────────────
@@ -463,7 +802,11 @@ def _normalize_skills(raw: list[Any]) -> list[dict[str, Any]]:
             {
                 "id": skill_id,
                 "name": display_name,
-                "confidence": confidence if confidence in {"high", "medium", "low", "very_high"} else "medium",
+                "confidence": (
+                    confidence
+                    if confidence in {"high", "medium", "low", "very_high"}
+                    else "medium"
+                ),
                 "evidence": _dedupe_strings(evidence),
                 "source": source,
             }
@@ -549,7 +892,15 @@ def _normalize_resume_profiler_v2(data: dict[str, Any]) -> dict[str, Any]:
     detected_level = normalize_text(
         data.get("detected_level") or data.get("seniority_level")
     )
-    if detected_level not in {"intern", "junior", "mid", "senior", "lead", "principal", "undefined"}:
+    if detected_level not in {
+        "intern",
+        "junior",
+        "mid",
+        "senior",
+        "lead",
+        "principal",
+        "undefined",
+    }:
         detected_level = _classify_seniority(total_months, leadership_signals)
 
     canonical = {
@@ -602,10 +953,18 @@ def _parse_cv_quality_score(cv_quality: Any) -> tuple[float, dict[str, float]]:
 
 def parse_analysis_response(raw: str) -> dict[str, Any]:
     data = extract_json(raw)
+    if "experiences" not in data and isinstance(data.get("experience"), list):
+        data = {**data, "experiences": data["experience"]}
+    validate_original_analysis_payload(data)
+    if "personal_info" not in data and isinstance(data.get("candidate"), dict):
+        data = {**data, "personal_info": data["candidate"]}
+    if "cv_quality_score" not in data and isinstance(data.get("communication_quality"), dict):
+        data = {**data, "cv_quality_score": data["communication_quality"]}
+
     canonical = _canonicalize_candidate_profile(data)
     personal_info = data.get("personal_info") if isinstance(data.get("personal_info"), dict) else {}
 
-    summary = data.get("candidate_summary")
+    summary = data.get("candidate_summary") or data.get("summary")
     strengths = _dedupe_strings(data.get("strengths") or [])
     weaknesses = _dedupe_strings(data.get("weaknesses") or [])
     recommendations = _dedupe_strings(data.get("recommendations") or [])
@@ -642,7 +1001,7 @@ def parse_analysis_response(raw: str) -> dict[str, Any]:
     if parsed_work_model is not None:
         extracted_data["work_model"] = parsed_work_model
 
-    return {
+    result = {
         "candidate_summary": str(summary).strip() if summary else None,
         "seniority_level": canonical.get("detected_level"),
         "total_experience_years": total_exp_years,
@@ -662,3 +1021,4 @@ def parse_analysis_response(raw: str) -> dict[str, Any]:
 
         "extracted_data": extracted_data,
     }
+    return sanitize_resume_analysis_result(result)
