@@ -36,6 +36,17 @@ class AIResponseValidationError(ValueError):
 
 
 def extract_json(text: str) -> dict[str, Any]:
+    """
+    [TECNICO: REGRA_DE_NEGOCIO / FALLBACK]
+    Implementa 3 estratégias em cascata para extrair JSON de respostas sujas da IA:
+    1. Busca por blocos markdown (```json ... ```)
+    2. Tenta parse direto da string inteira
+    3. Faz um scan guloso (depth counter) buscando o primeiro '{' e seu '}' correspondente.
+
+    O passo 3 é CRÍTICO: IAs frequentemente retornam texto antes ou depois do JSON
+    (ex: "Aqui está o resultado: { ... }"). Não substitua isso por um regex simples
+    pois JSON aninhado quebra regex facilmente.
+    """
     if not text or not text.strip():
         raise AIResponseValidationError("ai_response_empty", "empty AI response")
 
@@ -457,7 +468,13 @@ def _validate_legacy_profile_payload(data: dict[str, Any]) -> list[str]:
 
 
 def validate_original_analysis_payload(data: dict[str, Any]) -> None:
-    """Validate raw AI JSON before compatibility normalization."""
+    """
+    [TECNICO: REGRA_DE_NEGOCIO]
+    Valida o payload bruto da IA contra 3 schemas suportados (minimal, full, legacy).
+    O suporte a múltiplos schemas é mantido intencionalmente por retrocompatibilidade:
+    se o prompt da IA for atualizado ou se houver fallback para um modelo mais simples,
+    o parser ainda consegue processar respostas parciais (minimal) sem falhar o job.
+    """
     if not data:
         raise AIResponseValidationError("ai_response_empty", "empty AI response object")
 
@@ -550,6 +567,10 @@ def _months_between(start: Any, end: Any) -> int | None:
 
 
 def _merge_month_ranges(ranges: list[tuple[int, int]]) -> int:
+    # [TECNICO: REGRA_DE_NEGOCIO]
+    # Faz merge de períodos de trabalho sobrepostos para não contar
+    # experiência paralela em dobro. Ex: Trabalhar 2 anos em 2 empregos
+    # simultâneos deve contar como 2 anos de exp total, não 4.
     if not ranges:
         return 0
 

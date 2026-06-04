@@ -207,13 +207,14 @@ const PipelineContext = createContext<PipelineContextValue | undefined>(undefine
 export function PipelineProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<PipelineState>(INITIAL_STATE);
 
-  // ── Refs: stable access to mutable values without stale closures ─────────────
-  //
-  // Why refs instead of reading from state inside callbacks?
-  // useCallback with [] deps creates a function once. If that function reads
-  // state directly, it captures the initial value forever (stale closure).
-  // Refs are mutable containers — always reflect the latest value without
-  // requiring the callback to be recreated on every render.
+  // [TECNICO: ARQUITETURA / STALE_CLOSURE]
+  // ── Refs: Acesso estável a valores mutáveis ─────────────
+  // Por que usar refs em vez de ler direto do state dentro dos callbacks?
+  // O `useCallback` com dependências vazias `[]` cria a função uma única vez.
+  // Se essa função lesse o state diretamente, ela capturaria o valor inicial
+  // para sempre (stale closure). Refs são contêineres mutáveis — sempre
+  // refletem o valor mais recente sem forçar a recriação do callback a cada renderização.
+  // Evita re-renders adicionais no Board.
 
   const activeJobIdRef = useRef<string | null>(null);
   const selectedCandidateIdRef = useRef<string | null>(null);
@@ -257,10 +258,12 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
   // ── Jobs ───────────────────────────────────────────────────────────────────
 
-  // Guard: concurrent or redundant calls are no-ops.
-  // jobsFetchInFlightRef prevents a second call while one is in flight.
-  // jobsLoadedRef prevents re-fetching after a successful load.
-  // Both checks are synchronous so no race condition between them and setState.
+  // [TECNICO: CONCORRENCIA / DEDUPLICACAO]
+  // Guard: chamadas concorrentes ou redundantes são ignoradas (no-ops).
+  // `jobsFetchInFlightRef` previne novas chamadas à API enquanto a primeira
+  // ainda está em andamento.
+  // `jobsLoadedRef` previne re-fetching após um carregamento bem-sucedido.
+  // Ambas as checagens são síncronas para evitar dessincronia com o React batching.
   const loadJobs = useCallback(async (force = false) => {
     if (!force && jobsLoadedRef.current) return;
     if (jobsFetchInFlightRef.current) {
@@ -320,6 +323,9 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         if (cached) return cached;
       }
 
+      // [TECNICO: CONCORRENCIA]
+      // Promessa em voo: Se já existe um request para este mesmo cacheKey,
+      // retornamos a MESMA promessa para quem chamou, deduplicando o tráfego de rede.
       const inFlight = boardFetchInFlightRef.current.get(cacheKey);
       if (inFlight) return inFlight;
 

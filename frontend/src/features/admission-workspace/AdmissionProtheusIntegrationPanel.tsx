@@ -167,8 +167,12 @@ export function AdmissionProtheusIntegrationPanel({
   const readyForExport = Boolean(workspace?.summary.ready_for_export);
   const workspaceHref = useMemo(() => `/admission/cases/${caseId}`, [caseId]);
 
-  // Always-current workspace ref — used inside effects/callbacks to avoid stale closures
-  // without creating new callback refs on every workspace update.
+  // [TECNICO: ARQUITETURA / REACT_STALE_CLOSURES]
+  // Always-current workspace ref (padrão useLatest):
+  // Usamos uma mutable ref (`workspaceRef`) atualizada a cada renderização para
+  // que os `useCallback` (como `reload` ou `loadPackageState`) sempre leiam o workspace
+  // mais recente sem precisar tê-lo no array de dependências. Se o colocássemos nas deps,
+  // recriaríamos as funções a cada edição de formulário do usuário, disparando requests duplicados.
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
   const prevReadyForExportRef = useRef<boolean | null>(null);

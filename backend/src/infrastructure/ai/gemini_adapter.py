@@ -109,6 +109,13 @@ def _safe_int_setting(value: Any, default: int) -> int:
 
 
 def _sanitize_http_status_error(error: httpx.HTTPStatusError) -> httpx.HTTPStatusError:
+    """
+    [TECNICO: SEGURANCA]
+    Remove headers com tokens sensíveis (`Authorization`, `x-goog-api-key`) do
+    objeto httpx.Request antes de permitir que o erro suba na stack.
+    Isso previne o vazamento de chaves de API em logs de crash (ex: Sentry/Datadog)
+    caso a exceção seja serializada com seu contexto.
+    """
     request = error.request
     response = error.response
     sanitized_request = httpx.Request(
@@ -136,6 +143,11 @@ def _sanitize_http_status_error(error: httpx.HTTPStatusError) -> httpx.HTTPStatu
         response=sanitized_response,
     )
 
+# [TECNICO: CONCORRENCIA / INTEGRACAO]
+# Script Lua para controle de concorrência distribuído (Semaphore no Redis).
+# Usamos Redis em vez de `asyncio.Semaphore` porque a aplicação roda em múltiplos
+# workers Celery/Uvicorn em containers diferentes. O rate limit da API do Gemini
+# é global por chave/projeto, exigindo sincronização cross-processo.
 _ACQUIRE_SLOT_LUA = """
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
@@ -447,8 +459,11 @@ class GeminiAdapter(AIService):
             "responseMimeType": "application/json",
         }
 
-        # Gemini 2.5 Flash enables dynamic thinking by default. For compact JSON
-        # extraction, that burns tokens before the object is closed.
+        # [TECNICO: DECISAO_ARQUITETURAL]
+        # O Gemini 2.5 Flash ativa o "thinking" (chain of thought) por padrão.
+        # Para extração de JSON estruturado (nosso caso de uso), isso consome
+        # tokens desnecessariamente e atrasa o tempo de resposta, muitas vezes
+        # cortando o JSON no meio do streaming. Desabilitamos explicitamente.
         if self._model_id.startswith("gemini-2.5"):
             generation_config["thinkingConfig"] = {
                 "thinkingBudget": _THINKING_BUDGET_DISABLED,
@@ -467,6 +482,11 @@ class GeminiAdapter(AIService):
             "generationConfig": generation_config,
         }
 
+    # [TECNICO: FALLBACK / RETRY]
+    # Esta função implementa a estratégia de failover round-robin por chave.
+    # Em vez de um retry cego no mesmo endpoint, ela detecta falhas (HTTP 429 ou 400)
+    # e coloca APENAS a chave ofendida em quarentena (cooldown ou invalidada),
+    # tentando imediatamente a próxima chave do pool disponível.
     async def _analyze_with_key_failover(
         self,
         *,
@@ -568,6 +588,11 @@ class GeminiAdapter(AIService):
                 else:
                     raise
 
+        # [TECNICO: STATE_MACHINE / PRIORIDADE_DE_ERRO]
+        # Tratamento de exaustão do pool de chaves. A ordem de prioridade para a
+        # exceção final é:
+        # 1. Se HÁ erro de chave inválida e NÃO há rate limit -> chaves inválidas.
+        # 2. Se HÁ erro de rate limit (mesmo com algumas inválidas) -> rate limit.
         if last_invalid_key_error is not None and last_rate_limit_error is None:
             logger.error(
                 "gemini.keys_exhausted_invalid",

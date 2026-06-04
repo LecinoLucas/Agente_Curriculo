@@ -52,9 +52,10 @@ export function getAnalysisStatusInfo(status: string | null | undefined): Analys
   return _ANALYSIS_INFO_MAP[status] ?? null;
 }
 
+// [TECNICO: ARQUITETURA / BACKOFF]
 // ── Polling guard ─────────────────────────────────────────────────────────────
 
-// Statuses that indicate analysis is still running — page should poll for updates.
+// Restringe o polling apenas aos status que exigem atualização contínua.
 export const IN_PROGRESS_ANALYSIS_STATUSES = new Set<string>([
   'waiting_extraction',
   'pending',
@@ -478,10 +479,11 @@ function mapDetail(api: ApiApplicationDetail): CandidateApplicationDetail {
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
-// In-flight deduplicator: when App hydration and CandidateHomePage both call
-// getOverview() in the same render cycle (e.g. opening /minha-area directly),
-// they share a single HTTP request. Cleared after resolve OR reject so polling
-// always fires a fresh request rather than replaying a cached one.
+// [TECNICO: OTIMIZACAO]
+// In-flight deduplicator: Evita requisições simultâneas duplicadas enquanto
+// uma consulta equivalente ainda está em andamento (e.g. app hydrate e page component).
+// Eles compartilham a mesma Promise HTTP em memória. A promise é limpa (null) logo após sucesso
+// ou erro para que a próxima rodada de polling sempre faça uma requisição fresca.
 let _overviewInflight: Promise<CandidateOverview> | null = null;
 
 export interface SessionResult {

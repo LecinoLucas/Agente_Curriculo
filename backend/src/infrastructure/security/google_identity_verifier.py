@@ -55,6 +55,9 @@ class GoogleIdentityVerifier:
         email_verified = str(payload.get("email_verified") or "").strip().lower() == "true"
         exp_raw = str(payload.get("exp") or "").strip()
 
+        # [TECNICO: VALIDACAO]
+        # Assegura que o token foi gerado especificamente para este aplicativo
+        # validando o campo audience.
         if audience != client_id:
             raise GoogleIdentityVerificationError("Token do Google inválido para esta aplicação.")
         if issuer not in self.VALID_ISSUERS:

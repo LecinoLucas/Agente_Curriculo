@@ -42,6 +42,10 @@ celery_app.conf.update(
     # ─────────────────────────────────────────
     # RELIABILITY
     # ─────────────────────────────────────────
+    # [TECNICO: ARQUITETURA / FILAS]
+    # acks_late=True: garante que a mensagem só sai do Redis APÓS o fim da task. Se o pod morrer, ela volta.
+    # prefetch_multiplier=1: força workers a pegar apenas 1 task por vez, evitando que
+    # tasks longas de IA fiquem travadas na memória de um worker ocupado enquanto outros estão ociosos.
     task_acks_late=True,
     worker_prefetch_multiplier=1,
 
@@ -93,7 +97,11 @@ celery_app.conf.update(
             "default_retry_delay": 10,
         },
 
+        # [TECNICO: DECISAO_ARQUITETURAL]
         # DOCUMENT AI (OCR)
+        # max_retries=0: Falhas de OCR (ex: PDF corrompido, protegido por senha) raramente
+        # se resolvem com retry automático. Evitamos loop infinito e custo desnecessário
+        # exigindo que o usuário reenvie um arquivo legível.
         "src.interface.workers.document_ai_tasks.process_document_ai_job": {
             "max_retries": 0,
             "time_limit": 180,
@@ -126,6 +134,8 @@ celery_app.conf.update(
         "visibility_timeout": 3600,
     },
 
-    # 🔥 evita fila travada invisível
+    # [TECNICO: FALLBACK]
+    # 🔥 evita fila travada invisível: Se o worker morrer por OOM (Out Of Memory)
+    # ou segfault, a task é devolvida pro broker imediatamente em vez de ficar zombie.
     task_reject_on_worker_lost=True,
 )

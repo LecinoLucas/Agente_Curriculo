@@ -14,6 +14,9 @@ ERP_INTEGRATION_ATTEMPT_ENTITY = "erp_integration_attempt"
 TERMINAL_CASE_STATUSES = frozenset({"admitted", "dismissed", "cancelled", "offer_declined"})
 READY_CHECKLIST_ITEM_STATUSES = frozenset({"approved", "waived"})
 
+# [TECNICO: STATE_MACHINE]
+# As transições permitidas são declaradas explicitamente para impedir mudança
+# arbitrária de status nas rotas da API.
 _ALLOWED_TRANSITIONS: dict[str, dict[str, frozenset[str]]] = {
     PRE_ADMISSION_CASE_ENTITY: {
         "draft": frozenset(

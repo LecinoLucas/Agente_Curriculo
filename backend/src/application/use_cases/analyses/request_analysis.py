@@ -103,6 +103,13 @@ def _resume_analysis_readiness(version) -> _ResumeAnalysisReadiness:
 
 
 def _is_stale_in_flight_analysis(analysis) -> bool:
+    """
+    [TECNICO: STATE_MACHINE]
+    Determina se uma análise presa precisa ser reenfileirada.
+    O status 'waiting_extraction' nunca é considerado obsoleto (stale) aqui,
+    pois ele aguarda ativamente o fim do OCR e será acordado pelo próprio
+    worker de extração, não precisando de expiração baseada em tempo.
+    """
     now = datetime.now(UTC)
     status = str(analysis.status)
     if status == "waiting_extraction":
@@ -184,6 +191,10 @@ class RequestAnalysisUseCase:
             job_id=command.job_id,
         )
 
+        # [TECNICO: IDEMPOTENCIA]
+        # Se já existe uma análise em andamento (active) para os mesmos parâmetros,
+        # retornamos o ID existente sem reenfileirar. Isso previne que double-clicks
+        # no frontend ou falhas de rede dupliquem o processamento caro na IA.
         if existing and not command.force_reanalyze:
             queue_length = await self._analysis_repo.count_pending()
             estimated_wait = max(1, queue_length) * _ESTIMATED_WAIT_SECONDS_PER_POSITION
@@ -218,6 +229,10 @@ class RequestAnalysisUseCase:
             )
 
         # 3. Reutiliza análise concluída para o mesmo resume_version + vaga (cache)
+        # [TECNICO: REGRA_DE_NEGOCIO]
+        # Diferente do hit "active" acima (que evita duplicação na fila),
+        # este hit "completed" poupa créditos de IA. Ambas situações marcam
+        # `reused=True`, mas por motivos operacionais distintos.
         latest_completed = await self._analysis_repo.find_latest_completed_for_version(
             resume_version_id=command.resume_version_id,
             job_id=command.job_id,
@@ -292,10 +307,11 @@ class RequestAnalysisUseCase:
             job_id=str(command.job_id),
         )
 
-        # 3.5 P0.2B — enforce daily limits AFTER reuse checks (so cached/idempotent
-        # hits never consume a slot) and BEFORE inserting a new row. Raises
-        # AIDailyLimitExceededError when any scope's effective limit is hit;
-        # the router maps that to HTTP 429.
+        # [TECNICO: ARQUITETURA]
+        # 3.5 P0.2B — A verificação de limites diários ocorre DEPOIS da checagem
+        # de reuso (cache/idempotência) para não descontar do limite do usuário
+        # quando a resposta já estava pronta. A checagem ocorre ANTES de inserir
+        # a linha para evitar lixo no banco caso o limite tenha estourado.
         if self._limit_service is not None:
             await self._limit_service.check_request_allowed(
                 user_id=command.requested_by,
@@ -319,9 +335,12 @@ class RequestAnalysisUseCase:
             job_id=command.job_id,
             requested_by=command.requested_by,
         )
+        # [TECNICO: FEATURE_FLAG]
         if command.force_reanalyze:
             import time
-            idempotency_key += f":force:{int(time.time())}"  # força unicidade na re-análise
+            # O sufixo de timestamp quebra a chave de idempotência intencionalmente
+            # para forçar a criação de um novo registro e um novo processamento na IA.
+            idempotency_key += f":force:{int(time.time())}"
 
         # 6. Cria registro de análise
         from src.infrastructure.database.models.analysis_model import AnalysisModel
@@ -358,6 +377,10 @@ class RequestAnalysisUseCase:
                 },
             )
         except IntegrityError:
+            # [TECNICO: FALLBACK / CORRIDA]
+            # Dois workers ou requisições paralelas tentaram criar a análise exata
+            # no mesmo milissegundo. O banco rejeitou a segunda pela constraint unique
+            # da idempotency_key. O fallback busca quem "venceu" e retorna como reuso.
             existing_by_key = await self._analysis_repo.find_by_idempotency_key(idempotency_key)
             if existing_by_key is None:
                 raise

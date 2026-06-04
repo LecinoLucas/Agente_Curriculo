@@ -27,6 +27,10 @@ class ConversationPrompt:
     quick_replies: tuple[tuple[str, str], ...] = ()
 
 
+# [TECNICO: STATE_MACHINE]
+# Define o fluxo de forma determinística para evitar que o LLM decida
+# estados inesperados durante as etapas estruturadas de recrutamento.
+# A IA apenas extrai dados da mensagem atual; o motor avança o estado baseado neste dict.
 STATE_TRANSITIONS: dict[ConversationState, ConversationState] = {
     "IDENTIFY": "CHOOSE_LOCATION",
     "VERIFY_OTP": "CHOOSE_LOCATION",

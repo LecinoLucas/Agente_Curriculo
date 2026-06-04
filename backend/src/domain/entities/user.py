@@ -101,6 +101,9 @@ class User:
 
     @property
     def is_locked(self) -> bool:
+        # [TECNICO: COMPATIBILIDADE]
+        # O banco de dados pode retornar `locked_until` sem timezone dependendo do driver.
+        # Forçamos timezone.utc para garantir comparação segura (tz-aware).
         if self.locked_until is None:
             return False
         lu = self.locked_until
@@ -113,6 +116,9 @@ class User:
         return self.deleted_at is not None
 
     def record_failed_login(self) -> None:
+        # [TECNICO: CONTROLE DE ACESSO]
+        # Aplica regra de bloqueio após limite de falhas definido em MAX_FAILED_LOGINS.
+        # NUNCA resetar esse contador sem verificação humana ou redefinição de senha.
         self.failed_login_count += 1
         self.updated_at = datetime.now(timezone.utc)
         if self.failed_login_count >= MAX_FAILED_LOGINS:
@@ -140,6 +146,9 @@ class User:
         self.updated_at = datetime.now(timezone.utc)
 
     def soft_delete(self) -> None:
+        # [TECNICO: REGRA_DE_NEGOCIO]
+        # O soft delete preserva a integridade relacional. Dados sensíveis do
+        # usuário devem ser ofuscados na tabela diretamente, mantendo o UUID.
         self.deleted_at = datetime.now(timezone.utc)
         self.status = UserStatus.INACTIVE
         self.updated_at = datetime.now(timezone.utc)

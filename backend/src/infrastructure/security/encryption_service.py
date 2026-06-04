@@ -30,8 +30,9 @@ class EncryptionService:
 class AICredentialEncryptionService(EncryptionService):
     """Criptografia de chaves de provedores IA.
 
-    Usa AI_CREDENTIALS_ENCRYPTION_KEY quando configurada; caso contrário,
-    reaproveita FIELD_ENCRYPTION_KEY para preservar o padrão existente.
+    # [TECNICO: FALLBACK]
+    # Usa AI_CREDENTIALS_ENCRYPTION_KEY quando configurada (para isolamento de chaves);
+    # caso contrário, reaproveita FIELD_ENCRYPTION_KEY para retrocompatibilidade.
     """
 
     def __init__(self):
