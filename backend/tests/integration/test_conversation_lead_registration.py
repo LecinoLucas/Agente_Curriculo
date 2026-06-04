@@ -69,8 +69,6 @@ async def _send(client: AsyncClient, session_id: str, content: str) -> dict:
         f"/api/v1/conversations/{session_id}/messages",
         json={"content": content},
     )
-    if response.status_code != 200:
-        print(f"DEBUG: _send failed with {response.status_code}: {response.text}")
     assert response.status_code == 200
     return response.json()
 

@@ -493,6 +493,8 @@ class ConversationService:
                 context["lead_whatsapp"] = normalized
             if identifier_type == "cpf":
                 context["lead_cpf"] = normalized
+            else:
+                context["lead_cpf"] = normalized
         else:
             context.pop("identifier_unresolved", None)
             context["pending_candidate_id"] = str(candidate_id)
