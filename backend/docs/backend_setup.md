@@ -10,6 +10,7 @@ No macOS com Homebrew:
 ```bash
 cd backend
 brew install python@3.13
+brew install poppler tesseract tesseract-lang
 rm -rf .venv
 /opt/homebrew/opt/python@3.13/bin/python3.13 -m venv .venv
 ./.venv/bin/python -m pip install --upgrade pip
@@ -42,6 +43,28 @@ cd backend
 ```
 
 Para rodar com coverage, omita `--no-cov`.
+
+## Dependências de OCR para PDF
+
+O fluxo de extração de currículo em PDF usa:
+
+- `pdfplumber` para PDFs com texto selecionável;
+- `pdf2image` + Poppler para rasterizar PDFs sem texto;
+- `pytesseract` + Tesseract para OCR.
+
+Validação rápida no ambiente local:
+
+```bash
+cd backend
+which pdftoppm
+which tesseract
+./.venv/bin/python - <<'PY'
+import pdf2image
+import pytesseract
+print("pdf2image", pdf2image.__version__ if hasattr(pdf2image, "__version__") else "ok")
+print("pytesseract", pytesseract.get_tesseract_version())
+PY
+```
 
 ## Preparar uma base nova de desenvolvimento
 
