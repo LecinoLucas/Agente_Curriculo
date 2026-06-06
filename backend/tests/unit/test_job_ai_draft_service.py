@@ -15,13 +15,15 @@ from src.application.services.job_ai_draft_service import (
     MAX_COMBINED_CHARS,
     MAX_OCR_TEXT_CHARS,
     MAX_TEXT_INPUT_CHARS,
+    JobAiDraftService,
+)
+from src.application.services.job_ai_draft_rules import (
     AiDraftAIError,
     AiDraftParseError,
     AiDraftValidationError,
-    JobAiDraftService,
     _nonempty_str,
-    _parse_draft,
-    _sanitize,
+    parse_draft as _parse_draft,
+    sanitize as _sanitize,
     _SYSTEM_PROMPT,
 )
 
@@ -79,6 +81,7 @@ def _mock_ai(response: AIAnalysisResponse | None = None) -> AsyncMock:
 # ── Validation ────────────────────────────────────────────────────────────────
 
 @pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
 class TestAiDraftServiceValidation:
     @pytest.mark.asyncio
     async def test_raises_when_both_inputs_none(self) -> None:
@@ -108,9 +111,10 @@ class TestAiDraftServiceValidation:
             await svc.generate(text_input="   \n  ", ocr_text="\t\n", session=_mock_session())
 
 
-# ── Happy path ─────────────────────────────────────────────────────────────────
+# ── Happy Path ────────────────────────────────────────────────────────────────
 
 @pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
 class TestAiDraftServiceHappyPath:
     @pytest.mark.asyncio
     async def test_text_input_only_returns_result(self) -> None:
@@ -241,9 +245,10 @@ class TestAiDraftServiceHappyPath:
         assert isinstance(d.matching_criteria, list)
 
 
-# ── needs_review ─────────────────────────────────────────────────────────────
+# ── Needs Review logic ────────────────────────────────────────────────────────
 
 @pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
 class TestNeedsReview:
     @pytest.mark.asyncio
     async def test_salary_range_always_flagged(self) -> None:
@@ -313,6 +318,7 @@ class TestNeedsReview:
 # ── Error handling ────────────────────────────────────────────────────────────
 
 @pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
 class TestAiDraftServiceErrors:
     @pytest.mark.asyncio
     async def test_ai_provider_error_raises_ai_draft_ai_error(self) -> None:
@@ -369,9 +375,10 @@ class TestAiDraftServiceErrors:
         assert "work_model" in result.needs_review
 
 
-# ── Token logging ─────────────────────────────────────────────────────────────
+# ── Logging and Persistence ───────────────────────────────────────────────────
 
 @pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
 class TestTokenLogging:
     @pytest.mark.asyncio
     async def test_persist_usage_log_called_on_success(self) -> None:
@@ -452,9 +459,10 @@ class TestSanitize:
         assert _sanitize("  hello  ") == "hello"
 
 
-# ── Truncation ────────────────────────────────────────────────────────────────
+# ── Truncation logic ──────────────────────────────────────────────────────────
 
 @pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
 class TestTruncation:
     @pytest.mark.asyncio
     async def test_oversized_text_input_is_truncated_not_rejected(self) -> None:
@@ -503,10 +511,10 @@ class TestTruncation:
         assert len(captured[0].resume_text) <= MAX_COMBINED_CHARS
 
 
-# ── Security & normalisation guardrails ───────────────────────────────────────
-
+# ── Security & Guardrails ─────────────────────────────────────────────────────
 
 @pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
 class TestSecurityGuardrails:
     """Tests validating anti-discriminatory and normalization rules."""
 
@@ -731,3 +739,128 @@ class TestSecurityGuardrails:
         data = dict(_DRAFT_JSON, mandatory_skills=["Python", "python", "JAVA", "java", "C#"])
         draft = _parse_draft(data)
         assert draft.mandatory_skills == ["Python", "JAVA", "C#"]
+
+
+# ── LangGraph Active Path ─────────────────────────────────────────────────────
+
+import sys
+from unittest.mock import MagicMock
+
+# Mock out langgraph to allow testing the nodes and service interaction without the library installed
+mock_langgraph = MagicMock()
+mock_langgraph.graph.START = "START"
+mock_langgraph.graph.END = "END"
+sys.modules["langgraph"] = mock_langgraph
+sys.modules["langgraph.graph"] = mock_langgraph.graph
+sys.modules["langchain_core"] = MagicMock()
+sys.modules["langchain_core.runnables"] = MagicMock()
+
+from src.ai_orchestration.jobs.job_ai_draft_graph import (
+    normalize_input_node,
+    post_validate_node,
+    build_job_ai_draft_graph
+)
+
+@pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", True)
+class TestLangGraphActivePath:
+    @pytest.mark.asyncio
+    async def test_fallback_when_import_fails(self) -> None:
+        """7. Se houver simulação de falha/import ausente do LangGraph, o fallback deve funcionar."""
+        # By setting the module to None in sys.modules, Python raises ImportError on import
+        with patch.dict("sys.modules", {"src.ai_orchestration.jobs.job_ai_draft_graph": None}):
+            # JobAiDraftService will now catch ImportError and fallback
+            svc = JobAiDraftService()
+            with patch("src.application.services.job_ai_draft_service.AIServiceFactory.create") as m_ai:
+                m_ai.return_value = _mock_ai()
+                result = await svc.generate(text_input="Texto válido", ocr_text=None, session=_mock_session())
+                assert result.draft.title == "Operador de Caixa"
+
+    @pytest.mark.asyncio
+    @patch("src.ai_orchestration.jobs.job_ai_draft_graph.build_job_ai_draft_graph")
+    async def test_service_executes_graph_when_flag_true(self, mock_build: MagicMock) -> None:
+        """1. Com JOB_AI_DRAFT_USE_LANGGRAPH=True, o JobAiDraftService deve executar o graph."""
+        mock_graph = AsyncMock()
+        mock_build.return_value = mock_graph
+        
+        # Prepare a mock state to return
+        mock_graph.ainvoke.return_value = {
+            "draft": _parse_draft(_DRAFT_JSON),
+            "needs_review": ["safety_check"],
+            "warnings": ["Warning do graph"],
+            "usage": MagicMock(input_tokens=10, output_tokens=10, total_tokens=20, estimated_cost=None),
+            "text_used": True,
+            "ocr_used": False,
+            "input_character_count": 100,
+        }
+        
+        svc = JobAiDraftService()
+        result = await svc.generate(text_input="Input mockado", ocr_text=None, session=_mock_session())
+        
+        # Verify graph was called
+        mock_graph.ainvoke.assert_called_once()
+        
+        # Verify result is mapped correctly to AiDraftResult
+        assert result.draft.title == "Operador de Caixa"
+        assert result.warnings == ["Warning do graph"]
+        assert result.needs_review == ["safety_check"]
+
+    @pytest.mark.asyncio
+    async def test_post_validate_node_removes_invented_salary(self) -> None:
+        """3. Com LangGraph ativo, salary inventado deve ser descartado (sem dígitos no input)."""
+        draft = _parse_draft(_DRAFT_JSON)
+        draft.salary_min = 2000.0  # Invented
+        state = {
+            "draft": draft,
+            "combined_text": "Apenas texto sem numeros."
+        }
+        
+        result_state = await post_validate_node(state, {})
+        assert result_state["draft"].salary_min is None
+        assert any("Salário inferido ou inventado" in w for w in result_state["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_post_validate_node_removes_discriminatory_items(self) -> None:
+        """4. Com LangGraph ativo, itens discriminatórios em listas continuam sendo removidos.
+           5. Com LangGraph ativo, warnings continuam sendo retornados."""
+        draft = _parse_draft(_DRAFT_JSON)
+        draft.requirements.append("Boa aparência")  # Discriminatory
+        state = {
+            "draft": draft,
+            "combined_text": "Texto qualquer."
+        }
+        
+        result_state = await post_validate_node(state, {})
+        assert "Boa aparência" not in result_state["draft"].requirements
+        assert any("potencial discriminatório" in w for w in result_state["warnings"])
+        assert "safety_check" in result_state["needs_review"]
+
+    @pytest.mark.asyncio
+    async def test_refine_requirements_node(self) -> None:
+        """Valida que requisitos sobrepostos são removidos do nice_to_have_skills."""
+        from src.ai_orchestration.jobs.job_ai_draft_graph import refine_requirements_node
+        draft = _parse_draft(_DRAFT_JSON)
+        draft.mandatory_skills = ["Python", "FastAPI"]
+        draft.nice_to_have_skills = ["Python", "Docker"]
+        state = {"draft": draft}
+        
+        result = await refine_requirements_node(state, {})
+        assert result["draft"].mandatory_skills == ["Python", "FastAPI"]
+        assert result["draft"].nice_to_have_skills == ["Docker"]
+
+    @pytest.mark.asyncio
+    async def test_evaluate_quality_node(self) -> None:
+        """Valida quality_score e emissão de warnings por missing fields."""
+        from src.ai_orchestration.jobs.job_ai_draft_graph import evaluate_quality_node
+        draft = _parse_draft(_DRAFT_JSON)
+        draft.title = None
+        draft.description = "Curto"
+        draft.mandatory_skills = []
+        state = {"draft": draft, "warnings": ["Previous Warning"]}
+        
+        result = await evaluate_quality_node(state, {})
+        assert result["quality_score"] < 1.0
+        assert "missing_field: missing_title" in result["warnings"]
+        assert "missing_field: generic_description" in result["warnings"]
+        assert "missing_field: weak_mandatory_requirements" in result["warnings"]
+        assert "Previous Warning" in result["warnings"]
