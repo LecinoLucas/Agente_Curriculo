@@ -75,7 +75,8 @@ class GeminiRagSynthesisProvider:
                 return parts[0].get("text", "").strip()
 
         except httpx.RequestError as exc:
-            raise RuntimeError(f"Network error calling Gemini Synthesis API: {exc}")
+            sanitized_exc = sanitize_log_text(str(exc))
+            raise RuntimeError(f"Network error calling Gemini Synthesis API: {sanitized_exc}") from None
 
     def _handle_api_error(self, response: httpx.Response) -> None:
         """Trata erros da API sem vazar segredos."""

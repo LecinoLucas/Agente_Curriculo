@@ -108,7 +108,8 @@ class GeminiEmbeddingProvider(EmbeddingProviderContract):
                 )
 
         except httpx.RequestError as exc:
-            raise RuntimeError(f"Network error calling Gemini Embedding API: {exc}")
+            sanitized_exc = sanitize_log_text(str(exc))
+            raise RuntimeError(f"Network error calling Gemini Embedding API: {sanitized_exc}") from None
 
     async def embed_query(self, text: str) -> list[float]:
         """Gera embedding para query via :embedContent."""
@@ -145,7 +146,8 @@ class GeminiEmbeddingProvider(EmbeddingProviderContract):
                 return vector
 
         except httpx.RequestError as exc:
-            raise RuntimeError(f"Network error calling Gemini Embedding API: {exc}")
+            sanitized_exc = sanitize_log_text(str(exc))
+            raise RuntimeError(f"Network error calling Gemini Embedding API: {sanitized_exc}") from None
 
     async def health_check(self) -> bool:
         """Verifica se a chave e o modelo estão ativos com uma chamada mínima."""

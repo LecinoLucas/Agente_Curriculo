@@ -72,3 +72,19 @@ class TestGeminiRagSynthesisProvider:
             provider = GeminiRagSynthesisProvider()
             with pytest.raises(RuntimeError, match="Network error"):
                 await provider.generate_response("X")
+
+    async def test_network_error_sanitizes_api_key(self) -> None:
+        """Test H-02: Falha de rede não vaza API key presente na URL."""
+        # Simula erro de rede que contém a URL com a chave
+        sensitive_url = "https://generativelanguage.googleapis.com/v1beta/models/m?key=SUPER-SECRET-KEY"
+        mock_exc = httpx.ConnectError(f"Failed to connect to {sensitive_url}")
+        
+        with patch("httpx.AsyncClient.post", side_effect=mock_exc):
+            provider = GeminiRagSynthesisProvider(api_key="SUPER-SECRET-KEY")
+            with pytest.raises(RuntimeError) as exc_info:
+                await provider.generate_response("Pergunta")
+            
+            error_msg = str(exc_info.value)
+            assert "SUPER-SECRET-KEY" not in error_msg
+            assert "[REDACTED]" in error_msg or "[REDACTED_GOOGLE_API_KEY]" in error_msg
+

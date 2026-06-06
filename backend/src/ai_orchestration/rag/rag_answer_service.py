@@ -16,6 +16,7 @@ from src.ai_orchestration.rag.answer_schemas import (
 from src.ai_orchestration.rag.gemini_rag_synthesis_provider import GeminiRagSynthesisProvider
 from src.ai_orchestration.rag.rag_prompting import RagPrompting
 from src.ai_orchestration.rag.schemas import KnowledgeChunk
+from src.core.ai_response_redactor import redact_ai_response_text
 from src.core.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,9 @@ class RagAnswerService:
             # 5. Chamada ao Provider
             answer_text = await self._provider.generate_response(prompt)
 
+            # 5.1 Redação de PII (H-01)
+            safe_answer = redact_ai_response_text(answer_text)
+
             # 6. Montagem das Fontes Estruturadas
             sources = [
                 RagSource(
@@ -77,7 +81,7 @@ class RagAnswerService:
 
             return RagAnswerResult(
                 ok=True,
-                answer=answer_text,
+                answer=safe_answer,
                 sources=sources,
                 provider=self._provider.provider_name,
                 model=self._provider.model_name,

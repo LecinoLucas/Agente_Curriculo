@@ -125,3 +125,22 @@ class TestRagAnswerService:
             assert result.ok is False
             assert result.error_code == "SYNTHESIS_ERROR"
             assert "RuntimeError" in result.message
+
+    async def test_synthesized_answer_is_redacted(self) -> None:
+        """Test H-01: Resposta sintetizada passa por redação de PII."""
+        with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
+            mock_provider = AsyncMock()
+            # Resposta contendo um CPF fictício
+            mock_provider.generate_response.return_value = "O CPF do candidato é 123.456.789-00."
+            mock_provider.provider_name = "mock"
+            mock_provider.model_name = "m1"
+            
+            service = RagAnswerService(synthesis_provider=mock_provider)
+            chunks = [_make_chunk("Doc com dados.")]
+            req = RagAnswerRequest(query="Qual o CPF?", retrieved_chunks=chunks)
+            
+            result = await service.synthesize_answer(req)
+            
+            assert result.ok is True
+            assert "123.456.789-00" not in result.answer
+            assert "[cpf_removido]" in result.answer

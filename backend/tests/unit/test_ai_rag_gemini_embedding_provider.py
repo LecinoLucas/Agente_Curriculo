@@ -115,3 +115,21 @@ class TestGeminiEmbeddingProvider:
         with patch("src.core.settings.settings.GOOGLE_API_KEY_1", ""):
             provider = GeminiEmbeddingProvider(api_key="")
             assert await provider.health_check() is False
+
+    async def test_network_error_sanitizes_api_key(self) -> None:
+        """Test H-02: Falha de rede não vaza API key presente na URL."""
+        sensitive_url = "https://generativelanguage.googleapis.com/v1beta/models/m?key=EMBEDDING-SECRET"
+        mock_exc = httpx.ConnectError(f"Failed to connect to {sensitive_url}")
+        
+        with patch("httpx.AsyncClient.post", side_effect=mock_exc):
+            provider = GeminiEmbeddingProvider(api_key="EMBEDDING-SECRET")
+            # Testa embed_query
+            with pytest.raises(RuntimeError) as exc_info:
+                await provider.embed_query("teste")
+            assert "EMBEDDING-SECRET" not in str(exc_info.value)
+            
+            # Testa embed_texts
+            with pytest.raises(RuntimeError) as exc_info:
+                await provider.embed_texts(["t1"])
+            assert "EMBEDDING-SECRET" not in str(exc_info.value)
+
