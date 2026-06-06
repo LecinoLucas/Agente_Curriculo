@@ -32,6 +32,8 @@ INTENT_TO_TOOL: dict[str, str] = {
     "admission.events_summary": "get_admission_events_summary",
     # Protheus ──────────────────────────────────────────────────────────
     "protheus.export_status": "get_protheus_export_status",
+    # Knowledge (RAG) ───────────────────────────────────────────────────
+    "knowledge.search": "search_knowledge",
 }
 
 

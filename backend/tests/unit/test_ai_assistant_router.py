@@ -214,11 +214,11 @@ class TestIntentCatalog:
 
     def test_default_catalog_covers_all_required_domains(self) -> None:
         domains = set(DEFAULT_CATALOG.list_domains())
-        required = {"job", "candidate", "pipeline", "admission", "protheus"}
+        required = {"job", "candidate", "pipeline", "admission", "protheus", "knowledge"}
         assert required.issubset(domains), f"Domínios faltando: {required - domains}"
 
     def test_default_catalog_has_at_least_one_intent_per_domain(self) -> None:
-        for domain in ("job", "candidate", "pipeline", "admission", "protheus"):
+        for domain in ("job", "candidate", "pipeline", "admission", "protheus", "knowledge"):
             intents_in_domain = [i for i in DEFAULT_CATALOG.list_intents() if i.startswith(f"{domain}.")]
             assert len(intents_in_domain) >= 1, f"Nenhuma intent para domínio '{domain}'"
 
@@ -370,6 +370,11 @@ class TestAssistantRouterDomainCoverage:
         router, mock_rt = _router()
         await router.handle(AssistantRequest(intent="protheus.export_status"), _exec_ctx())
         assert mock_rt.calls[0]["tool_name"] == "get_protheus_export_status"
+
+    async def test_handles_knowledge_intent(self) -> None:
+        router, mock_rt = _router()
+        await router.handle(AssistantRequest(intent="knowledge.search"), _exec_ctx())
+        assert mock_rt.calls[0]["tool_name"] == "search_knowledge"
 
 
 class TestAssistantRouterWithRealRuntime:

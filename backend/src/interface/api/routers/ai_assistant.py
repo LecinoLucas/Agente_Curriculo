@@ -41,20 +41,24 @@ _ROLE_PERMISSIONS: dict[str, list[str]] = {
         "can_view_pipeline",
         "can_view_admissions",
         "can_view_protheus_status",
+        "can_use_assistant",
     ],
     UserRole.RECRUITER.value: [
         "can_view_jobs",
         "can_view_candidates",
         "can_view_pipeline",
+        "can_use_assistant",
     ],
     UserRole.HR.value: [
         "can_view_admissions",
         "can_view_protheus_status",
+        "can_use_assistant",
     ],
     UserRole.MANAGER.value: [
         "can_view_jobs",
         "can_view_candidates",
         "can_view_pipeline",
+        "can_use_assistant",
     ],
     UserRole.VIEWER.value: [
         "can_view_jobs",
@@ -75,13 +79,17 @@ def _build_agent_context(user: User, request: Request, session_id: str | None) -
 
 
 def _build_services(db: AsyncSession) -> dict[str, Any]:
+    from src.ai_orchestration.rag.embedding_provider_factory import get_embedding_provider
+    from src.ai_orchestration.rag.postgres_vector_retriever import PostgresVectorRetriever
     from src.application.services.admission_case_workspace_service import AdmissionCaseWorkspaceService
     from src.application.services.admission_package_service import AdmissionPackageService
     from src.application.services.candidate_service import CandidateService
     from src.application.services.job_service import JobService
     from src.application.services.pipeline_service import PipelineService
+    from src.infrastructure.repositories.postgres_vector_store import PostgresVectorStore
     from src.infrastructure.repositories.sqlalchemy_candidate_repository import SQLAlchemyCandidateRepository
     from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+    from src.infrastructure.repositories.sqlalchemy_knowledge_document_repository import SQLAlchemyKnowledgeDocumentRepository
     from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
     from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import SQLAlchemyPreAdmissionRepository
 
@@ -91,6 +99,11 @@ def _build_services(db: AsyncSession) -> dict[str, Any]:
         "pipeline_service": PipelineService(SQLAlchemyPipelineRepository(db), session=db),
         "admission_service": AdmissionCaseWorkspaceService(SQLAlchemyPreAdmissionRepository(db)),
         "admission_package_service": AdmissionPackageService(db),
+        "retriever": PostgresVectorRetriever(
+            vector_store=PostgresVectorStore(db),
+            embedding_provider=get_embedding_provider(),
+            document_repository=SQLAlchemyKnowledgeDocumentRepository(db),
+        ),
     }
 
 

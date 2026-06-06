@@ -213,6 +213,25 @@ class TestPermissionDenied:
         assert body["ok"] is False
         assert body["error_code"] == "PERMISSION_DENIED"
 
+    async def test_viewer_user_cannot_access_knowledge_domain_intent(self) -> None:
+        """VIEWER não tem can_use_assistant → knowledge.search retorna PERMISSION_DENIED."""
+        user = _user(UserRole.VIEWER)
+        _fastapi_app.dependency_overrides[get_current_user] = lambda: user
+        try:
+            with patch("src.interface.api.routers.ai_assistant._build_services", return_value={}):
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                    resp = await c.post(
+                        _ENDPOINT,
+                        json={"intent": "knowledge.search", "arguments": {"query": "test"}},
+                    )
+        finally:
+            _fastapi_app.dependency_overrides.pop(get_current_user, None)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is False
+        assert body["error_code"] == "PERMISSION_DENIED"
+
 
 # ── Test 7: Service ausente → MISSING_SERVICE ────────────────────────────────
 
@@ -372,6 +391,7 @@ _DOMAIN_INTENTS = [
     ("pipeline.overview", "get_job_pipeline_overview", {"job_id": str(uuid4())}),
     ("admission.case_summary", "get_admission_case_summary", {"admission_case_id": str(uuid4())}),
     ("protheus.export_status", "get_protheus_export_status", {"package_id": str(uuid4())}),
+    ("knowledge.search", "search_knowledge", {"query": "test"}),
 ]
 
 
@@ -394,6 +414,10 @@ class TestDomainCoverage:
 
     async def test_protheus_domain_intent_resolves_to_expected_tool(self) -> None:
         intent, expected_tool, args = _DOMAIN_INTENTS[4]
+        await _assert_tool_name_for_domain(intent, expected_tool, args, UserRole.ADMIN)
+
+    async def test_knowledge_domain_intent_resolves_to_expected_tool(self) -> None:
+        intent, expected_tool, args = _DOMAIN_INTENTS[5]
         await _assert_tool_name_for_domain(intent, expected_tool, args, UserRole.ADMIN)
 
 
