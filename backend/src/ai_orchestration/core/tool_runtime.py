@@ -97,7 +97,7 @@ class ToolRuntime:
         try:
             call_kwargs = _build_kwargs(tool_def.fn, args, execution_context)
         except _MissingServiceError as exc:
-            return ToolResult.error("INTERNAL_ERROR", str(exc))
+            return ToolResult.error("MISSING_SERVICE", str(exc))
 
         # 6. Executa a tool (captura qualquer exceção não tratada)
         try:

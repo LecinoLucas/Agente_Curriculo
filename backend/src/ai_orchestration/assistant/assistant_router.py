@@ -52,6 +52,18 @@ class AssistantRouter:
         Returns:
             AssistantResponse — sempre retorna, nunca propaga exceção.
         """
+        # 0. Garante que o contexto está em modo read-only
+        if not execution_context.read_only:
+            return AssistantResponse(
+                ok=False,
+                intent=request.intent,
+                error_code="READ_ONLY_REQUIRED",
+                message=(
+                    "O AssistantRouter opera exclusivamente em modo read-only. "
+                    "Defina read_only=True no ToolExecutionContext."
+                ),
+            )
+
         # 1. Resolve intent → tool_name
         tool_name = self._catalog.resolve(request.intent)
         if tool_name is None:

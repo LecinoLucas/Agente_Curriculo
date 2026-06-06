@@ -379,7 +379,7 @@ class TestAssistantRouterWithRealRuntime:
         router = AssistantRouter(runtime=runtime)
         req = AssistantRequest(intent="job.summary", arguments={"job_id": "abc"})
         exec_ctx = ToolExecutionContext(agent_context=_ctx(), services={})
-        # Deve retornar INTERNAL_ERROR (job_service ausente), nunca levantar
+        # Deve retornar MISSING_SERVICE (job_service ausente), nunca levantar
         resp = await router.handle(req, exec_ctx)
         assert isinstance(resp, AssistantResponse)
         assert resp.intent == "job.summary"
@@ -391,3 +391,40 @@ class TestAssistantRouterWithRealRuntime:
         resp = await router.handle(AssistantRequest(intent="nao.existe"), _exec_ctx())
         assert resp.error_code == "UNKNOWN_INTENT"
         assert resp.ok is False
+
+
+class TestAssistantRouterReadOnlyEnforcement:
+    """Garante que o router rejeita contextos não-read-only antes de executar qualquer tool."""
+
+    async def test_non_read_only_context_returns_read_only_required(self) -> None:
+        router, mock_rt = _router()
+        non_ro_ctx = ToolExecutionContext(agent_context=_ctx(), services={}, read_only=False)
+        resp = await router.handle(AssistantRequest(intent="job.summary"), non_ro_ctx)
+        assert resp.ok is False
+        assert resp.error_code == "READ_ONLY_REQUIRED"
+
+    async def test_non_read_only_context_does_not_call_runtime(self) -> None:
+        router, mock_rt = _router()
+        non_ro_ctx = ToolExecutionContext(agent_context=_ctx(), services={}, read_only=False)
+        await router.handle(AssistantRequest(intent="job.summary"), non_ro_ctx)
+        assert len(mock_rt.calls) == 0
+
+    async def test_non_read_only_context_preserves_intent_in_response(self) -> None:
+        router, _ = _router()
+        non_ro_ctx = ToolExecutionContext(agent_context=_ctx(), services={}, read_only=False)
+        resp = await router.handle(AssistantRequest(intent="pipeline.overview"), non_ro_ctx)
+        assert resp.intent == "pipeline.overview"
+
+    async def test_non_read_only_unknown_intent_still_returns_read_only_required(self) -> None:
+        """read_only check deve acontecer antes da resolução de intent."""
+        router, mock_rt = _router()
+        non_ro_ctx = ToolExecutionContext(agent_context=_ctx(), services={}, read_only=False)
+        resp = await router.handle(AssistantRequest(intent="unknown.intent"), non_ro_ctx)
+        assert resp.error_code == "READ_ONLY_REQUIRED"
+        assert len(mock_rt.calls) == 0
+
+    async def test_read_only_true_context_proceeds_to_runtime(self) -> None:
+        router, mock_rt = _router()
+        ro_ctx = ToolExecutionContext(agent_context=_ctx(), services={}, read_only=True)
+        await router.handle(AssistantRequest(intent="job.summary"), ro_ctx)
+        assert len(mock_rt.calls) == 1

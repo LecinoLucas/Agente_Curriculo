@@ -200,3 +200,26 @@ class TestDefaultRegistry:
     def test_no_duplicate_names_in_default_registry(self) -> None:
         names = DEFAULT_REGISTRY.list_names()
         assert len(names) == len(set(names)), "DEFAULT_REGISTRY contém nomes duplicados"
+
+    def test_build_default_registry_loads_without_error(self) -> None:
+        from src.ai_orchestration.tools.registry import build_default_registry
+        registry = build_default_registry()
+        assert len(registry) == _EXPECTED_TOOL_COUNT
+
+    def test_build_default_registry_matches_default_registry_count(self) -> None:
+        from src.ai_orchestration.tools.registry import build_default_registry
+        built = build_default_registry()
+        assert len(built) == len(DEFAULT_REGISTRY)
+
+    def test_build_default_registry_has_all_same_tool_names(self) -> None:
+        from src.ai_orchestration.tools.registry import build_default_registry
+        built = build_default_registry()
+        assert set(built.list_names()) == set(DEFAULT_REGISTRY.list_names())
+
+    def test_all_registered_tools_have_non_empty_name(self) -> None:
+        for tool in DEFAULT_REGISTRY.list_tools():
+            assert tool.name, f"Tool registrada com name vazio"
+
+    def test_all_registered_tools_have_non_empty_domain(self) -> None:
+        for tool in DEFAULT_REGISTRY.list_tools():
+            assert tool.domain, f"Tool '{tool.name}' tem domain vazio"

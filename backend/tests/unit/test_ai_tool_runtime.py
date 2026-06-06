@@ -350,7 +350,7 @@ class TestToolRuntimeServiceInjection:
         assert result.ok is True
         assert result.data["service_id"] == id(mock_svc)
 
-    async def test_missing_required_service_returns_internal_error(self) -> None:
+    async def test_missing_required_service_returns_missing_service(self) -> None:
         registry = _build_registry(_def_with_service())
         runtime = ToolRuntime(registry)
         result = await runtime.execute(
@@ -359,7 +359,7 @@ class TestToolRuntimeServiceInjection:
             _exec_ctx(services={}),  # no service provided
         )
         assert result.ok is False
-        assert result.error_code == "INTERNAL_ERROR"
+        assert result.error_code == "MISSING_SERVICE"
 
     async def test_missing_service_error_mentions_param_name(self) -> None:
         registry = _build_registry(_def_with_service())
