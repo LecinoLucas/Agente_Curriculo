@@ -111,3 +111,45 @@ class AIKnowledgeChunkModel(Base):
         sa.Index("idx_ai_knowledge_chunks_document_id", "document_id"),
         sa.Index("idx_ai_knowledge_chunks_content_hash", "content_hash"),
     )
+
+
+class AIKnowledgeEmbeddingModel(Base):
+    __tablename__ = "ai_knowledge_embeddings"
+
+    id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=sa.text("uuid_generate_v4()"),
+    )
+    chunk_id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("ai_knowledge_chunks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(sa.String(50), nullable=False)
+    model: Mapped[str] = mapped_column(sa.String(100), nullable=False)
+    dimensions: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    # Fallback JSON para o vetor enquanto pgvector não é adicionado
+    vector_json: Mapped[list[float]] = mapped_column(
+        JSONB_COMPAT, nullable=False
+    )
+    content_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "chunk_id",
+            "provider",
+            "model",
+            name="uq_ai_knowledge_embeddings_chunk_prov_mod",
+        ),
+        sa.Index("idx_ai_knowledge_embeddings_chunk_id", "chunk_id"),
+        sa.Index("idx_ai_knowledge_embeddings_prov_mod", "provider", "model"),
+        sa.Index("idx_ai_knowledge_embeddings_hash", "content_hash"),
+    )
