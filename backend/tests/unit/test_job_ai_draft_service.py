@@ -19,7 +19,10 @@ from src.application.services.job_ai_draft_service import (
     AiDraftParseError,
     AiDraftValidationError,
     JobAiDraftService,
+    _nonempty_str,
+    _parse_draft,
     _sanitize,
+    _SYSTEM_PROMPT,
 )
 
 # ── Fixtures & factories ──────────────────────────────────────────────────────
@@ -219,7 +222,7 @@ class TestAiDraftServiceHappyPath:
             return_value=_mock_ai(),
         ):
             result = await svc.generate(
-                text_input="Vaga teste",
+                text_input="Operador de Caixa para São Paulo, SP. Jornada 6x1.",
                 ocr_text=None,
                 session=session,
             )
@@ -298,7 +301,7 @@ class TestNeedsReview:
             return_value=_mock_ai(),
         ):
             result = await svc.generate(
-                text_input="Vaga completa",
+                text_input="Vaga completa para Operador de Caixa em São Paulo, SP, escala 6x1",
                 ocr_text=None,
                 session=session,
             )
@@ -498,3 +501,233 @@ class TestTruncation:
             await svc.generate(text_input=text_in, ocr_text=text_ocr, session=session)
 
         assert len(captured[0].resume_text) <= MAX_COMBINED_CHARS
+
+
+# ── Security & normalisation guardrails ───────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestSecurityGuardrails:
+    """Tests validating anti-discriminatory and normalization rules."""
+
+    # ── _nonempty_str helper ──────────────────────────────────────────────────
+
+    def test_nonempty_str_returns_none_for_whitespace_only(self) -> None:
+        assert _nonempty_str("   ") is None
+
+    def test_nonempty_str_returns_none_for_empty_string(self) -> None:
+        assert _nonempty_str("") is None
+
+    def test_nonempty_str_returns_none_for_none(self) -> None:
+        assert _nonempty_str(None) is None
+
+    def test_nonempty_str_strips_and_returns_value(self) -> None:
+        assert _nonempty_str("  Frentista  ") == "Frentista"
+
+    # ── _parse_draft normalisation ────────────────────────────────────────────
+
+    def test_title_whitespace_only_becomes_none(self) -> None:
+        data = dict(_DRAFT_JSON, title="   ")
+        draft = _parse_draft(data)
+        assert draft.title is None
+
+    def test_unit_whitespace_only_becomes_none(self) -> None:
+        data = dict(_DRAFT_JSON, unit="\t\n")
+        draft = _parse_draft(data)
+        assert draft.unit is None
+
+    def test_working_hours_whitespace_only_becomes_none(self) -> None:
+        data = dict(_DRAFT_JSON, working_hours="   ")
+        draft = _parse_draft(data)
+        assert draft.working_hours is None
+
+    def test_salary_null_when_not_in_data(self) -> None:
+        """salary_min and salary_max must remain null when AI omits them."""
+        data = dict(_DRAFT_JSON, salary_min=None, salary_max=None)
+        draft = _parse_draft(data)
+        assert draft.salary_min is None
+        assert draft.salary_max is None
+
+    def test_location_unit_null_when_not_in_data(self) -> None:
+        """unit (location) must remain null when AI omits it."""
+        data = dict(_DRAFT_JSON, unit=None)
+        draft = _parse_draft(data)
+        assert draft.unit is None
+
+    def test_list_items_trimmed_and_empty_dropped(self) -> None:
+        """_safe_list must strip whitespace and discard blank entries."""
+        data = dict(_DRAFT_JSON, mandatory_skills=["  Python  ", "", "  ", "Java"])
+        draft = _parse_draft(data)
+        assert draft.mandatory_skills == ["Python", "Java"]
+
+    # ── System prompt antidiscrimination content ──────────────────────────────
+
+    def test_system_prompt_blocks_age_criteria(self) -> None:
+        assert "idade" in _SYSTEM_PROMPT.lower() or "etária" in _SYSTEM_PROMPT.lower()
+
+    def test_system_prompt_blocks_gender_criteria(self) -> None:
+        assert "gênero" in _SYSTEM_PROMPT or "g\u00eanero" in _SYSTEM_PROMPT
+
+    def test_system_prompt_blocks_race_criteria(self) -> None:
+        prompt_lower = _SYSTEM_PROMPT.casefold()
+        assert "ra" in prompt_lower and "a" in prompt_lower  # raça / raca
+        assert any(k in prompt_lower for k in ("raça", "raca", "etnia", "cor"))
+
+    def test_system_prompt_blocks_health_criteria(self) -> None:
+        assert "saúde" in _SYSTEM_PROMPT or "sa\u00fade" in _SYSTEM_PROMPT
+
+    def test_system_prompt_blocks_disability_criteria(self) -> None:
+        prompt_lower = _SYSTEM_PROMPT.casefold()
+        assert any(k in prompt_lower for k in ("deficiência", "deficiencia", "defici"))
+
+    def test_system_prompt_antidiscrimination_section_present(self) -> None:
+        assert "ANTIDISCRIMINAT" in _SYSTEM_PROMPT
+
+    @pytest.mark.asyncio
+    async def test_salary_not_invented_service_level(self) -> None:
+        """When AI returns null salary, the service must propagate nulls."""
+        draft_no_salary = dict(_DRAFT_JSON, salary_min=None, salary_max=None)
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_no_salary))),
+        ):
+            result = await svc.generate(
+                text_input="Vaga sem menção de salário",
+                ocr_text=None,
+                session=session,
+            )
+        assert result.draft.salary_min is None
+        assert result.draft.salary_max is None
+        assert "salary_range" in result.needs_review
+
+    @pytest.mark.asyncio
+    async def test_location_not_invented_service_level(self) -> None:
+        """When AI returns null unit, service must propagate null and flag it."""
+        draft_no_unit = dict(_DRAFT_JSON, unit=None)
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_no_unit))),
+        ):
+            result = await svc.generate(
+                text_input="Vaga sem localização",
+                ocr_text=None,
+                session=session,
+            )
+        assert result.draft.unit is None
+        assert "unit" in result.needs_review
+
+    @pytest.mark.asyncio
+    async def test_post_validation_strips_discriminatory_items_from_lists(self) -> None:
+        draft_discriminatory = dict(_DRAFT_JSON, requirements=["Ensino médio", "Boa aparência", "Casado", "Sexo masculino"])
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_discriminatory))),
+        ):
+            result = await svc.generate(
+                text_input="Vaga normal",
+                ocr_text=None,
+                session=session,
+            )
+        assert result.draft.requirements == ["Ensino médio"]
+        assert any("potencial discriminatório" in w for w in result.warnings)
+        assert "safety_check" in result.needs_review
+
+    @pytest.mark.asyncio
+    async def test_post_validation_flags_discriminatory_text_fields(self) -> None:
+        draft_discriminatory = dict(_DRAFT_JSON, description="Vaga para pessoa do sexo feminino")
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_discriminatory))),
+        ):
+            result = await svc.generate(
+                text_input="Vaga normal",
+                ocr_text=None,
+                session=session,
+            )
+        assert result.draft.description == "Vaga para pessoa do sexo feminino"
+        assert any("conter termos discriminatórios" in w for w in result.warnings)
+        assert "safety_check" in result.needs_review
+
+    @pytest.mark.asyncio
+    async def test_post_validation_removes_invented_salary(self) -> None:
+        draft_invented = dict(_DRAFT_JSON, salary_min=2000, salary_max=3000)
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_invented))),
+        ):
+            result = await svc.generate(
+                text_input="Vaga sem menção de salário",
+                ocr_text=None,
+                session=session,
+            )
+        assert result.draft.salary_min is None
+        assert result.draft.salary_max is None
+        assert any("Salário inferido ou inventado" in w for w in result.warnings)
+        assert "salary_range" in result.needs_review
+
+    @pytest.mark.asyncio
+    async def test_post_validation_keeps_real_salary(self) -> None:
+        draft_real = dict(_DRAFT_JSON, salary_min=2000, salary_max=3000)
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_real))),
+        ):
+            result = await svc.generate(
+                text_input="Vaga com salário de R$ 2000 a 3000",
+                ocr_text=None,
+                session=session,
+            )
+        assert result.draft.salary_min == 2000
+        assert result.draft.salary_max == 3000
+
+    @pytest.mark.asyncio
+    async def test_post_validation_removes_invented_unit(self) -> None:
+        draft_invented = dict(_DRAFT_JSON, unit="São Paulo, SP")
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_invented))),
+        ):
+            result = await svc.generate(
+                text_input="Vaga remota",
+                ocr_text=None,
+                session=session,
+            )
+        assert result.draft.unit is None
+        assert any("Local/unidade inferido ou inventado" in w for w in result.warnings)
+        assert "unit" in result.needs_review
+
+    @pytest.mark.asyncio
+    async def test_post_validation_removes_invented_working_hours(self) -> None:
+        draft_invented = dict(_DRAFT_JSON, working_hours="12x36")
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_invented))),
+        ):
+            result = await svc.generate(
+                text_input="Vaga de atendimento",
+                ocr_text=None,
+                session=session,
+            )
+        assert result.draft.working_hours is None
+        assert any("Jornada/escala inferida ou inventada" in w for w in result.warnings)
+
+    def test_safe_list_deduplicates_case_insensitive(self) -> None:
+        data = dict(_DRAFT_JSON, mandatory_skills=["Python", "python", "JAVA", "java", "C#"])
+        draft = _parse_draft(data)
+        assert draft.mandatory_skills == ["Python", "JAVA", "C#"]

@@ -890,5 +890,6 @@ class AiDraftSourceResponse(BaseModel):
 class AiDraftGenerateResponse(BaseModel):
     draft: AiDraftFieldsResponse
     needs_review: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     source: AiDraftSourceResponse
     usage: AiDraftUsageResponse

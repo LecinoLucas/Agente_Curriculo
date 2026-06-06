@@ -103,6 +103,7 @@ class AiDraftSource:
 class AiDraftResult:
     draft: AiDraftFields
     needs_review: list[str]
+    warnings: list[str]
     usage: AiDraftUsage
     source: AiDraftSource
 
@@ -170,7 +171,11 @@ class JobAiDraftService:
             logger.error("job_ai_draft.parse_failed", error=str(exc)[:200])
             raise AiDraftParseError("Resposta da IA não pôde ser interpretada") from exc
 
+        draft, warnings = _post_validate(draft, combined)
         needs_review = _compute_needs_review(draft)
+        
+        if any("discriminatório" in w for w in warnings):
+            needs_review.append("safety_check")
 
         cost_decimal: Decimal | None = estimate_ai_cost(
             settings.AI_PROVIDER,
@@ -204,6 +209,7 @@ class JobAiDraftService:
         return AiDraftResult(
             draft=draft,
             needs_review=needs_review,
+            warnings=warnings,
             usage=AiDraftUsage(
                 provider=settings.AI_PROVIDER,
                 model=settings.AI_MODEL_ID,
@@ -250,7 +256,97 @@ def _user_prompt(combined: str) -> str:
 def _safe_list(raw: Any, limit: int = 10) -> list[str]:
     if not isinstance(raw, list):
         return []
-    return [str(item).strip() for item in raw[:limit] if item and str(item).strip()]
+    seen = set()
+    out = []
+    for item in raw:
+        if not item:
+            continue
+        cleaned = str(item).strip()
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(cleaned)
+            if len(out) == limit:
+                break
+    return out
+
+_DISCRIMINATORY_PATTERNS = [
+    r"\bboa apar[êe]ncia\b",
+    r"\bsexo feminino\b",
+    r"\bsexo masculino\b",
+    r"\bapenas mulher(es)?\b",
+    r"\bapenas homem(ns)?\b",
+    r"\bidade entre\b",
+    r"\b(na )?faixa et[áa]ria\b",
+    r"\bsem filhos\b",
+    r"\bsolteir[oa]s?\b",
+    r"\bcasad[oa]s?\b",
+    r"\bpreferência por (homens|mulheres)\b",
+    r"\b(de )?cor branca\b",
+    r"\bcaucasian[oa]s?\b",
+]
+
+def _post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields, list[str]]:
+    warnings: list[str] = []
+    
+    def contains_discriminatory(text: str) -> bool:
+        if not text:
+            return False
+        lower_text = text.casefold()
+        for pattern in _DISCRIMINATORY_PATTERNS:
+            if re.search(pattern, lower_text):
+                return True
+        return False
+
+    # 1. Block discriminatory items in lists
+    list_fields = [
+        "responsibilities", "requirements", "mandatory_skills",
+        "nice_to_have_skills", "benefits", "screening_questions"
+    ]
+    for field_name in list_fields:
+        lst = getattr(draft, field_name)
+        if lst:
+            safe_list = []
+            for item in lst:
+                if contains_discriminatory(item):
+                    warnings.append(f"Removido item com potencial discriminatório de {field_name}.")
+                else:
+                    safe_list.append(item)
+            setattr(draft, field_name, safe_list)
+
+    # 2. Flag discriminatory content in text fields
+    text_fields = ["title", "description", "area", "unit"]
+    for field_name in text_fields:
+        val = getattr(draft, field_name)
+        if val and contains_discriminatory(val):
+            warnings.append(f"O campo {field_name} pode conter termos discriminatórios. Revisão manual obrigatória.")
+
+    # 3. Detect invented salary
+    if draft.salary_min is not None or draft.salary_max is not None:
+        if not re.search(r'\d', source_text):
+            warnings.append("Salário inferido ou inventado pela IA foi removido.")
+            draft.salary_min = None
+            draft.salary_max = None
+
+    # 4. Detect invented location/unit
+    if draft.unit:
+        unit_words = [w for w in re.split(r'\W+', draft.unit.casefold()) if len(w) > 3]
+        src_lower = source_text.casefold()
+        if unit_words and not any(w in src_lower for w in unit_words):
+            warnings.append("Local/unidade inferido ou inventado pela IA foi removido.")
+            draft.unit = None
+
+    # 5. Detect invented working hours
+    if draft.working_hours:
+        wh_words = [w for w in re.split(r'\W+', draft.working_hours.casefold()) if len(w) > 1]
+        src_lower = source_text.casefold()
+        if wh_words and not any(w in src_lower for w in wh_words):
+            warnings.append("Jornada/escala inferida ou inventada pela IA foi removida.")
+            draft.working_hours = None
+
+    return draft, warnings
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -262,6 +358,14 @@ def _coerce_float(value: Any) -> float | None:
         return None
 
 
+def _nonempty_str(value: Any) -> str | None:
+    """Return stripped string or None if absent / blank."""
+    if not value:
+        return None
+    cleaned = str(value).strip()
+    return cleaned if cleaned else None
+
+
 def _parse_draft(data: dict[str, Any]) -> AiDraftFields:
     wm = str(data.get("work_model") or "").strip().lower()
     work_model = wm if wm in _VALID_WORK_MODELS else None
@@ -270,20 +374,20 @@ def _parse_draft(data: dict[str, Any]) -> AiDraftFields:
     seniority = seniority_raw if seniority_raw in _VALID_SENIORITY else None
 
     return AiDraftFields(
-        title=str(data["title"]).strip() if data.get("title") else None,
-        area=str(data["area"]).strip() if data.get("area") else None,
+        title=_nonempty_str(data.get("title")),
+        area=_nonempty_str(data.get("area")),
         seniority=seniority,
         work_model=work_model,
-        unit=str(data["unit"]).strip() if data.get("unit") else None,
+        unit=_nonempty_str(data.get("unit")),
         salary_min=_coerce_float(data.get("salary_min")),
         salary_max=_coerce_float(data.get("salary_max")),
-        description=str(data["description"]).strip() if data.get("description") else None,
+        description=_nonempty_str(data.get("description")),
         responsibilities=_safe_list(data.get("responsibilities")),
         requirements=_safe_list(data.get("requirements")),
         mandatory_skills=_safe_list(data.get("mandatory_skills")),
         nice_to_have_skills=_safe_list(data.get("nice_to_have_skills")),
         benefits=_safe_list(data.get("benefits")),
-        working_hours=str(data["working_hours"]).strip() if data.get("working_hours") else None,
+        working_hours=_nonempty_str(data.get("working_hours")),
         screening_questions=_safe_list(data.get("screening_questions")),
         pipeline_steps=_safe_list(data.get("pipeline_steps")),
         matching_criteria=_safe_list(data.get("matching_criteria"), limit=5),
@@ -334,6 +438,22 @@ Regras obrigatórias:
 - Se escala aparecer (6x1, 12x36, 44h semanais), preencha working_hours.
 - work_model: "onsite" | "hybrid" | "remote" | null.
 - Escreva em português do Brasil, texto profissional e objetivo.
+
+REGRAS ANTIDISCRIMINATÓRIAS — OBRIGATÓRIAS:
+É PROIBIDO incluir, sugerir ou inferir qualquer critério baseado em:
+- Idade ou faixa etária
+- Gênero ou identidade de gênero
+- Raça, etnia ou cor
+- Religião ou crença
+- Estado civil ou situação familiar
+- Condição de saúde ou doença
+- Deficiência física, mental ou sensorial
+- Aparência física
+- Nacionalidade ou origem
+- Orientação sexual
+- Qualquer outro atributo pessoal sensível
+Requisitos devem ser EXCLUSIVAMENTE relacionados a competências, experiência e função.
+Se o texto de entrada contiver linguagem discriminatória, ignore-a completamente.
 
 SCHEMA OBRIGATÓRIO:
 {

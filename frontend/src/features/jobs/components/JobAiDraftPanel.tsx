@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, Sparkles, Plus, Trash2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,11 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { JobFormValues } from "../jobFormConfig";
 import {
+  applyDraftToForm as _legacyApplyDraftToForm,
   MOCK_AI_PROMPT_EXAMPLE,
-  applyDraftToForm,
-  generateMockJobDraft,
   type JobAiDraft,
 } from "../utils/mockJobAiDraft";
+import { applyApiDraftToForm, extractSkillSuggestions } from "../utils/jobAiDraftHelpers";
+import { generateJobAiDraft, type JobAiDraftFields } from "../services/jobAiDraftService";
 
 interface JobAiDraftPanelProps {
   formHasData: boolean;
@@ -25,7 +26,11 @@ interface JobAiDraftPanelProps {
 
 type AiStatus = "idle" | "loading" | "ready" | "error";
 
-export const draftToFormUpdates = applyDraftToForm;
+/**
+ * @deprecated Use applyApiDraftToForm from jobAiDraftHelpers.ts instead.
+ * Kept only for backwards-compat with existing tests that import this.
+ */
+export const draftToFormUpdates = _legacyApplyDraftToForm;
 
 function SectionTitle({ children }: { children: string }) {
   return <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{children}</p>;
@@ -40,18 +45,6 @@ function ChipList({ items, testId }: { items: string[]; testId?: string }) {
         </Badge>
       ))}
     </div>
-  );
-}
-
-function OrderedList({ items, testId }: { items: string[]; testId?: string }) {
-  return (
-    <ol className="space-y-2 pl-4 text-sm text-text" data-testid={testId}>
-      {items.map((item) => (
-        <li key={item} className="list-decimal">
-          {item}
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -115,7 +108,8 @@ function EditableList({
 export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPanelProps) {
   const [prompt, setPrompt] = useState("");
   const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
-  const [draft, setDraft] = useState<JobAiDraft | null>(null);
+  const [draft, setDraft] = useState<JobAiDraftFields | null>(null);
+  const [needsReview, setNeedsReview] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -125,16 +119,27 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
   const draftMeta = useMemo(() => {
     if (!draft) return [];
     return [
-      { label: draft.area, variant: "outline" as const },
-      { label: draft.work_model === "onsite" ? "Presencial" : draft.work_model, variant: "secondary" as const },
-      { label: draft.location, variant: "secondary" as const },
-    ];
+      draft.area ? { label: draft.area, variant: "outline" as const } : null,
+      draft.work_model
+        ? {
+            label:
+              draft.work_model === "onsite"
+                ? "Presencial"
+                : draft.work_model === "hybrid"
+                  ? "Híbrido"
+                  : "Remoto",
+            variant: "secondary" as const,
+          }
+        : null,
+      draft.unit ? { label: draft.unit, variant: "secondary" as const } : null,
+    ].filter(Boolean) as { label: string; variant: "outline" | "secondary" }[];
   }, [draft]);
 
   async function handleGenerate() {
     if (!prompt.trim()) {
       setAiStatus("error");
       setDraft(null);
+      setNeedsReview([]);
       setErrorMessage("Informe uma descrição para gerar o rascunho.");
       return;
     }
@@ -142,22 +147,26 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     setAiStatus("loading");
     setErrorMessage(null);
     setDraft(null);
+    setNeedsReview([]);
 
     try {
-      const nextDraft = await generateMockJobDraft(prompt);
-      setDraft(nextDraft);
+      const response = await generateJobAiDraft({ text_input: prompt, ocr_text: null });
+      setDraft(response.draft);
+      setNeedsReview(response.needs_review ?? []);
       setAiStatus("ready");
-    } catch {
+    } catch (err: unknown) {
       setAiStatus("error");
-      setErrorMessage("Não foi possível montar o rascunho simulado agora.");
+      const message =
+        err instanceof Error && err.message ? err.message : "Não foi possível gerar o rascunho.";
+      setErrorMessage(message);
     }
   }
 
-  function updateDraftField(field: keyof JobAiDraft, value: string) {
+  function updateDraftField(field: keyof JobAiDraftFields, value: string) {
     setDraft((prev) => (prev ? { ...prev, [field]: value } : null));
   }
 
-  function updateDraftListItem(field: keyof JobAiDraft, index: number, value: string) {
+  function updateDraftListItem(field: keyof JobAiDraftFields, index: number, value: string) {
     setDraft((prev) => {
       if (!prev) return null;
       const list = [...(prev[field] as string[])];
@@ -166,7 +175,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     });
   }
 
-  function addDraftListItem(field: keyof JobAiDraft) {
+  function addDraftListItem(field: keyof JobAiDraftFields) {
     setDraft((prev) => {
       if (!prev) return null;
       const list = [...(prev[field] as string[])];
@@ -175,7 +184,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     });
   }
 
-  function removeDraftListItem(field: keyof JobAiDraft, index: number) {
+  function removeDraftListItem(field: keyof JobAiDraftFields, index: number) {
     setDraft((prev) => {
       if (!prev) return null;
       const list = [...(prev[field] as string[])];
@@ -184,21 +193,22 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     });
   }
 
-  function normalizeDraftList(field: keyof JobAiDraft) {
+  function normalizeDraftList(field: keyof JobAiDraftFields) {
     setDraft((prev) => {
       if (!prev) return null;
       const list = (prev[field] as string[]).map((i) => i.trim()).filter(Boolean);
-      const unique = Array.from(new Set(list.map((i) => i.toLowerCase()))).map((lower) => list.find((i) => i.toLowerCase() === lower)!);
+      const unique = Array.from(new Set(list.map((i) => i.toLowerCase()))).map(
+        (lower) => list.find((i) => i.toLowerCase() === lower)!,
+      );
       return { ...prev, [field]: unique };
     });
   }
 
   function confirmApply() {
     if (!draft) return;
-    onApply(applyDraftToForm(draft), {
-      mandatory: draft.mandatory_skills,
-      optional: draft.nice_to_have_skills,
-    });
+    const updates = applyApiDraftToForm(draft);
+    const skills = extractSkillSuggestions(draft);
+    onApply(updates, skills);
     setShowConfirm(false);
   }
 
@@ -211,6 +221,21 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     confirmApply();
   }
 
+  function handleDiscard() {
+    setDraft(null);
+    setNeedsReview([]);
+    setAiStatus("idle");
+    setErrorMessage(null);
+  }
+
+  const NEEDS_REVIEW_LABELS: Record<string, string> = {
+    salary_range: "Faixa salarial não informada",
+    unit: "Local de trabalho não informado",
+    work_model: "Modelo de trabalho não informado",
+    title: "Título não gerado",
+    description: "Descrição não gerada",
+  };
+
   return (
     <>
       <section
@@ -221,25 +246,23 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-sm font-semibold text-text">Criar vaga com IA</h2>
-              <StatusPill label="Simulação visual" tone="mock" />
             </div>
             <p className="text-sm text-text-muted">
-              Simulação visual. A vaga só será salva quando você revisar e clicar em salvar.
+              Descreva a vaga e a IA gerará um rascunho. Revise antes de aplicar ao formulário.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="rounded-md px-2 py-1 text-[11px]">
-              Sem backend
-            </Badge>
-            <Badge variant="secondary" className="rounded-md px-2 py-1 text-[11px]">
-              Sem publicação automática
-            </Badge>
-            {onClose && (
-              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 ml-1 text-text-muted hover:text-text" onClick={onClose} aria-label="Fechar painel">
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+          {onClose && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 ml-1 text-text-muted hover:text-text"
+              onClick={onClose}
+              aria-label="Fechar painel"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -247,13 +270,15 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
             <label htmlFor="ai-draft-prompt" className="text-sm font-medium text-text">
               Descrição da vaga para IA
             </label>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-text-muted hover:text-text"
               onClick={() => setPrompt(MOCK_AI_PROMPT_EXAMPLE)}
-              className="text-xs font-medium text-[hsl(var(--primary))] hover:underline"
             >
               Usar exemplo
-            </button>
+            </Button>
           </div>
 
           <textarea
@@ -268,21 +293,26 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={() => void handleGenerate()} disabled={isLoading}>
+          <Button
+            type="button"
+            onClick={() => void handleGenerate()}
+            disabled={isLoading}
+            data-testid="ai-draft-generate-btn"
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                Gerando exemplo...
+                Gerando rascunho...
               </>
             ) : (
               <>
                 <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
-                Gerar exemplo com IA
+                Gerar com IA
               </>
             )}
           </Button>
           <p className="text-xs text-text-muted">
-            Rascunho mockado para revisão manual antes do salvamento.
+            O rascunho é para revisão humana — não salva nem publica automaticamente.
           </p>
         </div>
 
@@ -292,7 +322,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
             className="flex items-center gap-2 rounded-xl border border-border bg-surface-muted px-3 py-3 text-sm text-text-muted"
           >
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            Gerando rascunho de exemplo...
+            Gerando rascunho com IA...
           </div>
         )}
 
@@ -316,7 +346,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                 <div>
                   <SectionTitle>Título sugerido</SectionTitle>
                   <Input
-                    value={draft.title}
+                    value={draft.title ?? ""}
                     onChange={(e) => updateDraftField("title", e.target.value)}
                     className="mt-1 h-10 w-full min-w-[280px] text-base font-semibold"
                     data-testid="draft-title-input"
@@ -326,19 +356,40 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                 <StatusPill label="Revisão humana obrigatória" tone="warning" />
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                {draftMeta.map((item) => (
-                  <Badge key={item.label} variant={item.variant} className="rounded-md px-2 py-1 text-xs">
-                    {item.label}
-                  </Badge>
-                ))}
-              </div>
+              {draftMeta.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {draftMeta.map((item) => (
+                    <Badge
+                      key={item.label}
+                      variant={item.variant}
+                      className="rounded-md px-2 py-1 text-xs"
+                    >
+                      {item.label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              {needsReview.length > 0 && (
+                <div
+                  className="flex items-start gap-2 rounded-xl border border-[hsl(var(--warning))]/25 bg-warning-soft px-3 py-2 text-sm text-warning"
+                  data-testid="ai-draft-needs-review"
+                >
+                  <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <div>
+                    <span className="font-medium">Campos para revisão: </span>
+                    {needsReview
+                      .map((key) => NEEDS_REVIEW_LABELS[key] ?? key)
+                      .join(", ")}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <SectionTitle>Senioridade</SectionTitle>
                   <Input
-                    value={draft.seniority}
+                    value={draft.seniority ?? ""}
                     onChange={(e) => updateDraftField("seniority", e.target.value)}
                     className="mt-1 h-8 text-sm"
                     aria-label="Senioridade"
@@ -347,23 +398,10 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                 <div>
                   <SectionTitle>Jornada</SectionTitle>
                   <Input
-                    value={draft.working_hours}
+                    value={draft.working_hours ?? ""}
                     onChange={(e) => updateDraftField("working_hours", e.target.value)}
                     className="mt-1 h-8 text-sm"
                     aria-label="Jornada"
-                  />
-                </div>
-                <div>
-                  <SectionTitle>Anos de exp.</SectionTitle>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={draft.minimum_years_experience ?? ""}
-                    onChange={(e) => updateDraftField("minimum_years_experience", e.target.value ? Number(e.target.value) : null as any)}
-                    className="mt-1 h-8 text-sm"
-                    aria-label="Anos mínimos de experiência"
-                    data-testid="draft-min-years"
                   />
                 </div>
               </div>
@@ -372,20 +410,10 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                 <div className="rounded-xl border border-border bg-surface px-3 py-3">
                   <SectionTitle>Resumo</SectionTitle>
                   <Textarea
-                    value={draft.description}
+                    value={draft.description ?? ""}
                     onChange={(e) => updateDraftField("description", e.target.value)}
                     className="mt-2 min-h-[100px] text-sm leading-6"
                     aria-label="Resumo da vaga"
-                  />
-                </div>
-                <div className="rounded-xl border border-border bg-surface px-3 py-3">
-                  <SectionTitle>Contexto de experiência</SectionTitle>
-                  <Textarea
-                    value={draft.experience_context}
-                    onChange={(e) => updateDraftField("experience_context", e.target.value)}
-                    className="mt-2 min-h-[100px] text-sm leading-6"
-                    aria-label="Contexto de experiência"
-                    data-testid="draft-experience-context"
                   />
                 </div>
               </div>
@@ -451,16 +479,31 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
               />
             </div>
 
-
-
             <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-muted/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-2 text-sm text-text-muted">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--primary))]" aria-hidden="true" />
+                <CheckCircle2
+                  className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--primary))]"
+                  aria-hidden="true"
+                />
                 <span>Revise e ajuste o rascunho acima antes de aplicar ao formulário.</span>
               </div>
-              <Button type="button" onClick={handleApply}>
-                Aplicar ao formulário
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDiscard}
+                  data-testid="ai-draft-discard-btn"
+                >
+                  Descartar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleApply}
+                  data-testid="ai-draft-apply-btn"
+                >
+                  Aplicar ao formulário
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -480,7 +523,11 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
               Revise tudo antes de salvar.
             </p>
             <div className="mt-5 flex justify-end gap-3">
-              <Button type="button" variant="secondary" onClick={() => setShowConfirm(false)}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowConfirm(false)}
+              >
                 Cancelar
               </Button>
               <Button type="button" onClick={confirmApply}>

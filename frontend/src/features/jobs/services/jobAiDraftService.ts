@@ -59,6 +59,7 @@ export type JobAiDraftGenerateRequest = {
 export type JobAiDraftGenerateResponse = {
   draft: JobAiDraftFields;
   needs_review: string[];
+  warnings?: string[];
   source: JobAiDraftSource;
   usage: JobAiDraftUsage;
 };
