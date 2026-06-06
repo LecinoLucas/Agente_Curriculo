@@ -102,7 +102,8 @@ fi
 if [ "$DEV_MODE" = "network" ]; then
   BIND_HOST=${DEV_HOST:-0.0.0.0}
 else
-  BIND_HOST=${DEV_HOST:-127.0.0.1}
+  # Para modo local, bindamos em 0.0.0.0 para aceitar localhost e 127.0.0.1
+  BIND_HOST="0.0.0.0"
 fi
 
 print_section() {
@@ -407,8 +408,11 @@ if [ "$DEV_MODE" = "network" ]; then
 fi
 
 BACKEND_LOCAL_URL="http://127.0.0.1:${BACKEND_PORT}"
+BACKEND_LOCAL_ALT="http://localhost:${BACKEND_PORT}"
 FRONTEND_LOCAL_URL="http://127.0.0.1:${FRONTEND_PORT}"
+FRONTEND_LOCAL_ALT="http://localhost:${FRONTEND_PORT}"
 PORTAL_LOCAL_URL="http://127.0.0.1:${CANDIDATE_PORTAL_PORT}"
+PORTAL_LOCAL_ALT="http://localhost:${CANDIDATE_PORTAL_PORT}"
 BACKEND_PUBLIC_URL="http://${PUBLIC_HOST}:${BACKEND_PORT}"
 FRONTEND_PUBLIC_URL="http://${PUBLIC_HOST}:${FRONTEND_PORT}"
 PORTAL_PUBLIC_URL="http://${PUBLIC_HOST}:${CANDIDATE_PORTAL_PORT}"
@@ -417,9 +421,9 @@ API_V1_URL="${BACKEND_PUBLIC_URL}/api/v1"
 print_section "Ambiente"
 printf 'Modo             : %s\n' "$DEV_MODE"
 printf 'Bind host        : %s\n' "$BIND_HOST"
-printf 'Backend local    : %s\n' "$BACKEND_LOCAL_URL"
-printf 'Frontend local   : %s\n' "$FRONTEND_LOCAL_URL"
-printf 'Portal local     : %s\n' "$PORTAL_LOCAL_URL"
+printf 'Backend local    : %s, %s\n' "$BACKEND_LOCAL_URL" "$BACKEND_LOCAL_ALT"
+printf 'Frontend local   : %s, %s\n' "$FRONTEND_LOCAL_URL" "$FRONTEND_LOCAL_ALT"
+printf 'Portal local     : %s, %s\n' "$PORTAL_LOCAL_URL" "$PORTAL_LOCAL_ALT"
 if [ "$DEV_MODE" = "network" ]; then
   printf 'Backend network  : %s\n' "$BACKEND_PUBLIC_URL"
   printf 'Frontend network : %s\n' "$FRONTEND_PUBLIC_URL"
@@ -511,7 +515,7 @@ print_ok "Backend iniciado (PID $BACKEND_PID)"
 print_info "Subindo frontend staff/admin..."
 (
   cd "$FRONTEND_DIR"
-  npm run --silent dev -- --host 0.0.0.0 --port "$FRONTEND_PORT" --strictPort
+  npm run --silent dev -- --host "$BIND_HOST" --port "$FRONTEND_PORT" --strictPort
 ) &
 STAFF_PID=$!
 CHILD_PIDS+=("$STAFF_PID")
@@ -521,7 +525,7 @@ if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
   print_info "Subindo candidate-portal..."
   (
     cd "$CANDIDATE_PORTAL_DIR"
-    npm run --silent dev -- --host 0.0.0.0 --port "$CANDIDATE_PORTAL_PORT" --strictPort
+    npm run --silent dev -- --host "$BIND_HOST" --port "$CANDIDATE_PORTAL_PORT" --strictPort
   ) &
   CANDIDATE_PORTAL_PID=$!
   CHILD_PIDS+=("$CANDIDATE_PORTAL_PID")
@@ -552,11 +556,9 @@ if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
 fi
 
 print_section "Pronto"
-printf 'Backend          : %s\n' "$BACKEND_LOCAL_URL"
-printf 'Frontend (Staff) : %s\n' "$FRONTEND_LOCAL_URL"
-printf '                   http://localhost:%s\n' "$FRONTEND_PORT"
-printf 'Candidate Portal : %s\n' "$PORTAL_LOCAL_URL"
-printf '                   http://localhost:%s\n' "$CANDIDATE_PORTAL_PORT"
+printf 'Backend          : %s, %s\n' "$BACKEND_LOCAL_URL" "$BACKEND_LOCAL_ALT"
+printf 'Frontend (Staff) : %s, %s\n' "$FRONTEND_LOCAL_URL" "$FRONTEND_LOCAL_ALT"
+printf 'Candidate Portal : %s, %s\n' "$PORTAL_LOCAL_URL" "$PORTAL_LOCAL_ALT"
 
 if [ "$DEV_MODE" = "network" ]; then
   printf 'Backend network  : %s\n' "$BACKEND_PUBLIC_URL"
