@@ -114,6 +114,29 @@ class TestEmbeddingRepository:
         stmt = sa.select(AIKnowledgeEmbeddingModel).where(AIKnowledgeEmbeddingModel.chunk_id == UUID(chunk.id))
         row = await db_session.scalar(stmt)
         assert row.vector_json == [0.9, 0.9]
+        assert row.dimensions == 2
+
+    async def test_upsert_skips_invalid_dimension(self, db_session: AsyncSession) -> None:
+        """Test: Ignora vetores com len != dimensions."""
+        doc_repo = SQLAlchemyKnowledgeDocumentRepository(db_session)
+        chunk_repo = SQLAlchemyKnowledgeChunkRepository(db_session)
+        emb_repo = SQLAlchemyKnowledgeEmbeddingRepository(db_session)
+
+        doc = await doc_repo.create_document(_doc())
+        chunks = await chunk_repo.save_chunks([_chunk(doc.id)])
+        
+        ev = EmbeddingVector(
+            chunk_id=chunks[0].id,
+            document_id=doc.id,
+            provider="fake",
+            model="m1",
+            dimensions=4, # Diz que tem 4
+            vector=[0.1, 0.2], # Mas manda 2
+        )
+        
+        count = await emb_repo.upsert_embeddings([ev])
+        assert count == 0 # Nada persistido
+        assert await emb_repo.count_embeddings() == 0
 
     async def test_delete_by_document(self, db_session: AsyncSession) -> None:
         doc_repo = SQLAlchemyKnowledgeDocumentRepository(db_session)

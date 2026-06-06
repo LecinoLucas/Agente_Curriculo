@@ -13,6 +13,10 @@ class TestFakeEmbeddingProvider:
         provider = FakeEmbeddingProvider(dimensions=8)
         vector = await provider.embed_query("teste")
         assert len(vector) == 8
+        
+        provider_16 = FakeEmbeddingProvider(dimensions=16)
+        v16 = await provider_16.embed_query("teste")
+        assert len(v16) == 16
 
     async def test_same_text_same_vector(self) -> None:
         provider = FakeEmbeddingProvider()

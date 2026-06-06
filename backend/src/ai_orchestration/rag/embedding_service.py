@@ -60,21 +60,35 @@ class EmbeddingService:
             # 2. Gerar embeddings via provider
             batch = await self._provider.embed_texts(texts)
 
-            # 3. Converter para objetos EmbeddingVector
+            # 3. Validação de consistência
+            if len(batch.vectors) != len(chunks):
+                return EmbeddingServiceResult(
+                    ok=False,
+                    error="embedding_quantity_mismatch",
+                )
+
+            # 4. Converter para objetos EmbeddingVector com validação de dimensão
             embedding_vectors = []
             for i, chunk in enumerate(chunks):
+                vector = batch.vectors[i]
+                if len(vector) != batch.dimensions:
+                    return EmbeddingServiceResult(
+                        ok=False,
+                        error="INVALID_EMBEDDING_DIMENSION",
+                    )
+
                 ev = EmbeddingVector(
                     chunk_id=chunk.id,
                     document_id=chunk.document_id,
                     provider=batch.provider,
                     model=batch.model,
                     dimensions=batch.dimensions,
-                    vector=batch.vectors[i],
+                    vector=vector,
                     metadata={"content_hash": getattr(chunk, "content_hash", None)},
                 )
                 embedding_vectors.append(ev)
 
-            # 4. Salvar no vector store (se disponível)
+            # 5. Salvar no vector store (se disponível)
             created_count = len(embedding_vectors)
             if self._vector_store:
                 created_count = await self._vector_store.upsert_embeddings(

@@ -30,12 +30,20 @@ class SQLAlchemyKnowledgeEmbeddingRepository(VectorStoreContract):
         self._session = session
 
     async def upsert_embeddings(self, embeddings: list[EmbeddingVector]) -> int:
-        """Persiste embeddings. Em caso de conflito (chunk, provider, model), atualiza o vetor."""
+        """Persiste ou atualiza embeddings em lote.
+        
+        Garante idempotência por (chunk_id, provider, model).
+        Rejeita vetores com dimensão inconsistente.
+        """
         if not embeddings:
             return 0
 
         count = 0
         for ev in embeddings:
+            # Validação defensiva no repositório
+            if len(ev.vector) != ev.dimensions:
+                continue
+
             # Tenta encontrar existente
             stmt = sa.select(AIKnowledgeEmbeddingModel).where(
                 AIKnowledgeEmbeddingModel.chunk_id == UUID(ev.chunk_id),
@@ -46,6 +54,7 @@ class SQLAlchemyKnowledgeEmbeddingRepository(VectorStoreContract):
 
             if existing:
                 existing.vector_json = ev.vector
+                existing.dimensions = ev.dimensions
                 existing.content_hash = ev.metadata.get("content_hash", "legacy")
             else:
                 new_emb = AIKnowledgeEmbeddingModel(
