@@ -9,13 +9,15 @@ from uuid import uuid4
 import pytest
 from src.ai_orchestration.core.agent_context import AgentContext
 from src.ai_orchestration.core.agent_result import ToolResult
+from src.ai_orchestration.rag.answer_schemas import RagAnswerResult, RagSource
 from src.ai_orchestration.rag.postgres_vector_retriever import PostgresVectorRetriever
+from src.ai_orchestration.rag.rag_answer_service import RagAnswerService
 from src.ai_orchestration.rag.schemas import (
     KnowledgeChunk,
     RetrievalResult,
     RetrievedChunk,
 )
-from src.ai_orchestration.tools.knowledge_tools import search_knowledge
+from src.ai_orchestration.tools.knowledge_tools import answer_knowledge, search_knowledge
 
 
 def _make_context(permissions: list[str] | None = None) -> AgentContext:
@@ -144,3 +146,119 @@ class TestSearchKnowledgeTool:
         assert result.ok is False
         assert result.error_code == "INTERNAL_ERROR"
         assert "RuntimeError" in result.message
+
+
+@pytest.mark.asyncio
+class TestAnswerKnowledgeTool:
+    async def test_answer_knowledge_success(self) -> None:
+        """Test: answer_knowledge com chunks e síntese habilitada chama RagAnswerService."""
+        context = _make_context()
+        retriever = AsyncMock(spec=PostgresVectorRetriever)
+        answer_service = AsyncMock(spec=RagAnswerService)
+        
+        # Mock de busca
+        chunk = KnowledgeChunk(id="c1", document_id="d1", chunk_index=0, content="X", source_title="S", metadata={})
+        retriever.retrieve.return_value = RetrievalResult(
+            query="Q", chunks=[RetrievedChunk(chunk=chunk, score=0.9)], total=1
+        )
+        
+        # Mock de síntese
+        answer_service.synthesize_answer.return_value = RagAnswerResult(
+            ok=True,
+            answer="Resposta final.",
+            sources=[RagSource(document_id="d1", chunk_id="c1", source_title="S", score=0.9)],
+            provider="gemini",
+            model="m1",
+        )
+
+        result = await answer_knowledge(
+            context=context,
+            query="Pergunta?",
+            retriever=retriever,
+            answer_service=answer_service,
+        )
+
+        assert result.ok is True
+        assert result.data["answer"] == "Resposta final."
+        assert len(result.data["sources"]) == 1
+        assert result.data["sources"][0]["source_title"] == "S"
+        assert result.data["retrieval_summary"]["total_found"] == 1
+
+    async def test_answer_knowledge_permission_denied(self) -> None:
+        """Test: Rejeita se sem permissão."""
+        context = _make_context(permissions=[])
+        result = await answer_knowledge(context=context, query="Q", retriever=None, answer_service=None)
+        assert result.ok is False
+        assert result.error_code == "PERMISSION_DENIED"
+
+    async def test_answer_knowledge_empty_query(self) -> None:
+        """Test: Rejeita query vazia."""
+        context = _make_context()
+        result = await answer_knowledge(context=context, query="  ", retriever=None, answer_service=None)
+        assert result.ok is False
+        assert result.error_code == "INVALID_INPUT"
+
+    async def test_answer_knowledge_no_evidence(self) -> None:
+        """Test: Se RagAnswerService retornar falta de evidência (ok=True), propaga."""
+        context = _make_context()
+        retriever = AsyncMock()
+        answer_service = AsyncMock()
+        
+        retriever.retrieve.return_value = RetrievalResult(query="Q", chunks=[], total=0)
+        answer_service.synthesize_answer.return_value = RagAnswerResult(
+            ok=True,
+            answer="Não encontrei evidências.",
+            sources=[],
+        )
+
+        result = await answer_knowledge(
+            context=context,
+            query="Q",
+            retriever=retriever,
+            answer_service=answer_service
+        )
+
+        assert result.ok is True
+        assert "Não encontrei evidências" in result.data["answer"]
+        assert len(result.data["sources"]) == 0
+
+    async def test_answer_knowledge_synthesis_disabled(self) -> None:
+        """Test: Se RagAnswerService retornar aviso de síntese desabilitada, propaga."""
+        context = _make_context()
+        retriever = AsyncMock()
+        answer_service = AsyncMock()
+        
+        retriever.retrieve.return_value = RetrievalResult(query="Q", chunks=[RetrievedChunk(chunk=MagicMock(), score=0.1)], total=1)
+        answer_service.synthesize_answer.return_value = RagAnswerResult(
+            ok=True,
+            answer="Síntese desativada.",
+            warnings=["rag_synthesis_disabled_by_flag"]
+        )
+
+        result = await answer_knowledge(context, "Q", retriever, answer_service)
+        
+        assert result.ok is True
+        assert "Síntese desativada" in result.data["answer"]
+        assert "rag_synthesis_disabled_by_flag" in result.data["warnings"]
+
+    async def test_answer_knowledge_avoids_internal_metadata_exposure(self) -> None:
+        """Test: Não expõe vector_json ou content_hash nas fontes."""
+        context = _make_context()
+        retriever = AsyncMock()
+        answer_service = AsyncMock()
+        
+        retriever.retrieve.return_value = RetrievalResult(query="Q", chunks=[], total=0)
+        answer_service.synthesize_answer.return_value = RagAnswerResult(
+            ok=True,
+            answer="ok",
+            sources=[RagSource(
+                document_id="1", chunk_id="2", source_title="S", 
+                metadata={"vector_json": [1], "content_hash": "h", "safe": "val"}
+            )]
+        )
+
+        result = await answer_knowledge(context, "Q", retriever, answer_service)
+        meta = result.data["sources"][0]["metadata"]
+        assert "safe" in meta
+        assert "vector_json" not in meta
+        assert "content_hash" not in meta

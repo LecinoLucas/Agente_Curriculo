@@ -81,6 +81,7 @@ def _build_agent_context(user: User, request: Request, session_id: str | None) -
 def _build_services(db: AsyncSession) -> dict[str, Any]:
     from src.ai_orchestration.rag.embedding_provider_factory import get_embedding_provider
     from src.ai_orchestration.rag.postgres_vector_retriever import PostgresVectorRetriever
+    from src.ai_orchestration.rag.rag_answer_service import RagAnswerService
     from src.application.services.admission_case_workspace_service import AdmissionCaseWorkspaceService
     from src.application.services.admission_package_service import AdmissionPackageService
     from src.application.services.candidate_service import CandidateService
@@ -93,6 +94,8 @@ def _build_services(db: AsyncSession) -> dict[str, Any]:
     from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
     from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import SQLAlchemyPreAdmissionRepository
 
+    embedding_provider = get_embedding_provider()
+    
     return {
         "job_service": JobService(SQLAlchemyJobRepository(db)),
         "candidate_service": CandidateService(SQLAlchemyCandidateRepository(db)),
@@ -101,9 +104,10 @@ def _build_services(db: AsyncSession) -> dict[str, Any]:
         "admission_package_service": AdmissionPackageService(db),
         "retriever": PostgresVectorRetriever(
             vector_store=PostgresVectorStore(db),
-            embedding_provider=get_embedding_provider(),
+            embedding_provider=embedding_provider,
             document_repository=SQLAlchemyKnowledgeDocumentRepository(db),
         ),
+        "answer_service": RagAnswerService(),
     }
 
 

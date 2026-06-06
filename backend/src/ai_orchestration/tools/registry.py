@@ -49,6 +49,15 @@ _TOOL_DEFINITIONS: list[ToolDefinition] = [
         requires_approval=False,
         fn=knowledge_tools.search_knowledge,
     ),
+    ToolDefinition(
+        name="answer_knowledge",
+        domain="knowledge",
+        description="Responde uma pergunta baseando-se na base de conhecimento (RAG) com síntese de IA.",
+        required_permissions=_KNOWLEDGE_PERMS,
+        read_only=True,
+        requires_approval=False,
+        fn=knowledge_tools.answer_knowledge,
+    ),
     # ── Jobs ────────────────────────────────────────────────────────────
     ToolDefinition(
         name="get_job_summary",
@@ -209,7 +218,7 @@ _TOOL_DEFINITIONS: list[ToolDefinition] = [
     ),
 ]
 
-_EXPECTED_TOOL_COUNT = 18
+_EXPECTED_TOOL_COUNT = 19
 
 
 def build_default_registry() -> ToolRegistry:
