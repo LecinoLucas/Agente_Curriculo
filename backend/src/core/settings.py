@@ -108,6 +108,12 @@ class Settings(BaseSettings):
     ERP_INTEGRATION_MODE: str = "dry_run"
     PRE_ADMISSION_DOCUMENT_MAX_BYTES: int = 10 * 1024 * 1024
 
+    # RAG Embeddings (AI-RAG-7)
+    RAG_EMBEDDING_PROVIDER: str = "fake"  # "fake" or "gemini"
+    RAG_GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+    RAG_GEMINI_EMBEDDING_DIMENSIONS: int = 768
+    RAG_GEMINI_EMBEDDING_ENABLED: bool = False
+
     # Upload hardening
     MAX_UPLOAD_SIZE_MB: int = 10
     FILE_SCAN_ENABLED: bool = False
