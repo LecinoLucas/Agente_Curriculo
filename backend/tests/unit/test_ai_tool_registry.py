@@ -150,7 +150,7 @@ class TestDefaultRegistry:
 
     def test_all_domains_represented(self) -> None:
         domains = {t.domain for t in DEFAULT_REGISTRY.list_tools()}
-        assert domains == {"jobs", "candidates", "pipeline", "admission", "protheus"}
+        assert domains == {"jobs", "candidates", "pipeline", "admission", "protheus", "knowledge"}
 
     def test_all_registered_tools_have_required_permissions(self) -> None:
         for tool in DEFAULT_REGISTRY.list_tools():
@@ -196,6 +196,12 @@ class TestDefaultRegistry:
 
     def test_protheus_tool_registered(self) -> None:
         assert "get_protheus_export_status" in DEFAULT_REGISTRY
+
+    def test_knowledge_tool_registered(self) -> None:
+        assert "search_knowledge" in DEFAULT_REGISTRY
+        tool = DEFAULT_REGISTRY.get("search_knowledge")
+        assert tool.domain == "knowledge"
+        assert tool.read_only is True
 
     def test_no_duplicate_names_in_default_registry(self) -> None:
         names = DEFAULT_REGISTRY.list_names()

@@ -26,6 +26,7 @@ from src.ai_orchestration.tools import (
     admission_tools,
     candidate_tools,
     job_tools,
+    knowledge_tools,
     pipeline_tools,
     protheus_tools,
 )
@@ -35,8 +36,19 @@ _CANDIDATE_PERMS = ["can_view_candidates"]
 _PIPELINE_PERMS = ["can_view_pipeline"]
 _ADMISSION_PERMS = ["can_view_admissions"]
 _PROTHEUS_PERMS = ["can_view_protheus_status"]
+_KNOWLEDGE_PERMS = ["can_use_assistant"]
 
 _TOOL_DEFINITIONS: list[ToolDefinition] = [
+    # ── Knowledge ───────────────────────────────────────────────────────
+    ToolDefinition(
+        name="search_knowledge",
+        domain="knowledge",
+        description="Busca informações na base de conhecimento (RAG) usando busca vetorial.",
+        required_permissions=_KNOWLEDGE_PERMS,
+        read_only=True,
+        requires_approval=False,
+        fn=knowledge_tools.search_knowledge,
+    ),
     # ── Jobs ────────────────────────────────────────────────────────────
     ToolDefinition(
         name="get_job_summary",
@@ -197,7 +209,7 @@ _TOOL_DEFINITIONS: list[ToolDefinition] = [
     ),
 ]
 
-_EXPECTED_TOOL_COUNT = 17
+_EXPECTED_TOOL_COUNT = 18
 
 
 def build_default_registry() -> ToolRegistry:
