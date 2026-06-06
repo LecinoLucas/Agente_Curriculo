@@ -40,6 +40,7 @@ from src.interface.api.routers import (
     admin_system_health,
     admission_packages,
     admissions,
+    ai_assistant,
     ai_models,
     analyses,
     applications,
@@ -125,6 +126,7 @@ app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(users.router, prefix=_PREFIX)
 app.include_router(internal_users.router, prefix=_PREFIX)
 app.include_router(admin_assistant.router, prefix=_PREFIX)
+app.include_router(ai_assistant.router, prefix=_PREFIX)
 app.include_router(admin_bi.router, prefix=_PREFIX)
 app.include_router(admin_diagnostics.router, prefix=_PREFIX)
 app.include_router(admin_audit_logs.router, prefix=_PREFIX)
