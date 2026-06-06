@@ -511,7 +511,7 @@ print_ok "Backend iniciado (PID $BACKEND_PID)"
 print_info "Subindo frontend staff/admin..."
 (
   cd "$FRONTEND_DIR"
-  npm run --silent dev -- --host "$BIND_HOST" --port "$FRONTEND_PORT" --strictPort
+  npm run --silent dev -- --host 0.0.0.0 --port "$FRONTEND_PORT" --strictPort
 ) &
 STAFF_PID=$!
 CHILD_PIDS+=("$STAFF_PID")
@@ -521,7 +521,7 @@ if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
   print_info "Subindo candidate-portal..."
   (
     cd "$CANDIDATE_PORTAL_DIR"
-    npm run --silent dev -- --host "$BIND_HOST" --port "$CANDIDATE_PORTAL_PORT" --strictPort
+    npm run --silent dev -- --host 0.0.0.0 --port "$CANDIDATE_PORTAL_PORT" --strictPort
   ) &
   CANDIDATE_PORTAL_PID=$!
   CHILD_PIDS+=("$CANDIDATE_PORTAL_PID")
@@ -553,8 +553,11 @@ fi
 
 print_section "Pronto"
 printf 'Backend          : %s\n' "$BACKEND_LOCAL_URL"
-printf 'Frontend         : %s\n' "$FRONTEND_LOCAL_URL"
+printf 'Frontend (Staff) : %s\n' "$FRONTEND_LOCAL_URL"
+printf '                   http://localhost:%s\n' "$FRONTEND_PORT"
 printf 'Candidate Portal : %s\n' "$PORTAL_LOCAL_URL"
+printf '                   http://localhost:%s\n' "$CANDIDATE_PORTAL_PORT"
+
 if [ "$DEV_MODE" = "network" ]; then
   printf 'Backend network  : %s\n' "$BACKEND_PUBLIC_URL"
   printf 'Frontend network : %s\n' "$FRONTEND_PUBLIC_URL"

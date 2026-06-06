@@ -30,6 +30,7 @@ export type JobAiDraftFields = {
   matching_criteria: string[];
   requires_manager_review: boolean;
   requires_behavioral_assessment: boolean;
+  quality_score?: number | null;
 };
 
 export type JobAiDraftUsage = {
