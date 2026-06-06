@@ -13,6 +13,10 @@ from src.infrastructure.database.models.admission_package_model import (
 from src.infrastructure.database.models.ai_daily_limit_override_model import (
     AIDailyLimitOverrideModel,
 )
+from src.infrastructure.database.models.ai_knowledge_models import (
+    AIKnowledgeChunkModel,
+    AIKnowledgeDocumentModel,
+)
 from src.infrastructure.database.models.ai_provider_credential_model import (
     AIProviderCredentialModel,
 )
@@ -168,6 +172,8 @@ __all__ = [
     "JobRequiredSkillModel",
     "SkillModel",
     "JobUnitModel",
+    "AIKnowledgeDocumentModel",
+    "AIKnowledgeChunkModel",
     "AuditLogModel",
     "Admission",
     "DocumentRequirement",
