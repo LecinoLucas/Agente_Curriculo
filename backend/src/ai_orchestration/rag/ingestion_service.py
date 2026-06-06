@@ -54,8 +54,9 @@ class TextIngestionService:
     ) -> IngestionPipelineResult:
         """Ingere documento na knowledge base.
 
-        Retorna duplicate=True se content_hash já existir (a menos que force_reingest).
-        Retorna ok=False para conteúdo vazio ou erros de repositório.
+        Retorna was_duplicate=True se content_hash já existir.
+        Se force_reingest=True e for duplicado, recria os chunks do documento existente
+        sem criar um novo registro em KnowledgeDocument (evita violação de UniqueConstraint).
         """
         content = (pipeline_input.content or "").strip()
         if not content:
@@ -63,23 +64,43 @@ class TextIngestionService:
 
         content_hash = compute_content_hash(content)
 
-        if not pipeline_input.force_reingest:
-            try:
-                existing = await self._doc_repo.find_by_content_hash(content_hash)
-            except Exception as exc:
-                return IngestionPipelineResult(
-                    ok=False,
-                    content_hash=content_hash,
-                    error=f"repository_error: {exc}",
-                )
-            if existing is not None:
+        # 1. Verificar deduplicação
+        existing = None
+        try:
+            existing = await self._doc_repo.find_by_content_hash(content_hash)
+        except Exception as exc:
+            return IngestionPipelineResult(
+                ok=False,
+                content_hash=content_hash,
+                error=f"repository_error: {exc}",
+            )
+
+        # 2. Caso de duplicata encontrada
+        if existing is not None:
+            if not pipeline_input.force_reingest:
                 return IngestionPipelineResult(
                     ok=True,
                     document_id=existing.id,
                     content_hash=content_hash,
                     was_duplicate=True,
+                    reingested=False,
                 )
+            
+            # force_reingest=True -> Reutilizar documento existente e recriar chunks
+            re_result = await self.reingest_by_document_id(existing.id)
+            if not re_result.ok:
+                return re_result
+            
+            return IngestionPipelineResult(
+                ok=True,
+                document_id=existing.id,
+                content_hash=content_hash,
+                was_duplicate=True,
+                reingested=True,
+                chunks_created=re_result.chunks_created,
+            )
 
+        # 3. Caso de documento novo
         meta: dict[str, Any] = dict(pipeline_input.metadata or {})
         if pipeline_input.source_uri:
             meta["source_uri"] = pipeline_input.source_uri
@@ -98,6 +119,7 @@ class TextIngestionService:
             saved_doc = await self._doc_repo.create_document(doc)
             chunks = await self._chunk_and_save(saved_doc)
         except Exception as exc:
+            # Captura erro de integridade (ex: corrida onde documento foi criado entre find e create)
             return IngestionPipelineResult(
                 ok=False,
                 content_hash=content_hash,
@@ -109,6 +131,7 @@ class TextIngestionService:
             document_id=saved_doc.id,
             content_hash=content_hash,
             was_duplicate=False,
+            reingested=False,
             chunks_created=len(chunks),
         )
 
@@ -137,7 +160,10 @@ class TextIngestionService:
             )
 
         try:
+            # Deletar chunks antigos (limpeza garantida)
             await self._chunk_repo.delete_chunks_by_document(document_id)
+            
+            # Gerar e salvar novos chunks
             chunks = await self._chunk_and_save(doc)
         except Exception as exc:
             return IngestionPipelineResult(
@@ -150,6 +176,8 @@ class TextIngestionService:
             ok=True,
             document_id=doc.id,
             content_hash=compute_content_hash(doc.content),
+            was_duplicate=True, # Já existia se estamos em reingest_by_id
+            reingested=True,
             chunks_created=len(chunks),
         )
 

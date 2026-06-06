@@ -59,6 +59,7 @@ class IngestionPipelineResult:
         embeddings_created: Quantidade de embeddings gerados e armazenados.
         content_hash: SHA-256 do conteúdo (para detecção de duplicatas).
         was_duplicate: True se o documento já existia (content_hash repetido).
+        reingested: True se um documento existente foi re-processado (chunks recriados).
         error: Mensagem de erro se ok=False.
         warnings: Avisos não-fatais (ex: chunk muito curto, token limit atingido).
     """
@@ -69,6 +70,7 @@ class IngestionPipelineResult:
     embeddings_created: int = 0
     content_hash: str | None = None
     was_duplicate: bool = False
+    reingested: bool = False
     error: str | None = None
     warnings: list[str] = field(default_factory=list)
 

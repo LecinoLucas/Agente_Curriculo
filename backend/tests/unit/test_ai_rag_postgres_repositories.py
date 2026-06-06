@@ -419,6 +419,19 @@ class TestDeleteChunksByDocument:
 
 
 class TestUniqueConstraint:
+    async def test_duplicate_content_hash_raises(
+        self, db_session: AsyncSession
+    ) -> None:
+        repo = SQLAlchemyKnowledgeDocumentRepository(db_session)
+        content = "Conteúdo idêntico para teste de constraint."
+        await repo.create_document(_doc(content=content))
+        
+        # O segundo deve falhar no banco se tentarmos persistir manualmente (ou via repo se ele não tratasse)
+        with pytest.raises((IntegrityError, Exception)):
+            # Usamos um novo doc_id mas com o mesmo conteúdo
+            await repo.create_document(_doc(content=content))
+            await db_session.flush()
+
     async def test_duplicate_doc_chunk_idx_raises(
         self, db_session: AsyncSession
     ) -> None:

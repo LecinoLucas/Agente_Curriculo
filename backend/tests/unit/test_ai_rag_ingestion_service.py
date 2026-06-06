@@ -225,6 +225,7 @@ class TestDuplicateDetection:
 
         assert result.ok is True
         assert result.was_duplicate is True
+        assert result.reingested is False
 
     async def test_duplicate_result_contains_existing_document_id(self) -> None:
         doc_repo = FakeDocumentRepository()
@@ -235,16 +236,22 @@ class TestDuplicateDetection:
 
         assert second.document_id == first.document_id
 
-    async def test_force_reingest_bypasses_duplicate_check(self) -> None:
+    async def test_force_reingest_reuses_existing_document(self) -> None:
+        """Com force_reingest=True, não cria novo documento mas recria chunks."""
         doc_repo = FakeDocumentRepository()
-        service = _make_service(doc_repo=doc_repo)
+        chunk_repo = FakeChunkRepository()
+        service = _make_service(doc_repo=doc_repo, chunk_repo=chunk_repo)
 
         await service.ingest(_make_input())
+        assert len(doc_repo._store) == 1
+        
         result = await service.ingest(_make_input(force_reingest=True))
 
         assert result.ok is True
-        assert result.was_duplicate is False
-        assert len(doc_repo._store) == 2
+        assert result.was_duplicate is True
+        assert result.reingested is True
+        assert len(doc_repo._store) == 1  # Reutilizou o documento
+        assert len(chunk_repo.delete_calls) == 1  # Deletou chunks antigos
 
 
 class TestInvalidInput:
@@ -351,6 +358,8 @@ class TestReingest:
 
         assert reingest_result.ok is True
         assert reingest_result.document_id == doc_id
+        assert reingest_result.was_duplicate is True
+        assert reingest_result.reingested is True
         chunks_after = await chunk_repo.get_chunks_by_document(doc_id)
         assert len(chunks_after) > 0
         assert doc_id in chunk_repo.delete_calls  # delete was called
