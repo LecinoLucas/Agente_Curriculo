@@ -65,12 +65,17 @@ class PostgresVectorStore(VectorStoreContract):
         """Persiste ou atualiza embeddings em lote.
         
         Garante idempotência por (chunk_id, provider, model).
+        Rejeita vetores com dimensão inconsistente.
         """
         if not embeddings:
             return 0
 
         count = 0
         for ev in embeddings:
+            # Validação defensiva
+            if len(ev.vector) != ev.dimensions:
+                continue
+
             stmt = sa.select(AIKnowledgeEmbeddingModel).where(
                 AIKnowledgeEmbeddingModel.chunk_id == UUID(ev.chunk_id),
                 AIKnowledgeEmbeddingModel.provider == ev.provider,
@@ -80,6 +85,7 @@ class PostgresVectorStore(VectorStoreContract):
 
             if existing:
                 existing.vector_json = ev.vector
+                existing.dimensions = ev.dimensions
                 existing.content_hash = ev.metadata.get("content_hash", "legacy")
             else:
                 new_emb = AIKnowledgeEmbeddingModel(
@@ -120,10 +126,19 @@ class PostgresVectorStore(VectorStoreContract):
                 warnings=[build_pgvector_unavailable_warning()],
             )
 
+        # Validação de query vector
+        if not query_vector:
+            return RetrievalResult(
+                query=query.query,
+                chunks=[],
+                warnings=["empty_query_embedding"],
+            )
+
         # JOIN: embeddings → chunks → documents (exclude archived docs)
         stmt = (
             sa.select(
                 AIKnowledgeEmbeddingModel.vector_json,
+                AIKnowledgeEmbeddingModel.dimensions,
                 AIKnowledgeChunkModel.id.label("chunk_id"),
                 AIKnowledgeChunkModel.chunk_index,
                 AIKnowledgeChunkModel.content,
@@ -156,16 +171,24 @@ class PostgresVectorStore(VectorStoreContract):
 
         # Compute cosine similarity in Python (bridge: no native vector column yet)
         scored: list[tuple[float, object]] = []
+        warnings = []
+        skipped_count = 0
+
         for row in rows:
             vector = row.vector_json
             if not isinstance(vector, list) or len(vector) != len(query_vector):
+                skipped_count += 1
                 continue
+            
             raw_sim = _cosine_similarity(query_vector, vector)
             # Clamp to [0, 1]: negative cosine → semantically unrelated, treat as 0
             score = max(0.0, raw_sim)
             if query.min_score > 0.0 and score < query.min_score:
                 continue
             scored.append((score, row))
+
+        if skipped_count > 0:
+            warnings.append(f"embedding_dimension_mismatch: skipped {skipped_count} chunks")
 
         scored.sort(key=lambda x: -x[0])
         scored = scored[: query.limit]
@@ -190,7 +213,7 @@ class PostgresVectorStore(VectorStoreContract):
             query=query.query,
             chunks=chunks,
             total=len(chunks),
-            warnings=[],
+            warnings=warnings,
         )
 
     async def delete_embeddings_by_document(self, document_id: str) -> int:

@@ -197,6 +197,22 @@ class TestPostgresVectorRetriever:
         assert result.total == 0
         assert any("vector_store_error" in w for w in result.warnings)
 
+    async def test_rejection_on_invalid_query_dimension(self) -> None:
+        """Test: Retriever rejeita se o embedding da query tiver dimensão errada."""
+        bad_provider = AsyncMock()
+        # Provider diz que tem 16, mas retorna 17
+        bad_provider.dimensions = 16
+        bad_provider.embed_query.return_value = [0.1] * 17
+        
+        vector_store = AsyncMock(spec=VectorStoreContract)
+        retriever = _make_retriever(vector_store=vector_store, provider=bad_provider)
+        
+        result = await retriever.retrieve(RetrievalQuery(query="test"))
+        
+        assert result.chunks == []
+        assert "INVALID_QUERY_EMBEDDING_DIMENSION" in result.warnings
+        vector_store.similarity_search.assert_not_called()
+
     async def test_score_preserved_in_retrieved_chunk(self) -> None:
         """Test 9: Score é preservado no RetrievedChunk quando há resultado."""
         chunk = KnowledgeChunk(

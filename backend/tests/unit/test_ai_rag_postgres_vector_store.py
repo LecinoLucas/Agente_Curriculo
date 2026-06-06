@@ -222,7 +222,7 @@ class TestPostgresVectorStore:
     async def test_similarity_search_skips_rows_with_mismatched_dimensions(
         self,
     ) -> None:
-        """Rows com vector de dimensão diferente da query são ignoradas sem erro."""
+        """Rows com vector de dimensão diferente da query são ignoradas e geram warning."""
         session = AsyncMock()
         row_wrong_dim = _make_row(vector=[0.5, 0.5, 0.5], idx=0)  # 3D vs query 2D
         row_correct = _make_row(vector=[0.8, 0.0], idx=1)
@@ -239,6 +239,22 @@ class TestPostgresVectorStore:
         # Apenas a row com dimensão correta deve ser incluída
         assert len(result.chunks) == 1
         assert result.chunks[0].chunk.chunk_index == 1
+        assert any("embedding_dimension_mismatch" in w for w in result.warnings)
+        assert "skipped 1 chunks" in result.warnings[0]
+
+    async def test_similarity_search_rejects_empty_query_vector(self) -> None:
+        """Query vector vazio retorna resultado controlado com warning."""
+        session = AsyncMock()
+        session.execute.return_value = _pgvector_available_mock()
+
+        store = PostgresVectorStore(session)
+        result = await store.similarity_search(
+            RetrievalQuery(query="test"),
+            query_vector=[],
+        )
+
+        assert result.chunks == []
+        assert "empty_query_embedding" in result.warnings
 
     async def test_similarity_search_source_type_filter_is_applied(self) -> None:
         """Filtro source_type é passado na query SQL sem causar erro."""

@@ -67,6 +67,15 @@ class PostgresVectorRetriever(RetrieverContract):
         # Gera embedding da query — falha vira warning controlado
         try:
             query_vector = await self._embedding_provider.embed_query(query.query)
+            
+            # Validação de dimensão da query
+            if len(query_vector) != self._embedding_provider.dimensions:
+                return RetrievalResult(
+                    query=query.query,
+                    chunks=[],
+                    total=0,
+                    warnings=["INVALID_QUERY_EMBEDDING_DIMENSION"],
+                )
         except Exception as exc:
             return RetrievalResult(
                 query=query.query,
