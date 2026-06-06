@@ -870,6 +870,7 @@ class AiDraftFieldsResponse(BaseModel):
     matching_criteria: list[str] = Field(default_factory=list)
     requires_manager_review: bool = True
     requires_behavioral_assessment: bool = False
+    quality_score: float | None = None
 
 
 class AiDraftUsageResponse(BaseModel):

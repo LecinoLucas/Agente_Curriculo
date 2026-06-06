@@ -174,6 +174,7 @@ class Settings(BaseSettings):
     JOB_AI_DRAFT_DAILY_LIMIT: int = 10
     JOB_AI_DRAFT_MAX_INPUT_CHARS: int = 12_000
     JOB_AI_DRAFT_MAX_FILE_MB: int = 5
+    JOB_AI_DRAFT_USE_LANGGRAPH: bool = True
 
     # AI daily analysis limits — baseline values that admin overrides modify.
     AI_ANALYSIS_DAILY_LIMIT_PER_USER: int = 50
