@@ -114,6 +114,13 @@ class Settings(BaseSettings):
     RAG_GEMINI_EMBEDDING_DIMENSIONS: int = 768
     RAG_GEMINI_EMBEDDING_ENABLED: bool = False
 
+    # RAG Synthesis (AI-RAG-10)
+    RAG_SYNTHESIS_ENABLED: bool = False
+    RAG_SYNTHESIS_PROVIDER: str = "gemini"
+    RAG_GEMINI_SYNTHESIS_MODEL: str = "gemini-2.0-flash"
+    RAG_SYNTHESIS_MAX_CHUNKS: int = 5
+    RAG_SYNTHESIS_REQUIRE_SOURCES: bool = True
+
     # Upload hardening
     MAX_UPLOAD_SIZE_MB: int = 10
     FILE_SCAN_ENABLED: bool = False
