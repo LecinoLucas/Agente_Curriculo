@@ -434,6 +434,14 @@ ensure_frontend_dependencies
 ensure_candidate_portal_dependencies
 ensure_backend_dependencies
 
+print_section "Database"
+print_info "Aplicando migrations..."
+(
+  cd "$BACKEND_DIR"
+  .venv/bin/python -m alembic upgrade head
+)
+print_ok "Migrations aplicadas."
+
 if [ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ]; then
   print_error "uvicorn nao encontrado em $BACKEND_DIR/.venv/bin/uvicorn."
   exit 1

@@ -81,6 +81,7 @@ function expectTopNavMissing(labels: string[]) {
 describe("AppShell — Sidebar Nav", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     closeCandidateMock.mockClear();
     localStorage.clear();
   });
@@ -118,8 +119,8 @@ describe("AppShell — Sidebar Nav", () => {
     it("renderiza menu Admitidos para RH", () => {
       renderShell("hr");
 
-      expectTopNavLabels(["Central RH", "Recrutamento", "Admissão"]);
-      expectTopNavMissing(["Outros", "Administração", "Avaliações"]);
+      expectTopNavLabels(["Central RH", "Recrutamento", "Admissão", "Administração"]);
+      expectTopNavMissing(["Outros", "Avaliações"]);
       fireEvent.click(within(topNav()).getByRole("button", { name: "Recrutamento" }));
       expect(screen.queryByRole("link", { name: /Candidatos/ })).not.toBeInTheDocument();
       fireEvent.click(within(topNav()).getByRole("button", { name: "Admissão" }));
@@ -147,6 +148,27 @@ describe("AppShell — Sidebar Nav", () => {
     it("exibe Outros (Demo RH) para admin", () => {
       renderShell("admin");
       expect(topNavItem("Outros")).toBeInTheDocument();
+    });
+
+    it("renderiza rota antiga e novo portal do candidato em Outros sem remover itens existentes", () => {
+      vi.stubEnv("VITE_CANDIDATE_PORTAL_URL", "https://candidatos.example.test");
+      vi.stubEnv("VITE_CANDIDATE_PORTAL_PROTOTYPE_URL", "https://prototype.example.test");
+      renderShell("admin");
+
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Outros" }));
+
+      const legacyPortal = screen.getByRole("link", { name: /Rota antiga do candidato/ });
+      const newPortal = screen.getByRole("link", { name: /Novo portal do candidato/ });
+      const prototypePortal = screen.getByRole("link", { name: /Protótipo do portal/ });
+
+      expect(legacyPortal).toHaveAttribute("href", "/candidato/portal");
+      expect(newPortal).toHaveAttribute("href", "https://candidatos.example.test");
+      expect(newPortal).toHaveAttribute("target", "_blank");
+      expect(newPortal).toHaveAttribute("rel", "noreferrer");
+      expect(prototypePortal).toHaveAttribute("href", "https://prototype.example.test");
+      expect(prototypePortal).toHaveAttribute("target", "_blank");
+      expect(screen.getByRole("link", { name: /Demo RH/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Demo 2/ })).toBeInTheDocument();
     });
 
     it.each(["hr", "manager", "viewer"] as const)(
@@ -181,6 +203,7 @@ describe("AppShell — Sidebar Nav", () => {
           { path: "/vagas", roles: ["admin"] },
           { path: "/candidatos", roles: ["admin"] },
           { path: "/agenda", roles: ["admin"] },
+          { path: "/admin/estrutura-operacional", roles: ["admin"] },
           { path: "/admin/behavioral-templates", roles: ["admin"] },
           { path: "/analises-ia", roles: ["admin"] },
           { path: "/importar", roles: ["admin"] },

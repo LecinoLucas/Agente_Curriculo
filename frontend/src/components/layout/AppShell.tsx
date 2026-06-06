@@ -18,6 +18,7 @@ import {
   KeyRound,
   MapPinned,
   BrainCircuit,
+  ExternalLink,
   FlaskConical,
   PanelTop,
   UserRound,
@@ -51,6 +52,8 @@ export type NavItem = {
   label: string;
   caption: string;
   roles: UserRole[];
+  external?: boolean;
+  iconKey?: string;
 };
 
 export type NavGroup = {
@@ -61,7 +64,19 @@ export type NavGroup = {
   items: NavItem[];
 };
 
-const NAVIGATION_CONFIG: NavGroup[] = [
+function getStandaloneCandidatePortalUrl() {
+  return (import.meta.env.VITE_CANDIDATE_PORTAL_URL ?? "").trim();
+}
+
+function getCandidatePortalPrototypeUrl() {
+  return (import.meta.env.VITE_CANDIDATE_PORTAL_PROTOTYPE_URL ?? "http://localhost:5175").trim();
+}
+
+function buildNavigationConfig(): NavGroup[] {
+  const standaloneCandidatePortalUrl = getStandaloneCandidatePortalUrl();
+  const candidatePortalPrototypeUrl = getCandidatePortalPrototypeUrl();
+
+  return [
   {
     label: "Central RH",
     caption: "Pendências do dia",
@@ -148,12 +163,29 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     roles: JOB_MANAGEMENT_ROLES,
     isDropdown: true,
     items: [
-      { to: "/candidato/portal", label: "Portal do Candidato (Preview)", caption: "Visualização do candidato", roles: ADMIN_ONLY_ROLES },
+      { to: "/candidato/portal", label: "Rota antiga do candidato", caption: "Tela de transição", roles: JOB_MANAGEMENT_ROLES },
+      {
+        to: standaloneCandidatePortalUrl || "/candidato",
+        label: "Novo portal do candidato",
+        caption: "Frontend separado",
+        roles: JOB_MANAGEMENT_ROLES,
+        external: Boolean(standaloneCandidatePortalUrl),
+        iconKey: "Novo portal do candidato",
+      },
+      {
+        to: candidatePortalPrototypeUrl || "/candidato",
+        label: "Protótipo do portal",
+        caption: "Mock visual separado",
+        roles: JOB_MANAGEMENT_ROLES,
+        external: Boolean(candidatePortalPrototypeUrl),
+        iconKey: "Protótipo do portal",
+      },
       { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: JOB_MANAGEMENT_ROLES },
       { to: "/demo-2", label: "Demo 2", caption: "Apresentação RH IA", roles: JOB_MANAGEMENT_ROLES },
     ],
   },
-];
+  ];
+}
 
 const ICON_MAP: Record<string, any> = {
   "/rh": ClipboardList,
@@ -179,6 +211,8 @@ const ICON_MAP: Record<string, any> = {
   "/admin/health": Activity,
   "/admin/ai-provider-credentials": KeyRound,
   "/candidato/portal": User,
+  "Novo portal do candidato": ExternalLink,
+  "Protótipo do portal": ExternalLink,
   "/demo-rh": FlaskConical,
   "/demo-2": Sparkles,
   "Central RH": ClipboardList,
@@ -251,7 +285,7 @@ export function AppShell() {
   const visibleGroups = useMemo(() => {
     if (!user) return [];
 
-    return NAVIGATION_CONFIG.map((group) => {
+    return buildNavigationConfig().map((group) => {
       const allowedItems = group.items.filter(
         (item) => item.roles.includes(user.role) && isAllowed(item.to, user.role)
       );

@@ -464,167 +464,157 @@
 
   :root[data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 — Azul Industrial
+       Visual Theme 2 — Scandinavian Glass (Branco Vivo + Safira)
        -----------------------------------------------------------------------
        Direção:
-       - Azul aço/industrial com presença corporativa.
-       - Base cinza fria azulada, texto slate e cards branco frio.
-       - Vermelho fica restrito a erro/destructive, não a primary.
-       - Navbar branca, limpa e contemporânea com contraste suave.
+       - Fundo base "gelo" muito suave (quase imperceptível).
+       - Cards em branco absoluto para separação visual elegante.
+       - Destaques em Azul Safira vibrante para injetar vida.
+       - Sombras suaves difusas e glassmorphism refinado.
        ----------------------------------------------------------------------- */
 
-    /* Cor principal da marca no tema atual. */
-    --brand:               207 78% 36%;
-    /* Versão mais escura da marca, usada em bordas, hover e profundidade. */
-    --brand-dark:          212 64% 22%;
-    /* Versão suave da marca, usada em fundos leves e badges. */
-    --brand-soft:          207 72% 94%;
-    /* Tom luminoso da marca, usado em brilhos e gradientes. */
-    --brand-glow:          207 76% 58%;
+    /* Cor principal da marca no tema atual (Azul Safira Elétrico) */
+    --brand:               220 90% 55%;
+    --brand-dark:          220 90% 40%;
+    --brand-soft:          220 90% 95%;
+    --brand-glow:          220 100% 70%;
 
-    --bg:                  207 10% 98%;
+    /* Fundos: Um branco puro e cristalino com a base levíssima "gelo" */
+    --bg:                  210 20% 98%;
     --surface:             0 0% 100%;
-    --surface-muted:       207 10% 94%;
-    --border:              207 10% 88%;
-    --border-strong:       207 10% 75%;
+    --surface-muted:       210 20% 96%;
+    --border:              210 15% 90%;
+    --border-strong:       210 20% 80%;
 
-    --background:          207 10% 98%;
-    --foreground:          207 10% 15%;
+    --background:          210 20% 98%;
+    --foreground:          220 30% 15%;
     --card:                0 0% 100%;
-    --card-foreground:     207 10% 15%;
+    --card-foreground:     220 30% 15%;
     --popover:             0 0% 100%;
-    --popover-foreground:  207 10% 15%;
-    --secondary:           207 10% 94%;
-    --secondary-foreground:207 10% 15%;
-    --muted:               207 10% 94%;
-    --muted-foreground:    207 10% 45%;
+    --popover-foreground:  220 30% 15%;
+    --secondary:           210 20% 95%;
+    --secondary-foreground:220 30% 20%;
+    --muted:               210 15% 95%;
+    --muted-foreground:    210 10% 45%;
 
-    --text:                207 10% 15%;
-    --text-muted:          207 10% 45%;
+    --text:                220 30% 15%;
+    --text-muted:          210 10% 45%;
 
-    /* Cor principal de ação: botões, foco e CTA. */
-    --primary:             207 76% 38%;
-    /* Variação da cor principal para hover. */
-    --primary-hover:       207 70% 30%;
-    /* Fundo suave baseado na cor principal. */
-    --primary-soft:        207 72% 94%;
-    /* Texto usado sobre a cor primary. */
+    /* Cor principal de ação */
+    --primary:             220 90% 55%;
+    --primary-hover:       220 80% 45%;
+    --primary-soft:        220 90% 95%;
     --primary-foreground:  0 0% 100%;
-    /* Cor do anel de foco acessível. */
-    --ring:                207 76% 38%;
+    --ring:                220 90% 55%;
 
-    /* Token shadcn/Radix para área de destaque. */
-    --accent:              207 72% 94%;
-    /* Texto usado sobre o accent. */
-    --accent-foreground:   207 68% 27%;
-    /* Fundo de destaque suave. */
-    --accent-soft:         207 72% 94%;
-    /* Texto usado sobre áreas de destaque suave. */
-    --accent-contrast:     218 28% 13%;
+    --accent:              220 80% 95%;
+    --accent-foreground:   220 90% 45%;
+    --accent-soft:         220 80% 95%;
+    --accent-contrast:     220 90% 15%;
 
-    /* Cor semântica para erro/risco, separada do vermelho da marca. */
-    --danger:              344 62% 38%;
-    /* Fundo suave para estados de erro/risco. */
-    --danger-soft:         344 52% 94%;
-    /* Token shadcn/Radix para ações destrutivas. */
-    --destructive:         344 62% 38%;
-    /* Texto usado sobre destructive. */
+    --danger:              344 70% 50%;
+    --danger-soft:         344 60% 95%;
+    --destructive:         344 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Borda/fundo base de inputs. */
-    --input:               207 10% 85%;
+    --input:               210 15% 88%;
 
+    /* Navbar translúcida para efeito Glass */
     --nav-bg:              0 0% 100%;
-    --nav-text:            215 24% 12%;
-    --nav-muted:           215 14% 34%;
-    --nav-active-bg:       207 72% 94%;
-    --nav-active-text:     215 24% 12%;
-    --nav-border:          210 18% 86%;
+    --nav-text:            220 30% 15%;
+    --nav-muted:           210 10% 45%;
+    --nav-active-bg:       220 90% 95%;
+    --nav-active-text:     220 90% 50%;
+    --nav-border:          210 15% 92%;
 
-    --sidebar-accent:      207 76% 38%;
-    --hero-start:          207 76% 38%;
-    --hero-end:            207 10% 20%;
+    --sidebar-accent:      220 90% 55%;
+    --hero-start:          220 90% 55%;
+    --hero-end:            220 80% 40%;
 
-    --page-glow-start:     207 10% 98%;
-    --page-glow-end:       207 10% 94%;
-    --page-gradient-start: 207 10% 98%;
-    --page-gradient-end:   207 10% 94%;
+    /* Gradientes de fundo leves (gelo para leve tom safira) */
+    --page-glow-start:     210 20% 98%;
+    --page-glow-end:       220 40% 95%;
+    --page-gradient-start: 210 20% 98%;
+    --page-gradient-end:   210 15% 95%;
   }
 
   :root[data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 3 — Rosé Elegance
+       Visual Theme 3 — Rosé Elegance (Colorido Suave)
        -----------------------------------------------------------------------
        Direção:
        - Feminino elegante, sem rosa neon.
-       - Base em branco rosado sutil.
-       - Brand focado em rosa queimado e ameixa.
+       - Base em tons pasteis/rosé suaves para fugir do branco puro.
+       - Brand focado em rosa queimado e ameixa profundo para contraste.
+       - Cards com levíssimo toque de cor (rosé) e fontes em ameixa vibrante.
        ----------------------------------------------------------------------- */
 
-    --brand:               340 45% 65%;
-    --brand-dark:          335 45% 45%;
-    --brand-soft:          340 30% 92%;
-    --brand-glow:          340 45% 65%;
+    --brand:               340 55% 60%;
+    --brand-dark:          335 55% 40%;
+    --brand-soft:          340 40% 90%;
+    --brand-glow:          340 55% 60%;
 
-    --bg:                  340 20% 98%;
-    --surface:             340 10% 100%;
-    --surface-muted:       340 15% 95%;
-    --border:              340 15% 90%;
-    --border-strong:       340 15% 80%;
+    /* Fundo levemente colorido em vez de branco */
+    --bg:                  340 35% 96%;
+    --surface:             340 30% 98%;
+    --surface-muted:       340 35% 94%;
+    --border:              340 25% 86%;
+    --border-strong:       340 30% 75%;
 
-    --background:          340 20% 98%;
-    --foreground:          330 20% 20%;
-    --card:                340 10% 100%;
-    --card-foreground:     330 20% 20%;
-    --popover:             340 10% 100%;
-    --popover-foreground:  330 20% 20%;
-    --secondary:           340 15% 95%;
-    --secondary-foreground:330 20% 20%;
-    --muted:               340 15% 95%;
-    --muted-foreground:    330 15% 45%;
+    --background:          340 35% 96%;
+    /* Fonte primária com mais cor (Ameixa escuro) */
+    --foreground:          330 40% 18%;
+    --card:                340 30% 98%;
+    --card-foreground:     330 40% 18%;
+    --popover:             340 30% 98%;
+    --popover-foreground:  330 40% 18%;
+    --secondary:           340 35% 94%;
+    --secondary-foreground:330 40% 18%;
+    --muted:               340 35% 94%;
+    --muted-foreground:    330 25% 40%;
 
-    --text:                330 20% 20%;
-    --text-muted:          330 15% 45%;
+    --text:                330 40% 18%;
+    --text-muted:          330 25% 40%;
 
-    --primary:             340 45% 65%;
-    --primary-hover:       340 45% 55%;
-    --primary-soft:        340 30% 92%;
+    --primary:             340 55% 60%;
+    --primary-hover:       340 55% 50%;
+    --primary-soft:        340 40% 90%;
     --primary-foreground:  0 0% 100%;
-    --ring:                340 45% 65%;
+    --ring:                340 55% 60%;
 
-    --accent:              35 30% 85%;
-    --accent-foreground:   330 20% 20%;
-    --accent-soft:         35 30% 85%;
-    --accent-contrast:     330 20% 20%;
+    --accent:              340 40% 90%;
+    --accent-foreground:   330 45% 30%;
+    --accent-soft:         340 40% 90%;
+    --accent-contrast:     330 45% 30%;
 
-    --danger:              344 62% 45%;
-    --danger-soft:         344 50% 95%;
-    --destructive:         344 62% 45%;
+    --danger:              344 65% 45%;
+    --danger-soft:         344 55% 94%;
+    --destructive:         344 65% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --input:               340 15% 85%;
+    --input:               340 25% 86%;
 
-    --nav-bg:              335 30% 15%;
-    --nav-text:            340 20% 98%;
-    --nav-muted:           340 15% 70%;
-    --nav-active-bg:       340 45% 65%;
+    --nav-bg:              335 45% 15%;
+    --nav-text:            340 30% 98%;
+    --nav-muted:           340 25% 75%;
+    --nav-active-bg:       340 55% 60%;
     --nav-active-text:     0 0% 100%;
-    --nav-border:          335 30% 10%;
+    --nav-border:          335 45% 10%;
 
-    --sidebar-accent:      340 45% 65%;
-    --hero-start:          340 20% 98%;
-    --hero-end:            340 15% 92%;
+    --sidebar-accent:      340 55% 60%;
+    --hero-start:          340 35% 96%;
+    --hero-end:            340 30% 90%;
 
-    --page-glow-start:     340 20% 98%;
-    --page-glow-end:       340 15% 94%;
-    --page-gradient-start: 340 20% 98%;
-    --page-gradient-end:   340 15% 94%;
+    --page-glow-start:     340 35% 96%;
+    --page-glow-end:       340 35% 92%;
+    --page-gradient-start: 340 35% 96%;
+    --page-gradient-end:   340 30% 92%;
   }
 
   :root[data-visual-theme="theme-4"] {
     /* -----------------------------------------------------------------------
        Visual Theme 4 — Creme Vibrante
-       ----------------------------------------------------------------------- 
+       -----------------------------------------------------------------------
        Direção:
        - Claro, leve e contemporâneo.
        - Base creme quente com superfícies quase marfim.
@@ -873,59 +863,70 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 Dark — Botânico Floral
+       Visual Theme 2 Dark — Midnight Sapphire Premium
        -----------------------------------------------------------------------
        Direção:
-       - Escuro industrial, frio e elegante.
+       - Azul meia-noite profundo e sofisticado.
+       - Superfícies escuras que elevam o Azul Safira brilhante.
        ----------------------------------------------------------------------- */
-    --brand:               207 46% 58%;
-    --brand-dark:          210 40% 42%;
-    --brand-soft:          212 30% 18%;
-    --brand-glow:          207 34% 40%;
-    --bg:                  212 18% 11%;
-    --surface:             212 16% 14%;
-    --surface-muted:       212 16% 18%;
-    --border:              212 12% 23%;
-    --border-strong:       212 10% 31%;
-    --background:          212 18% 11%;
-    --foreground:          210 10% 90%;
-    --card:                212 16% 14%;
-    --card-foreground:     210 10% 90%;
-    --popover:             212 16% 14%;
-    --popover-foreground:  210 10% 90%;
-    --secondary:           212 16% 18%;
-    --secondary-foreground:210 10% 90%;
-    --muted:               212 16% 18%;
-    --muted-foreground:    210 8% 66%;
-    --text:                210 10% 90%;
-    --text-muted:          210 8% 66%;
-    --primary:             207 42% 54%;
-    --primary-hover:       207 38% 48%;
-    --primary-soft:        212 30% 18%;
+    --brand:               220 90% 65%;
+    --brand-dark:          220 70% 50%;
+    --brand-soft:          220 90% 12%;
+    --brand-glow:          220 100% 75%;
+
+    --bg:                  225 30% 6%;
+    --surface:             225 20% 9%;
+    --surface-muted:       225 20% 12%;
+    --border:              225 15% 18%;
+    --border-strong:       225 20% 25%;
+
+    --background:          225 30% 6%;
+    --foreground:          210 20% 92%;
+    --card:                225 20% 9%;
+    --card-foreground:     210 20% 92%;
+    --popover:             225 20% 9%;
+    --popover-foreground:  210 20% 92%;
+    --secondary:           225 20% 14%;
+    --secondary-foreground:210 20% 92%;
+    --muted:               225 20% 14%;
+    --muted-foreground:    210 10% 60%;
+
+    --text:                210 20% 92%;
+    --text-muted:          210 10% 60%;
+
+    --primary:             220 90% 65%;
+    --primary-hover:       220 80% 55%;
+    --primary-soft:        220 90% 12%;
     --primary-foreground:  0 0% 100%;
-    --ring:                207 42% 54%;
-    --accent:              212 18% 19%;
-    --accent-foreground:   210 10% 90%;
-    --accent-soft:         212 18% 19%;
-    --accent-contrast:     210 10% 90%;
-    --danger:              344 50% 52%;
-    --danger-soft:         344 24% 18%;
-    --destructive:         344 50% 52%;
+    --ring:                220 90% 65%;
+
+    --accent:              220 25% 15%;
+    --accent-foreground:   220 20% 95%;
+    --accent-soft:         220 25% 15%;
+    --accent-contrast:     220 20% 95%;
+
+    --danger:              344 70% 55%;
+    --danger-soft:         344 40% 15%;
+    --destructive:         344 70% 55%;
     --destructive-foreground: 0 0% 100%;
-    --input:               212 12% 21%;
-    --nav-bg:              212 20% 9%;
-    --nav-text:            210 10% 88%;
-    --nav-muted:           210 8% 61%;
-    --nav-active-bg:       208 28% 24%;
-    --nav-active-text:     210 10% 92%;
-    --nav-border:          212 14% 15%;
-    --sidebar-accent:      207 38% 48%;
-    --hero-start:          208 28% 24%;
-    --hero-end:            212 20% 9%;
-    --page-glow-start:     207 28% 18%;
-    --page-glow-end:       212 18% 12%;
-    --page-gradient-start: 212 18% 11%;
-    --page-gradient-end:   212 20% 9%;
+
+    --input:               225 15% 18%;
+
+    --nav-bg:              225 30% 5%;
+    --nav-text:            0 0% 90%;
+    --nav-muted:           0 0% 60%;
+    --nav-active-bg:       220 40% 15%;
+    --nav-active-text:     220 90% 75%;
+    --nav-border:          225 20% 12%;
+
+    --sidebar-accent:      220 90% 65%;
+    --hero-start:          220 60% 15%;
+    --hero-end:            225 30% 6%;
+
+    --page-glow-start:     220 50% 10%;
+    --page-glow-end:       225 30% 6%;
+    --page-gradient-start: 225 30% 6%;
+    --page-gradient-end:   225 20% 8%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-3"] {
@@ -1000,7 +1001,7 @@
   :root[data-theme="dark"][data-visual-theme="theme-4"] {
     /* -----------------------------------------------------------------------
        Visual Theme 4 Dark — Creme Vibrante
-       ----------------------------------------------------------------------- 
+       -----------------------------------------------------------------------
        Direção:
        - Fundo espresso profundo e quente.
        - Surface grafite castanho discreto.
@@ -2511,6 +2512,62 @@
 :root[data-theme="dark"] .pipeline-ranking-panel {
   background:
     linear-gradient(180deg, hsl(219 30% 14% / 0.96), hsl(224 34% 10% / 0.96)) !important;
+}
+
+/* ==========================================================================
+   Theme 2 Specific Overrides (Scandinavian Glass + Sapphire)
+   ========================================================================== */
+
+:root[data-visual-theme="theme-2"] .ui-card,
+:root[data-visual-theme="theme-2"] .glass {
+  border-radius: 1.25rem;
+  /* Soft, elegant shadow for depth without darkening the white surface */
+  box-shadow: 0 16px 40px -12px rgba(0, 30, 80, 0.05), 0 4px 12px -8px rgba(0, 30, 80, 0.03);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+}
+
+:root[data-visual-theme="theme-2"] .ui-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 48px -12px rgba(0, 30, 80, 0.08), 0 8px 24px -12px rgba(0, 30, 80, 0.04);
+}
+
+:root[data-visual-theme="theme-2"][data-theme="dark"] .ui-card,
+:root[data-visual-theme="theme-2"][data-theme="dark"] .glass {
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.03);
+  background-color: rgba(20, 25, 35, 0.85);
+}
+
+:root[data-visual-theme="theme-2"] .ui-btn-primary {
+  box-shadow: 0 4px 14px 0 rgba(0, 80, 255, 0.25);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+:root[data-visual-theme="theme-2"] .ui-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 80, 255, 0.35);
+}
+
+:root[data-visual-theme="theme-2"] .navbar,
+:root[data-visual-theme="theme-2"] .sidebar-glass {
+  background-color: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(0, 30, 80, 0.04) !important;
+  border-bottom: 1px solid rgba(0, 30, 80, 0.04) !important;
+}
+
+:root[data-visual-theme="theme-2"][data-theme="dark"] .navbar,
+:root[data-visual-theme="theme-2"][data-theme="dark"] .sidebar-glass {
+  background-color: rgba(10, 15, 25, 0.75) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
 /* ==========================================================================

@@ -8,6 +8,8 @@ export type TopNavItem = {
   to: string;
   label: string;
   caption: string;
+  external?: boolean;
+  iconKey?: string;
 };
 
 export type TopNavGroup = {
@@ -75,28 +77,10 @@ export function TopNavDropdown({
           {group.items.map((item) => {
             const active = isItemActive(item.to);
 
-            return (
-               <NavLink
-                key={item.to}
-                to={item.to}
-                role="menuitem"
-                aria-current={active ? "page" : undefined}
-                onClick={() => {
-                  onClose();
-                  if (item.to === "/pipeline") {
-                    onPipelineClick();
-                  }
-                }}
-                className={cn(
-                  "flex min-w-0 items-start gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-all duration-200",
-                  "focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
-                  active
-                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-                    : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]",
-                )}
-              >
+            const content = (
+              <>
                 <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors", active ? "bg-[hsl(var(--nav-active-bg))]/60 text-[hsl(var(--nav-active-text))]" : "bg-[hsl(var(--nav-active-bg))]/20 text-[hsl(var(--nav-muted))] group-hover:text-[hsl(var(--nav-text))]")}>
-                  {renderIcon(item.to)}
+                  {renderIcon(item.iconKey ?? item.to)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className={cn("block truncate text-[13px] font-bold", active ? "text-[hsl(var(--nav-active-text))]" : "text-[hsl(var(--nav-text))]")}>
@@ -106,6 +90,43 @@ export function TopNavDropdown({
                     {item.caption}
                   </span>
                 </div>
+              </>
+            );
+            const className = cn(
+              "flex min-w-0 items-start gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-all duration-200",
+              "focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
+              active
+                ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
+                : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]",
+            );
+
+            return item.external ? (
+              <a
+                key={`${item.label}-${item.to}`}
+                href={item.to}
+                target="_blank"
+                rel="noreferrer"
+                role="menuitem"
+                onClick={onClose}
+                className={className}
+              >
+                {content}
+              </a>
+            ) : (
+              <NavLink
+                key={`${item.label}-${item.to}`}
+                to={item.to}
+                role="menuitem"
+                aria-current={active ? "page" : undefined}
+                onClick={() => {
+                  onClose();
+                  if (item.to === "/pipeline") {
+                    onPipelineClick();
+                  }
+                }}
+                className={className}
+              >
+                {content}
               </NavLink>
             );
           })}

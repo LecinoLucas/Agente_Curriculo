@@ -67,7 +67,7 @@ export function Sidebar({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          "group/sidebar fixed inset-y-0 left-0 z-50 flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]/70",
+          "group/sidebar sidebar-glass fixed inset-y-0 left-0 z-50 flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]/70",
           mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[4.5rem]",
           isHovered && "lg:w-56"
         )}
@@ -115,24 +115,10 @@ export function Sidebar({
             if (!group.isDropdown) {
               const item = group.items[0];
               const active = isItemActive(item.to);
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => {
-                    if (mobileMenuOpen) onToggleMobileMenu();
-                    if (item.to === "/pipeline") onPipelineClick();
-                  }}
-                  className={cn(
-                    "group flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
-                    active
-                      ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-                      : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]"
-                  )}
-                  title={item.label}
-                >
-                  <div className="flex shrink-0 items-center justify-center">
-                    {renderIcon(item.to)}
+              const content = (
+                <>
+                  <div className={cn("flex shrink-0 items-center justify-center transition-transform duration-300", active && "scale-110")}>
+                    {renderIcon(item.iconKey ?? item.to)}
                   </div>
                   <span className={cn(
                     "ml-3 truncate transition-opacity duration-300",
@@ -142,6 +128,41 @@ export function Sidebar({
                   )}>
                     {item.label}
                   </span>
+                </>
+              );
+              const className = cn(
+                "group flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
+                active
+                  ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
+                  : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]"
+              );
+
+              return item.external ? (
+                <a
+                  key={`${item.label}-${item.to}`}
+                  href={item.to}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => {
+                    if (mobileMenuOpen) onToggleMobileMenu();
+                  }}
+                  className={className}
+                  title={item.label}
+                >
+                  {content}
+                </a>
+              ) : (
+                <NavLink
+                  key={`${item.label}-${item.to}`}
+                  to={item.to}
+                  onClick={() => {
+                    if (mobileMenuOpen) onToggleMobileMenu();
+                    if (item.to === "/pipeline") onPipelineClick();
+                  }}
+                  className={className}
+                  title={item.label}
+                >
+                  {content}
                 </NavLink>
               );
             }
@@ -163,7 +184,7 @@ export function Sidebar({
                   title={group.label}
                 >
                   <div className="flex items-center min-w-0">
-                    <div className="flex shrink-0 items-center justify-center">
+                    <div className={cn("flex shrink-0 items-center justify-center transition-transform duration-300", isGroupActive && "scale-110")}>
                       {renderIcon(group.label)}
                     </div>
                     <span className={cn(
@@ -194,26 +215,43 @@ export function Sidebar({
                 >
                   {group.items.map((item) => {
                     const active = isItemActive(item.to);
-                    return (
+                    const content = <span className="truncate">{item.label}</span>;
+                    const className = cn(
+                      "flex items-center rounded-lg py-2 pl-10 pr-3 text-[13px] font-medium transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))]",
+                      active
+                        ? "bg-[hsl(var(--nav-active-bg))]/50 text-[hsl(var(--nav-active-text))] font-semibold"
+                        : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]",
+                      "lg:hidden",
+                      (isHovered || mobileMenuOpen) && "lg:flex",
+                      mobileMenuOpen ? "flex" : ""
+                    );
+
+                    return item.external ? (
+                      <a
+                        key={`${item.label}-${item.to}`}
+                        href={item.to}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => {
+                          if (mobileMenuOpen) onToggleMobileMenu();
+                        }}
+                        className={className}
+                        title={item.label}
+                      >
+                        {content}
+                      </a>
+                    ) : (
                       <NavLink
-                        key={item.to}
+                        key={`${item.label}-${item.to}`}
                         to={item.to}
                         onClick={() => {
                           if (mobileMenuOpen) onToggleMobileMenu();
                           if (item.to === "/pipeline") onPipelineClick();
                         }}
-                        className={cn(
-                          "flex items-center rounded-lg py-2 pl-10 pr-3 text-[13px] font-medium transition-all duration-150 border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))]",
-                          active
-                            ? "bg-[hsl(var(--nav-active-bg))]/50 text-[hsl(var(--nav-active-text))] font-semibold"
-                            : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/35 hover:text-[hsl(var(--nav-text))]",
-                          "lg:hidden",
-                          (isHovered || mobileMenuOpen) && "lg:flex",
-                          mobileMenuOpen ? "flex" : ""
-                        )}
+                        className={className}
                         title={item.label}
                       >
-                        <span className="truncate">{item.label}</span>
+                        {content}
                       </NavLink>
                     );
                   })}
