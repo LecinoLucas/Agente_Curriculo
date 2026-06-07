@@ -413,7 +413,7 @@ class TestTokenLogging:
         assert payload.operation == "job_ai_draft"
 
     @pytest.mark.asyncio
-    async def test_persist_usage_log_not_called_on_ai_error(self) -> None:
+    async def test_persist_usage_log_called_with_failed_on_ai_error(self) -> None:
         svc = JobAiDraftService()
         session = _mock_session()
         failing_ai = AsyncMock()
@@ -434,7 +434,40 @@ class TestTokenLogging:
                 ocr_text=None,
                 session=session,
             )
-        mock_log.assert_not_called()
+        mock_log.assert_called_once()
+        payload = mock_log.call_args[0][1]
+        assert payload.status == "error"
+        assert payload.error_message == "usage_unavailable"
+        assert payload.input_tokens == 0
+        assert payload.output_tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_persist_usage_log_called_with_failed_on_parse_error(self) -> None:
+        svc = JobAiDraftService()
+        session = _mock_session()
+        bad_ai = _mock_ai(_ai_response(content="not valid json at all !!", input_tokens=100, output_tokens=50))
+        with (
+            patch(
+                "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+                return_value=bad_ai,
+            ),
+            patch(
+                "src.application.services.job_ai_draft_service.persist_ai_usage_log",
+                new_callable=AsyncMock,
+            ) as mock_log,
+            pytest.raises(AiDraftParseError),
+        ):
+            await svc.generate(
+                text_input="Operador de Caixa",
+                ocr_text=None,
+                session=session,
+            )
+        mock_log.assert_called_once()
+        payload = mock_log.call_args[0][1]
+        assert payload.status == "error"
+        assert payload.error_message == "json_parse_error"
+        assert payload.input_tokens == 100
+        assert payload.output_tokens == 50
 
 
 # ── Sanitisation ──────────────────────────────────────────────────────────────
@@ -1454,6 +1487,66 @@ class TestLangGraphActivePath:
         result_state = await post_validate_node(state, {})
         assert result_state["draft"].salary_min is None
         assert "salary_removed_no_source_evidence" in result_state["warnings"]
+
+    @pytest.mark.asyncio
+    async def test_generate_draft_node_logs_failed_on_ai_error(self) -> None:
+        from src.ai_orchestration.jobs.job_ai_draft_graph import generate_draft_node
+        failing_ai = AsyncMock()
+        failing_ai.analyze = AsyncMock(side_effect=RuntimeError("LangGraph boom"))
+        session = _mock_session()
+        config = {"configurable": {"session": session}}
+        state = {"combined_text": "vaga mock"}
+        with (
+            patch("src.ai_orchestration.jobs.job_ai_draft_graph.AIServiceFactory.create", return_value=failing_ai),
+            patch("src.ai_orchestration.jobs.job_ai_draft_graph.persist_ai_usage_log", new_callable=AsyncMock) as mock_log,
+            pytest.raises(AiDraftAIError)
+        ):
+            await generate_draft_node(state, config)
+        
+        mock_log.assert_called_once()
+        payload = mock_log.call_args[0][1]
+        assert payload.status == "error"
+        assert payload.input_tokens == 0
+        assert payload.error_message == "usage_unavailable"
+
+    @pytest.mark.asyncio
+    async def test_parse_draft_node_logs_failed_on_parse_error(self) -> None:
+        from src.ai_orchestration.jobs.job_ai_draft_graph import parse_draft_node
+        session = _mock_session()
+        config = {"configurable": {"session": session}}
+        usage = MagicMock(provider="google", model="gemini", input_tokens=10, output_tokens=5)
+        state = {"raw_content": "bad json", "usage": usage}
+        
+        with (
+            patch("src.ai_orchestration.jobs.job_ai_draft_graph.persist_ai_usage_log", new_callable=AsyncMock) as mock_log,
+            pytest.raises(AiDraftParseError)
+        ):
+            await parse_draft_node(state, config)
+            
+        mock_log.assert_called_once()
+        payload = mock_log.call_args[0][1]
+        assert payload.status == "error"
+        assert payload.input_tokens == 10
+        assert payload.output_tokens == 5
+        assert payload.error_message == "json_parse_error"
+
+    @pytest.mark.asyncio
+    async def test_post_validate_node_logs_success(self) -> None:
+        from src.ai_orchestration.jobs.job_ai_draft_graph import post_validate_node
+        session = _mock_session()
+        config = {"configurable": {"session": session}}
+        usage = MagicMock(provider="google", model="gemini", input_tokens=10, output_tokens=5)
+        draft = _parse_draft(_DRAFT_JSON)
+        state = {"draft": draft, "combined_text": "test", "usage": usage, "warnings": []}
+        
+        with patch("src.ai_orchestration.jobs.job_ai_draft_graph.persist_ai_usage_log", new_callable=AsyncMock) as mock_log:
+            await post_validate_node(state, config)
+            
+        mock_log.assert_called_once()
+        payload = mock_log.call_args[0][1]
+        assert payload.status == "success"
+        assert payload.input_tokens == 10
+        assert payload.output_tokens == 5
 
     @pytest.mark.asyncio
     async def test_post_validate_node_removes_discriminatory_items(self) -> None:

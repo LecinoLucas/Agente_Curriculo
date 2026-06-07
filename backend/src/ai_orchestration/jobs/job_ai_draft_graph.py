@@ -77,6 +77,19 @@ async def generate_draft_node(state: JobAiDraftState, config: RunnableConfig) ->
             error_type=type(exc).__name__,
             elapsed_ms=elapsed,
         )
+        await persist_ai_usage_log(
+            session,
+            AIUsageLogPayload(
+                provider=settings.AI_PROVIDER,
+                model=settings.AI_MODEL_ID,
+                operation=_OPERATION,
+                status="error",
+                input_tokens=0,
+                output_tokens=0,
+                latency_ms=elapsed,
+                error_message="usage_unavailable",
+            ),
+        )
         raise AiDraftAIError("Provedor de IA indisponível. Tente novamente.") from exc
 
     elapsed_ms = int(time.monotonic() * 1000) - t0
@@ -90,20 +103,6 @@ async def generate_draft_node(state: JobAiDraftState, config: RunnableConfig) ->
         output_tokens=output_tokens,
     )
     estimated_cost = float(cost_decimal) if cost_decimal is not None else None
-
-    # We do the persist log here because it fits the step
-    await persist_ai_usage_log(
-        session,
-        AIUsageLogPayload(
-            provider=settings.AI_PROVIDER,
-            model=settings.AI_MODEL_ID,
-            operation=_OPERATION,
-            status="success",
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            latency_ms=elapsed_ms,
-        ),
-    )
 
     return {
         "raw_content": ai_response.content,
@@ -123,6 +122,21 @@ async def parse_draft_node(state: JobAiDraftState, config: RunnableConfig) -> di
         draft = parse_draft(raw)
     except Exception as exc:
         logger.error("job_ai_draft.parse_failed", error=str(exc)[:200])
+        usage = state.get("usage")
+        session = config.get("configurable", {}).get("session")
+        if usage and session:
+            await persist_ai_usage_log(
+                session,
+                AIUsageLogPayload(
+                    provider=usage.provider,
+                    model=usage.model,
+                    operation=_OPERATION,
+                    status="failed",
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    error_message="json_parse_error",
+                ),
+            )
         raise AiDraftParseError("Resposta da IA não pôde ser interpretada") from exc
 
     return {"draft": draft}
@@ -135,6 +149,21 @@ async def post_validate_node(state: JobAiDraftState, config: RunnableConfig) -> 
         needs_review.append("safety_check")
     if safety_check is not None and "safety_check" not in needs_review:
         needs_review.append("safety_check")
+
+    usage = state.get("usage")
+    session = config.get("configurable", {}).get("session")
+    if usage and session:
+        await persist_ai_usage_log(
+            session,
+            AIUsageLogPayload(
+                provider=usage.provider,
+                model=usage.model,
+                operation=_OPERATION,
+                status="success",
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+            ),
+        )
 
     return {
         "draft": draft,

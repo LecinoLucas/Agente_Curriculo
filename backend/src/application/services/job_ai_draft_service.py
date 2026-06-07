@@ -157,6 +157,19 @@ class JobAiDraftService:
                 error_type=type(exc).__name__,
                 elapsed_ms=elapsed,
             )
+            await persist_ai_usage_log(
+                session,
+                AIUsageLogPayload(
+                    provider=settings.AI_PROVIDER,
+                    model=settings.AI_MODEL_ID,
+                    operation=_OPERATION,
+                    status="error",
+                    input_tokens=0,
+                    output_tokens=0,
+                    latency_ms=elapsed,
+                    error_message="usage_unavailable",
+                ),
+            )
             raise AiDraftAIError("Provedor de IA indisponível. Tente novamente.") from exc
 
         elapsed_ms = int(time.monotonic() * 1000) - t0
@@ -168,6 +181,19 @@ class JobAiDraftService:
             draft = parse_draft(raw)
         except Exception as exc:
             logger.error("job_ai_draft.parse_failed", error=str(exc)[:200])
+            await persist_ai_usage_log(
+                session,
+                AIUsageLogPayload(
+                    provider=settings.AI_PROVIDER,
+                    model=settings.AI_MODEL_ID,
+                    operation=_OPERATION,
+                    status="error",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    latency_ms=elapsed_ms,
+                    error_message="json_parse_error",
+                ),
+            )
             raise AiDraftParseError("Resposta da IA não pôde ser interpretada") from exc
 
         draft, warnings, safety_check = post_validate(draft, combined)
