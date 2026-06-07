@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from src.ai_orchestration.rag.answer_schemas import RagAnswerRequest, RagSynthesisProviderResult
+from src.ai_orchestration.rag.gemini_rag_synthesis_provider import GeminiSynthesisError
 from src.ai_orchestration.rag.rag_answer_service import RagAnswerService
 from src.ai_orchestration.rag.schemas import KnowledgeChunk
 
@@ -133,7 +134,15 @@ class TestRagAnswerService:
         """Test 10: Erro do Gemini vira erro controlado."""
         with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
             mock_provider = AsyncMock()
-            mock_provider.generate_response.side_effect = RuntimeError("API Down")
+            mock_provider.generate_response.side_effect = GeminiSynthesisError(
+                error_code="PROVIDER_UNAVAILABLE",
+                user_message="Não foi possível gerar a resposta agora porque o provedor de IA está temporariamente indisponível. Tente novamente em instantes.",
+                retryable=True,
+                provider_message="Temporary outage",
+                status_code=503,
+            )
+            mock_provider.provider_name = "gemini"
+            mock_provider.model_name = "gemini-2.5-flash"
             
             service = RagAnswerService(synthesis_provider=mock_provider)
             req = RagAnswerRequest(query="Q", retrieved_chunks=[_make_chunk("A")])
@@ -141,8 +150,8 @@ class TestRagAnswerService:
             result = await service.synthesize_answer(req)
             
             assert result.ok is False
-            assert result.error_code == "SYNTHESIS_ERROR"
-            assert "RuntimeError" in result.message
+            assert result.error_code == "PROVIDER_UNAVAILABLE"
+            assert "temporariamente indisponível" in result.message
 
     async def test_synthesized_answer_is_redacted(self) -> None:
         """Test H-01: Resposta sintetizada passa por redação de PII."""
@@ -198,5 +207,42 @@ class TestRagAnswerService:
             assert row.input_tokens == 123
             assert row.output_tokens == 45
             assert row.status == "success"
+            assert not hasattr(row, "prompt")
+            assert not hasattr(row, "answer")
+
+    async def test_records_classified_usage_error_without_prompt_or_answer(self) -> None:
+        with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
+            mock_provider = AsyncMock()
+            mock_provider.generate_response.side_effect = GeminiSynthesisError(
+                error_code="PROVIDER_RATE_LIMITED",
+                user_message="Não foi possível gerar a resposta agora porque o provedor de IA atingiu o limite temporário de uso. Tente novamente em instantes.",
+                retryable=True,
+                provider_message="Rate limited",
+                status_code=429,
+            )
+            mock_provider.provider_name = "gemini"
+            mock_provider.model_name = "gemini-2.5-flash"
+            usage_session = _UsageSession()
+
+            service = RagAnswerService(
+                synthesis_provider=mock_provider,
+                usage_session=usage_session,  # type: ignore[arg-type]
+            )
+
+            result = await service.synthesize_answer(
+                RagAnswerRequest(query="Q", retrieved_chunks=[_make_chunk("A")])
+            )
+
+            assert result.ok is False
+            assert result.error_code == "PROVIDER_RATE_LIMITED"
+            assert "limite temporário" in result.message
+            assert usage_session.flushed is True
+            assert len(usage_session.added) == 1
+            row = usage_session.added[0]
+            assert row.operation == "rag_synthesis"
+            assert row.status == "error"
+            assert row.input_tokens == 0
+            assert row.output_tokens == 0
+            assert row.error_message.startswith("PROVIDER_RATE_LIMITED:")
             assert not hasattr(row, "prompt")
             assert not hasattr(row, "answer")
