@@ -464,78 +464,78 @@
 
   :root[data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 — Scandinavian Glass (Branco Vivo + Safira)
+       Visual Theme 2 — Azul Marfim (Ivory Blue)
        -----------------------------------------------------------------------
        Direção:
-       - Fundo base "gelo" muito suave (quase imperceptível).
-       - Cards em branco absoluto para separação visual elegante.
-       - Destaques em Azul Safira vibrante para injetar vida.
-       - Sombras suaves difusas e glassmorphism refinado.
+       - Fundo base cremoso (marfim/ivory) super elegante e aconchegante.
+       - Superfícies quentes e claras, sem ser um branco artificial.
+       - Cor da marca e destaques em um Azul Clássico encorpado.
+       - Navbar azul meia-noite rica e profunda.
        ----------------------------------------------------------------------- */
 
-    /* Cor principal da marca no tema atual (Azul Safira Elétrico) */
-    --brand:               220 90% 55%;
-    --brand-dark:          220 90% 40%;
-    --brand-soft:          220 90% 95%;
-    --brand-glow:          220 100% 70%;
+    /* Cor principal da marca no tema atual (Azul Clássico Encorpado) */
+    --brand:               215 65% 35%;
+    --brand-dark:          215 70% 25%;
+    --brand-soft:          215 40% 92%;
+    --brand-glow:          215 80% 50%;
 
-    /* Fundos: Um branco puro e cristalino com a base levíssima "gelo" */
-    --bg:                  210 20% 98%;
-    --surface:             0 0% 100%;
-    --surface-muted:       210 20% 96%;
-    --border:              210 15% 90%;
-    --border-strong:       210 20% 80%;
+    /* Fundos: Tons confortáveis de Marfim / Creme */
+    --bg:                  40 30% 96%;
+    --surface:             40 40% 99%;
+    --surface-muted:       40 25% 92%;
+    --border:              40 20% 86%;
+    --border-strong:       40 15% 75%;
 
-    --background:          210 20% 98%;
-    --foreground:          220 30% 15%;
-    --card:                0 0% 100%;
-    --card-foreground:     220 30% 15%;
-    --popover:             0 0% 100%;
-    --popover-foreground:  220 30% 15%;
-    --secondary:           210 20% 95%;
-    --secondary-foreground:220 30% 20%;
-    --muted:               210 15% 95%;
-    --muted-foreground:    210 10% 45%;
+    --background:          40 30% 96%;
+    --foreground:          215 40% 15%;
+    --card:                40 40% 99%;
+    --card-foreground:     215 40% 15%;
+    --popover:             40 40% 99%;
+    --popover-foreground:  215 40% 15%;
+    --secondary:           40 25% 92%;
+    --secondary-foreground:215 40% 20%;
+    --muted:               40 25% 92%;
+    --muted-foreground:    215 15% 45%;
 
-    --text:                220 30% 15%;
-    --text-muted:          210 10% 45%;
+    --text:                215 40% 15%;
+    --text-muted:          215 15% 45%;
 
     /* Cor principal de ação */
-    --primary:             220 90% 55%;
-    --primary-hover:       220 80% 45%;
-    --primary-soft:        220 90% 95%;
+    --primary:             215 65% 35%;
+    --primary-hover:       215 70% 28%;
+    --primary-soft:        215 40% 92%;
     --primary-foreground:  0 0% 100%;
-    --ring:                220 90% 55%;
+    --ring:                215 65% 35%;
 
-    --accent:              220 80% 95%;
-    --accent-foreground:   220 90% 45%;
-    --accent-soft:         220 80% 95%;
-    --accent-contrast:     220 90% 15%;
+    --accent:              215 40% 92%;
+    --accent-foreground:   215 70% 30%;
+    --accent-soft:         215 40% 92%;
+    --accent-contrast:     215 70% 20%;
 
-    --danger:              344 70% 50%;
+    --danger:              344 70% 45%;
     --danger-soft:         344 60% 95%;
-    --destructive:         344 70% 50%;
+    --destructive:         344 70% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --input:               210 15% 88%;
+    --input:               40 20% 84%;
 
-    /* Navbar translúcida para efeito Glass */
-    --nav-bg:              0 0% 100%;
-    --nav-text:            220 30% 15%;
-    --nav-muted:           210 10% 45%;
-    --nav-active-bg:       220 90% 95%;
-    --nav-active-text:     220 90% 50%;
-    --nav-border:          210 15% 92%;
+    /* Navbar rica azul profunda para equilibrar o fundo marfim */
+    --nav-bg:              215 50% 12%;
+    --nav-text:            40 30% 96%;
+    --nav-muted:           215 20% 65%;
+    --nav-active-bg:       215 65% 35%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          215 50% 8%;
 
-    --sidebar-accent:      220 90% 55%;
-    --hero-start:          220 90% 55%;
-    --hero-end:            220 80% 40%;
+    --sidebar-accent:      215 65% 35%;
+    --hero-start:          215 65% 35%;
+    --hero-end:            215 70% 20%;
 
-    /* Gradientes de fundo leves (gelo para leve tom safira) */
-    --page-glow-start:     210 20% 98%;
-    --page-glow-end:       220 40% 95%;
-    --page-gradient-start: 210 20% 98%;
-    --page-gradient-end:   210 15% 95%;
+    /* Gradientes de fundo cremosos */
+    --page-glow-start:     40 40% 98%;
+    --page-glow-end:       215 30% 95%;
+    --page-gradient-start: 40 30% 96%;
+    --page-gradient-end:   40 25% 93%;
   }
 
   :root[data-visual-theme="theme-3"] {

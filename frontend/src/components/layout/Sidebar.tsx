@@ -60,7 +60,7 @@ export function Sidebar({
       />
 
       {/* Placeholder space for the fixed sidebar so main content doesn't underlap */}
-      <div className="hidden lg:block lg:w-[8px] shrink-0" />
+      <div className="hidden lg:block lg:w-[12px] shrink-0" />
 
       {/* ── Sidebar Container ── */}
       <aside
@@ -68,14 +68,14 @@ export function Sidebar({
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
           "group/sidebar sidebar-glass fixed inset-y-0 left-0 z-50 flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]/70",
-          mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[8px]",
+          mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[12px]",
           isHovered && "lg:w-56"
         )}
       >
         {/* Subtle indicator line when collapsed */}
         <div
           className={cn(
-            "absolute right-0 top-0 bottom-0 w-[3px] bg-[hsl(var(--nav-active-bg))] transition-opacity duration-200 pointer-events-none lg:block hidden",
+            "absolute right-0 top-0 bottom-0 w-[9px] bg-black border-l-[1.5px] border-white/60 transition-opacity duration-200 pointer-events-none lg:block hidden",
             isHovered || mobileMenuOpen ? "opacity-0" : "opacity-80"
           )}
         />
