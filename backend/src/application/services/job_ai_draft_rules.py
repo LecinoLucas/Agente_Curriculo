@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from typing import Any
+from typing import Any, Literal
 from dataclasses import dataclass
 
 # ── Exceptions ────────────────────────────────────────────────────────────────
@@ -63,29 +63,151 @@ class AiDraftResult:
     draft: AiDraftFields
     needs_review: list[str]
     warnings: list[str]
+    safety_check: "AiDraftSafetyCheck | None"
     usage: AiDraftUsage
     source: AiDraftSource
+
+@dataclass
+class AiDraftSafetyFinding:
+    field: str
+    severity: Literal["high", "medium", "low"]
+    code: str
+    message: str
+    term: str | None = None
+
+@dataclass
+class AiDraftSafetyCheck:
+    status: Literal["ok", "needs_review"]
+    highest_severity: Literal["high", "medium", "low"] | None
+    findings: list[AiDraftSafetyFinding]
 
 _VALID_WORK_MODELS = frozenset({"onsite", "hybrid", "remote"})
 _VALID_SENIORITY = frozenset(
     {"intern", "junior", "mid", "senior", "lead", "principal", "director"}
 )
 
-_DISCRIMINATORY_PATTERNS = [
-    r"\bboa apar[êe]ncia\b",
-    r"\bsexo feminino\b",
-    r"\bsexo masculino\b",
-    r"\bapenas mulher(es)?\b",
-    r"\bapenas homem(ns)?\b",
-    r"\bidade entre\b",
-    r"\b(na )?faixa et[áa]ria\b",
-    r"\bsem filhos\b",
-    r"\bsolteir[oa]s?\b",
-    r"\bcasad[oa]s?\b",
-    r"\bpreferência por (homens|mulheres)\b",
-    r"\b(de )?cor branca\b",
-    r"\bcaucasian[oa]s?\b",
-]
+_SEVERITY_ORDER = {"low": 1, "medium": 2, "high": 3}
+
+@dataclass(frozen=True)
+class _DiscriminationRule:
+    code: str
+    severity: Literal["high", "medium", "low"]
+    message: str
+    patterns: tuple[str, ...]
+
+_DISCRIMINATION_RULES: tuple[_DiscriminationRule, ...] = (
+    _DiscriminationRule(
+        code="discriminatory_age_requirement",
+        severity="high",
+        message="Critério de idade removido do texto.",
+        patterns=(
+            r"\bjovem\b",
+            r"\bperfil jovem\b",
+            r"\bidade maxima\b",
+            r"\bate\s+\d{1,2}\s+anos\b",
+            r"\bmaximo\s+\d{1,2}\s+anos\b",
+            r"\bmenor de\s+\d{1,2}\b",
+            r"\bacima de\s+\d{1,2}\s+anos\b",
+        ),
+    ),
+    _DiscriminationRule(
+        code="discriminatory_gender_requirement",
+        severity="high",
+        message="Critério de gênero removido do texto.",
+        patterns=(
+            r"\bhomem\b",
+            r"\bmulher\b",
+            r"\bmasculino\b",
+            r"\bfeminino\b",
+            r"\bperfil feminino\b",
+            r"\bperfil masculino\b",
+        ),
+    ),
+    _DiscriminationRule(
+        code="discriminatory_family_requirement",
+        severity="high",
+        message="Critério de estado civil ou situação familiar removido do texto.",
+        patterns=(
+            r"\bsolteir[oa]s?\b",
+            r"\bcasad[oa]s?\b",
+            r"\bsem filhos\b",
+            r"\bcom filhos\b",
+            r"\bfilhos\b",
+            r"\bsem dependentes\b",
+            r"\bmae\b",
+            r"\bpai\b",
+        ),
+    ),
+    _DiscriminationRule(
+        code="discriminatory_appearance_requirement",
+        severity="high",
+        message="Critério de aparência removido do texto.",
+        patterns=(
+            r"\bboa aparencia\b",
+            r"\baparencia agradavel\b",
+            r"\bperfil bonito\b",
+            r"\bbem apresentado\b",
+        ),
+    ),
+    _DiscriminationRule(
+        code="discriminatory_health_requirement",
+        severity="high",
+        message="Critério de saúde ou deficiência removido do texto.",
+        patterns=(
+            r"\bsem deficiencia\b",
+            r"\bsem restricao medica\b",
+            r"\bsaude perfeita\b",
+            r"\bnao pcd\b",
+            r"\bsem laudo\b",
+            r"\bsem problema de saude\b",
+        ),
+    ),
+    _DiscriminationRule(
+        code="discriminatory_religion_politics_requirement",
+        severity="high",
+        message="Critério de religião ou posicionamento político removido do texto.",
+        patterns=(
+            r"\breligiao\b",
+            r"\bevangelic[oa]\b",
+            r"\bcatolic[oa]\b",
+            r"\bpolitica\b",
+            r"\bpartido\b",
+        ),
+    ),
+    _DiscriminationRule(
+        code="discriminatory_residence_requirement",
+        severity="medium",
+        message="Restrição pessoal de moradia ou residência removida do texto.",
+        patterns=(
+            r"\bmorador de\b",
+            r"\bresidir no bairro\b",
+            r"\bmorar perto\b",
+            r"\bsomente moradores\b",
+            r"\bperto da empresa\b",
+        ),
+    ),
+    _DiscriminationRule(
+        code="biased_subjective_requirement",
+        severity="medium",
+        message="Critério subjetivo com risco de viés removido do texto.",
+        patterns=(
+            r"\bdisponibilidade total\b",
+            r"\bsem questionar horario\b",
+            r"\bnao faltar\b",
+            r"\bperfil de dono\b",
+            r"\bfaculdade de primeira linha\b",
+            r"\buniversidade de elite\b",
+        ),
+    ),
+    _DiscriminationRule(
+        code="inadequate_subjective_language",
+        severity="low",
+        message="Linguagem subjetiva inadequada removida do texto.",
+        patterns=(
+            r"\bvestir a camisa\b",
+        ),
+    ),
+)
 
 _SALARY_EVIDENCE_PATTERNS = [
     r"\bsal[áa]rio\b",
@@ -96,6 +218,13 @@ _SALARY_EVIDENCE_PATTERNS = [
     r"\bpor m[êe]s\b",
     r"\bao m[êe]s\b",
     r"r\s*\$",
+]
+
+_SALARY_NEGATION_PATTERNS = [
+    r"\bn[aã]o informar sal[áa]rio\b",
+    r"\bsem informar sal[áa]rio\b",
+    r"\bn[aã]o informar faixa salarial\b",
+    r"\bsal[áa]rio n[aã]o informado\b",
 ]
 
 _EDUCATION_LEVEL_PATTERNS: tuple[tuple[str, str], ...] = (
@@ -161,6 +290,60 @@ _SELECTION_FLOW_EVIDENCE_PHRASES = (
     "entrevista com rh e gestor",
     "prova tecnica",
     "teste pratico",
+)
+
+_REQUIREMENT_CANONICAL_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Excel", (r"\bexcel\b",)),
+    ("Boa comunicação", (r"\bboa comunica[çc][ãa]o\b",)),
+    ("Organização", (r"\borganiza[çc][ãa]o\b(?!\s+de\s+arquivos)",)),
+    ("Atendimento interno", (r"\batendimento interno\b",)),
+    ("Conferência de documentos", (r"\bconfer[êe]ncia de documentos\b",)),
+    ("Lançamentos", (r"\blan[çc]amentos?\b",)),
+    ("Planilhas", (r"\bplanilhas?\b",)),
+    ("Organização de arquivos", (r"\borganiza[çc][ãa]o de arquivos\b",)),
+)
+
+_REQUIREMENT_SIGNAL_PREFIXES = (
+    "precisa ter",
+    "necessario",
+    "necessaria",
+    "necessarios",
+    "necessarias",
+    "requisito",
+    "requisitos",
+    "conhecimento em",
+    "conhecimento com",
+    "experiencia com",
+    "vivencia com",
+)
+
+_WORK_MODEL_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "remote",
+        (
+            r"\bremot[oa]\b",
+            r"\bhome office\b",
+            r"\btrabalho remoto\b",
+            r"\b100%\s*remot[oa]\b",
+        ),
+    ),
+    (
+        "hybrid",
+        (
+            r"\bh[ií]brid[oa]\b",
+            r"\bmodelo h[ií]brid[oa]\b",
+            r"\bregime h[ií]brid[oa]\b",
+        ),
+    ),
+    (
+        "onsite",
+        (
+            r"\bpresencial\b",
+            r"\btrabalho presencial\b",
+            r"\bmodelo presencial\b",
+            r"\bregime presencial\b",
+        ),
+    ),
 )
 
 _SYSTEM_PROMPT = """\
@@ -317,9 +500,29 @@ def _normalize_evidence_text(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
     return re.sub(r"\s+", " ", normalized).strip()
 
+def _match_discrimination_rules(text: str) -> list[tuple[_DiscriminationRule, str]]:
+    normalized = _normalize_evidence_text(text)
+    if not normalized:
+        return []
+    matches: list[tuple[_DiscriminationRule, str]] = []
+    for rule in _DISCRIMINATION_RULES:
+        for pattern in rule.patterns:
+            match = re.search(pattern, normalized)
+            if match:
+                matches.append((rule, match.group(0)))
+                break
+    return matches
+
+def _highest_severity(findings: list["AiDraftSafetyFinding"]) -> Literal["high", "medium", "low"] | None:
+    if not findings:
+        return None
+    return max(findings, key=lambda item: _SEVERITY_ORDER[item.severity]).severity
+
 def has_salary_source_evidence(source_text: str) -> bool:
     """Return True only when the input explicitly mentions salary context."""
     if not source_text:
+        return False
+    if any(re.search(pattern, source_text, flags=re.IGNORECASE) for pattern in _SALARY_NEGATION_PATTERNS):
         return False
     source = source_text.casefold()
     return any(re.search(pattern, source, flags=re.IGNORECASE) for pattern in _SALARY_EVIDENCE_PATTERNS)
@@ -399,6 +602,137 @@ def extract_experience_context(source_text: str) -> str | None:
     context = f"{prefix} {body}"
     return context[:240].strip()
 
+def _safe_sentence_fragments(source_text: str) -> list[str]:
+    fragments: list[str] = []
+    for raw in re.split(r"[\n.;:]+", source_text):
+        cleaned = raw.strip(" -,")
+        if cleaned:
+            fragments.append(cleaned)
+    return fragments
+
+def _split_requirement_clause_items(clause: str) -> list[str]:
+    items: list[str] = []
+    if not clause:
+        return items
+
+    clause = re.sub(
+        r"^(?:precisa ter|necess[aá]ri[oa]s?|requisitos?)\s+",
+        "",
+        clause,
+        flags=re.IGNORECASE,
+    ).strip()
+    clause = re.sub(
+        r"^(?:conhecimento|experi[êe]ncia|viv[êe]ncia)\s+(?:em|com|de)\s+",
+        "",
+        clause,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    parts = re.split(r",|\be\b", clause, flags=re.IGNORECASE)
+    for part in parts:
+        cleaned = re.sub(r"^(?:com|em|de)\s+", "", part.strip(), flags=re.IGNORECASE)
+        cleaned = cleaned.strip(" -,")
+        if cleaned:
+            items.append(cleaned)
+    return items
+
+def _normalize_requirement_candidate(value: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    normalized = _normalize_evidence_text(cleaned)
+    aliases = {
+        "excel": "Excel",
+        "boa comunicacao": "Boa comunicação",
+        "comunicacao": "Comunicação",
+        "organizacao": "Organização",
+        "atendimento interno": "Atendimento interno",
+        "conferencia de documentos": "Conferência de documentos",
+        "lancamentos": "Lançamentos",
+        "planilhas": "Planilhas",
+        "organizacao de arquivos": "Organização de arquivos",
+        "sql": "Conhecimento em SQL",
+        "protheus": "Experiência com Protheus",
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+
+    if len(normalized) < 3:
+        return None
+    if len(normalized.split()) > 5:
+        return None
+
+    if re.fullmatch(r"[a-z]{2,5}", normalized):
+        return f"Conhecimento em {normalized.upper()}"
+
+    title_cased = " ".join(
+        token.upper() if len(token) <= 3 else token.capitalize()
+        for token in normalized.split()
+    )
+    return title_cased
+
+def extract_requirements(source_text: str) -> list[str]:
+    if not source_text:
+        return []
+
+    collected: list[str] = []
+    seen: set[str] = set()
+
+    def add_requirement(value: str | None) -> None:
+        if not value:
+            return
+        key = value.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        collected.append(value)
+
+    for sentence in _safe_sentence_fragments(source_text):
+        normalized_sentence = _normalize_evidence_text(sentence)
+        if any(prefix in normalized_sentence for prefix in _REQUIREMENT_SIGNAL_PREFIXES):
+            for item in _split_requirement_clause_items(sentence):
+                add_requirement(_normalize_requirement_candidate(item))
+
+    for label, patterns in _REQUIREMENT_CANONICAL_PATTERNS:
+        for pattern in patterns:
+            if re.search(pattern, source_text, flags=re.IGNORECASE):
+                add_requirement(label)
+                break
+
+    return collected[:8]
+
+def extract_routine_context(source_text: str) -> str | None:
+    requirement_candidates = extract_requirements(source_text)
+    routine_only = [
+        item
+        for item in requirement_candidates
+        if item in {
+            "Atendimento interno",
+            "Conferência de documentos",
+            "Lançamentos",
+            "Planilhas",
+            "Organização de arquivos",
+        }
+    ]
+    if not routine_only:
+        return None
+    joined = ", ".join(routine_only[:5])
+    return f"Rotinas com {joined}."
+
+def extract_work_model(source_text: str) -> str | None:
+    if not source_text:
+        return None
+
+    matched_models: list[str] = []
+    for work_model, patterns in _WORK_MODEL_PATTERNS:
+        if any(re.search(pattern, source_text, flags=re.IGNORECASE) for pattern in patterns):
+            matched_models.append(work_model)
+
+    if len(matched_models) != 1:
+        return None
+    return matched_models[0]
+
 def _normalize_selection_flow_type(value: Any) -> str | None:
     cleaned = _nonempty_str(value)
     if not cleaned:
@@ -422,7 +756,7 @@ def has_selection_flow_source_evidence(source_text: str) -> bool:
     return _source_contains_any_phrase(source_text, _SELECTION_FLOW_EVIDENCE_PHRASES)
 
 def has_experience_context_source_evidence(context: str, source_text: str) -> bool:
-    source_context = extract_experience_context(source_text)
+    source_context = extract_routine_context(source_text) or extract_experience_context(source_text)
     if not source_context:
         return False
     context_tokens = {
@@ -533,40 +867,75 @@ def evaluate_quality(draft: AiDraftFields) -> tuple[float, list[str]]:
     
     return score, missing
 
-def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields, list[str]]:
+def post_validate(
+    draft: AiDraftFields,
+    source_text: str,
+) -> tuple[AiDraftFields, list[str], AiDraftSafetyCheck | None]:
     warnings: list[str] = []
-    
-    def contains_discriminatory(text: str) -> bool:
-        if not text:
-            return False
-        lower_text = text.casefold()
-        for pattern in _DISCRIMINATORY_PATTERNS:
-            if re.search(pattern, lower_text):
-                return True
-        return False
+    safety_findings: list[AiDraftSafetyFinding] = []
 
-    # 1. Block discriminatory items in lists
+    def add_safety_finding(
+        *,
+        field: str,
+        rule: _DiscriminationRule,
+        term: str | None,
+    ) -> None:
+        safety_findings.append(
+            AiDraftSafetyFinding(
+                field=field,
+                severity=rule.severity,
+                code=rule.code,
+                message=rule.message,
+                term=term,
+            )
+        )
+
+    # 1. Remove discriminatory content from list fields that can reach the form
     list_fields = [
-        "responsibilities", "requirements", "mandatory_skills",
-        "nice_to_have_skills", "benefits", "screening_questions"
+        "responsibilities",
+        "requirements",
+        "mandatory_skills",
+        "nice_to_have_skills",
+        "screening_questions",
     ]
     for field_name in list_fields:
-        lst = getattr(draft, field_name)
-        if lst:
-            safe_list = []
-            for item in lst:
-                if contains_discriminatory(item):
-                    warnings.append(f"Removido item com potencial discriminatório de {field_name}.")
+        items = getattr(draft, field_name)
+        if not items:
+            continue
+        safe_items: list[str] = []
+        for item in items:
+            matches = _match_discrimination_rules(item)
+            if matches:
+                for rule, term in matches:
+                    add_safety_finding(field=field_name, rule=rule, term=term)
+                if field_name == "screening_questions":
+                    warnings.append("discriminatory_screening_question_removed")
                 else:
-                    safe_list.append(item)
-            setattr(draft, field_name, safe_list)
+                    warnings.append("discriminatory_requirement_removed")
+                continue
+            safe_items.append(item)
+        setattr(draft, field_name, safe_items)
 
-    # 2. Flag discriminatory content in text fields
-    text_fields = ["title", "description", "area", "unit"]
+    # 2. Remove or block discriminatory free-text fields
+    text_fields = [
+        "title",
+        "description",
+        "experience_context",
+        "working_hours",
+    ]
     for field_name in text_fields:
-        val = getattr(draft, field_name)
-        if val and contains_discriminatory(val):
-            warnings.append(f"O campo {field_name} pode conter termos discriminatórios. Revisão manual obrigatória.")
+        value = getattr(draft, field_name)
+        if not value:
+            continue
+        matches = _match_discrimination_rules(value)
+        if not matches:
+            continue
+        for rule, term in matches:
+            add_safety_finding(field=field_name, rule=rule, term=term)
+        warnings.append("discriminatory_text_removed")
+        if field_name == "title":
+            warnings.append("job_title_requires_manual_review")
+        setattr(draft, field_name, None)
 
     # 3. Detect invented salary
     if draft.salary_min is not None or draft.salary_max is not None:
@@ -607,22 +976,40 @@ def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields
             draft.minimum_education_level = source_education
 
     # 7. Detect invented experience context
+    source_context = extract_routine_context(source_text) or extract_experience_context(source_text)
     if draft.experience_context:
         if not has_experience_context_source_evidence(draft.experience_context, source_text):
-            source_context = extract_experience_context(source_text)
             if source_context:
                 draft.experience_context = source_context
+                warnings.append("experience_context_backfilled_from_source")
             else:
                 warnings.append("experience_context_removed_no_source_evidence")
                 draft.experience_context = None
+    elif source_context:
+        draft.experience_context = source_context
+        warnings.append("experience_context_backfilled_from_source")
+
+    # 7.1 Backfill requirements when AI omitted an obvious list from source
+    if not draft.requirements:
+        source_requirements = extract_requirements(source_text)
+        if source_requirements:
+            draft.requirements = source_requirements
+            warnings.append("requirements_backfilled_from_source")
 
     # 8. Detect invented location/unit
     if draft.unit:
-        unit_words = [w for w in re.split(r'\W+', draft.unit.casefold()) if len(w) > 3]
-        src_lower = source_text.casefold()
-        if unit_words and not any(w in src_lower for w in unit_words):
-            warnings.append("Local/unidade inferido ou inventado pela IA foi removido.")
+        unit_matches = _match_discrimination_rules(draft.unit)
+        if unit_matches:
+            for rule, term in unit_matches:
+                add_safety_finding(field="unit", rule=rule, term=term)
+            warnings.append("discriminatory_text_removed")
             draft.unit = None
+        else:
+            unit_words = [w for w in re.split(r'\W+', draft.unit.casefold()) if len(w) > 3]
+            src_lower = source_text.casefold()
+            if unit_words and not any(w in src_lower for w in unit_words):
+                warnings.append("Local/unidade inferido ou inventado pela IA foi removido.")
+                draft.unit = None
 
     # 9. Detect invented working hours
     if draft.working_hours:
@@ -631,6 +1018,18 @@ def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields
         if wh_words and not any(w in src_lower for w in wh_words):
             warnings.append("Jornada/escala inferida ou inventada pela IA foi removida.")
             draft.working_hours = None
+
+    # 9.1 Guard and backfill work_model with explicit source evidence only
+    source_work_model = extract_work_model(source_text)
+    if draft.work_model is not None:
+        if source_work_model is None:
+            warnings.append("work_model_removed_no_source_evidence")
+            draft.work_model = None
+        else:
+            draft.work_model = source_work_model
+    elif source_work_model is not None:
+        draft.work_model = source_work_model
+        warnings.append("work_model_backfilled_from_source")
 
     # 10. Guard selection flow booleans with explicit source evidence
     if draft.requires_manager_review is True:
@@ -654,7 +1053,16 @@ def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields
     elif draft.selection_flow_type is not None:
         draft.selection_flow_type = None
 
-    return draft, warnings
+    safety_check: AiDraftSafetyCheck | None = None
+    if safety_findings:
+        warnings.append("safety_check_requires_review")
+        safety_check = AiDraftSafetyCheck(
+            status="needs_review",
+            highest_severity=_highest_severity(safety_findings),
+            findings=safety_findings,
+        )
+
+    return draft, list(dict.fromkeys(warnings)), safety_check
 
 def compute_needs_review(draft: AiDraftFields) -> list[str]:
     flags: list[str] = []

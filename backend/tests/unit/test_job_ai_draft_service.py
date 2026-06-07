@@ -22,6 +22,8 @@ from src.application.services.job_ai_draft_rules import (
     AiDraftParseError,
     AiDraftValidationError,
     _nonempty_str,
+    extract_requirements,
+    extract_work_model,
     evaluate_quality,
     parse_draft as _parse_draft,
     post_validate as _post_validate,
@@ -232,7 +234,7 @@ class TestAiDraftServiceHappyPath:
             return_value=_mock_ai(),
         ):
             result = await svc.generate(
-                text_input="Operador de Caixa para São Paulo, SP. Jornada 6x1. Processo com entrevista com gestor.",
+                text_input="Operador de Caixa presencial para São Paulo, SP. Jornada 6x1. Processo com entrevista com gestor.",
                 ocr_text=None,
                 session=session,
             )
@@ -312,7 +314,7 @@ class TestNeedsReview:
             return_value=_mock_ai(),
         ):
             result = await svc.generate(
-                text_input="Vaga completa para Operador de Caixa em São Paulo, SP, escala 6x1",
+                text_input="Vaga completa para Operador de Caixa em São Paulo, SP, escala 6x1 e modelo presencial",
                 ocr_text=None,
                 session=session,
             )
@@ -373,7 +375,7 @@ class TestAiDraftServiceErrors:
             return_value=_mock_ai(_ai_response(json.dumps(draft_bad_wm))),
         ):
             result = await svc.generate(
-                text_input="Vaga presencial",
+                text_input="Vaga para caixa",
                 ocr_text=None,
                 session=session,
             )
@@ -649,8 +651,10 @@ class TestSecurityGuardrails:
                 session=session,
             )
         assert result.draft.requirements == ["Ensino médio"]
-        assert any("potencial discriminatório" in w for w in result.warnings)
+        assert "discriminatory_requirement_removed" in result.warnings
         assert "safety_check" in result.needs_review
+        assert result.safety_check is not None
+        assert result.safety_check.highest_severity == "high"
 
     @pytest.mark.asyncio
     async def test_post_validation_flags_discriminatory_text_fields(self) -> None:
@@ -666,8 +670,8 @@ class TestSecurityGuardrails:
                 ocr_text=None,
                 session=session,
             )
-        assert result.draft.description == "Vaga para pessoa do sexo feminino"
-        assert any("conter termos discriminatórios" in w for w in result.warnings)
+        assert result.draft.description is None
+        assert "discriminatory_text_removed" in result.warnings
         assert "safety_check" in result.needs_review
 
     @pytest.mark.asyncio
@@ -840,7 +844,7 @@ class TestSalaryBenefitsEvidenceGuardrails:
 
     def test_backend_warnings_contract_stays_plain_string_list(self) -> None:
         draft = _parse_draft(dict(_DRAFT_JSON, salary_min=3000, benefits=["Vale-transporte"]))
-        _, warnings = _post_validate(draft, "Vaga para vendedor.")
+        _, warnings, _ = _post_validate(draft, "Vaga para vendedor.")
         assert "salary_removed_no_source_evidence" in warnings
         assert "benefit_removed_no_source_evidence" in warnings
         assert all(isinstance(warning, str) for warning in warnings)
@@ -937,6 +941,22 @@ class TestExperienceEducationEvidenceGuardrails:
             "Requisito: experiência com atendimento ao cliente.",
         )
         assert result.draft.experience_context == "experiência com atendimento ao cliente"
+
+    @pytest.mark.asyncio
+    async def test_backfills_experience_context_from_administrative_routines_when_ai_omits_it(self) -> None:
+        draft = dict(_DRAFT_JSON, experience_context=None)
+        result = await self._generate_with_draft(
+            draft,
+            (
+                "Vai ajudar com lançamentos, conferência de documentos, atendimento interno, "
+                "planilhas e organização de arquivos."
+            ),
+        )
+        assert result.draft.experience_context == (
+            "Rotinas com Atendimento interno, Conferência de documentos, "
+            "Lançamentos, Planilhas, Organização de arquivos."
+        )
+        assert "experience_context_backfilled_from_source" in result.warnings
 
     @pytest.mark.asyncio
     async def test_regression_salary_without_evidence_still_removed(self) -> None:
@@ -1098,6 +1118,253 @@ class TestSelectionFlowBooleanGuardrails:
             return await svc.generate(text_input=text_input, ocr_text=None, session=session)
 
 
+@pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
+class TestFillBackfillGuardrails:
+    ADMIN_TEXT = (
+        "Criar vaga para Assistente Administrativo.\n\n"
+        "Vai ajudar com lançamentos, conferência de documentos, atendimento interno, "
+        "planilhas e organização de arquivos.\n\n"
+        "Precisa ter conhecimento em Excel, boa comunicação e organização.\n\n"
+        "Escala 6x1, 44 horas semanais, 3 vagas disponíveis.\n"
+        "Preferência por pessoa jovem, boa aparência e que more perto da empresa.\n\n"
+        "Não informar salário.\n"
+        "Não informar benefícios."
+    )
+
+    def test_extract_requirements_returns_expected_administrative_items(self) -> None:
+        assert extract_requirements(self.ADMIN_TEXT) == [
+            "Excel",
+            "Boa comunicação",
+            "Organização",
+            "Atendimento interno",
+            "Conferência de documentos",
+            "Lançamentos",
+            "Planilhas",
+            "Organização de arquivos",
+        ]
+
+    def test_extract_work_model_requires_explicit_evidence(self) -> None:
+        assert extract_work_model("Escala 6x1, 44 horas semanais.") is None
+        assert extract_work_model("Modelo de trabalho híbrido com 2 dias presenciais.") == "hybrid"
+        assert extract_work_model("Vaga 100% remota.") == "remote"
+        assert extract_work_model("Atuação presencial na unidade central.") == "onsite"
+
+    @pytest.mark.asyncio
+    async def test_backfills_requirements_when_ai_returns_empty(self) -> None:
+        draft = dict(_DRAFT_JSON, requirements=[])
+        result = await self._generate_with_draft(draft, self.ADMIN_TEXT)
+        assert result.draft.requirements == [
+            "Excel",
+            "Boa comunicação",
+            "Organização",
+            "Atendimento interno",
+            "Conferência de documentos",
+            "Lançamentos",
+            "Planilhas",
+            "Organização de arquivos",
+        ]
+        assert "requirements_backfilled_from_source" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_backfills_experience_context_when_ai_returns_null(self) -> None:
+        draft = dict(_DRAFT_JSON, experience_context=None)
+        result = await self._generate_with_draft(draft, self.ADMIN_TEXT)
+        assert result.draft.experience_context == (
+            "Rotinas com Atendimento interno, Conferência de documentos, "
+            "Lançamentos, Planilhas, Organização de arquivos."
+        )
+        assert "experience_context_backfilled_from_source" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_removes_work_model_without_explicit_source_evidence(self) -> None:
+        draft = dict(_DRAFT_JSON, work_model="onsite")
+        result = await self._generate_with_draft(draft, self.ADMIN_TEXT)
+        assert result.draft.work_model is None
+        assert "work_model_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_backfills_work_model_when_source_is_explicit_and_ai_omits_it(self) -> None:
+        draft = dict(_DRAFT_JSON, work_model=None)
+        result = await self._generate_with_draft(
+            draft,
+            "Vaga para assistente administrativo em modelo híbrido com escala 6x1.",
+        )
+        assert result.draft.work_model == "hybrid"
+        assert "work_model_backfilled_from_source" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_residence_restriction_does_not_fill_location(self) -> None:
+        draft = dict(_DRAFT_JSON, unit="Perto da empresa")
+        result = await self._generate_with_draft(draft, self.ADMIN_TEXT)
+        assert result.draft.unit is None
+        assert result.safety_check is not None
+        assert any(f.field == "unit" for f in result.safety_check.findings)
+
+    @pytest.mark.asyncio
+    async def test_admin_text_keeps_salary_and_benefits_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, salary_min=2500, salary_max=3000, benefits=["Vale-transporte"])
+        result = await self._generate_with_draft(draft, self.ADMIN_TEXT)
+        assert result.draft.salary_min is None
+        assert result.draft.salary_max is None
+        assert result.draft.benefits == []
+
+    async def _generate_with_draft(self, draft_payload: dict, text_input: str):
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_payload))),
+        ):
+            return await svc.generate(text_input=text_input, ocr_text=None, session=session)
+
+
+@pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
+class TestDiscriminationSafetyCheckGuardrails:
+    @pytest.mark.asyncio
+    async def test_description_with_age_requirement_is_removed_and_marked_for_review(self) -> None:
+        draft = dict(_DRAFT_JSON, description="Buscamos profissional até 30 anos para a vaga.")
+        result = await self._generate_with_draft(draft, "Vaga para atendimento.")
+        assert result.draft.description is None
+        assert "discriminatory_text_removed" in result.warnings
+        assert "safety_check" in result.needs_review
+        assert result.safety_check is not None
+        assert result.safety_check.highest_severity == "high"
+
+    @pytest.mark.asyncio
+    async def test_title_with_vaga_para_jovem_generates_manual_review(self) -> None:
+        draft = dict(_DRAFT_JSON, title="Vaga para jovem")
+        result = await self._generate_with_draft(draft, "Vaga para atendimento.")
+        assert result.draft.title is None
+        assert "job_title_requires_manual_review" in result.warnings
+        assert result.safety_check is not None
+        assert any(f.field == "title" for f in result.safety_check.findings)
+
+    @pytest.mark.asyncio
+    async def test_requirement_boa_aparencia_is_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, requirements=["Ensino médio completo", "Boa aparência"])
+        result = await self._generate_with_draft(draft, "Vaga para atendimento.")
+        assert result.draft.requirements == ["Ensino médio completo"]
+        assert "discriminatory_requirement_removed" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_screening_question_with_age_is_removed(self) -> None:
+        draft = dict(
+            _DRAFT_JSON,
+            screening_questions=["Você tem até 30 anos?", "Tem disponibilidade para turno integral?"],
+        )
+        result = await self._generate_with_draft(draft, "Vaga para atendimento.")
+        assert result.draft.screening_questions == ["Tem disponibilidade para turno integral?"]
+        assert "discriminatory_screening_question_removed" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_screening_question_with_family_status_is_removed(self) -> None:
+        draft = dict(
+            _DRAFT_JSON,
+            screening_questions=["Você tem filhos?", "Tem disponibilidade para turno integral?"],
+        )
+        result = await self._generate_with_draft(draft, "Vaga para atendimento.")
+        assert result.draft.screening_questions == ["Tem disponibilidade para turno integral?"]
+        assert "discriminatory_screening_question_removed" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_perfil_feminino_is_removed_or_blocked(self) -> None:
+        draft = dict(_DRAFT_JSON, description="Buscamos perfil feminino para recepção.")
+        result = await self._generate_with_draft(draft, "Vaga para recepção.")
+        assert result.draft.description is None
+        assert result.safety_check is not None
+        assert any(f.code == "discriminatory_gender_requirement" for f in result.safety_check.findings)
+
+    @pytest.mark.asyncio
+    async def test_sem_deficiencia_is_removed_or_blocked(self) -> None:
+        draft = dict(_DRAFT_JSON, requirements=["Sem deficiência", "Ensino médio completo"])
+        result = await self._generate_with_draft(draft, "Vaga para atendimento.")
+        assert result.draft.requirements == ["Ensino médio completo"]
+        assert result.safety_check is not None
+        assert any(f.code == "discriminatory_health_requirement" for f in result.safety_check.findings)
+
+    @pytest.mark.asyncio
+    async def test_morador_de_bairro_restriction_is_removed_or_marked(self) -> None:
+        draft = dict(_DRAFT_JSON, description="Somente moradores de bairro X devem se candidatar.")
+        result = await self._generate_with_draft(draft, "Vaga para logística.")
+        assert result.draft.description is None
+        assert result.safety_check is not None
+        assert any(f.field == "description" for f in result.safety_check.findings)
+
+    @pytest.mark.asyncio
+    async def test_safety_check_highest_severity_is_high_when_high_term_exists(self) -> None:
+        draft = dict(_DRAFT_JSON, description="Buscamos profissional até 30 anos.")
+        result = await self._generate_with_draft(draft, "Vaga para atendimento.")
+        assert result.safety_check is not None
+        assert result.safety_check.highest_severity == "high"
+
+    @pytest.mark.asyncio
+    async def test_safety_check_findings_contains_affected_field(self) -> None:
+        draft = dict(_DRAFT_JSON, experience_context="Experiência com clientes e boa aparência.")
+        result = await self._generate_with_draft(draft, "Experiência com atendimento ao cliente.")
+        assert result.safety_check is not None
+        assert any(f.field == "experience_context" for f in result.safety_check.findings)
+
+    @pytest.mark.asyncio
+    async def test_needs_review_contains_safety_check_when_high_finding_exists(self) -> None:
+        draft = dict(_DRAFT_JSON, title="Vaga para jovem")
+        result = await self._generate_with_draft(draft, "Vaga para atendimento.")
+        assert "safety_check" in result.needs_review
+
+    @pytest.mark.asyncio
+    async def test_safe_text_does_not_generate_critical_safety_check(self) -> None:
+        draft = dict(
+            _DRAFT_JSON,
+            description="Vaga para atendimento ao cliente em escala 6x1.",
+            requirements=["Ensino médio completo"],
+            screening_questions=["Tem disponibilidade para turno integral?"],
+        )
+        result = await self._generate_with_draft(draft, "Vaga para atendimento ao cliente em escala 6x1.")
+        assert result.safety_check is None
+        assert "safety_check" not in result.needs_review
+
+    @pytest.mark.asyncio
+    async def test_regression_salary_without_evidence_still_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, salary_min=3000, salary_max=3500)
+        result = await self._generate_with_draft(draft, "Vaga para vendedor.")
+        assert result.draft.salary_min is None
+        assert result.draft.salary_max is None
+
+    @pytest.mark.asyncio
+    async def test_regression_benefit_without_evidence_still_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, benefits=["Vale-transporte"])
+        result = await self._generate_with_draft(draft, "Vaga para vendedor.")
+        assert result.draft.benefits == []
+
+    @pytest.mark.asyncio
+    async def test_regression_experience_and_education_without_evidence_still_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_years_experience=2, minimum_education_level="bachelor")
+        result = await self._generate_with_draft(draft, "Vaga para vendedor.")
+        assert result.draft.minimum_years_experience is None
+        assert result.draft.minimum_education_level is None
+
+    @pytest.mark.asyncio
+    async def test_regression_booleans_without_evidence_still_removed(self) -> None:
+        draft = dict(
+            _DRAFT_JSON,
+            requires_manager_review=True,
+            requires_behavioral_assessment=True,
+        )
+        result = await self._generate_with_draft(draft, "Vaga para vendedor.")
+        assert result.draft.requires_manager_review is None
+        assert result.draft.requires_behavioral_assessment is None
+
+    async def _generate_with_draft(self, draft_payload: dict, text_input: str):
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_payload))),
+        ):
+            return await svc.generate(text_input=text_input, ocr_text=None, session=session)
+
+
 # ── LangGraph Active Path ─────────────────────────────────────────────────────
 
 import sys
@@ -1145,6 +1412,7 @@ class TestLangGraphActivePath:
             "draft": _parse_draft(_DRAFT_JSON),
             "needs_review": ["safety_check"],
             "warnings": ["Warning do graph"],
+            "safety_check": None,
             "usage": MagicMock(input_tokens=10, output_tokens=10, total_tokens=20, estimated_cost=None),
             "text_used": True,
             "ocr_used": False,
@@ -1189,8 +1457,9 @@ class TestLangGraphActivePath:
         
         result_state = await post_validate_node(state, {})
         assert "Boa aparência" not in result_state["draft"].requirements
-        assert any("potencial discriminatório" in w for w in result_state["warnings"])
+        assert "discriminatory_requirement_removed" in result_state["warnings"]
         assert "safety_check" in result_state["needs_review"]
+        assert result_state["safety_check"] is not None
 
     @pytest.mark.asyncio
     async def test_refine_requirements_node(self) -> None:
