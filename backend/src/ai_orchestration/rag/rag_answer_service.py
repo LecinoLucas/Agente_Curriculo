@@ -65,11 +65,17 @@ class RagAnswerService:
             prompt = RagPrompting.build_synthesis_prompt(request.query, limited_chunks)
 
             # 5. Chamada ao Provider
-            answer_text = await self._provider.generate_response(prompt)
-            await self._record_usage(status="success")
+            result = await self._provider.generate_response(prompt)
+            
+            await self._record_usage(
+                status="success",
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
+                usage_available=result.usage_available
+            )
 
             # 5.1 Redação de PII (H-01)
-            safe_answer = redact_ai_response_text(answer_text)
+            safe_answer = redact_ai_response_text(result.text)
 
             # 6. Montagem das Fontes Estruturadas
             sources = [
@@ -123,7 +129,15 @@ class RagAnswerService:
             cleaned.append(new_chunk)
         return cleaned
 
-    async def _record_usage(self, *, status: str, error_message: str | None = None) -> None:
+    async def _record_usage(
+        self,
+        *,
+        status: str,
+        error_message: str | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        usage_available: bool = False,
+    ) -> None:
         """Registra a chamada RAG sem armazenar prompt, resposta ou chunks."""
         if self._usage_session is None:
             return
@@ -135,8 +149,8 @@ class RagAnswerService:
                     provider=self._provider.provider_name,
                     model=self._provider.model_name,
                     operation="rag_synthesis",
-                    input_tokens=0,
-                    output_tokens=0,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
                     status=status,
                     error_message=error_message,
                 ),

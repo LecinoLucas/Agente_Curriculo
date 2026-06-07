@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 from src.core.settings import settings
 from src.core.log_sanitizer import sanitize_log_text
+from src.ai_orchestration.rag.answer_schemas import RagSynthesisProviderResult
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,8 @@ class GeminiRagSynthesisProvider:
     def model_name(self) -> str:
         return self._model_name
 
-    async def generate_response(self, prompt: str) -> str:
-        """Gera resposta textual para o prompt fornecido."""
+    async def generate_response(self, prompt: str) -> RagSynthesisProviderResult:
+        """Gera resposta textual para o prompt fornecido, incluindo metadados de tokens."""
         if not self._api_key:
             raise RuntimeError("Gemini API Key não configurada para síntese.")
 
@@ -63,6 +64,14 @@ class GeminiRagSynthesisProvider:
                     self._handle_api_error(response)
 
                 data = response.json()
+                
+                # Extract Usage Metadata
+                usage = data.get("usageMetadata", {})
+                input_tokens = usage.get("promptTokenCount", 0)
+                output_tokens = usage.get("candidatesTokenCount", 0)
+                total_tokens = usage.get("totalTokenCount", 0)
+                usage_available = "totalTokenCount" in usage
+
                 # Gemini response path: candidates[0].content.parts[0].text
                 candidates = data.get("candidates", [])
                 if not candidates:
@@ -72,7 +81,15 @@ class GeminiRagSynthesisProvider:
                 if not parts:
                     raise RuntimeError("Gemini API retornou resposta vazia (sem parts).")
                 
-                return parts[0].get("text", "").strip()
+                answer_text = parts[0].get("text", "").strip()
+
+                return RagSynthesisProviderResult(
+                    text=answer_text,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    usage_available=usage_available
+                )
 
         except httpx.RequestError as exc:
             sanitized_exc = sanitize_log_text(str(exc))

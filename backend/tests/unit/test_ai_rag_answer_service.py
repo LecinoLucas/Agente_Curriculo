@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
-from src.ai_orchestration.rag.answer_schemas import RagAnswerRequest
+from src.ai_orchestration.rag.answer_schemas import RagAnswerRequest, RagSynthesisProviderResult
 from src.ai_orchestration.rag.rag_answer_service import RagAnswerService
 from src.ai_orchestration.rag.schemas import KnowledgeChunk
 
@@ -65,7 +65,13 @@ class TestRagAnswerService:
         """Test 3 & 6: Com chunks válidos chama provider e inclui fontes."""
         with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
             mock_provider = AsyncMock()
-            mock_provider.generate_response.return_value = "Resposta com base nas fontes."
+            mock_provider.generate_response.return_value = RagSynthesisProviderResult(
+                text="Resposta com base nas fontes.",
+                input_tokens=10,
+                output_tokens=5,
+                total_tokens=15,
+                usage_available=True
+            )
             mock_provider.provider_name = "mock"
             mock_provider.model_name = "m1"
             
@@ -85,7 +91,7 @@ class TestRagAnswerService:
         """Test 4: Limita número de chunks enviados ao provider."""
         with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
             mock_provider = AsyncMock()
-            mock_provider.generate_response.return_value = "ok"
+            mock_provider.generate_response.return_value = RagSynthesisProviderResult(text="ok")
             
             service = RagAnswerService(synthesis_provider=mock_provider)
             chunks = [_make_chunk(f"C{i}") for i in range(10)]
@@ -103,7 +109,7 @@ class TestRagAnswerService:
         """Test 5 & 7-9: Filtra metadados sensíveis antes do provider."""
         with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
             mock_provider = AsyncMock()
-            mock_provider.generate_response.return_value = "ok"
+            mock_provider.generate_response.return_value = RagSynthesisProviderResult(text="ok")
             
             service = RagAnswerService(synthesis_provider=mock_provider)
             chunk = _make_chunk("A", metadata={
@@ -143,7 +149,9 @@ class TestRagAnswerService:
         with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
             mock_provider = AsyncMock()
             # Resposta contendo um CPF fictício
-            mock_provider.generate_response.return_value = "O CPF do candidato é 123.456.789-00."
+            mock_provider.generate_response.return_value = RagSynthesisProviderResult(
+                text="O CPF do candidato é 123.456.789-00."
+            )
             mock_provider.provider_name = "mock"
             mock_provider.model_name = "m1"
             
@@ -157,11 +165,17 @@ class TestRagAnswerService:
             assert "123.456.789-00" not in result.answer
             assert "[cpf_removido]" in result.answer
 
-    async def test_records_rag_synthesis_usage_without_prompt_or_answer(self) -> None:
-        """AI-USAGE-1: registra usage da síntese sem persistir prompt/resposta."""
+    async def test_records_rag_synthesis_usage_with_real_tokens(self) -> None:
+        """AI-USAGE-2: registra usage da síntese com tokens reais capturados."""
         with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
             mock_provider = AsyncMock()
-            mock_provider.generate_response.return_value = "Resposta segura."
+            mock_provider.generate_response.return_value = RagSynthesisProviderResult(
+                text="Resposta segura.",
+                input_tokens=123,
+                output_tokens=45,
+                total_tokens=168,
+                usage_available=True
+            )
             mock_provider.provider_name = "mock"
             mock_provider.model_name = "m1"
             usage_session = _UsageSession()
@@ -181,8 +195,8 @@ class TestRagAnswerService:
             assert row.provider == "mock"
             assert row.model == "m1"
             assert row.operation == "rag_synthesis"
-            assert row.input_tokens == 0
-            assert row.output_tokens == 0
+            assert row.input_tokens == 123
+            assert row.output_tokens == 45
             assert row.status == "success"
             assert not hasattr(row, "prompt")
             assert not hasattr(row, "answer")

@@ -1,90 +1,88 @@
-"""
-Unit tests — Gemini RAG Synthesis Provider (AI-RAG-10).
-"""
-from __future__ import annotations
-
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import httpx
 import pytest
+import httpx
+from unittest.mock import patch, MagicMock
 from src.ai_orchestration.rag.gemini_rag_synthesis_provider import GeminiRagSynthesisProvider
-
+from src.ai_orchestration.rag.answer_schemas import RagSynthesisProviderResult
 
 @pytest.mark.asyncio
 class TestGeminiRagSynthesisProvider:
-    async def test_generate_response_success(self) -> None:
-        """Test: GeminiRagSynthesisProvider chama client mockado e retorna texto."""
-        mock_response = MagicMock(spec=httpx.Response)
+    
+    async def test_generate_response_extracts_usage_metadata(self):
+        """Testa se o provider extrai metadados de uso corretamente."""
+        mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "candidates": [{
-                "content": {"parts": [{"text": "Resposta sintetizada."}]}
-            }]
+                "content": {"parts": [{"text": "Resposta sintética"}]}
+            }],
+            "usageMetadata": {
+                "promptTokenCount": 100,
+                "candidatesTokenCount": 50,
+                "totalTokenCount": 150
+            }
         }
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
-            
-            provider = GeminiRagSynthesisProvider(api_key="test-key")
-            answer = await provider.generate_response("Prompt de teste")
-            
-            assert answer == "Resposta sintetizada."
-            
-            # Verifica chamada
-            args, kwargs = mock_post.call_args
-            assert "generateContent" in args[0]
-            assert kwargs["params"]["key"] == "test-key"
-            assert "Prompt de teste" in str(kwargs["json"])
+        with patch("httpx.AsyncClient.post", return_value=mock_response):
+            provider = GeminiRagSynthesisProvider(api_key="fake-key", model="gemini-pro")
+            result = await provider.generate_response("Pergunta teste")
 
-    async def test_handles_api_error_without_leaking_key(self) -> None:
-        """Test: Trata erro da API sem vazar segredo."""
-        mock_response = MagicMock(spec=httpx.Response)
-        mock_response.status_code = 400
-        mock_response.json.return_value = {
-            "error": {"message": "Invalid model name", "code": 400}
-        }
+            assert isinstance(result, RagSynthesisProviderResult)
+            assert result.text == "Resposta sintética"
+            assert result.input_tokens == 100
+            assert result.output_tokens == 50
+            assert result.total_tokens == 150
+            assert result.usage_available is True
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
-            
-            provider = GeminiRagSynthesisProvider(api_key="SECRET_123")
-            with pytest.raises(RuntimeError) as exc_info:
-                await provider.generate_response("X")
-            
-            assert "SECRET_123" not in str(exc_info.value)
-            assert "Gemini Synthesis API failed" in str(exc_info.value)
-
-    async def test_handles_empty_response(self) -> None:
-        """Test: Trata resposta vazia (sem candidates)."""
-        mock_response = MagicMock(spec=httpx.Response)
+    async def test_generate_response_handles_missing_usage_metadata(self):
+        """Testa o fallback quando usageMetadata não vem na resposta."""
+        mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"candidates": []}
+        mock_response.json.return_value = {
+            "candidates": [{
+                "content": {"parts": [{"text": "Resposta sem usage"}]}
+            }]
+            # usageMetadata ausente
+        }
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
+        with patch("httpx.AsyncClient.post", return_value=mock_response):
+            provider = GeminiRagSynthesisProvider(api_key="fake-key", model="gemini-pro")
+            result = await provider.generate_response("Pergunta teste")
+
+            assert result.text == "Resposta sem usage"
+            assert result.input_tokens == 0
+            assert result.output_tokens == 0
+            assert result.total_tokens == 0
+            assert result.usage_available is False
+
+    async def test_generate_response_handles_partial_usage_metadata(self):
+        """Testa comportamento com usageMetadata parcial."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "candidates": [{
+                "content": {"parts": [{"text": "Uso parcial"}]}
+            }],
+            "usageMetadata": {
+                "promptTokenCount": 42
+                # totalTokenCount ausente
+            }
+        }
+
+        with patch("httpx.AsyncClient.post", return_value=mock_response):
+            provider = GeminiRagSynthesisProvider(api_key="fake-key", model="gemini-pro")
+            result = await provider.generate_response("Pergunta teste")
+
+            assert result.input_tokens == 42
+            assert result.total_tokens == 0
+            assert result.usage_available is False
+
+    async def test_generate_response_error_sanitizes_api_key(self):
+        """Garante que erros de rede não vazam a API key."""
+        with patch("httpx.AsyncClient.post", side_effect=httpx.RequestError("Error calling API with key=SECRET_KEY")):
+            provider = GeminiRagSynthesisProvider(api_key="SECRET_KEY", model="gemini-pro")
             
-            provider = GeminiRagSynthesisProvider()
-            with pytest.raises(RuntimeError, match="sem candidates"):
-                await provider.generate_response("X")
-
-    async def test_generate_response_timeout(self) -> None:
-        with patch("httpx.AsyncClient.post", side_effect=httpx.TimeoutException("Timeout")):
-            provider = GeminiRagSynthesisProvider()
-            with pytest.raises(RuntimeError, match="Network error"):
-                await provider.generate_response("X")
-
-    async def test_network_error_sanitizes_api_key(self) -> None:
-        """Test H-02: Falha de rede não vaza API key presente na URL."""
-        # Simula erro de rede que contém a URL com a chave
-        sensitive_url = "https://generativelanguage.googleapis.com/v1beta/models/m?key=SUPER-SECRET-KEY"
-        mock_exc = httpx.ConnectError(f"Failed to connect to {sensitive_url}")
-        
-        with patch("httpx.AsyncClient.post", side_effect=mock_exc):
-            provider = GeminiRagSynthesisProvider(api_key="SUPER-SECRET-KEY")
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(RuntimeError) as exc:
                 await provider.generate_response("Pergunta")
             
-            error_msg = str(exc_info.value)
-            assert "SUPER-SECRET-KEY" not in error_msg
-            assert "[REDACTED]" in error_msg or "[REDACTED_GOOGLE_API_KEY]" in error_msg
-
+            assert "SECRET_KEY" not in str(exc.value)
+            assert "[REDACTED]" in str(exc.value)

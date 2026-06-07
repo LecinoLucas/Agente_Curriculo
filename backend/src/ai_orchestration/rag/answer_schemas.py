@@ -32,6 +32,16 @@ class RagSource:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class RagSynthesisProviderResult:
+    """Resultado bruto do provedor de síntese (LLM), incluindo metadados de uso."""
+    text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    usage_available: bool = False
+
+
 @dataclass
 class RagAnswerResult:
     """Resultado da síntese gerada pelo LLM."""
