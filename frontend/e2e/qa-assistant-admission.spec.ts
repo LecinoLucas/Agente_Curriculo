@@ -8,8 +8,8 @@ const ADMISSION_URL = `/admission/cases/${CASE_ID}?packageId=${PACKAGE_ID}`;
 const COMPOSITE_PROMPT = "O que falta para exportar essa admissão?";
 const BLOCKED_PROMPT = "Exportar agora para Protheus";
 const SENSITIVE_TERMS = [
-  "cpf",
-  "phone",
+  "00000000000",
+  "qa.admissional@example.test",
   "payload_json",
   "review_notes",
   "internal_notes",
@@ -20,6 +20,8 @@ const SENSITIVE_TERMS = [
   "embedding",
   "embeddings",
   "api_key",
+  "token",
+  "secret",
   "traceback",
   "stack trace",
 ];
