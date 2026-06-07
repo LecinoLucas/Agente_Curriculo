@@ -188,6 +188,12 @@ const AssistantAdminPage = lazy(() =>
   }))
 );
 
+const KnowledgeAdminPage = lazy(() =>
+  import("../pages/KnowledgeAdminPage").then((m) => ({
+    default: m.KnowledgeAdminPage,
+  }))
+);
+
 function PageLoader() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-500">
@@ -405,6 +411,11 @@ export function AppRouter() {
         <Route
           path="admin/ia"
           element={protectedPage(<AiSettingsPage />, ADMIN_ONLY_ROLES)}
+        />
+
+        <Route
+          path="admin/conhecimento"
+          element={protectedPage(<KnowledgeAdminPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route

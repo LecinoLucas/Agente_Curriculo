@@ -164,6 +164,8 @@ describe("AdminPage", () => {
     expect(screen.getByText("Ver BI")).toBeInTheDocument();
     expect(screen.getAllByText("Laboratório IA")[0]).toBeInTheDocument();
     expect(screen.getByText("Abrir Laboratório")).toBeInTheDocument();
+    expect(screen.getAllByText("Base de conhecimento")[0]).toBeInTheDocument();
+    expect(screen.getByText("Gerenciar conhecimento")).toBeInTheDocument();
     expect(screen.getAllByText("Importação por formulário")[0]).toBeInTheDocument();
     expect(screen.getByText("Abrir importação")).toBeInTheDocument();
 

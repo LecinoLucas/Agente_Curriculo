@@ -152,6 +152,15 @@ export function AdminPage() {
             />
 
             <AdminQuickAction
+              icon={<BrainCircuit className="h-4 w-4 text-cyan-700" />}
+              title="Base de conhecimento"
+              description="Cadastre documentos Markdown/texto, acompanhe indexação e teste a busca RAG com segurança."
+              buttonLabel="Gerenciar conhecimento"
+              onButtonClick={() => navigate("/admin/conhecimento")}
+              variant="default"
+            />
+
+            <AdminQuickAction
               icon={<BarChart3 className="h-4 w-4 text-blue-600" />}
               title="BI de Recrutamento"
               description="Indicadores de vagas, candidatos, análises e uso de IA."

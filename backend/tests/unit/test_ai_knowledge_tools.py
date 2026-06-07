@@ -262,3 +262,30 @@ class TestAnswerKnowledgeTool:
         assert "safe" in meta
         assert "vector_json" not in meta
         assert "content_hash" not in meta
+
+    async def test_answer_knowledge_propagates_friendly_provider_error(self) -> None:
+        context = _make_context()
+        retriever = AsyncMock(spec=PostgresVectorRetriever)
+        answer_service = AsyncMock(spec=RagAnswerService)
+
+        chunk = KnowledgeChunk(id="c1", document_id="d1", chunk_index=0, content="X", source_title="S", metadata={})
+        retriever.retrieve.return_value = RetrievalResult(
+            query="Q", chunks=[RetrievedChunk(chunk=chunk, score=0.9)], total=1
+        )
+        answer_service.synthesize_answer.return_value = RagAnswerResult(
+            ok=False,
+            error_code="PROVIDER_UNAVAILABLE",
+            message="Não foi possível gerar a resposta agora porque o provedor de IA está temporariamente indisponível. Tente novamente em instantes.",
+        )
+
+        result = await answer_knowledge(
+            context=context,
+            query="Pergunta?",
+            retriever=retriever,
+            answer_service=answer_service,
+        )
+
+        assert result.ok is False
+        assert result.error_code == "PROVIDER_UNAVAILABLE"
+        assert "temporariamente indisponível" in result.message
+        assert "RuntimeError" not in result.message

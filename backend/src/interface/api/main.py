@@ -28,6 +28,7 @@ from src.interface.api.middlewares.audit_middleware import AuditMiddleware
 from src.interface.api.middlewares.request_id_middleware import RequestIDMiddleware
 from src.interface.api.middlewares.security_headers_middleware import SecurityHeadersMiddleware
 from src.interface.api.routers import (
+    admin_ai_knowledge,
     admin_ai_limits,
     admin_ai_provider_credentials,
     admin_ai_provider_health,
@@ -136,6 +137,7 @@ app.include_router(admin_notifications.router, prefix=_PREFIX)
 app.include_router(admin_ai_limits.router, prefix=_PREFIX)
 app.include_router(admin_ai_provider_credentials.router, prefix=_PREFIX)
 app.include_router(admin_ai_provider_health.router, prefix=_PREFIX)
+app.include_router(admin_ai_knowledge.router, prefix=_PREFIX)
 app.include_router(admin_behavioral_ai.router, prefix=_PREFIX)
 app.include_router(candidaturas.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)

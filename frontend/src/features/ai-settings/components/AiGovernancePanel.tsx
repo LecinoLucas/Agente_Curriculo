@@ -192,6 +192,9 @@ export function AiGovernancePanel() {
                 <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/admin/ai-provider-credentials")}>
                   <KeyRound className="mr-2 h-4 w-4" /> Credenciais IA
                 </Button>
+                <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/admin/conhecimento")}>
+                  <BrainCircuit className="mr-2 h-4 w-4" /> Base de conhecimento
+                </Button>
                 <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/admin/health")}>
                   <HeartPulse className="mr-2 h-4 w-4" /> Health do Sistema
                 </Button>
