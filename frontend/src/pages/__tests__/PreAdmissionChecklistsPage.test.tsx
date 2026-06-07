@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "../../app/ProtectedRoute";
@@ -138,24 +139,37 @@ beforeEach(() => {
     max_file_size_mb: 10,
     display_order: 1,
     is_active: true,
-    created_at: "2026-05-26T10:00:00Z",
     updated_at: "2026-05-26T10:10:00Z",
   });
+  
+  vi.spyOn(window, "confirm").mockImplementation(() => true);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("PreAdmissionChecklistsPage", () => {
+  it("abre com lista compacta e sem formulário aberto por padrão", async () => {
+    renderPage();
+
+    expect(await screen.findByTestId("checklists-table")).toBeInTheDocument();
+    expect(screen.queryByTestId("checklist-create-form")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("checklist-item-create-form")).not.toBeInTheDocument();
+  });
+
   it("lista checklists existentes", async () => {
     renderPage();
 
-    expect(await screen.findByText("Checklist CLT")).toBeInTheDocument();
-    expect(screen.getByText("Documentos padrão CLT")).toBeInTheDocument();
-    expect(screen.getByText("1 documentos")).toBeInTheDocument();
+    expect((await screen.findAllByText("Checklist CLT")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Documentos padrão CLT")).length).toBeGreaterThan(0);
+    expect(screen.getByText("1 documento(s) • CLT")).toBeInTheDocument();
   });
 
   it("cria checklist", async () => {
     renderPage();
 
-    await screen.findByText("Checklist CLT");
+    await screen.findByTestId("checklists-table");
     fireEvent.click(screen.getByRole("button", { name: /novo checklist/i }));
     const createForm = await screen.findByTestId("checklist-create-form");
 
@@ -177,16 +191,28 @@ describe("PreAdmissionChecklistsPage", () => {
   it("adiciona documento obrigatório", async () => {
     renderPage();
 
-    await screen.findByText("Checklist CLT");
+    const user = userEvent.setup();
+
+    await screen.findByTestId("checklists-table");
+    
+    // Abrir drawer de edição
+    await user.click(await screen.findByTestId("edit-template-btn"));
+    
+    // Navegar para a aba Documentos
+    await user.click(await screen.findByRole("tab", { name: /documentos/i }));
+
+    // Abrir drawer de documento
+    await user.click(await screen.findByTestId("checklist-item-add-btn"));
+
     const createItemForm = await screen.findByTestId("checklist-item-create-form");
 
-    fireEvent.change(within(createItemForm).getByPlaceholderText("cpf"), {
+    fireEvent.change(within(createItemForm).getByPlaceholderText("ex: rg, cpf, cnh"), {
       target: { value: "rg" },
     });
-    fireEvent.change(within(createItemForm).getByPlaceholderText("CPF"), {
+    fireEvent.change(within(createItemForm).getByPlaceholderText("Ex: RG (Registro Geral)"), {
       target: { value: "RG" },
     });
-    fireEvent.click(within(createItemForm).getByRole("button", { name: /adicionar documento/i }));
+    fireEvent.click(within(createItemForm).getByTestId("save-item-btn"));
 
     await waitFor(() => {
       expect(createItemMock).toHaveBeenCalledWith(
@@ -203,8 +229,17 @@ describe("PreAdmissionChecklistsPage", () => {
   it("arquiva checklist", async () => {
     renderPage();
 
-    await screen.findByText("Checklist CLT");
-    fireEvent.click(screen.getByRole("button", { name: /arquivar/i }));
+    const user = userEvent.setup();
+
+    await screen.findByTestId("checklists-table");
+    
+    // Abrir drawer de edição
+    await user.click(await screen.findByTestId("edit-template-btn"));
+    
+    // Navegar para a aba Configurações
+    await user.click(await screen.findByRole("tab", { name: /configurações/i }));
+
+    await user.click(await screen.findByRole("button", { name: /arquivar/i }));
 
     await waitFor(() => {
       expect(archiveTemplateMock).toHaveBeenCalledWith("template-1");
@@ -214,7 +249,7 @@ describe("PreAdmissionChecklistsPage", () => {
   it("valida campos obrigatórios na criação", async () => {
     renderPage();
 
-    await screen.findByText("Checklist CLT");
+    await screen.findByTestId("checklists-table");
     fireEvent.click(screen.getByRole("button", { name: /novo checklist/i }));
     const createForm = await screen.findByTestId("checklist-create-form");
     fireEvent.click(within(createForm).getByRole("button", { name: /criar checklist/i }));
@@ -238,13 +273,13 @@ describe("PreAdmissionChecklistsPage", () => {
   it("botão Modelos prontos abre e fecha a galeria de kits", async () => {
     renderPage();
 
-    await screen.findByText("Checklist CLT");
+    await screen.findByTestId("checklists-table");
     expect(screen.queryByTestId("template-kits-gallery")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("show-kits-gallery-btn"));
     expect(await screen.findByTestId("template-kits-gallery")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /fechar/i }));
+    fireEvent.click(screen.getByTestId("close-kits-gallery-btn"));
     await waitFor(() => {
       expect(screen.queryByTestId("template-kits-gallery")).not.toBeInTheDocument();
     });

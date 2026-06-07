@@ -7,15 +7,19 @@ import {
   FilePlus2,
   LayoutTemplate,
   Loader2,
+  Search,
   Plus,
   Save,
-  ShieldCheck,
   Sparkles,
   Trash2,
+  Pencil,
+  X,
+  Settings,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "../shared/utils/toast";
 import { preAdmissionChecklistTemplatesService } from "../services/preAdmissionChecklistTemplatesService";
 import type {
@@ -129,6 +133,27 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function SummaryStat({
+  label,
+  value,
+  isDanger,
+  isSuccess,
+}: {
+  label: string;
+  value: string | number;
+  isDanger?: boolean;
+  isSuccess?: boolean;
+}) {
+  const valueColor = isDanger ? "text-red-600" : isSuccess ? "text-emerald-600" : "text-text";
+
+  return (
+    <div className="flex flex-col rounded-xl border border-border bg-white p-3 shadow-sm">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">{label}</span>
+      <span className={`mt-1 text-lg font-bold ${valueColor}`}>{value}</span>
+    </div>
+  );
+}
+
 function TemplateKitCard({
   kit,
   installingId,
@@ -146,22 +171,22 @@ function TemplateKitCard({
 
   return (
     <article
-      className="flex flex-col rounded-[28px] border border-border bg-white p-5 shadow-sm"
+      className="flex flex-col rounded-[24px] border border-border bg-white p-5 shadow-sm transition hover:shadow-md"
       data-testid={`kit-card-${kit.id}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-semibold text-text">{kit.name}</p>
-          <p className="mt-1 text-sm text-text-muted">{kit.description}</p>
+          <p className="mt-1 text-sm text-text-muted line-clamp-2">{kit.description}</p>
         </div>
         <Badge variant="outline" className="shrink-0">{kit.admission_type}</Badge>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <div className="mt-4 flex flex-wrap gap-1.5">
         {visibleDocs.map((doc) => (
           <span
             key={doc.document_key}
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
               doc.is_required
                 ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "border border-border bg-surface-muted/50 text-text-muted"
@@ -171,13 +196,13 @@ function TemplateKitCard({
           </span>
         ))}
         {remainingCount > 0 ? (
-          <span className="inline-flex items-center rounded-full border border-border bg-surface-muted/50 px-2.5 py-1 text-xs text-text-muted">
+          <span className="inline-flex items-center rounded-full border border-border bg-surface-muted/50 px-2.5 py-1 text-[11px] text-text-muted">
             +{remainingCount} mais
           </span>
         ) : null}
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-auto pt-5 flex justify-end">
         <Button
           type="button"
           size="sm"
@@ -197,192 +222,31 @@ function TemplateKitCard({
   );
 }
 
-function TemplateItemEditor({
-  item,
-  disabled,
-  isFirst,
-  isLast,
-  onSave,
-  onMoveUp,
-  onMoveDown,
-  onRemove,
-}: {
-  item: PreAdmissionChecklistTemplateItem;
-  disabled: boolean;
-  isFirst: boolean;
-  isLast: boolean;
-  onSave: (itemId: string, payload: Partial<PreAdmissionChecklistTemplateItem>) => Promise<void>;
-  onMoveUp: () => Promise<void>;
-  onMoveDown: () => Promise<void>;
-  onRemove: () => Promise<void>;
-}) {
-  const [documentKey, setDocumentKey] = useState(item.document_key);
-  const [title, setTitle] = useState(item.title);
-  const [candidateDescription, setCandidateDescription] = useState(item.candidate_description ?? "");
-  const [isRequired, setIsRequired] = useState(item.is_required);
-  const [acceptedFileTypes, setAcceptedFileTypes] = useState<string[]>(item.accepted_file_types);
-  const [maxFileSizeMb, setMaxFileSizeMb] = useState(item.max_file_size_mb);
-
-  useEffect(() => {
-    setDocumentKey(item.document_key);
-    setTitle(item.title);
-    setCandidateDescription(item.candidate_description ?? "");
-    setIsRequired(item.is_required);
-    setAcceptedFileTypes(item.accepted_file_types);
-    setMaxFileSizeMb(item.max_file_size_mb);
-  }, [item]);
-
-  const handleToggleFileType = (value: string) => {
-    setAcceptedFileTypes((current) =>
-      current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value],
-    );
-  };
-
-  return (
-    <article className="rounded-3xl border border-border bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-text">{item.title}</h3>
-            <Badge variant="outline" className={item.is_required ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-700"}>
-              {item.is_required ? "Obrigatório" : "Opcional"}
-            </Badge>
-          </div>
-          <p className="mt-1 text-xs text-text-muted">
-            Ordem {item.display_order + 1} • Atualizado em {formatDate(item.updated_at)}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={disabled || isFirst} onClick={() => void onMoveUp()}>
-            <ArrowUp className="mr-1 h-4 w-4" />
-            Subir
-          </Button>
-          <Button type="button" variant="outline" size="sm" disabled={disabled || isLast} onClick={() => void onMoveDown()}>
-            <ArrowDown className="mr-1 h-4 w-4" />
-            Descer
-          </Button>
-          <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => void onRemove()}>
-            <Trash2 className="mr-1 h-4 w-4" />
-            Remover
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Chave</span>
-          <input
-            value={documentKey}
-            onChange={(event) => setDocumentKey(event.target.value)}
-            className="w-full rounded-2xl border border-border px-3 py-2"
-          />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Título</span>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            className="w-full rounded-2xl border border-border px-3 py-2"
-          />
-        </label>
-      </div>
-
-      <label className="mt-4 block space-y-1 text-sm">
-        <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-          Descrição pública para o candidato
-        </span>
-        <textarea
-          value={candidateDescription}
-          onChange={(event) => setCandidateDescription(event.target.value)}
-          rows={3}
-          className="w-full rounded-2xl border border-border px-3 py-2"
-        />
-      </label>
-
-      <div className="mt-4 grid gap-4 md:grid-cols-[1fr_220px]">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-            Tipos aceitos
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {FILE_TYPE_OPTIONS.map((option) => (
-              <label
-                key={option.value}
-                className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  checked={acceptedFileTypes.includes(option.value)}
-                  onChange={() => handleToggleFileType(option.value)}
-                />
-                {option.label}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <label className="block space-y-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-              Tamanho máximo (MB)
-            </span>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={maxFileSizeMb}
-              onChange={(event) => setMaxFileSizeMb(Number(event.target.value) || 1)}
-              className="w-full rounded-2xl border border-border px-3 py-2"
-            />
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm font-medium text-text">
-            <input type="checkbox" checked={isRequired} onChange={(event) => setIsRequired(event.target.checked)} />
-            Documento obrigatório
-          </label>
-        </div>
-      </div>
-
-      <div className="mt-4 flex justify-end">
-        <Button
-          type="button"
-          disabled={disabled}
-          onClick={() =>
-            void onSave(item.id, {
-              document_key: documentKey,
-              title,
-              candidate_description: candidateDescription,
-              is_required: isRequired,
-              accepted_file_types: acceptedFileTypes,
-              max_file_size_mb: maxFileSizeMb,
-            })
-          }
-        >
-          <Save className="mr-2 h-4 w-4" />
-          Salvar documento
-        </Button>
-      </div>
-    </article>
-  );
-}
-
 export function PreAdmissionChecklistsPage() {
   const [templates, setTemplates] = useState<PreAdmissionChecklistTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<PreAdmissionChecklistTemplateDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [isTemplateEditorOpen, setIsTemplateEditorOpen] = useState(false);
+  const [templateEditorMode, setTemplateEditorMode] = useState<"create" | "edit">("create");
+  
+  // Detalhes do checklist
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [templateAdmissionType, setTemplateAdmissionType] = useState("");
   const [templateIsDefault, setTemplateIsDefault] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
-  const [createAdmissionType, setCreateAdmissionType] = useState("");
-  const [createIsDefault, setCreateIsDefault] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [templateFormError, setTemplateFormError] = useState<string | null>(null);
+  
+  // Editor de documento
+  const [isDocumentEditorOpen, setIsDocumentEditorOpen] = useState(false);
+  const [documentEditorMode, setDocumentEditorMode] = useState<"create" | "edit">("create");
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
   const [documentDraft, setDocumentDraft] = useState<DocumentDraft>(EMPTY_DOCUMENT_DRAFT);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  
+  // Galeria de kits
   const [showKitsGallery, setShowKitsGallery] = useState(false);
   const [installingKitId, setInstallingKitId] = useState<string | null>(null);
 
@@ -391,6 +255,39 @@ export function PreAdmissionChecklistsPage() {
     [selectedTemplateId, templates],
   );
 
+  const filteredTemplates = useMemo(() => {
+    const normalizedSearch = templateSearch.trim().toLowerCase();
+    if (!normalizedSearch) return templates;
+
+    return templates.filter((template) =>
+      [template.name, template.description ?? "", template.admission_type ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearch),
+    );
+  }, [templateSearch, templates]);
+
+  const templateSummary = useMemo(() => {
+    const total = templates.length;
+    const active = templates.filter((template) => template.is_active).length;
+    const defaults = templates.filter((template) => template.is_default).length;
+    const totalDocuments = templates.reduce((sum, template) => sum + template.item_count, 0);
+    const archived = total - active;
+    const lastUpdatedAt = templates.reduce<string | null>((latest, template) => {
+      if (!latest) return template.updated_at;
+      return new Date(template.updated_at).getTime() > new Date(latest).getTime() ? template.updated_at : latest;
+    }, null);
+
+    return {
+      total,
+      active,
+      defaults,
+      totalDocuments,
+      archived,
+      lastUpdated: lastUpdatedAt ? formatDate(lastUpdatedAt) : "—",
+    };
+  }, [templates]);
+
   useEffect(() => {
     void loadTemplates();
   }, []);
@@ -398,6 +295,7 @@ export function PreAdmissionChecklistsPage() {
   useEffect(() => {
     if (!selectedTemplateId) {
       setSelectedTemplate(null);
+      setIsDocumentEditorOpen(false);
       return;
     }
     void loadTemplateDetail(selectedTemplateId);
@@ -441,56 +339,67 @@ export function PreAdmissionChecklistsPage() {
     }
   }
 
-  async function handleCreateTemplate() {
-    if (!createName.trim()) {
-      setCreateError("O nome do checklist é obrigatório.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setCreateError(null);
-      const created = await preAdmissionChecklistTemplatesService.createTemplate({
-        name: createName.trim(),
-        description: createDescription.trim() || null,
-        admission_type: createAdmissionType.trim() || null,
-        is_active: true,
-        is_default: createIsDefault,
-      });
-      toast.success("Checklist criado.");
-      setShowCreateForm(false);
-      setCreateName("");
-      setCreateDescription("");
-      setCreateAdmissionType("");
-      setCreateIsDefault(false);
-      await loadTemplates(created.id);
-    } catch (error) {
-      setCreateError(error instanceof Error ? error.message : "Erro ao criar checklist");
-    } finally {
-      setSaving(false);
-    }
+  function openTemplateCreate() {
+    setTemplateEditorMode("create");
+    setTemplateName("");
+    setTemplateDescription("");
+    setTemplateAdmissionType("");
+    setTemplateIsDefault(false);
+    setTemplateFormError(null);
+    setIsTemplateEditorOpen(true);
   }
 
-  async function handleSaveTemplate() {
+  function openTemplateEdit() {
     if (!selectedTemplate) return;
+    setTemplateEditorMode("edit");
+    setTemplateName(selectedTemplate.name);
+    setTemplateDescription(selectedTemplate.description ?? "");
+    setTemplateAdmissionType(selectedTemplate.admission_type ?? "");
+    setTemplateIsDefault(selectedTemplate.is_default);
+    setTemplateFormError(null);
+    setIsTemplateEditorOpen(true);
+  }
+
+  function closeTemplateEditor() {
+    setIsTemplateEditorOpen(false);
+    setTemplateFormError(null);
+  }
+
+  async function handleSaveTemplateEditor() {
     if (!templateName.trim()) {
-      toast.error("O nome do checklist é obrigatório.");
+      setTemplateFormError("O nome do checklist é obrigatório.");
       return;
     }
 
     try {
       setSaving(true);
-      await preAdmissionChecklistTemplatesService.updateTemplate(selectedTemplate.id, {
-        name: templateName.trim(),
-        description: templateDescription.trim() || null,
-        admission_type: templateAdmissionType.trim() || null,
-        is_default: templateIsDefault,
-      });
-      toast.success("Checklist atualizado.");
-      await loadTemplates(selectedTemplate.id);
-      await loadTemplateDetail(selectedTemplate.id);
+      setTemplateFormError(null);
+
+      if (templateEditorMode === "create") {
+        const created = await preAdmissionChecklistTemplatesService.createTemplate({
+          name: templateName.trim(),
+          description: templateDescription.trim() || null,
+          admission_type: templateAdmissionType.trim() || null,
+          is_active: true,
+          is_default: templateIsDefault,
+        });
+        toast.success("Checklist criado.");
+        closeTemplateEditor();
+        await loadTemplates(created.id);
+      } else if (selectedTemplate) {
+        await preAdmissionChecklistTemplatesService.updateTemplate(selectedTemplate.id, {
+          name: templateName.trim(),
+          description: templateDescription.trim() || null,
+          admission_type: templateAdmissionType.trim() || null,
+          is_default: templateIsDefault,
+        });
+        toast.success("Checklist atualizado.");
+        closeTemplateEditor();
+        await loadTemplates(selectedTemplate.id);
+        await loadTemplateDetail(selectedTemplate.id);
+      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao salvar checklist");
+      setTemplateFormError(error instanceof Error ? error.message : "Erro ao salvar checklist");
     } finally {
       setSaving(false);
     }
@@ -498,6 +407,7 @@ export function PreAdmissionChecklistsPage() {
 
   async function handleArchiveTemplate() {
     if (!selectedTemplate) return;
+    if (!window.confirm("Deseja realmente arquivar este checklist?")) return;
     try {
       setSaving(true);
       await preAdmissionChecklistTemplatesService.archiveTemplate(selectedTemplate.id);
@@ -526,7 +436,37 @@ export function PreAdmissionChecklistsPage() {
     }
   }
 
-  async function handleAddDocument() {
+  // Ações do Editor de Documento
+  function openDocumentCreate() {
+    setDocumentEditorMode("create");
+    setEditingDocumentId(null);
+    setDocumentDraft(EMPTY_DOCUMENT_DRAFT);
+    setDocumentError(null);
+    setIsDocumentEditorOpen(true);
+  }
+
+  function openDocumentEdit(item: PreAdmissionChecklistTemplateItem) {
+    setDocumentEditorMode("edit");
+    setEditingDocumentId(item.id);
+    setDocumentDraft({
+      document_key: item.document_key,
+      title: item.title,
+      candidate_description: item.candidate_description ?? "",
+      is_required: item.is_required,
+      accepted_file_types: item.accepted_file_types,
+      max_file_size_mb: item.max_file_size_mb,
+    });
+    setDocumentError(null);
+    setIsDocumentEditorOpen(true);
+  }
+
+  function closeDocumentEditor() {
+    setIsDocumentEditorOpen(false);
+    setEditingDocumentId(null);
+    setDocumentDraft(EMPTY_DOCUMENT_DRAFT);
+  }
+
+  async function handleSaveDocument() {
     if (!selectedTemplate) return;
     if (!documentDraft.document_key.trim() || !documentDraft.title.trim()) {
       setDocumentError("Informe a chave e o título do documento.");
@@ -540,35 +480,32 @@ export function PreAdmissionChecklistsPage() {
     try {
       setSaving(true);
       setDocumentError(null);
-      await preAdmissionChecklistTemplatesService.createItem(selectedTemplate.id, {
-        document_key: documentDraft.document_key.trim(),
-        title: documentDraft.title.trim(),
-        candidate_description: documentDraft.candidate_description.trim() || null,
-        is_required: documentDraft.is_required,
-        accepted_file_types: documentDraft.accepted_file_types,
-        max_file_size_mb: documentDraft.max_file_size_mb,
-      });
-      toast.success("Documento adicionado ao checklist.");
-      setDocumentDraft(EMPTY_DOCUMENT_DRAFT);
+      if (documentEditorMode === "create") {
+        await preAdmissionChecklistTemplatesService.createItem(selectedTemplate.id, {
+          document_key: documentDraft.document_key.trim(),
+          title: documentDraft.title.trim(),
+          candidate_description: documentDraft.candidate_description.trim() || null,
+          is_required: documentDraft.is_required,
+          accepted_file_types: documentDraft.accepted_file_types,
+          max_file_size_mb: documentDraft.max_file_size_mb,
+        });
+        toast.success("Documento adicionado ao checklist.");
+      } else if (editingDocumentId) {
+        await preAdmissionChecklistTemplatesService.updateItem(selectedTemplate.id, editingDocumentId, {
+          document_key: documentDraft.document_key.trim(),
+          title: documentDraft.title.trim(),
+          candidate_description: documentDraft.candidate_description.trim() || null,
+          is_required: documentDraft.is_required,
+          accepted_file_types: documentDraft.accepted_file_types,
+          max_file_size_mb: documentDraft.max_file_size_mb,
+        });
+        toast.success("Documento atualizado.");
+      }
+      closeDocumentEditor();
       await loadTemplates(selectedTemplate.id);
       await loadTemplateDetail(selectedTemplate.id);
     } catch (error) {
-      setDocumentError(error instanceof Error ? error.message : "Erro ao adicionar documento");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleSaveItem(itemId: string, payload: Partial<PreAdmissionChecklistTemplateItem>) {
-    if (!selectedTemplate) return;
-    try {
-      setSaving(true);
-      await preAdmissionChecklistTemplatesService.updateItem(selectedTemplate.id, itemId, payload);
-      toast.success("Documento atualizado.");
-      await loadTemplateDetail(selectedTemplate.id);
-      await loadTemplates(selectedTemplate.id);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao atualizar documento");
+      setDocumentError(error instanceof Error ? error.message : "Erro ao salvar documento");
     } finally {
       setSaving(false);
     }
@@ -600,12 +537,14 @@ export function PreAdmissionChecklistsPage() {
 
   async function handleRemoveItem(itemId: string) {
     if (!selectedTemplate) return;
+    if (!window.confirm("Deseja realmente remover este documento do checklist?")) return;
     try {
       setSaving(true);
       await preAdmissionChecklistTemplatesService.deleteItem(selectedTemplate.id, itemId);
       toast.success("Documento removido do checklist.");
       await loadTemplateDetail(selectedTemplate.id);
       await loadTemplates(selectedTemplate.id);
+      if (editingDocumentId === itemId) closeDocumentEditor();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao remover documento");
     } finally {
@@ -643,6 +582,15 @@ export function PreAdmissionChecklistsPage() {
     }
   }
 
+  const handleToggleFileType = (value: string) => {
+    setDocumentDraft((current) => ({
+      ...current,
+      accepted_file_types: current.accepted_file_types.includes(value)
+        ? current.accepted_file_types.filter((entry) => entry !== value)
+        : [...current.accepted_file_types, value],
+    }));
+  };
+
   if (loading && templates.length === 0) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center text-sm text-text-muted">
@@ -653,57 +601,67 @@ export function PreAdmissionChecklistsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col gap-3 rounded-[32px] border border-border bg-[linear-gradient(135deg,rgba(4,120,87,0.08),rgba(15,23,42,0.02))] p-6 md:flex-row md:items-start md:justify-between">
-        <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Pré-admissão</p>
-          <h1 className="mt-2 text-2xl font-semibold text-text">Checklists de documentos</h1>
-          <p className="mt-2 text-sm text-text-muted">
-            Cadastre os modelos de documentos usados pelo RH na abertura dos casos admissionais. Os itens ativos
-            são copiados como snapshot para o caso no momento da criação.
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
+      <header className="flex flex-col gap-3 rounded-[24px] border border-border bg-[linear-gradient(135deg,rgba(4,120,87,0.08),rgba(15,23,42,0.02))] p-5 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-2xl">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Pré-admissão</p>
+          <h1 className="mt-1 text-xl font-semibold text-text">Checklists de documentos</h1>
+          <p className="mt-1 text-sm text-text-muted">
+            Cadastre os modelos de documentos exigidos na abertura dos casos admissionais.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"
+            size="sm"
             onClick={() => setShowKitsGallery((prev) => !prev)}
             data-testid="show-kits-gallery-btn"
           >
             <LayoutTemplate className="mr-2 h-4 w-4" />
             Modelos prontos
           </Button>
-          <Button type="button" onClick={() => setShowCreateForm((current) => !current)}>
+          <Button type="button" size="sm" onClick={openTemplateCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Novo checklist
           </Button>
         </div>
       </header>
 
+      <section className="flex flex-wrap gap-4">
+        <SummaryStat label="Checklists" value={templateSummary.total} />
+        <SummaryStat label="Ativos" value={templateSummary.active} isSuccess />
+        <SummaryStat label="Padrão" value={templateSummary.defaults} />
+        <SummaryStat label="Documentos" value={templateSummary.totalDocuments} />
+        <SummaryStat label="Arquivados" value={templateSummary.archived} isDanger={templateSummary.archived > 0} />
+        <SummaryStat label="Última alteração" value={templateSummary.lastUpdated} />
+      </section>
+
       {(showKitsGallery || (templates.length === 0 && !loading)) ? (
         <section
-          className="rounded-[28px] border border-border bg-[linear-gradient(135deg,rgba(4,120,87,0.04),rgba(15,23,42,0.02))] p-5"
+          className="rounded-[24px] border border-border bg-[linear-gradient(135deg,rgba(4,120,87,0.04),rgba(15,23,42,0.02))] p-5"
           data-testid="template-kits-gallery"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Modelos prontos</p>
-              <h3 className="mt-1 text-base font-semibold text-text">Começar a partir de um modelo</h3>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Galeria</p>
+              <h3 className="mt-1 text-base font-semibold text-text">Começar a partir de um modelo pronto</h3>
               <p className="mt-1 text-sm text-text-muted">
-                Clique em "Usar este modelo" para criar um checklist completo com os documentos mais comuns para cada tipo de contratação.
+                Crie um checklist completo com os documentos mais comuns para cada tipo de contratação.
               </p>
             </div>
             {templates.length > 0 ? (
               <button
                 type="button"
                 onClick={() => setShowKitsGallery(false)}
-                className="shrink-0 text-sm text-text-muted hover:text-text"
+                className="shrink-0 rounded-full p-2 text-text-muted hover:bg-black/5 hover:text-text transition"
+                data-testid="close-kits-gallery-btn"
               >
-                Fechar
+                <X className="h-4 w-4" />
               </button>
             ) : null}
           </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
             {TEMPLATE_KITS.map((kit) => (
               <TemplateKitCard
                 key={kit.id}
@@ -717,317 +675,620 @@ export function PreAdmissionChecklistsPage() {
         </section>
       ) : null}
 
-      {showCreateForm ? (
-        <section className="rounded-[28px] border border-border bg-white p-5 shadow-sm" data-testid="checklist-create-form">
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Nome</span>
+      <div className="flex flex-col gap-6">
+        <section className="rounded-2xl border border-border bg-white shadow-sm flex flex-col">
+          <div className="border-b border-border/60 bg-surface-muted/20 px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold text-text">Lista de checklists</h2>
+              <p className="text-[13px] text-text-muted">Selecione um modelo para revisar documentos e abrir edições sob demanda.</p>
+            </div>
+
+            <div className="relative w-full md:max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
               <input
-                value={createName}
-                onChange={(event) => setCreateName(event.target.value)}
-                placeholder="Checklist admissional padrão"
-                className="w-full rounded-2xl border border-border px-3 py-2"
+                type="text"
+                className="w-full rounded-full border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all shadow-sm"
+                placeholder="Buscar checklist por nome, descrição ou tipo..."
+                value={templateSearch}
+                onChange={(event) => setTemplateSearch(event.target.value)}
               />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Tipo de admissão
-              </span>
-              <input
-                value={createAdmissionType}
-                onChange={(event) => setCreateAdmissionType(event.target.value)}
-                placeholder="CLT, estágio, aprendiz..."
-                className="w-full rounded-2xl border border-border px-3 py-2"
-              />
-            </label>
+            </div>
           </div>
-          <label className="mt-4 block space-y-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Descrição</span>
-            <textarea
-              value={createDescription}
-              onChange={(event) => setCreateDescription(event.target.value)}
-              rows={3}
-              className="w-full rounded-2xl border border-border px-3 py-2"
-            />
-          </label>
-          <label className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-text">
-            <input type="checkbox" checked={createIsDefault} onChange={(event) => setCreateIsDefault(event.target.checked)} />
-            Usar como checklist padrão
-          </label>
-          {createError ? (
-            <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{createError}</p>
-          ) : null}
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
-              Cancelar
-            </Button>
-            <Button type="button" onClick={() => void handleCreateTemplate()} disabled={saving}>
-              <Save className="mr-2 h-4 w-4" />
-              Criar checklist
-            </Button>
-          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center p-12 text-sm text-text-muted">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Carregando checklists admissionais...
+            </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="rounded-[24px] border border-dashed border-border bg-white p-10 text-center text-sm text-text-muted flex flex-col items-center">
+              <div className="h-12 w-12 rounded-full bg-surface-muted flex items-center justify-center mb-3">
+                <LayoutTemplate className="h-6 w-6 text-text-muted/60" />
+              </div>
+              <p className="text-sm font-medium text-text">
+                {templateSearch.trim() ? "Nenhum checklist encontrado." : "Nenhum checklist cadastrado."}
+              </p>
+              <p className="mt-1 max-w-sm text-sm text-text-muted">
+                {templateSearch.trim()
+                  ? "Tente outro termo de busca ou crie um novo checklist."
+                  : "Crie um checklist novo ou use um modelo pronto para começar."}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm" data-testid="checklists-table">
+                <thead className="bg-surface/50 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-b border-border/60">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Checklist</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Metadados</th>
+                    <th className="px-4 py-3 font-medium text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredTemplates.map((template) => {
+                    const isSelected = template.id === selectedTemplateId;
+                    return (
+                      <tr
+                        key={template.id}
+                        className={`transition-colors hover:bg-surface/30 ${isSelected ? "bg-emerald-50/50" : ""}`}
+                      >
+                        <td className="px-4 py-3 min-w-[220px]">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTemplateId(template.id)}
+                            className="text-left"
+                            data-testid={`checklist-card-${template.id}`}
+                          >
+                            <p className="font-semibold text-text">{template.name}</p>
+                            <p className="mt-0.5 text-[11px] text-text-muted">
+                              {template.description || "Sem descrição"}
+                            </p>
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex flex-col gap-1.5">
+                            <Badge
+                              variant="outline"
+                              className={`w-fit text-[10px] uppercase font-bold py-0.5 h-auto ${
+                                template.is_active
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-slate-50 text-slate-600 border-slate-200"
+                              }`}
+                            >
+                              {template.is_active ? "Ativo" : "Arquivado"}
+                            </Badge>
+                            {template.is_default ? (
+                              <span className="text-[11px] text-text-muted">Checklist padrão</span>
+                            ) : (
+                              <span className="text-[11px] text-text-muted">Sem padrão global</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] text-text-muted">
+                              {template.item_count} documento(s)
+                              {template.admission_type ? ` • ${template.admission_type}` : ""}
+                            </span>
+                            <span className="text-[11px] text-text-muted">
+                              Atualizado em {formatDate(template.updated_at)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTemplateId(template.id)}
+                              className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-emerald-600"
+                              title="Ver documentos"
+                            >
+                              <FilePlus2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedTemplateId(template.id);
+                                void loadTemplateDetail(template.id).then(() => openTemplateEdit());
+                              }}
+                              className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-emerald-600"
+                              title="Editar checklist"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
-      ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="space-y-4">
-          {templates.map((template) => {
-            const isSelected = template.id === selectedTemplateId;
-            return (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => setSelectedTemplateId(template.id)}
-                className={`w-full rounded-[28px] border p-5 text-left shadow-sm transition ${
-                  isSelected
-                    ? "border-emerald-500 bg-emerald-50/80"
-                    : "border-border bg-white hover:border-emerald-300"
-                }`}
-                data-testid={`checklist-card-${template.id}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-base font-semibold text-text">{template.name}</p>
-                    <p className="mt-1 text-sm text-text-muted">
-                      {template.description || "Sem descrição cadastrada."}
-                    </p>
-                  </div>
-                  {template.is_default ? (
-                    <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Padrão</Badge>
-                  ) : null}
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs text-text-muted">
-                  <Badge variant="outline">{template.is_active ? "Ativo" : "Arquivado"}</Badge>
-                  <Badge variant="outline">{template.item_count} documentos</Badge>
-                  {template.admission_type ? <Badge variant="outline">{template.admission_type}</Badge> : null}
-                </div>
-                <p className="mt-4 text-xs text-text-muted">Atualizado em {formatDate(template.updated_at)}</p>
-              </button>
-            );
-          })}
-        </aside>
-
-        <section className="space-y-5">
+        <section className="flex flex-col gap-6">
           {!selectedTemplate ? (
-            <div className="rounded-[28px] border border-dashed border-border bg-white p-10 text-center text-sm text-text-muted">
-              Selecione um checklist para editar os documentos exigidos na pré-admissão.
+            <div className="rounded-[24px] border border-dashed border-border bg-white p-10 text-center text-sm text-text-muted flex flex-col items-center">
+              <div className="h-12 w-12 rounded-full bg-surface-muted flex items-center justify-center mb-3">
+                <LayoutTemplate className="h-6 w-6 text-text-muted/60" />
+              </div>
+              <p>Selecione um checklist na lista para revisar os documentos exigidos.</p>
             </div>
           ) : (
             <>
-              <div className="rounded-[32px] border border-border bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-xl font-semibold text-text">{selectedTemplateSummary?.name}</h2>
-                      {selectedTemplateSummary?.is_default ? (
-                        <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
-                          <ShieldCheck className="mr-1 h-3 w-3" />
-                          Padrão
-                        </Badge>
+              <div className="rounded-[24px] border border-border bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-text truncate">{selectedTemplateSummary?.name}</h2>
+                    <p className="mt-1 text-sm text-text-muted">
+                      {selectedTemplateSummary?.description || "Sem descrição pública."}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-text-muted">
+                      <span className="rounded-full border border-border px-2 py-1">
+                        {selectedTemplate.items.length} item(ns)
+                      </span>
+                      {selectedTemplate.admission_type ? (
+                        <span className="rounded-full border border-border px-2 py-1">
+                          {selectedTemplate.admission_type}
+                        </span>
+                      ) : null}
+                      {selectedTemplate.is_default ? (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
+                          Padrão global
+                        </span>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-sm text-text-muted">
-                      {selectedTemplate.items.length} documento(s) ativo(s) neste checklist.
-                    </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={() => void handleDuplicateTemplate()} disabled={saving}>
-                      <Copy className="mr-2 h-4 w-4" />
-                      Duplicar
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => void handleArchiveTemplate()} disabled={saving}>
-                      <Archive className="mr-2 h-4 w-4" />
-                      Arquivar
-                    </Button>
-                    <Button type="button" onClick={() => void handleSaveTemplate()} disabled={saving}>
-                      <Save className="mr-2 h-4 w-4" />
-                      Salvar checklist
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    <Button type="button" onClick={openTemplateEdit} disabled={saving} data-testid="edit-template-btn">
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Editar checklist
                     </Button>
                   </div>
                 </div>
-
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <label className="space-y-1 text-sm">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Nome</span>
-                    <input
-                      value={templateName}
-                      onChange={(event) => setTemplateName(event.target.value)}
-                      className="w-full rounded-2xl border border-border px-3 py-2"
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                      Tipo de admissão
-                    </span>
-                    <input
-                      value={templateAdmissionType}
-                      onChange={(event) => setTemplateAdmissionType(event.target.value)}
-                      className="w-full rounded-2xl border border-border px-3 py-2"
-                    />
-                  </label>
-                </div>
-
-                <label className="mt-4 block space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Descrição</span>
-                  <textarea
-                    value={templateDescription}
-                    onChange={(event) => setTemplateDescription(event.target.value)}
-                    rows={3}
-                    className="w-full rounded-2xl border border-border px-3 py-2"
-                  />
-                </label>
-
-                <label className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-text">
-                  <input type="checkbox" checked={templateIsDefault} onChange={(event) => setTemplateIsDefault(event.target.checked)} />
-                  Usar este checklist como padrão quando nenhum template for informado
-                </label>
               </div>
 
-              <div className="rounded-[32px] border border-border bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
+              {/* Tabela de Documentos (Read-Only) */}
+              <div className="rounded-[24px] border border-border bg-white shadow-sm overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between border-b border-border/60 bg-surface-muted/20 px-5 py-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">
-                      Documentos do checklist
+                    <h3 className="text-base font-semibold text-text">Documentos solicitados</h3>
+                    <p className="text-[13px] text-text-muted">{selectedTemplate.items.length} itens ativos neste checklist.</p>
+                  </div>
+                </div>
+
+                {selectedTemplate.items.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-12 text-center">
+                    <div className="h-12 w-12 rounded-full bg-emerald-50 flex items-center justify-center mb-3">
+                      <FilePlus2 className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <p className="text-sm font-medium text-text">Nenhum documento neste checklist</p>
+                    <p className="mt-1 text-sm text-text-muted max-w-sm">
+                      Clique em "Editar checklist" para adicionar documentos e organizar a lista.
                     </p>
-                    <h3 className="mt-1 text-lg font-semibold text-text">Itens ativos</h3>
                   </div>
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  {selectedTemplate.items.map((item, index) => (
-                    <TemplateItemEditor
-                      key={item.id}
-                      item={item}
-                      disabled={saving}
-                      isFirst={index === 0}
-                      isLast={index === selectedTemplate.items.length - 1}
-                      onSave={handleSaveItem}
-                      onMoveUp={() => handleReorderItem(item, "up")}
-                      onMoveDown={() => handleReorderItem(item, "down")}
-                      onRemove={() => handleRemoveItem(item.id)}
-                    />
-                  ))}
-                </div>
-
-                <div className="mt-6 rounded-[28px] border border-dashed border-border bg-surface-muted/30 p-5" data-testid="checklist-item-create-form">
-                  <div className="flex items-center gap-2">
-                    <FilePlus2 className="h-4 w-4 text-emerald-700" />
-                    <h4 className="text-sm font-semibold text-text">Adicionar documento</h4>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Chave</span>
-                      <input
-                        value={documentDraft.document_key}
-                        onChange={(event) => setDocumentDraft((current) => ({ ...current, document_key: event.target.value }))}
-                        placeholder="cpf"
-                        className="w-full rounded-2xl border border-border px-3 py-2"
-                      />
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Título</span>
-                      <input
-                        value={documentDraft.title}
-                        onChange={(event) => setDocumentDraft((current) => ({ ...current, title: event.target.value }))}
-                        placeholder="CPF"
-                        className="w-full rounded-2xl border border-border px-3 py-2"
-                      />
-                    </label>
-                  </div>
-
-                  <label className="mt-4 block space-y-1 text-sm">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                      Descrição pública
-                    </span>
-                    <textarea
-                      value={documentDraft.candidate_description}
-                      onChange={(event) =>
-                        setDocumentDraft((current) => ({ ...current, candidate_description: event.target.value }))
-                      }
-                      rows={3}
-                      className="w-full rounded-2xl border border-border px-3 py-2"
-                    />
-                  </label>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-[1fr_220px]">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                        Tipos aceitos
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {FILE_TYPE_OPTIONS.map((option) => (
-                          <label
-                            key={option.value}
-                            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={documentDraft.accepted_file_types.includes(option.value)}
-                              onChange={() =>
-                                setDocumentDraft((current) => ({
-                                  ...current,
-                                  accepted_file_types: current.accepted_file_types.includes(option.value)
-                                    ? current.accepted_file_types.filter((entry) => entry !== option.value)
-                                    : [...current.accepted_file_types, option.value],
-                                }))
-                              }
-                            />
-                            {option.label}
-                          </label>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-surface/50 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-b border-border/60">
+                        <tr>
+                          <th className="px-5 py-3 font-medium">Ordem</th>
+                          <th className="px-5 py-3 font-medium">Documento</th>
+                          <th className="px-5 py-3 font-medium">Chave</th>
+                          <th className="px-5 py-3 font-medium">Regras</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {selectedTemplate.items.map((item, index) => (
+                          <tr key={item.id} className="transition-colors hover:bg-surface/30">
+                            <td className="px-5 py-3 whitespace-nowrap text-text-muted">
+                              #{item.display_order + 1}
+                            </td>
+                            <td className="px-5 py-3 min-w-[200px]">
+                              <div className="font-medium text-text">{item.title}</div>
+                              <div className="text-[12px] text-text-muted truncate max-w-[250px]" title={item.candidate_description ?? ""}>
+                                {item.candidate_description || "Sem descrição pública."}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 whitespace-nowrap">
+                              <code className="rounded bg-surface-muted px-1.5 py-0.5 text-[11px] text-text-muted">{item.document_key}</code>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex flex-col gap-1.5">
+                                {item.is_required ? (
+                                  <span className="inline-flex w-fit items-center rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                    Obrigatório
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex w-fit items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
+                                    Opcional
+                                  </span>
+                                )}
+                                <span className="text-[11px] text-text-muted">Até {item.max_file_size_mb}MB</span>
+                              </div>
+                            </td>
+                          </tr>
                         ))}
-                      </div>
-                    </div>
-                    <div className="space-y-4">
-                      <label className="block space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                          Tamanho máximo (MB)
-                        </span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={10}
-                          value={documentDraft.max_file_size_mb}
-                          onChange={(event) =>
-                            setDocumentDraft((current) => ({
-                              ...current,
-                              max_file_size_mb: Number(event.target.value) || 1,
-                            }))
-                          }
-                          className="w-full rounded-2xl border border-border px-3 py-2"
-                        />
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm font-medium text-text">
-                        <input
-                          type="checkbox"
-                          checked={documentDraft.is_required}
-                          onChange={(event) =>
-                            setDocumentDraft((current) => ({ ...current, is_required: event.target.checked }))
-                          }
-                        />
-                        Documento obrigatório
-                      </label>
-                    </div>
+                      </tbody>
+                    </table>
                   </div>
-
-                  {documentError ? (
-                    <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                      {documentError}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-4 flex justify-end">
-                    <Button type="button" onClick={() => void handleAddDocument()} disabled={saving}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Adicionar documento
-                    </Button>
-                  </div>
-                </div>
+                )}
               </div>
             </>
           )}
         </section>
       </div>
+
+      {/* Unified Template Editor Drawer */}
+      {isTemplateEditorOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-950/30 backdrop-blur-[2px] transition-opacity" onClick={closeTemplateEditor} aria-hidden="true" />
+          <div className="relative w-full max-w-2xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right-8 duration-300" role="dialog" aria-label={templateEditorMode === "create" ? "Criar checklist" : "Editar checklist"} data-testid="checklist-create-form">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-surface-muted/20">
+              <div>
+                <h3 className="text-base font-semibold text-text">
+                  {templateEditorMode === "create" ? "Novo checklist" : "Editar checklist"}
+                </h3>
+                <p className="text-[11px] text-text-muted mt-0.5">Configure os dados do modelo e os documentos solicitados.</p>
+              </div>
+              <button onClick={closeTemplateEditor} className="rounded-full p-2 text-text-muted hover:bg-surface-muted hover:text-text transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <Tabs defaultValue="geral" className="flex h-full flex-col">
+                <div className="border-b border-border bg-surface/30 px-6 py-3">
+                  <TabsList>
+                    <TabsTrigger value="geral">
+                      <LayoutTemplate className="mr-2 h-4 w-4" />
+                      Geral
+                    </TabsTrigger>
+                    {templateEditorMode === "edit" && selectedTemplate ? (
+                      <TabsTrigger value="documentos">
+                        <FilePlus2 className="mr-2 h-4 w-4" />
+                        Documentos
+                      </TabsTrigger>
+                    ) : null}
+                    {templateEditorMode === "edit" && selectedTemplate ? (
+                      <TabsTrigger value="configuracoes">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Configurações
+                      </TabsTrigger>
+                    ) : null}
+                  </TabsList>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6">
+                  <TabsContent value="geral" className="mt-0 space-y-5 focus:outline-none">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="block space-y-1.5 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Nome</span>
+                        <input
+                          value={templateName}
+                          onChange={(event) => setTemplateName(event.target.value)}
+                          placeholder="Checklist admissional padrão"
+                          className="w-full rounded-xl border border-border px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </label>
+                      <label className="block space-y-1.5 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Tipo de admissão</span>
+                        <input
+                          value={templateAdmissionType}
+                          onChange={(event) => setTemplateAdmissionType(event.target.value)}
+                          placeholder="CLT, estágio, aprendiz..."
+                          className="w-full rounded-xl border border-border px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="block space-y-1.5 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Descrição</span>
+                      <textarea
+                        value={templateDescription}
+                        onChange={(event) => setTemplateDescription(event.target.value)}
+                        rows={3}
+                        className="w-full rounded-xl border border-border px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"
+                      />
+                    </label>
+
+                    <label className="inline-flex items-center gap-2 text-sm font-medium text-text cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={templateIsDefault}
+                        onChange={(event) => setTemplateIsDefault(event.target.checked)}
+                        className="rounded border-border text-emerald-600 focus:ring-emerald-500"
+                      />
+                      Usar como checklist padrão
+                    </label>
+
+                    {templateFormError ? (
+                      <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{templateFormError}</p>
+                    ) : null}
+                  </TabsContent>
+
+                  {templateEditorMode === "edit" && selectedTemplate ? (
+                    <TabsContent value="documentos" className="mt-0 space-y-5 focus:outline-none">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-text">Lista de Documentos</h4>
+                        <Button type="button" size="sm" onClick={openDocumentCreate} disabled={saving || isDocumentEditorOpen} data-testid="checklist-item-add-btn">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Adicionar
+                        </Button>
+                      </div>
+
+                      {selectedTemplate.items.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-border p-8 text-center bg-surface-muted/30">
+                          <p className="text-sm font-medium text-text">Nenhum documento neste checklist</p>
+                          <p className="mt-1 text-[13px] text-text-muted mb-4 max-w-xs mx-auto">Comece adicionando o primeiro documento exigido para o candidato.</p>
+                          <Button type="button" onClick={openDocumentCreate} data-testid="checklist-item-empty-add-btn">
+                            Adicionar documento
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
+                          <table className="w-full text-left text-sm">
+                            <thead className="bg-surface/50 text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b border-border/60">
+                              <tr>
+                                <th className="px-4 py-2 font-medium">Documento</th>
+                                <th className="px-4 py-2 font-medium">Obrigatório</th>
+                                <th className="px-4 py-2 font-medium text-right">Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/60">
+                              {selectedTemplate.items.map((item, index) => {
+                                const isFirst = index === 0;
+                                const isLast = index === selectedTemplate.items.length - 1;
+                                const isEditing = editingDocumentId === item.id;
+                                return (
+                                  <tr key={item.id} className={`transition-colors hover:bg-surface/30 ${isEditing ? "bg-emerald-50/50" : ""}`}>
+                                    <td className="px-4 py-2">
+                                      <div className="font-medium text-text">{item.title}</div>
+                                      <code className="text-[10px] text-text-muted mt-0.5">{item.document_key}</code>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap">
+                                      {item.is_required ? (
+                                        <span className="text-amber-700 text-[11px] font-medium border border-amber-200 bg-amber-50 px-1.5 py-0.5 rounded">Sim</span>
+                                      ) : (
+                                        <span className="text-slate-500 text-[11px] border border-slate-200 bg-slate-50 px-1.5 py-0.5 rounded">Não</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                                      <div className="flex items-center justify-end">
+                                        <button
+                                          type="button"
+                                          disabled={saving || isFirst}
+                                          onClick={() => handleReorderItem(item, "up")}
+                                          className="p-1.5 text-text-muted hover:text-text disabled:opacity-30 disabled:hover:text-text-muted rounded-md hover:bg-surface-muted transition-colors"
+                                          title="Subir"
+                                        >
+                                          <ArrowUp className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={saving || isLast}
+                                          onClick={() => handleReorderItem(item, "down")}
+                                          className="p-1.5 text-text-muted hover:text-text disabled:opacity-30 disabled:hover:text-text-muted rounded-md hover:bg-surface-muted transition-colors"
+                                          title="Descer"
+                                        >
+                                          <ArrowDown className="h-3.5 w-3.5" />
+                                        </button>
+                                        <div className="w-px h-3 bg-border/80 mx-1" />
+                                        <button
+                                          type="button"
+                                          onClick={() => openDocumentEdit(item)}
+                                          className="p-1.5 text-text-muted hover:text-emerald-700 rounded-md hover:bg-surface-muted transition-colors"
+                                          title="Editar"
+                                          data-testid={`edit-item-${item.id}`}
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={saving}
+                                          onClick={() => handleRemoveItem(item.id)}
+                                          className="p-1.5 text-text-muted hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                                          title="Remover"
+                                          data-testid={`remove-item-${item.id}`}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </TabsContent>
+                  ) : null}
+
+                  {templateEditorMode === "edit" && selectedTemplate ? (
+                    <TabsContent value="configuracoes" className="mt-0 space-y-6 focus:outline-none">
+                      <div className="rounded-xl border border-border p-5 bg-surface-muted/10">
+                        <h4 className="text-sm font-semibold text-text mb-4">Ações Avançadas do Checklist</h4>
+                        <div className="flex flex-col gap-3">
+                          <Button type="button" variant="outline" className="w-fit" onClick={() => void handleDuplicateTemplate()} disabled={saving}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            Duplicar este checklist
+                          </Button>
+                          <Button type="button" variant="outline" className="w-fit border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void handleArchiveTemplate()} disabled={saving}>
+                            <Archive className="mr-2 h-4 w-4" />
+                            Arquivar este checklist
+                          </Button>
+                        </div>
+                      </div>
+                    </TabsContent>
+                  ) : null}
+                </div>
+              </Tabs>
+            </div>
+
+            <div className="border-t border-border p-5 flex justify-end gap-3 bg-white">
+              <Button type="button" variant="outline" onClick={closeTemplateEditor} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void handleSaveTemplateEditor()} disabled={saving}>
+                <Save className="mr-2 h-4 w-4" />
+                {templateEditorMode === "create" ? "Criar checklist" : "Salvar alterações"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer / Modal de Edição de Documento sob demanda */}
+      {isDocumentEditorOpen && selectedTemplate && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div 
+            className="absolute inset-0 bg-slate-950/30 backdrop-blur-[2px] transition-opacity" 
+            onClick={closeDocumentEditor}
+            aria-hidden="true"
+          />
+          <div 
+            className="relative w-full max-w-md h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right-8 duration-300"
+            role="dialog"
+            aria-label={documentEditorMode === "create" ? "Adicionar documento" : "Editar documento"}
+            data-testid="checklist-item-create-form"
+          >
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <h3 className="text-lg font-semibold text-text">
+                {documentEditorMode === "create" ? "Adicionar documento" : "Editar documento"}
+              </h3>
+              <button 
+                onClick={closeDocumentEditor}
+                className="rounded-full p-2 text-text-muted hover:bg-surface-muted hover:text-text transition-colors"
+                data-testid="close-editor-btn"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+              <label className="block space-y-1.5 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Chave do documento</span>
+                <input
+                  value={documentDraft.document_key}
+                  onChange={(event) => setDocumentDraft((current) => ({ ...current, document_key: event.target.value }))}
+                  placeholder="ex: rg, cpf, cnh"
+                  className="w-full rounded-xl border border-border px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+              </label>
+
+              <label className="block space-y-1.5 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Título visível</span>
+                <input
+                  value={documentDraft.title}
+                  onChange={(event) => setDocumentDraft((current) => ({ ...current, title: event.target.value }))}
+                  placeholder="Ex: RG (Registro Geral)"
+                  className="w-full rounded-xl border border-border px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+              </label>
+
+              <label className="block space-y-1.5 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Descrição ou instruções
+                </span>
+                <textarea
+                  value={documentDraft.candidate_description}
+                  onChange={(event) =>
+                    setDocumentDraft((current) => ({ ...current, candidate_description: event.target.value }))
+                  }
+                  rows={3}
+                  placeholder="Instruções públicas que o candidato verá..."
+                  className="w-full rounded-xl border border-border px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"
+                />
+              </label>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Formatos aceitos
+                </p>
+                <div className="flex flex-col gap-2">
+                  {FILE_TYPE_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm cursor-pointer transition-colors ${
+                        documentDraft.accepted_file_types.includes(option.value) 
+                          ? "border-emerald-500 bg-emerald-50/50" 
+                          : "border-border hover:border-emerald-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={documentDraft.accepted_file_types.includes(option.value)}
+                        onChange={() => handleToggleFileType(option.value)}
+                        className="rounded border-border text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="font-medium text-text">{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block space-y-1.5 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Tamanho máximo
+                  </span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={documentDraft.max_file_size_mb}
+                      onChange={(event) =>
+                        setDocumentDraft((current) => ({
+                          ...current,
+                          max_file_size_mb: Number(event.target.value) || 1,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-border px-3 py-2 pr-10 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-text-muted pointer-events-none">
+                      MB
+                    </span>
+                  </div>
+                </label>
+                
+                <div className="flex flex-col justify-end pb-1.5">
+                  <label className="flex items-center gap-2 text-sm font-medium text-text cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={documentDraft.is_required}
+                      onChange={(event) =>
+                        setDocumentDraft((current) => ({ ...current, is_required: event.target.checked }))
+                      }
+                      className="rounded border-border text-emerald-600 focus:ring-emerald-500"
+                    />
+                    Obrigatório
+                  </label>
+                </div>
+              </div>
+
+              {documentError ? (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {documentError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="border-t border-border bg-surface/50 p-6 flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={closeDocumentEditor} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void handleSaveDocument()} disabled={saving} data-testid="save-item-btn">
+                <Save className="mr-2 h-4 w-4" />
+                {documentEditorMode === "create" ? "Adicionar" : "Salvar"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
