@@ -21,7 +21,20 @@ export type AiAssistantHistorySource =
   | "suggestion"
   | "knowledge_manual"
   | "text_intent"
-  | "composite_intent";
+  | "composite_intent"
+  | "local_answer";
+
+export type AiAssistantLocalNextAction = {
+  label: string;
+  href: string;
+};
+
+export type AiAssistantLocalAnswer = {
+  kind: "local_answer";
+  label: string;
+  answer: string;
+  nextActions?: AiAssistantLocalNextAction[];
+};
 
 export type AiCompositeStep = {
   id: string;
@@ -88,6 +101,7 @@ export type AiAssistantHistoryItem = {
   query: string | null;
   summary: string;
   result: AiAssistantResponse | null;
+  localAnswer?: AiAssistantLocalAnswer | null;
   compositeResult?: AiCompositeExecutionResult | null;
   errorMessage: string | null;
 };

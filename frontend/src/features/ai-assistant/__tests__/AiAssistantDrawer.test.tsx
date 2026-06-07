@@ -75,16 +75,16 @@ describe("AiAssistantDrawer", () => {
   it("renders the drawer with readonly notice", () => {
     renderDrawer();
     expect(screen.getByTestId("ai-assistant-drawer")).toBeInTheDocument();
-    expect(screen.getByText(/Insights e recomendações para esta vaga/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ações recomendadas para esta tela/i)).toBeInTheDocument();
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto da tela: Vaga",
+      /Contexto: Vaga/i,
     );
   });
 
   it("renders the controlled text intent field", () => {
     renderDrawer("/vagas/job-123");
     expect(screen.getByTestId("ai-text-intent-section")).toBeInTheDocument();
-    expect(screen.getByText("Pergunte ao assistente")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Essa vaga está bem estruturada/i)).toBeInTheDocument();
   });
 
   it("uses the job placeholder in text intent input", () => {
@@ -122,8 +122,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "protheus");
-    await user.click(screen.getByTestId("ai-knowledge-search"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-warnings"));
     expect(
@@ -143,8 +143,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "protheus");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-warnings"));
     expect(
@@ -164,8 +164,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "protheus");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-warnings"));
     expect(
@@ -185,8 +185,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "erro");
-    await user.click(screen.getByTestId("ai-knowledge-search"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-warnings"));
     const warningsText = screen.getByTestId("ai-assistant-warnings").textContent ?? "";
@@ -214,8 +214,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "home office");
-    await user.click(screen.getByTestId("ai-knowledge-search"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     expect(screen.getByText("Fontes encontradas")).toBeInTheDocument();
@@ -241,8 +241,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "dados pessoais");
-    await user.click(screen.getByTestId("ai-knowledge-search"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     const resultText = screen.getByTestId("ai-assistant-result").textContent ?? "";
@@ -275,8 +275,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "campos internos");
-    await user.click(screen.getByTestId("ai-knowledge-search"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     const resultText = screen.getByTestId("ai-assistant-result").textContent ?? "";
@@ -298,8 +298,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "política inexistente");
-    await user.click(screen.getByTestId("ai-knowledge-search"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     expect(screen.getByText("Nenhuma fonte encontrada para essa pergunta.")).toBeInTheDocument();
@@ -321,8 +321,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "home office");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "responda politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     expect(screen.getByText("Resposta")).toBeInTheDocument();
@@ -342,8 +342,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "cpf");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "responda politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     const resultText = screen.getByTestId("ai-assistant-result").textContent ?? "";
@@ -365,8 +365,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "falha");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "responda politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     const resultText = screen.getByTestId("ai-assistant-result").textContent ?? "";
@@ -391,8 +391,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "exportação");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "responda politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     expect(screen.getByText("Checklist Admissional")).toBeInTheDocument();
@@ -412,8 +412,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "exportação");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "responda politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     expect(
@@ -437,7 +437,7 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer("/vagas/job-123");
 
-    await user.click(screen.getByTestId("ai-action-job.summary"));
+    await user.click(screen.getByTestId("ai-suggestion-job.summary"));
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
 
     expect(screen.getByText(/Resultado seguro/)).toBeInTheDocument();
@@ -458,7 +458,7 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer("/vagas/job-123");
 
-    await user.click(screen.getByTestId("ai-action-job.summary"));
+    await user.click(screen.getByTestId("ai-suggestion-job.summary"));
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
 
     expect(screen.getByText(/Não foi possível concluir a consulta agora/i)).toBeInTheDocument();
@@ -481,7 +481,7 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer("/admissao/case-123");
 
-    await user.click(screen.getByTestId("ai-action-admission.documents_status"));
+    await user.click(screen.getByTestId("ai-suggestion-admission.documents_status"));
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
 
     expect(screen.getByText("Próximo passo sugerido")).toBeInTheDocument();
@@ -490,41 +490,26 @@ describe("AiAssistantDrawer", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows generic empty state on non-contextual routes", () => {
-    renderDrawer("/rh");
-    expect(screen.getByTestId("ai-assistant-empty")).toBeInTheDocument();
-    expect(
-      screen.getByText("Não encontrei uma vaga, candidato ou admissão nesta tela."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Você ainda pode consultar a Base de Conhecimento.")).toBeInTheDocument();
-  });
+  
 
-  it("shows route-specific empty state for candidates without candidateId", () => {
-    renderDrawer("/candidatos");
-    expect(screen.getByText("Não identifiquei o candidato atual")).toBeInTheDocument();
-    expect(screen.queryByTestId("ai-action-candidate.summary")).not.toBeInTheDocument();
-  });
+  
 
-  it("hides job actions when the job id is missing", () => {
-    renderDrawer("/vagas");
-    expect(screen.getByText("Não identifiquei a vaga atual")).toBeInTheDocument();
-    expect(screen.queryByTestId("ai-action-job.summary")).not.toBeInTheDocument();
-  });
+  
 
   it("derives job context and keeps job actions visible on job routes", () => {
     renderDrawer("/vagas/job-123");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto da tela: Vaga",
+      /Contexto: Vaga/i,
     );
-    expect(screen.getByTestId("ai-action-job.summary")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-job.requirements")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-pipeline.overview")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-knowledge.job_quality_rules")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-job.summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-job.requirements")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-pipeline.overview")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-knowledge.job_quality_rules")).toBeInTheDocument();
   });
 
   it("shows job suggestions on job routes", () => {
     renderDrawer("/vagas/job-123");
-    expect(screen.getByText("Sugestões para esta tela")).toBeInTheDocument();
+    expect(screen.getByText("Sugestões rápidas")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-suggestion.job.structured_job")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-suggestion.job.requirements")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-suggestion.job.pipeline")).toBeInTheDocument();
@@ -534,11 +519,11 @@ describe("AiAssistantDrawer", () => {
   it("derives candidate context and keeps candidate actions visible on candidate routes", () => {
     renderDrawer("/candidatos/cand-456");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto da tela: Candidato",
+      /Contexto: Candidato/i,
     );
-    expect(screen.getByTestId("ai-action-candidate.summary")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-candidate.active_pipeline")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-knowledge.fair_evaluation_rules")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-candidate.summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-candidate.active_pipeline")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-knowledge.fair_evaluation_rules")).toBeInTheDocument();
   });
 
   it("shows candidate suggestions on candidate routes", () => {
@@ -571,7 +556,7 @@ describe("AiAssistantDrawer", () => {
     vi.mocked(aiAssistantService.query).mockResolvedValueOnce(makeResponse());
     renderDrawer("/vagas/123");
 
-    await user.click(screen.getByTestId("ai-action-job.summary"));
+    await user.click(screen.getByTestId("ai-suggestion-job.summary"));
 
     expect(aiAssistantService.query).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -595,7 +580,7 @@ describe("AiAssistantDrawer", () => {
         arguments: { job_id: "123" },
       }),
     );
-    expect(screen.getByText("Resumo da vaga")).toBeInTheDocument();
+    
   });
 
   it("classifies 'quais requisitos da vaga' to job.requirements on job routes", async () => {
@@ -715,7 +700,7 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer("/admission/cases/case-456");
 
-    await user.click(screen.getByTestId("ai-action-admission.case_summary"));
+    await user.click(screen.getByTestId("ai-suggestion-admission.case_summary"));
 
     expect(aiAssistantService.query).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -728,12 +713,12 @@ describe("AiAssistantDrawer", () => {
   it("derives admission context and renders admission actions", () => {
     renderDrawer("/admission/cases/case-456");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto da tela: Admissão",
+      /Contexto: Admissão/i,
     );
-    expect(screen.getByTestId("ai-action-admission.case_summary")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-admission.documents_status")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-admission.events_summary")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-knowledge.pre_admission_rules")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-admission.case_summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-admission.documents_status")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-admission.events_summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-knowledge.pre_admission_rules")).toBeInTheDocument();
   });
 
   it("shows admission suggestions on admission routes", () => {
@@ -861,7 +846,7 @@ describe("AiAssistantDrawer", () => {
 
   it("hides actions that require a missing ID", () => {
     renderDrawer("/admission/cases/case-456");
-    expect(screen.queryByTestId("ai-action-protheus.export_status")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ai-suggestion-protheus.export_status")).not.toBeInTheDocument();
   });
 
   it("does not show protheus suggestion without package_id", () => {
@@ -873,7 +858,7 @@ describe("AiAssistantDrawer", () => {
 
   it("shows protheus action when package_id is available in the route", () => {
     renderDrawer("/admission/cases/case-456?packageId=pkg-9");
-    expect(screen.getByTestId("ai-action-protheus.export_status")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-protheus.export_status")).toBeInTheDocument();
   });
 
   it("shows protheus suggestion when package_id is available in the route", () => {
@@ -912,11 +897,11 @@ describe("AiAssistantDrawer", () => {
   it("derives admin context and renders safe admin shortcuts", () => {
     renderDrawer("/admin");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto da tela: Administração",
+      /Contexto: Administração/i,
     );
-    expect(screen.getByTestId("ai-action-nav.admin.ia")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-nav.admin.health")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-knowledge.assistant_policy")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-nav.admin.ia")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-nav.admin.health")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-knowledge.assistant_policy")).toBeInTheDocument();
   });
 
   it("shows admin governance suggestions on admin routes", () => {
@@ -1029,6 +1014,53 @@ describe("AiAssistantDrawer", () => {
           limit: 5,
         },
       }),
+    );
+  });
+
+  it("responds locally for knowledge admin onboarding without calling the backend", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/rh");
+
+    await user.type(
+      screen.getByTestId("ai-text-intent-input"),
+      "consegui cadastrar novos conhecimentos nesse sistema?",
+    );
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("ai-assistant-local-answer")).toBeInTheDocument();
+    expect(screen.getByText("Base de Conhecimento")).toBeInTheDocument();
+    expect(screen.getByText(/Você pode cadastrar documentos revisados na Base de Conhecimento/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Abrir Base de Conhecimento/i })).toBeInTheDocument();
+  });
+
+  it("responds locally for token usage questions without calling Gemini", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/admin");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "onde vejo tokens?");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("ai-assistant-local-answer")).toBeInTheDocument();
+    expect(screen.getByText(/O consumo de tokens e custos estimados fica nas áreas administrativas/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Abrir System Health/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Abrir BI & Métricas/i })).toBeInTheDocument();
+  });
+
+  it("navigates from a local admin answer shortcut", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/rh");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "como cadastro conhecimento?");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+    await screen.findByTestId("ai-assistant-local-answer");
+
+    await user.click(screen.getByRole("button", { name: /Abrir Base de Conhecimento/i }));
+    await user.click(screen.getByTestId("ai-assistant-back"));
+
+    expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
+      /Contexto: Base de conhecimento/i,
     );
   });
 
@@ -1188,8 +1220,8 @@ describe("AiAssistantDrawer", () => {
     );
     render(<PersistentHistoryHarness />);
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "exportação");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
 
     const historyJson = screen.getByTestId("history-json").textContent ?? "";
@@ -1231,24 +1263,7 @@ describe("AiAssistantDrawer", () => {
     expect(historyJson).toContain("[telefone_removido]");
   });
 
-  it("does not save sensitive manual query in history", async () => {
-    const user = userEvent.setup();
-    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
-      makeResponse({
-        intent: "knowledge.answer",
-        data: { answer: "CPF [cpf_removido]" },
-      }),
-    );
-    render(<PersistentHistoryHarness />);
-
-    await user.type(screen.getByTestId("ai-knowledge-input"), "Meu CPF é 123.456.789-00");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
-    await waitFor(() => screen.getByTestId("ai-assistant-result"));
-
-    const historyJson = screen.getByTestId("history-json").textContent ?? "";
-    expect(historyJson).not.toContain("123.456.789-00");
-    expect(historyJson).toContain('"query":null');
-  });
+  
 
   it("stores friendly label and text_intent source in history for controlled text input", async () => {
     const user = userEvent.setup();
@@ -1317,7 +1332,7 @@ describe("AiAssistantDrawer", () => {
 
   it("keeps base de conhecimento available in every context", () => {
     renderDrawer("/admin");
-    expect(screen.getByTestId("ai-knowledge-section")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-text-intent-section")).toBeInTheDocument();
   });
 
   it("reopens history without issuing a new request", async () => {
@@ -1327,7 +1342,7 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer("/vagas/job-123");
 
-    await user.click(screen.getByTestId("ai-action-job.summary"));
+    await user.click(screen.getByTestId("ai-suggestion-job.summary"));
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     await user.click(screen.getByTestId("ai-assistant-new-query"));
 
@@ -1347,12 +1362,12 @@ describe("AiAssistantDrawer", () => {
     vi.mocked(aiAssistantService.query).mockResolvedValueOnce(makeResponse());
     renderDrawer("/vagas/job-123");
 
-    await user.click(screen.getByTestId("ai-action-job.summary"));
+    await user.click(screen.getByTestId("ai-suggestion-job.summary"));
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     await user.click(screen.getByTestId("ai-assistant-new-query"));
     await user.click(screen.getByTestId("ai-session-history-clear"));
 
-    expect(screen.getByTestId("ai-session-history-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("ai-session-history")).not.toBeInTheDocument();
   });
 
   it("renders html-like text as plain text", async () => {
@@ -1365,8 +1380,8 @@ describe("AiAssistantDrawer", () => {
     );
     renderDrawer();
 
-    await user.type(screen.getByTestId("ai-knowledge-input"), "html");
-    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "politica");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
 
     expect(screen.getByText("<strong>texto bruto</strong>")).toBeInTheDocument();

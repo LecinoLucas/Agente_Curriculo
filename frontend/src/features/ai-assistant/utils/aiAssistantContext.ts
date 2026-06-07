@@ -410,6 +410,12 @@ function buildAdminContext(pathname: string): AiAssistantPageContext {
     emptyDescription: "",
     availableActions: [
       buildNavigationAction(
+        "nav.admin.knowledge",
+        "Abrir Base de Conhecimento",
+        "Cadastre documentos revisados e reindexe a base administrativa do Assistente.",
+        "/admin/conhecimento",
+      ),
+      buildNavigationAction(
         "nav.admin.ia",
         "Abrir Laboratório IA",
         "Ver status do provider, limites e governança em Administração.",
@@ -420,6 +426,18 @@ function buildAdminContext(pathname: string): AiAssistantPageContext {
         "Abrir Saúde do sistema",
         "Consultar saúde técnica, filas e indicadores disponíveis para IA.",
         "/admin/health",
+      ),
+      buildNavigationAction(
+        "nav.admin.credentials",
+        "Abrir Credenciais IA",
+        "Gerenciar chaves e credenciais de provider sem expor segredos já salvos.",
+        "/admin/ai-provider-credentials",
+      ),
+      buildNavigationAction(
+        "nav.admin.bi",
+        "Abrir BI & Métricas",
+        "Consultar métricas agregadas e acompanhamento administrativo de uso.",
+        "/admin/bi",
       ),
       buildKnowledgeAction(
         "knowledge.assistant_policy",
@@ -455,6 +473,13 @@ function buildAdminContext(pathname: string): AiAssistantPageContext {
         "Abrir Credenciais IA",
         "Abra a tela administrativa para gerenciar chaves sem expor segredos já salvos.",
         "/admin/ai-provider-credentials",
+        "suggestions",
+      ),
+      buildNavigationAction(
+        "suggestion.admin.knowledge",
+        "Abrir Base de Conhecimento",
+        "Abra a área segura para cadastrar documentos revisados e reindexar o RAG.",
+        "/admin/conhecimento",
         "suggestions",
       ),
     ],

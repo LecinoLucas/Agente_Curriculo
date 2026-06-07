@@ -1,4 +1,9 @@
-import type { AiAssistantContextAction, AiAssistantPageContext } from "../types";
+import type {
+  AiAssistantContextAction,
+  AiAssistantLocalAnswer,
+  AiAssistantLocalNextAction,
+  AiAssistantPageContext,
+} from "../types";
 
 const MAX_INPUT_LENGTH = 300;
 
@@ -32,6 +37,11 @@ export type ClassifiedAssistantIntent =
       action: Extract<AiAssistantContextAction, { kind: "assistant" | "knowledge" }>;
       normalizedInput: string;
     }
+  | ({
+      status: "local_answer";
+      reason: string;
+      normalizedInput: string;
+    } & AiAssistantLocalAnswer)
   | {
       status: "blocked" | "invalid" | "unclassified";
       message: string;
@@ -67,6 +77,18 @@ function buildKnowledgeAction(query: string, label = "Consulta na Base de Conhec
   };
 }
 
+function buildKnowledgeAnswerAction(query: string, label = "Responder pergunta") {
+  return {
+    id: "text-intent-knowledge-answer",
+    kind: "knowledge" as const,
+    label,
+    description: query,
+    intent: "knowledge.answer" as const,
+    query,
+    arguments: { query },
+  };
+}
+
 function buildAssistantAction(
   id: string,
   label: string,
@@ -88,6 +110,174 @@ function buildAssistantAction(
 
 function includesAny(input: string, terms: string[]): boolean {
   return terms.some((term) => input.includes(term));
+}
+
+function buildLocalAnswer(params: {
+  label: string;
+  answer: string;
+  reason: string;
+  normalizedInput: string;
+  nextActions?: AiAssistantLocalNextAction[];
+}): ClassifiedAssistantIntent {
+  return {
+    status: "local_answer",
+    kind: "local_answer",
+    label: params.label,
+    answer: params.answer,
+    reason: params.reason,
+    normalizedInput: params.normalizedInput,
+    nextActions: params.nextActions,
+  };
+}
+
+function classifyAdministrativeLocalIntent(input: string): ClassifiedAssistantIntent | null {
+  const asksAboutKnowledgeBase = includesAny(input, [
+    "cadastrar novos conhecimentos",
+    "cadastro conhecimento",
+    "cadastro de conhecimento",
+    "adiciono documento na base",
+    "adicionar documento na base",
+    "alimento a base de conhecimento",
+    "ensino o assistente",
+    "coloco informacao para o assistente responder",
+    "coloco informação para o assistente responder",
+    "cadastro documento do rag",
+    "cadastrar documento do rag",
+    "base de conhecimento",
+  ]);
+
+  if (
+    asksAboutKnowledgeBase &&
+    includesAny(input, [
+      "consigo",
+      "como",
+      "onde",
+      "cadastro",
+      "cadastrar",
+      "adiciono",
+      "adicionar",
+      "alimento",
+      "ensino",
+      "coloco",
+    ])
+  ) {
+    return buildLocalAnswer({
+      label: "Base de Conhecimento",
+      reason: "A pergunta pede orientação administrativa sobre cadastro de documentos no RAG.",
+      normalizedInput: input,
+      answer:
+        "Sim. Você pode cadastrar documentos revisados na Base de Conhecimento em Administração > Base de Conhecimento. Clique em Novo documento, informe título, domínio, tipo de fonte e conteúdo. Não inclua CPF, telefone, e-mail real, currículos, documentos pessoais, segredos, payloads internos, vector_json ou embeddings. Depois salve e reindexe para o conteúdo ficar disponível nas buscas do Assistente.",
+      nextActions: [{ label: "Abrir Base de Conhecimento", href: "/admin/conhecimento" }],
+    });
+  }
+
+  if (
+    includesAny(input, ["reindexar documento", "reindexar", "reindexo", "reprocessar documento"]) &&
+    includesAny(input, ["documento", "base", "conhecimento", "rag"])
+  ) {
+    return buildLocalAnswer({
+      label: "Reindexação de documento",
+      reason: "A pergunta pede o fluxo administrativo de reindexação da base.",
+      normalizedInput: input,
+      answer:
+        "A reindexação é manual. Abra Administração > Base de Conhecimento, localize o documento revisado e use a ação de reindexar. Isso atualiza os chunks e embeddings para que o conteúdo novo apareça nas consultas do Assistente. Evite reindexar conteúdo com dados pessoais, segredos ou payloads internos.",
+      nextActions: [{ label: "Abrir Base de Conhecimento", href: "/admin/conhecimento" }],
+    });
+  }
+
+  if (includesAny(input, ["onde vejo tokens", "quanto estou gastando de ia", "gasto de ia", "uso de tokens", "usage"])) {
+    return buildLocalAnswer({
+      label: "Uso de IA",
+      reason: "A pergunta pede consumo administrativo de IA e tokens.",
+      normalizedInput: input,
+      answer:
+        "O consumo de tokens e custos estimados fica nas áreas administrativas de monitoramento. Use o System Health para saúde operacional e a área de BI para volume agregado. Essas telas mostram uso registrado, falhas e consumo por período sem chamar o provider.",
+      nextActions: [
+        { label: "Abrir System Health", href: "/admin/health" },
+        { label: "Abrir BI & Métricas", href: "/admin/bi" },
+      ],
+    });
+  }
+
+  if (includesAny(input, ["gemini esta ativo", "gemini está ativo", "gemini configurado", "provider de ia", "provider ativo"])) {
+    return buildLocalAnswer({
+      label: "Status do provider de IA",
+      reason: "A pergunta pede status administrativo do provider, sem exigir consulta ao modelo.",
+      normalizedInput: input,
+      answer:
+        "Você pode verificar se o Gemini está configurado e se a camada de IA está operacional nas telas administrativas. O Laboratório IA mostra o estado do ambiente de IA, e o System Health concentra sinais operacionais e warnings do provider.",
+      nextActions: [
+        { label: "Abrir Laboratório IA", href: "/admin/ia" },
+        { label: "Abrir System Health", href: "/admin/health" },
+      ],
+    });
+  }
+
+  if (includesAny(input, ["configuro a chave da ia", "configurar chave da ia", "configuro a chave", "onde fica a chave", "credenciais ia"])) {
+    return buildLocalAnswer({
+      label: "Credenciais IA",
+      reason: "A pergunta pede a tela administrativa de credenciais do provider.",
+      normalizedInput: input,
+      answer:
+        "As chaves da IA são gerenciadas em Administração > Credenciais IA. Nessa tela você cadastra e rotaciona chaves Gemini e Claude sem reexibir o segredo salvo. O assistente não mostra nem grava credenciais por chat.",
+      nextActions: [{ label: "Abrir Credenciais IA", href: "/admin/ai-provider-credentials" }],
+    });
+  }
+
+  if (includesAny(input, ["como testar a ia", "testar a ia", "testar o assistente", "laboratorio ia", "laboratório ia"])) {
+    return buildLocalAnswer({
+      label: "Laboratório IA",
+      reason: "A pergunta pede a área segura de teste e diagnóstico da IA.",
+      normalizedInput: input,
+      answer:
+        "Os testes controlados da IA ficam em Administração > Laboratório IA. Use essa área para validar configuração, comportamento read-only e respostas internas sem transformar o chat em ferramenta de escrita operacional.",
+      nextActions: [{ label: "Abrir Laboratório IA", href: "/admin/ia" }],
+    });
+  }
+
+  if (includesAny(input, ["onde vejo erros da ia", "erros da ia", "falhas da ia", "warnings da ia"])) {
+    return buildLocalAnswer({
+      label: "Erros e warnings de IA",
+      reason: "A pergunta pede observabilidade administrativa da camada de IA.",
+      normalizedInput: input,
+      answer:
+        "Os erros, warnings e sinais operacionais da IA devem ser verificados nas telas administrativas de monitoramento. O System Health mostra disponibilidade, falhas e métricas operacionais. O Laboratório IA ajuda a validar comportamento e configuração do ambiente.",
+      nextActions: [
+        { label: "Abrir System Health", href: "/admin/health" },
+        { label: "Abrir Laboratório IA", href: "/admin/ia" },
+      ],
+    });
+  }
+
+  if (includesAny(input, ["assistente pode executar acoes", "assistente pode executar ações", "assistente pode agir sozinho"])) {
+    return buildLocalAnswer({
+      label: "Limites do assistente",
+      reason: "A pergunta pede esclarecimento sobre limites operacionais do assistente.",
+      normalizedInput: input,
+      answer:
+        "Não. Nesta fase o assistente é read-only. Ele pode consultar contexto seguro, buscar fontes e orientar próximos passos, mas não salva dados, não aprova fluxos, não cadastra documentos e não dispara integrações automaticamente.",
+      nextActions: [
+        { label: "Abrir Laboratório IA", href: "/admin/ia" },
+        { label: "Abrir Base de Conhecimento", href: "/admin/conhecimento" },
+      ],
+    });
+  }
+
+  if (includesAny(input, ["assistente pode exportar protheus", "exportar protheus", "protheus pelo assistente"])) {
+    return buildLocalAnswer({
+      label: "Exportação Protheus",
+      reason: "A pergunta pede o limite operacional do assistente sobre integração externa.",
+      normalizedInput: input,
+      answer:
+        "Não. O assistente não executa exportação para Protheus nem outras ações externas. Ele pode apenas explicar regras, status e próximos passos seguros com base no contexto disponível e na documentação interna.",
+      nextActions: [
+        { label: "Abrir Laboratório IA", href: "/admin/ia" },
+        { label: "Abrir Base de Conhecimento", href: "/admin/conhecimento" },
+      ],
+    });
+  }
+
+  return null;
 }
 
 function classifyJobIntent(
@@ -420,6 +610,19 @@ function classifyProtheusIntent(
 }
 
 function classifyKnowledgeIntent(input: string): ClassifiedAssistantIntent | null {
+  if (includesAny(input, ["responda", "explique", "resuma"])) {
+    return {
+      status: "classified",
+      confidence: "medium",
+      intent: "knowledge.answer",
+      label: "Responder pergunta",
+      description: "Consulta segura com resposta baseada nas fontes.",
+      reason: "A pergunta pede uma resposta elaborada.",
+      action: buildKnowledgeAnswerAction(input),
+      normalizedInput: input,
+    };
+  }
+
   if (
     includesAny(input, [
       "quais criterios",
@@ -432,7 +635,6 @@ function classifyKnowledgeIntent(input: string): ClassifiedAssistantIntent | nul
       "politica",
       "base de conhecimento",
       "quais documentos precisam estar aprovados",
-      "como avaliar sem vies",
       "como avaliar sem vies",
     ])
   ) {
@@ -489,6 +691,9 @@ export function classifyAssistantTextInput(
     (context.domain === "admission" ? classifyAdmissionIntent(normalizedInput, context) : null);
 
   if (contextual) return contextual;
+
+  const localAdministrative = classifyAdministrativeLocalIntent(normalizedInput);
+  if (localAdministrative) return localAdministrative;
 
   const knowledge = classifyKnowledgeIntent(normalizedInput);
   if (knowledge) return knowledge;
