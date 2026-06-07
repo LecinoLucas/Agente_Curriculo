@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Database, Gauge, HeartPulse, RefreshCw, Server, TriangleAlert } from "lucide-react";
+import { Activity, Database, Gauge, HeartPulse, Server, TriangleAlert } from "lucide-react";
 
-import { SimpleBarChart } from "../components/charts/SimpleBarChart";
 import { SimpleDonutChart } from "../components/charts/SimpleDonutChart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/common/PageHeader";
+import { AiUsagePanel } from "../features/ai-settings/components/AiUsagePanel";
 import { useAsyncState } from "../hooks/useAsyncState";
 import {
   type AIPricingCatalog,
-  type AIUsageSummary,
   type DatabaseHealth,
   type HealthOverview,
   type QueueHealth,
@@ -29,14 +28,6 @@ const TAB_ITEMS: Array<{ key: HealthTab; label: string }> = [
   { key: "queues", label: "Filas" },
   { key: "database", label: "Banco" },
   { key: "errors", label: "Erros" },
-];
-
-const COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--success))",
-  "hsl(var(--warning))",
-  "hsl(var(--danger))",
-  "hsl(var(--info))",
 ];
 
 function formatNumber(value: number | null | undefined) {
@@ -170,15 +161,9 @@ type SystemHealthPageProps = {
 
 export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps = {}) {
   const [activeTab, setActiveTab] = useState<HealthTab>("overview");
-  const [aiFilters, setAiFilters] = useState({
-    date_from: "",
-    date_to: "",
-    provider: "",
-    model: "",
-  });
+  const [aiUsageRefreshKey, setAiUsageRefreshKey] = useState(0);
 
   const { data: overviewData, error: overviewError, loading: overviewLoading, run: runOverview } = useAsyncState<HealthOverview>();
-  const { data: aiUsageData, error: aiUsageError, loading: aiUsageLoading, run: runAIUsage } = useAsyncState<AIUsageSummary>();
   const { data: queuesData, error: queuesError, loading: queuesLoading, run: runQueues } = useAsyncState<QueueHealth>();
   const { data: databaseData, error: databaseError, loading: databaseLoading, run: runDatabase } = useAsyncState<DatabaseHealth>();
   const { data: errorsData, error: errorsError, loading: errorsLoading, run: runErrors } = useAsyncState<SystemErrors>();
@@ -198,22 +183,6 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
     }
     return null;
   }, [runOverview]);
-
-  const loadAIUsage = useCallback(async () => {
-    try {
-      await runAIUsage(() =>
-        systemHealthService.getAIUsage({
-          date_from: aiFilters.date_from || undefined,
-          date_to: aiFilters.date_to || undefined,
-          provider: aiFilters.provider || undefined,
-          model: aiFilters.model || undefined,
-        }),
-      );
-    } catch {
-      return null;
-    }
-    return null;
-  }, [aiFilters.date_from, aiFilters.date_to, aiFilters.model, aiFilters.provider, runAIUsage]);
 
   const loadQueues = useCallback(async () => {
     try {
@@ -284,33 +253,22 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
         total: result.total_null_rows,
         skipped: result.skipped_unpriced,
       });
-      await loadAIUsage();
+      setAiUsageRefreshKey((current) => current + 1);
     } catch (error) {
       setBackfillStatus({
         kind: "error",
         message: error instanceof Error ? error.message : "Falha ao recalcular custos.",
       });
     }
-  }, [loadAIUsage]);
+  }, []);
 
   useEffect(() => {
-    if (activeTab === "ai" && !aiUsageData && !aiUsageLoading) void loadAIUsage();
     if (activeTab === "ai" && !pricingData) void loadPricing();
     if (activeTab === "ai" && !limitsData) void loadLimits();
     if (activeTab === "queues" && !queuesData && !queuesLoading) void loadQueues();
     if (activeTab === "database" && !databaseData && !databaseLoading) void loadDatabase();
     if (activeTab === "errors" && !errorsData && !errorsLoading) void loadErrors();
-  }, [activeTab, aiUsageData, aiUsageLoading, databaseData, databaseLoading, errorsData, errorsLoading, limitsData, loadAIUsage, loadDatabase, loadErrors, loadLimits, loadPricing, loadQueues, pricingData, queuesData, queuesLoading]);
-
-  const aiDailyUsageChartData = useMemo(
-    () => (aiUsageData?.daily_usage ?? []).map((item, index) => ({
-      label: item.date ?? "—",
-      value: item.total_tokens,
-      note: `${formatNumber(item.total_calls)} chamadas`,
-      color: COLORS[index % COLORS.length],
-    })),
-    [aiUsageData],
-  );
+  }, [activeTab, databaseData, databaseLoading, errorsData, errorsLoading, limitsData, loadDatabase, loadErrors, loadLimits, loadPricing, loadQueues, pricingData, queuesData, queuesLoading]);
   const databaseStatusChartData = useMemo(
     () => (databaseData?.analyses_by_status ?? []).map((item, index) => ({
       label: item.status,
@@ -435,57 +393,11 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
       ) : null}
 
       {activeTab === "ai" ? (
-        <SectionShell
-          title="IA / Tokens"
-          description="Consumo interno de chamadas registradas pelo sistema."
-          loading={aiUsageLoading}
-          error={aiUsageError}
-          onRetry={() => void loadAIUsage()}
-        >
-          {aiUsageData ? (
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-border bg-surface-muted/40 p-4 text-sm text-text-muted">
-                O consumo exibido é calculado a partir das chamadas registradas pelo sistema. Para billing oficial, consulte Google AI Studio ou Google Cloud Billing.
-              </div>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Filtros</CardTitle>
-                  <CardDescription>Refine o período, provider ou modelo para análise operacional.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-4">
-                  <input type="date" value={aiFilters.date_from} onChange={(event) => setAiFilters((prev) => ({ ...prev, date_from: event.target.value }))} className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm" />
-                  <input type="date" value={aiFilters.date_to} onChange={(event) => setAiFilters((prev) => ({ ...prev, date_to: event.target.value }))} className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm" />
-                  <input placeholder="Provider" value={aiFilters.provider} onChange={(event) => setAiFilters((prev) => ({ ...prev, provider: event.target.value }))} className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm" />
-                  <input placeholder="Modelo" value={aiFilters.model} onChange={(event) => setAiFilters((prev) => ({ ...prev, model: event.target.value }))} className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 rounded-xl px-3 text-sm" />
-                  <div className="md:col-span-4 flex flex-wrap gap-2">
-                    <Button type="button" onClick={() => void loadAIUsage()}>
-                      Aplicar filtros
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setAiFilters({ date_from: "", date_to: "", provider: "", model: "" });
-                        void runAIUsage(() => systemHealthService.getAIUsage()).catch(() => undefined);
-                      }}
-                    >
-                      Limpar
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+        <SectionShell title="IA / Tokens" description="Consumo interno de chamadas registradas pelo sistema." loading={false} error={null} onRetry={() => undefined}>
+          <div className="space-y-6">
+            <AiUsagePanel refreshKey={aiUsageRefreshKey} />
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <HealthMetricCard label="Chamadas totais" value={formatNumber(aiUsageData.total_calls)} icon={<Activity className="h-5 w-5" />} />
-                <HealthMetricCard label="Tokens de entrada" value={formatNumber(aiUsageData.input_tokens)} icon={<Server className="h-5 w-5" />} />
-                <HealthMetricCard label="Tokens de saída" value={formatNumber(aiUsageData.output_tokens)} icon={<Server className="h-5 w-5" />} />
-                <HealthMetricCard label="Total de tokens" value={formatNumber(aiUsageData.total_tokens)} icon={<Gauge className="h-5 w-5" />} />
-                <HealthMetricCard label="Custo estimado" value={formatCurrency(aiUsageData.estimated_cost_usd)} icon={<HeartPulse className="h-5 w-5" />} />
-                <HealthMetricCard label="Falhas" value={formatNumber(aiUsageData.failed_calls)} icon={<TriangleAlert className="h-5 w-5" />} />
-                <HealthMetricCard label="Latência média" value={aiUsageData.avg_latency_ms != null ? `${formatDecimal(aiUsageData.avg_latency_ms, 0)} ms` : "—"} icon={<RefreshCw className="h-5 w-5" />} />
-              </div>
-
-              <Card>
+            <Card>
                 <CardHeader>
                   <CardTitle>Limites de IA</CardTitle>
                   <CardDescription>
@@ -576,18 +488,18 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     <p className="text-sm text-text-muted">Carregando limites...</p>
                   )}
                 </CardContent>
-              </Card>
+            </Card>
 
-              {limitsData ? (
-                <AILimitIncreaseModal
-                  open={increaseModalOpen}
-                  onClose={() => setIncreaseModalOpen(false)}
-                  onCreated={() => void loadLimits()}
-                  defaults={limitsData.defaults}
-                />
-              ) : null}
+            {limitsData ? (
+              <AILimitIncreaseModal
+                open={increaseModalOpen}
+                onClose={() => setIncreaseModalOpen(false)}
+                onCreated={() => void loadLimits()}
+                defaults={limitsData.defaults}
+              />
+            ) : null}
 
-              <Card>
+            <Card>
                 <CardHeader>
                   <CardTitle>Preços IA</CardTitle>
                   <CardDescription>
@@ -661,124 +573,8 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     <p className="text-sm text-danger">{backfillStatus.message}</p>
                   ) : null}
                 </CardContent>
-              </Card>
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Uso por provider</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {aiUsageData.by_provider.length === 0 ? (
-                      <EmptyState icon="🤖" title="Sem uso registrado" description="Nenhuma chamada de IA encontrada para os filtros selecionados." />
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border text-left text-text-muted">
-                              <th className="px-2 py-2">Provider</th>
-                              <th className="px-2 py-2">Chamadas</th>
-                              <th className="px-2 py-2">Tokens</th>
-                              <th className="px-2 py-2">Falhas</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {aiUsageData.by_provider.map((item) => (
-                              <tr key={item.provider ?? "provider"} className="border-b border-border/60">
-                                <td className="px-2 py-2">{item.provider ?? "—"}</td>
-                                <td className="px-2 py-2">{formatNumber(item.total_calls)}</td>
-                                <td className="px-2 py-2">{formatNumber(item.total_tokens)}</td>
-                                <td className="px-2 py-2">{formatNumber(item.failed_calls)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Uso por modelo</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {aiUsageData.by_model.length === 0 ? (
-                      <EmptyState icon="📦" title="Sem modelos registrados" description="Os modelos aparecem aqui conforme as chamadas são gravadas." />
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border text-left text-text-muted">
-                              <th className="px-2 py-2">Modelo</th>
-                              <th className="px-2 py-2">Chamadas</th>
-                              <th className="px-2 py-2">Latência média</th>
-                              <th className="px-2 py-2">Custo</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {aiUsageData.by_model.map((item) => (
-                              <tr key={`${item.provider}:${item.model}`} className="border-b border-border/60">
-                                <td className="px-2 py-2">{item.model ?? "—"}</td>
-                                <td className="px-2 py-2">{formatNumber(item.total_calls)}</td>
-                                <td className="px-2 py-2">{item.avg_latency_ms != null ? `${formatDecimal(item.avg_latency_ms, 0)} ms` : "—"}</td>
-                                <td className="px-2 py-2">{formatCurrency(item.estimated_cost_usd)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Uso diário</CardTitle>
-                    <CardDescription>Visualização simples dos tokens totais por dia.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="h-[300px] pt-4">
-                    {aiUsageData.daily_usage.length === 0 ? (
-                      <EmptyState icon="📈" title="Sem histórico diário" description="Quando houver chamadas registradas, o consumo diário aparecerá aqui." />
-                    ) : (
-                      <SimpleBarChart
-                        ariaLabel="Uso diário de tokens de IA"
-                        data={aiDailyUsageChartData}
-                        valueFormatter={formatNumber}
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Análises mais caras</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {aiUsageData.top_expensive_analyses.length === 0 ? (
-                      <EmptyState icon="💸" title="Sem custos agregados" description="As análises mais caras aparecem aqui quando houver pricing configurado ou logs com custo." />
-                    ) : (
-                      <div className="space-y-3">
-                        {aiUsageData.top_expensive_analyses.map((item) => (
-                          <div key={item.analysis_id} className="rounded-xl border border-border px-4 py-3">
-                            <p className="text-sm font-medium text-text">{item.model}</p>
-                            <p className="text-xs text-text-muted">{item.provider}</p>
-                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-text-muted">
-                              <span>{formatNumber(item.calls)} chamadas</span>
-                              <span>{formatNumber(item.total_tokens)} tokens</span>
-                              <span>{formatCurrency(item.estimated_cost_usd)}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          ) : null}
+            </Card>
+          </div>
         </SectionShell>
       ) : null}
 

@@ -14,6 +14,8 @@ const getAIUsageMock = vi.fn();
 const getQueuesMock = vi.fn();
 const getDatabaseMock = vi.fn();
 const getErrorsMock = vi.fn();
+const getAIPricingCatalogMock = vi.fn();
+const getUsageMock = vi.fn();
 
 vi.mock("../../services/systemHealthService", () => ({
   systemHealthService: {
@@ -22,6 +24,14 @@ vi.mock("../../services/systemHealthService", () => ({
     getQueues: () => getQueuesMock(),
     getDatabase: () => getDatabaseMock(),
     getErrors: () => getErrorsMock(),
+    getAIPricingCatalog: () => getAIPricingCatalogMock(),
+  },
+}));
+
+vi.mock("../../services/aiLimitsService", () => ({
+  aiLimitsService: {
+    getUsage: () => getUsageMock(),
+    revokeOverride: vi.fn(),
   },
 }));
 
@@ -32,6 +42,8 @@ describe("SystemHealthPage", () => {
     getQueuesMock.mockReset();
     getDatabaseMock.mockReset();
     getErrorsMock.mockReset();
+    getAIPricingCatalogMock.mockReset();
+    getUsageMock.mockReset();
 
     getOverviewMock.mockResolvedValue({
       status: "ok",
@@ -87,6 +99,14 @@ describe("SystemHealthPage", () => {
       recent_failures: [],
       worker_status: { status: "unknown", message: "Sem resposta", workers_online: null },
     });
+    getAIPricingCatalogMock.mockResolvedValue({
+      items: [],
+    });
+    getUsageMock.mockResolvedValue({
+      defaults: { per_user: 10, per_job: 20, global: 100 },
+      global_usage: { used_today: 5, effective_limit: 100, limit_source: "default" },
+      active_overrides: [],
+    });
   });
 
   it("renderiza a página e as abas", async () => {
@@ -128,7 +148,7 @@ describe("SystemHealthPage", () => {
     expect(screen.getByRole("button", { name: "Tentar novamente" })).toBeInTheDocument();
   });
 
-  it("carrega a aba de IA e mostra o aviso de billing oficial", async () => {
+  it("carrega a aba de IA e mantém a visualização de IA / Tokens", async () => {
     const user = userEvent.setup();
 
     render(
@@ -145,5 +165,6 @@ describe("SystemHealthPage", () => {
     });
 
     expect(await screen.findByText(/billing oficial/i)).toBeInTheDocument();
+    expect(screen.getByText("Métricas IA / Tokens")).toBeInTheDocument();
   });
 });

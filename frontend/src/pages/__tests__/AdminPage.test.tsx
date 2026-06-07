@@ -10,6 +10,8 @@ import { AdminPage } from "../AdminPage";
 
 const statsMock = vi.fn();
 const getUsageSummaryMock = vi.fn();
+const getStatusMock = vi.fn();
+const getAIUsageMock = vi.fn();
 
 vi.mock("../SystemHealthPage", () => ({
   SystemHealthPage: () => <div>Status geral</div>,
@@ -23,7 +25,14 @@ vi.mock("../../services/usersService", () => ({
 
 vi.mock("../../features/ai-settings/services/aiSettingsService", () => ({
   aiSettingsService: {
+    getStatus: () => getStatusMock(),
     getUsageSummary: (...args: unknown[]) => getUsageSummaryMock(...args),
+  },
+}));
+
+vi.mock("../../services/systemHealthService", () => ({
+  systemHealthService: {
+    getAIUsage: (...args: unknown[]) => getAIUsageMock(...args),
   },
 }));
 
@@ -72,6 +81,51 @@ const aiUsagePayload = {
   warnings: ["rag_synthesis_disabled"],
 };
 
+const aiStatusPayload = {
+  ok: true,
+  environment: "development",
+  assistant: {
+    enabled: true,
+    read_only: true,
+    free_text_enabled: false,
+  },
+  rag: {
+    embedding_provider: "gemini",
+    gemini_embedding_enabled: true,
+    embedding_model: "text-embedding-004",
+    synthesis_enabled: false,
+    synthesis_provider: "gemini",
+    synthesis_model: "gemini-2.5-flash",
+    vector_storage_mode: "json_fallback",
+    pgvector_available: false,
+  },
+  providers: {
+    provider: "google",
+    model: "gemini-2.5-flash",
+    gemini_api_key_configured: true,
+  },
+  protheus: {
+    real_send_enabled: false,
+    erp_allow_real_send: false,
+  },
+  warnings: [],
+};
+
+const aiHealthUsagePayload = {
+  total_calls: 10,
+  successful_calls: 9,
+  failed_calls: 1,
+  input_tokens: 1000,
+  output_tokens: 300,
+  total_tokens: 1300,
+  estimated_cost_usd: null,
+  avg_latency_ms: 2300,
+  by_provider: [{ provider: "google", total_calls: 10, successful_calls: 9, failed_calls: 1, input_tokens: 1000, output_tokens: 300, total_tokens: 1300, estimated_cost_usd: null, avg_latency_ms: 2300 }],
+  by_model: [{ provider: "google", model: "gemini-2.5-flash", total_calls: 10, successful_calls: 9, failed_calls: 1, input_tokens: 1000, output_tokens: 300, total_tokens: 1300, estimated_cost_usd: null, avg_latency_ms: 2300 }],
+  daily_usage: [{ date: "2026-06-07", total_calls: 10, successful_calls: 9, failed_calls: 1, input_tokens: 1000, output_tokens: 300, total_tokens: 1300, estimated_cost_usd: null, avg_latency_ms: 2300 }],
+  top_expensive_analyses: [],
+};
+
 describe("AdminPage", () => {
   beforeEach(() => {
     statsMock.mockReset();
@@ -88,6 +142,10 @@ describe("AdminPage", () => {
     });
     getUsageSummaryMock.mockReset();
     getUsageSummaryMock.mockResolvedValue(aiUsagePayload);
+    getStatusMock.mockReset();
+    getStatusMock.mockResolvedValue(aiStatusPayload);
+    getAIUsageMock.mockReset();
+    getAIUsageMock.mockResolvedValue(aiHealthUsagePayload);
   });
 
   it("exibe cards admin e o diagnóstico candidato/vaga ao alternar as abas", async () => {
@@ -141,7 +199,7 @@ describe("AdminPage", () => {
     expect(screen.getByText("Status geral")).toBeInTheDocument();
   });
 
-  it("possui aba IA e mostra status, consumo, features, recentes e atalhos", async () => {
+  it("possui aba IA e mostra governança, status, tokens, filtros, recentes e atalhos", async () => {
     render(
       <MemoryRouter future={routerFuture}>
         <AdminPage />
@@ -150,22 +208,32 @@ describe("AdminPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "IA" }));
 
-    expect(await screen.findByText("Status da IA")).toBeInTheDocument();
-    expect(screen.getByText("Consumo hoje")).toBeInTheDocument();
+    expect(await screen.findByText("Governança de IA")).toBeInTheDocument();
+    expect(screen.getByText("Resumo executivo")).toBeInTheDocument();
     expect(screen.getByText("Gemini configurado")).toBeInTheDocument();
     expect(screen.getByText("RAG synthesis")).toBeInTheDocument();
-    expect(screen.getByText("RAG embedding Gemini")).toBeInTheDocument();
+    expect(screen.getByText("Embeddings")).toBeInTheDocument();
     expect(screen.getByText("Assistant read-only")).toBeInTheDocument();
     expect(screen.getByText("Protheus real")).toBeInTheDocument();
     expect(screen.getByText("12.000")).toBeInTheDocument();
+    expect(screen.getByText("Métricas IA / Tokens")).toBeInTheDocument();
+    expect(screen.getByLabelText("Data inicial")).toBeInTheDocument();
+    expect(screen.getByLabelText("Data final")).toBeInTheDocument();
+    expect(screen.getByLabelText("Provider")).toBeInTheDocument();
+    expect(screen.getByLabelText("Modelo")).toBeInTheDocument();
+    expect(screen.getAllByText("1.300").length).toBeGreaterThan(0);
     expect(screen.getAllByText("rag_synthesis").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("job_ai_draft")).toBeInTheDocument();
     expect(screen.getByText("gemini/gemini-2.5-flash")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Abrir Laboratório IA/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Laboratório IA/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Credenciais IA/i })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Health do sistema/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("button", { name: /Health do Sistema/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Auditoria/i })).toBeInTheDocument();
+    expect(screen.getByText(/Synthesis RAG desligado/i)).toBeInTheDocument();
     expect(screen.getByText("rag_synthesis_disabled")).toBeInTheDocument();
     expect(getUsageSummaryMock).toHaveBeenCalledWith("today");
+    expect(getStatusMock).toHaveBeenCalled();
+    expect(getAIUsageMock).toHaveBeenCalled();
   });
 
   it("não renderiza chave, prompt, resposta bruta ou metadados sensíveis na aba IA", async () => {
@@ -181,7 +249,7 @@ describe("AdminPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "IA" }));
-    await screen.findByText("Status da IA");
+    await screen.findByText("Governança de IA");
 
     const text = document.body.textContent ?? "";
     expect(text).not.toContain("GEMINI_API_KEY");
@@ -192,7 +260,7 @@ describe("AdminPage", () => {
     expect(text).not.toContain("content_hash");
     expect(text).not.toContain("vector_json");
     expect(text).not.toContain("payload_json");
-    expect(text).not.toContain("embeddings");
+    expect(text).not.toContain("\"embedding\":");
   });
 
   it("mostra loading e erro amigável na aba IA", async () => {
@@ -206,9 +274,9 @@ describe("AdminPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "IA" }));
 
-    expect(screen.getByText("Carregando métricas de IA...")).toBeInTheDocument();
+    expect(screen.getByText("Carregando governança de IA...")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("Não foi possível carregar as métricas de IA agora.")).toBeInTheDocument();
+      expect(screen.getByText("network")).toBeInTheDocument();
     });
   });
 });

@@ -10,12 +10,7 @@ import { PermissionsMatrix } from "../features/admin/components/PermissionsMatri
 import { RoleCard } from "../features/admin/components/RoleCard";
 import { CandidateJobFlowDiagnosticsCard } from "../features/admin/components/CandidateJobFlowDiagnosticsCard";
 import { ROLES } from "../features/admin/config/adminConfig";
-import { aiSettingsService, type AiUsageSummaryResponse } from "../features/ai-settings/services/aiSettingsService";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AiGovernancePanel } from "../features/ai-settings/components/AiGovernancePanel";
 import { SystemHealthPage } from "./SystemHealthPage";
 
 type AdminTab = "overview" | "permissions" | "diagnostics" | "ia" | "health";
@@ -28,49 +23,14 @@ const TAB_ITEMS: Array<{ key: AdminTab; label: string }> = [
   { key: "health", label: "Health do Sistema" },
 ];
 
-function formatNumber(value: number | null | undefined): string {
-  return new Intl.NumberFormat("pt-BR").format(value ?? 0);
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return new Intl.DateTimeFormat("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-  }).format(parsed);
-}
-
-function flagBadge(enabled: boolean, enabledLabel = "Ligado", disabledLabel = "Desligado") {
-  return <Badge variant={enabled ? "success" : "secondary"}>{enabled ? enabledLabel : disabledLabel}</Badge>;
-}
-
 export function AdminPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
-  const [aiUsage, setAiUsage] = useState<AiUsageSummaryResponse | null>(null);
-  const [aiUsageLoading, setAiUsageLoading] = useState(false);
-  const [aiUsageError, setAiUsageError] = useState<string | null>(null);
 
   useEffect(() => {
     void usersService.stats().then(setStats);
   }, []);
-
-  useEffect(() => {
-    if (activeTab !== "ia" || aiUsage || aiUsageLoading) return;
-
-    setAiUsageLoading(true);
-    setAiUsageError(null);
-    void aiSettingsService
-      .getUsageSummary("today")
-      .then(setAiUsage)
-      .catch(() => setAiUsageError("Não foi possível carregar as métricas de IA agora."))
-      .finally(() => setAiUsageLoading(false));
-  }, [activeTab, aiUsage, aiUsageLoading]);
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
@@ -266,202 +226,7 @@ export function AdminPage() {
 
       {activeTab === "ia" && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          <section className="space-y-2">
-            <h2 className="text-base font-semibold text-text">IA</h2>
-            <p className="text-sm text-text-muted">
-              Status operacional, consumo de tokens e atalhos de governança. Esta visão não exibe chaves, prompts ou respostas completas.
-            </p>
-          </section>
-
-          {aiUsageLoading && (
-            <Card>
-              <CardContent className="p-6 text-sm text-text-muted">Carregando métricas de IA...</CardContent>
-            </Card>
-          )}
-
-          {aiUsageError && (
-            <Alert variant="warning">
-              <TriangleAlert className="h-4 w-4" />
-              <AlertTitle>Erro ao carregar IA</AlertTitle>
-              <AlertDescription>{aiUsageError}</AlertDescription>
-            </Alert>
-          )}
-
-          {aiUsage && (
-            <>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Status da IA</CardTitle>
-                    <CardDescription>Flags principais sem exposição de secrets.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Gemini configurado</span>
-                      {flagBadge(aiUsage.status.gemini_api_key_configured, "Sim", "Não")}
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>RAG synthesis</span>
-                      {flagBadge(aiUsage.status.rag_synthesis_enabled)}
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>RAG embedding Gemini</span>
-                      {flagBadge(aiUsage.status.gemini_embedding_enabled)}
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Assistant read-only</span>
-                      {flagBadge(aiUsage.status.assistant_enabled)}
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Free text</span>
-                      {flagBadge(aiUsage.status.free_text_enabled)}
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Protheus real</span>
-                      <Badge variant={aiUsage.status.protheus_real_send_enabled ? "danger" : "success"}>
-                        {aiUsage.status.protheus_real_send_enabled ? "Ligado" : "Desligado"}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Consumo hoje</CardTitle>
-                    <CardDescription>Resumo agregado de chamadas e tokens.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl border border-border bg-surface-muted p-3">
-                      <p className="text-xs text-text-muted">Requests</p>
-                      <p className="text-xl font-semibold">{formatNumber(aiUsage.totals.requests)}</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-surface-muted p-3">
-                      <p className="text-xs text-text-muted">Erros</p>
-                      <p className="text-xl font-semibold">{formatNumber(aiUsage.totals.errors)}</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-surface-muted p-3">
-                      <p className="text-xs text-text-muted">Input tokens</p>
-                      <p className="text-xl font-semibold">{formatNumber(aiUsage.totals.input_tokens)}</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-surface-muted p-3">
-                      <p className="text-xs text-text-muted">Output tokens</p>
-                      <p className="text-xl font-semibold">{formatNumber(aiUsage.totals.output_tokens)}</p>
-                    </div>
-                    <div className="col-span-2 rounded-xl border border-border bg-surface-muted p-3">
-                      <p className="text-xs text-text-muted">Total tokens</p>
-                      <p className="text-2xl font-semibold">{formatNumber(aiUsage.totals.total_tokens)}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Atalhos</CardTitle>
-                    <CardDescription>Acesso rápido às telas administrativas de IA.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/admin/ia")}>
-                      <FlaskConical className="mr-2 h-4 w-4" /> Abrir Laboratório IA
-                    </Button>
-                    <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/admin/ai-provider-credentials")}>
-                      <KeyRound className="mr-2 h-4 w-4" /> Credenciais IA
-                    </Button>
-                    <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/admin/health")}>
-                      <HeartPulse className="mr-2 h-4 w-4" /> Health do sistema
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {aiUsage.warnings.length > 0 && (
-                <Alert variant={aiUsage.status.protheus_real_send_enabled ? "destructive" : "warning"}>
-                  <TriangleAlert className="h-4 w-4" />
-                  <AlertTitle>Avisos IA</AlertTitle>
-                  <AlertDescription>
-                    <ul className="list-disc space-y-1 pl-4">
-                      {aiUsage.warnings.map((warning) => (
-                        <li key={warning}>{warning}</li>
-                      ))}
-                    </ul>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Consumo por feature</CardTitle>
-                  <CardDescription>Agrupamento por operação registrada no backend.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Feature</TableHead>
-                        <TableHead>Requests</TableHead>
-                        <TableHead>Tokens</TableHead>
-                        <TableHead>Erros</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {aiUsage.by_feature.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-text-muted">Nenhum uso registrado no período.</TableCell>
-                        </TableRow>
-                      ) : (
-                        aiUsage.by_feature.map((item) => (
-                          <TableRow key={item.feature}>
-                            <TableCell className="font-medium">{item.feature}</TableCell>
-                            <TableCell>{formatNumber(item.requests)}</TableCell>
-                            <TableCell>{formatNumber(item.total_tokens)}</TableCell>
-                            <TableCell>{formatNumber(item.errors)}</TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Últimas chamadas</CardTitle>
-                  <CardDescription>Eventos recentes sem prompts, respostas ou payloads sensíveis.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Data/hora</TableHead>
-                        <TableHead>Feature</TableHead>
-                        <TableHead>Provider/model</TableHead>
-                        <TableHead>Tokens</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {aiUsage.recent.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-text-muted">Nenhuma chamada recente.</TableCell>
-                        </TableRow>
-                      ) : (
-                        aiUsage.recent.map((item, index) => (
-                          <TableRow key={`${item.created_at ?? "sem-data"}-${item.feature}-${index}`}>
-                            <TableCell>{formatDateTime(item.created_at)}</TableCell>
-                            <TableCell className="font-medium">{item.feature}</TableCell>
-                            <TableCell>{item.provider}/{item.model}</TableCell>
-                            <TableCell>{formatNumber(item.total_tokens)}</TableCell>
-                            <TableCell>
-                              <Badge variant={item.status === "success" ? "success" : "warning"}>{item.status}</Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </>
-          )}
+          <AiGovernancePanel />
         </div>
       )}
     </div>
