@@ -106,6 +106,7 @@ class JobAiDraftService:
                     draft=final_state["draft"],
                     needs_review=final_state["needs_review"],
                     warnings=final_state.get("warnings", []),
+                    safety_check=final_state.get("safety_check"),
                     usage=final_state["usage"],
                     source=AiDraftSource(
                         text_used=final_state["text_used"],
@@ -169,10 +170,12 @@ class JobAiDraftService:
             logger.error("job_ai_draft.parse_failed", error=str(exc)[:200])
             raise AiDraftParseError("Resposta da IA não pôde ser interpretada") from exc
 
-        draft, warnings = post_validate(draft, combined)
+        draft, warnings, safety_check = post_validate(draft, combined)
         needs_review = compute_needs_review(draft)
         
         if any("discriminatório" in w for w in warnings):
+            needs_review.append("safety_check")
+        if safety_check is not None and "safety_check" not in needs_review:
             needs_review.append("safety_check")
 
         cost_decimal: Decimal | None = estimate_ai_cost(
@@ -208,6 +211,7 @@ class JobAiDraftService:
             draft=draft,
             needs_review=needs_review,
             warnings=warnings,
+            safety_check=safety_check,
             usage=AiDraftUsage(
                 provider=settings.AI_PROVIDER,
                 model=settings.AI_MODEL_ID,

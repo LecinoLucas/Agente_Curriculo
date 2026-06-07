@@ -769,6 +769,36 @@ def has_experience_context_source_evidence(context: str, source_text: str) -> bo
         return False
     return context_tokens.issubset(source_tokens)
 
+def has_nice_to_have_source_evidence(item: str, source_text: str) -> bool:
+    normalized_item = _normalize_evidence_text(item)
+    normalized_source = _normalize_evidence_text(source_text)
+    if not normalized_item or not normalized_source:
+        return False
+
+    semantic_item = re.sub(
+        r"^(experiencia com|conhecimento em|vivencia com|dominio de)\s+",
+        "",
+        normalized_item,
+    ).strip()
+    relevant_tokens = [token for token in semantic_item.split() if len(token) > 3]
+    if not relevant_tokens:
+        relevant_tokens = semantic_item.split()
+
+    if not relevant_tokens or not all(token in normalized_source for token in relevant_tokens):
+        return False
+
+    return bool(
+        re.search(
+            rf"(diferencial|desejavel|ser[aá]\s+um\s+plus|plus).{{0,60}}{' '.join(map(re.escape, relevant_tokens))}",
+            normalized_source,
+        )
+        or re.search(
+            rf"{' '.join(map(re.escape, relevant_tokens))}.{{0,60}}(diferencial|desejavel|ser[aá]\s+um\s+plus|plus)",
+            normalized_source,
+        )
+        or "diferencial" in normalized_source
+    )
+
 def parse_draft(data: dict[str, Any]) -> AiDraftFields:
     wm = str(data.get("work_model") or "").strip().lower()
     work_model = wm if wm in _VALID_WORK_MODELS else None
@@ -995,6 +1025,18 @@ def post_validate(
         if source_requirements:
             draft.requirements = source_requirements
             warnings.append("requirements_backfilled_from_source")
+
+    # 7.2 Items marked as diferencial in source cannot become mandatory
+    if draft.mandatory_skills:
+        retained_mandatory: list[str] = []
+        for skill in draft.mandatory_skills:
+            if has_nice_to_have_source_evidence(skill, source_text):
+                if skill.casefold() not in {item.casefold() for item in draft.nice_to_have_skills}:
+                    draft.nice_to_have_skills.append(skill)
+                warnings.append("nice_to_have_preserved_from_source")
+                continue
+            retained_mandatory.append(skill)
+        draft.mandatory_skills = retained_mandatory
 
     # 8. Detect invented location/unit
     if draft.unit:

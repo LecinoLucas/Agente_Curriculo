@@ -128,16 +128,19 @@ async def parse_draft_node(state: JobAiDraftState, config: RunnableConfig) -> di
     return {"draft": draft}
 
 async def post_validate_node(state: JobAiDraftState, config: RunnableConfig) -> dict[str, Any]:
-    draft, warnings = post_validate(state["draft"], state["combined_text"])
+    draft, warnings, safety_check = post_validate(state["draft"], state["combined_text"])
     needs_review = compute_needs_review(draft)
     
     if any("discriminatório" in w for w in warnings):
+        needs_review.append("safety_check")
+    if safety_check is not None and "safety_check" not in needs_review:
         needs_review.append("safety_check")
 
     return {
         "draft": draft,
         "warnings": state.get("warnings", []) + warnings,
-        "needs_review": needs_review
+        "needs_review": needs_review,
+        "safety_check": safety_check,
     }
 
 async def refine_requirements_node(state: JobAiDraftState, config: RunnableConfig) -> dict[str, Any]:

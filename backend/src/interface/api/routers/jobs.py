@@ -3,7 +3,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 import structlog
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.analysis_dispatch_service import CandidateJobAnalysisDispatcher
@@ -25,6 +25,11 @@ from src.application.services.job_ai_draft_service import (
     AiDraftParseError,
     AiDraftValidationError,
     JobAiDraftService,
+)
+from src.application.services.job_image_text_extraction_service import (
+    JobImageExtractionNoTextError,
+    JobImageExtractionUnavailableError,
+    JobImageTextExtractionService,
 )
 from src.application.services.job_bulk_import_service import JobBulkImportService
 from src.application.services.job_bulk_payload_normalizer import (
@@ -101,6 +106,8 @@ from src.interface.api.schemas.job_schemas import (
     AiDraftFieldsResponse,
     AiDraftGenerateRequest,
     AiDraftGenerateResponse,
+    AiDraftSafetyCheckResponse,
+    AiDraftSafetyFindingResponse,
     AiDraftSourceResponse,
     AiDraftUsageResponse,
     ArchiveJobRequest,
@@ -143,6 +150,81 @@ from src.interface.api.schemas.skill_schemas import (
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def _build_ai_draft_response(
+    result: Any,
+    *,
+    extracted_text: str | None = None,
+    extraction_confidence: float | None = None,
+    extra_warnings: list[str] | None = None,
+    extra_needs_review: list[str] | None = None,
+) -> AiDraftGenerateResponse:
+    warnings = list(dict.fromkeys([*(result.warnings or []), *(extra_warnings or [])]))
+    needs_review = list(dict.fromkeys([*(result.needs_review or []), *(extra_needs_review or [])]))
+
+    safety_check = None
+    if result.safety_check is not None:
+        safety_check = AiDraftSafetyCheckResponse(
+            status=result.safety_check.status,
+            highest_severity=result.safety_check.highest_severity,
+            findings=[
+                AiDraftSafetyFindingResponse(
+                    field=finding.field,
+                    severity=finding.severity,
+                    code=finding.code,
+                    message=finding.message,
+                    term=finding.term,
+                )
+                for finding in result.safety_check.findings
+            ],
+        )
+
+    return AiDraftGenerateResponse(
+        draft=AiDraftFieldsResponse(
+            title=result.draft.title,
+            area=result.draft.area,
+            seniority=result.draft.seniority,
+            work_model=result.draft.work_model,
+            unit=result.draft.unit,
+            salary_min=result.draft.salary_min,
+            salary_max=result.draft.salary_max,
+            minimum_education_level=result.draft.minimum_education_level,
+            minimum_years_experience=result.draft.minimum_years_experience,
+            experience_context=result.draft.experience_context,
+            description=result.draft.description,
+            responsibilities=result.draft.responsibilities,
+            requirements=result.draft.requirements,
+            mandatory_skills=result.draft.mandatory_skills,
+            nice_to_have_skills=result.draft.nice_to_have_skills,
+            benefits=result.draft.benefits,
+            working_hours=result.draft.working_hours,
+            screening_questions=result.draft.screening_questions,
+            pipeline_steps=result.draft.pipeline_steps,
+            matching_criteria=result.draft.matching_criteria,
+            selection_flow_type=result.draft.selection_flow_type,
+            requires_manager_review=result.draft.requires_manager_review,
+            requires_behavioral_assessment=result.draft.requires_behavioral_assessment,
+        ),
+        needs_review=needs_review,
+        warnings=warnings,
+        extracted_text=extracted_text,
+        extraction_confidence=extraction_confidence,
+        safety_check=safety_check,
+        source=AiDraftSourceResponse(
+            text_used=result.source.text_used,
+            ocr_used=result.source.ocr_used,
+            input_character_count=result.source.input_character_count,
+        ),
+        usage=AiDraftUsageResponse(
+            provider=result.usage.provider,
+            model=result.usage.model,
+            input_tokens=result.usage.input_tokens,
+            output_tokens=result.usage.output_tokens,
+            total_tokens=result.usage.total_tokens,
+            estimated_cost=result.usage.estimated_cost,
+        ),
+    )
 
 
 def _job_service(db: AsyncSession) -> JobService:
@@ -562,46 +644,137 @@ async def generate_job_ai_draft(
 
     await db.commit()
 
-    return AiDraftGenerateResponse(
-        draft=AiDraftFieldsResponse(
-            title=result.draft.title,
-            area=result.draft.area,
-            seniority=result.draft.seniority,
-            work_model=result.draft.work_model,
-            unit=result.draft.unit,
-            salary_min=result.draft.salary_min,
-            salary_max=result.draft.salary_max,
-            minimum_education_level=result.draft.minimum_education_level,
-            minimum_years_experience=result.draft.minimum_years_experience,
-            experience_context=result.draft.experience_context,
-            description=result.draft.description,
-            responsibilities=result.draft.responsibilities,
-            requirements=result.draft.requirements,
-            mandatory_skills=result.draft.mandatory_skills,
-            nice_to_have_skills=result.draft.nice_to_have_skills,
-            benefits=result.draft.benefits,
-            working_hours=result.draft.working_hours,
-            screening_questions=result.draft.screening_questions,
-            pipeline_steps=result.draft.pipeline_steps,
-            matching_criteria=result.draft.matching_criteria,
-            selection_flow_type=result.draft.selection_flow_type,
-            requires_manager_review=result.draft.requires_manager_review,
-            requires_behavioral_assessment=result.draft.requires_behavioral_assessment,
-        ),
-        needs_review=result.needs_review,
-        source=AiDraftSourceResponse(
-            text_used=result.source.text_used,
-            ocr_used=result.source.ocr_used,
-            input_character_count=result.source.input_character_count,
-        ),
-        usage=AiDraftUsageResponse(
-            provider=result.usage.provider,
-            model=result.usage.model,
-            input_tokens=result.usage.input_tokens,
-            output_tokens=result.usage.output_tokens,
-            total_tokens=result.usage.total_tokens,
-            estimated_cost=result.usage.estimated_cost,
-        ),
+    return _build_ai_draft_response(
+        result,
+        extracted_text=body.ocr_text,
+        extraction_confidence=None,
+    )
+
+
+@router.post(
+    "/ai-draft/from-image",
+    response_model=AiDraftGenerateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Geração de rascunho de vaga com IA a partir de imagem",
+)
+async def generate_job_ai_draft_from_image(
+    current_user: RecruiterOrAdmin,
+    file: UploadFile = File(...),
+    context_text: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+    _rl_ocr: None = Depends(rate_limit_ai_draft_ocr),
+    _rl_generate: None = Depends(rate_limit_ai_draft_generate),
+) -> AiDraftGenerateResponse:
+    """Recebe uma imagem de vaga, extrai texto e gera um rascunho revisável."""
+    content = await file.read(MAX_OCR_IMAGE_BYTES + 1)
+    extraction_service = JobImageTextExtractionService()
+    draft_service = JobAiDraftService()
+
+    try:
+        extraction = extraction_service.extract_from_image(
+            filename=file.filename or "upload",
+            content_type=file.content_type,
+            content=content,
+        )
+    except OcrImageTooLargeError as exc:
+        logger.warning(
+            "job_ai_draft_from_image.failed",
+            reason="file_too_large",
+            user_id=str(current_user.id),
+            size_bytes=len(content),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except OcrValidationError as exc:
+        logger.warning(
+            "job_ai_draft_from_image.failed",
+            reason="validation_error",
+            user_id=str(current_user.id),
+            mime_type=file.content_type,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except JobImageExtractionNoTextError as exc:
+        logger.warning(
+            "job_ai_draft_from_image.failed",
+            reason="no_useful_text",
+            user_id=str(current_user.id),
+            mime_type=file.content_type,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except (JobImageExtractionUnavailableError, OcrProcessingError) as exc:
+        logger.error(
+            "job_ai_draft_from_image.extraction_unavailable",
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Extracao de texto de imagem indisponivel no momento.",
+        ) from exc
+
+    try:
+        result = await draft_service.generate(
+            text_input=context_text,
+            ocr_text=extraction.extracted_text,
+            session=db,
+        )
+    except AiDraftValidationError as exc:
+        logger.warning(
+            "job_ai_draft_from_image.failed",
+            reason="validation_error",
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except AiDraftParseError as exc:
+        logger.error(
+            "job_ai_draft_from_image.failed",
+            reason="parse_error",
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Resposta do provedor de IA invalida. Tente novamente.",
+        ) from exc
+    except AiDraftAIError as exc:
+        logger.error(
+            "job_ai_draft_from_image.failed",
+            reason="ai_error",
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Provedor de IA indisponivel. Tente novamente em instantes.",
+        ) from exc
+
+    logger.info(
+        "job_ai_draft_from_image.generated",
+        user_id=str(current_user.id),
+        provider=result.usage.provider,
+        model=result.usage.model,
+        input_tokens=result.usage.input_tokens,
+        output_tokens=result.usage.output_tokens,
+        needs_review_count=len(result.needs_review),
+        extracted_character_count=len(extraction.extracted_text),
+    )
+
+    await db.commit()
+
+    return _build_ai_draft_response(
+        result,
+        extracted_text=extraction.extracted_text,
+        extraction_confidence=extraction.confidence,
+        extra_warnings=extraction.warnings,
+        extra_needs_review=["extracted_text"],
     )
 
 

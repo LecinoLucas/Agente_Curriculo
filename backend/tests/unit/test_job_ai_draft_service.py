@@ -1325,6 +1325,17 @@ class TestDiscriminationSafetyCheckGuardrails:
         assert "safety_check" not in result.needs_review
 
     @pytest.mark.asyncio
+    async def test_differential_source_does_not_turn_protheus_into_mandatory(self) -> None:
+        draft = dict(_DRAFT_JSON, mandatory_skills=["Experiência com Protheus"], nice_to_have_skills=[])
+        result = await self._generate_with_draft(
+            draft,
+            "Diferencial: conhecimento em Protheus. Ensino médio completo.",
+        )
+        assert "Experiência com Protheus" not in result.draft.mandatory_skills
+        assert "Experiência com Protheus" in result.draft.nice_to_have_skills
+        assert "nice_to_have_preserved_from_source" in result.warnings
+
+    @pytest.mark.asyncio
     async def test_regression_salary_without_evidence_still_removed(self) -> None:
         draft = dict(_DRAFT_JSON, salary_min=3000, salary_max=3500)
         result = await self._generate_with_draft(draft, "Vaga para vendedor.")

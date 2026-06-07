@@ -27,12 +27,14 @@ vi.mock("../services/jobAiDraftService", async (importOriginal) => {
   return {
     ...actual,
     generateJobAiDraft: vi.fn(),
+    generateJobAiDraftFromImage: vi.fn(),
   };
 });
 
-import { generateJobAiDraft } from "../services/jobAiDraftService";
+import { generateJobAiDraft, generateJobAiDraftFromImage } from "../services/jobAiDraftService";
 
 const mockGenerateJobAiDraft = generateJobAiDraft as ReturnType<typeof vi.fn>;
+const mockGenerateJobAiDraftFromImage = generateJobAiDraftFromImage as ReturnType<typeof vi.fn>;
 
 /** Minimal valid API response matching the real backend shape. */
 const MOCK_API_RESPONSE: JobAiDraftGenerateResponse = {
@@ -350,6 +352,7 @@ describe("jobAiSkillSuggestions", () => {
 describe("JobAiDraftPanel — API real", () => {
   beforeEach(() => {
     mockGenerateJobAiDraft.mockReset();
+    mockGenerateJobAiDraftFromImage.mockReset();
   });
 
   function renderPanel(formHasData = false, onApply = vi.fn()) {
@@ -607,6 +610,92 @@ describe("JobAiDraftPanel — API real", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/Não foi possível gerar o rascunho/i);
+  });
+
+  it("renderiza a opção 'Enviar imagem' no painel", () => {
+    renderPanel();
+    expect(screen.getByRole("tab", { name: /Enviar imagem/i })).toBeInTheDocument();
+  });
+
+  it("bloqueia arquivo inválido antes de chamar o endpoint", async () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+
+    const input = screen.getByTestId("ai-draft-image-input") as HTMLInputElement;
+    const invalidFile = new File(["<svg></svg>"], "vaga.svg", { type: "image/svg+xml" });
+    fireEvent.change(input, { target: { files: [invalidFile] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/PNG ou JPG\/JPEG/i);
+    expect(mockGenerateJobAiDraftFromImage).not.toHaveBeenCalled();
+  });
+
+  it("chama o endpoint multipart correto ao enviar imagem", async () => {
+    mockGenerateJobAiDraftFromImage.mockResolvedValue({
+      ...MOCK_API_RESPONSE,
+      extracted_text: "OPERADOR DE CAIXA 6x1 VALE-TRANSPORTE",
+      warnings: ["image_text_extraction_requires_review"],
+    });
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+
+    const image = new File(["binary"], "vaga.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("ai-draft-image-input"), {
+      target: { files: [image] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Extrair e gerar rascunho/i }));
+
+    await waitFor(() => expect(mockGenerateJobAiDraftFromImage).toHaveBeenCalledTimes(1));
+    expect(mockGenerateJobAiDraftFromImage).toHaveBeenCalledWith(image, "");
+    expect(await screen.findByTestId("ai-draft-extracted-text")).toHaveTextContent(
+      /OPERADOR DE CAIXA/i,
+    );
+  });
+
+  it("mostra loading e warnings no fluxo por imagem", async () => {
+    let resolvePromise!: (value: JobAiDraftGenerateResponse) => void;
+    mockGenerateJobAiDraftFromImage.mockReturnValueOnce(
+      new Promise<JobAiDraftGenerateResponse>((resolve) => {
+        resolvePromise = resolve;
+      }),
+    );
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+
+    const image = new File(["binary"], "vaga.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("ai-draft-image-input"), {
+      target: { files: [image] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Extrair e gerar rascunho/i }));
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Extraindo e gerando/i })).toBeDisabled();
+
+    resolvePromise({
+      ...MOCK_API_RESPONSE,
+      extracted_text: "Titulo, beneficios, jornada",
+      warnings: ["image_text_extraction_requires_review", "ocr_text_may_be_incomplete"],
+    });
+
+    const warnings = await screen.findByTestId("ai-draft-warnings");
+    expect(warnings).toHaveTextContent(/OCR imperfeito/i);
+    expect(warnings).toHaveTextContent(/extração da imagem parece parcial/i);
+  });
+
+  it("mostra erro amigável quando a extração por imagem falha", async () => {
+    mockGenerateJobAiDraftFromImage.mockRejectedValue(
+      new Error("Nao foi possivel extrair texto util da imagem enviada."),
+    );
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+
+    const image = new File(["binary"], "vaga.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("ai-draft-image-input"), {
+      target: { files: [image] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Extrair e gerar rascunho/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/extrair texto util/i);
+    expect(screen.queryByTestId("ai-draft-result")).not.toBeInTheDocument();
   });
 
   // ── Fechar painel ─────────────────────────────────────────────────────────

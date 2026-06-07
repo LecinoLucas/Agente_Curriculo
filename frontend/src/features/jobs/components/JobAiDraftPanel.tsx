@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Info, Loader2, Plus, ShieldAlert, Sparkles, 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { JobFormValues } from "../jobFormConfig";
@@ -15,6 +16,7 @@ import {
 } from "../utils/jobAiDraftHelpers";
 import {
   generateJobAiDraft,
+  generateJobAiDraftFromImage,
   type JobAiDraftFields,
   type JobAiDraftSafetyCheck,
 } from "../services/jobAiDraftService";
@@ -29,6 +31,10 @@ interface JobAiDraftPanelProps {
 }
 
 type AiStatus = "idle" | "loading" | "ready" | "error";
+type DraftInputMode = "text" | "image";
+
+const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg"];
+const ACCEPTED_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg"];
 
 /**
  * @deprecated Use applyApiDraftToForm from jobAiDraftHelpers.ts instead.
@@ -110,12 +116,16 @@ function EditableList({
 }
 
 export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPanelProps) {
+  const [inputMode, setInputMode] = useState<DraftInputMode>("text");
   const [prompt, setPrompt] = useState("");
+  const [contextText, setContextText] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
   const [draft, setDraft] = useState<JobAiDraftFields | null>(null);
   const [needsReview, setNeedsReview] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [safetyCheck, setSafetyCheck] = useState<JobAiDraftSafetyCheck | null>(null);
+  const [extractedText, setExtractedText] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -158,6 +168,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     setNeedsReview([]);
     setWarnings([]);
     setSafetyCheck(null);
+    setExtractedText(null);
 
     try {
       const response = await generateJobAiDraft({ text_input: prompt, ocr_text: null });
@@ -165,11 +176,83 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
       setNeedsReview(response.needs_review ?? []);
       setWarnings(response.warnings ?? []);
       setSafetyCheck(response.safety_check ?? null);
+      setExtractedText(response.extracted_text ?? null);
       setAiStatus("ready");
     } catch (err: unknown) {
       setAiStatus("error");
       const message =
         err instanceof Error && err.message ? err.message : "Não foi possível gerar o rascunho.";
+      setErrorMessage(message);
+    }
+  }
+
+  function validateImage(file: File): string | null {
+    const fileName = file.name.toLowerCase();
+    const allowedExtension = ACCEPTED_IMAGE_EXTENSIONS.some((ext) => fileName.endsWith(ext));
+    const allowedMime = ACCEPTED_IMAGE_TYPES.includes(file.type);
+
+    if (!allowedExtension || !allowedMime) {
+      return "Envie uma imagem PNG ou JPG/JPEG para gerar o rascunho.";
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return "A imagem excede o limite de 5 MB.";
+    }
+
+    return null;
+  }
+
+  function handleImageSelection(file: File | null) {
+    setSelectedImage(file);
+    setErrorMessage(null);
+    if (!file) {
+      return;
+    }
+
+    const validationError = validateImage(file);
+    if (validationError) {
+      setSelectedImage(null);
+      setAiStatus("error");
+      setErrorMessage(validationError);
+    }
+  }
+
+  async function handleGenerateFromImage() {
+    if (!selectedImage) {
+      setAiStatus("error");
+      setErrorMessage("Selecione uma imagem da vaga para extrair o rascunho.");
+      return;
+    }
+
+    const validationError = validateImage(selectedImage);
+    if (validationError) {
+      setAiStatus("error");
+      setErrorMessage(validationError);
+      return;
+    }
+
+    setAiStatus("loading");
+    setErrorMessage(null);
+    setDraft(null);
+    setNeedsReview([]);
+    setWarnings([]);
+    setSafetyCheck(null);
+    setExtractedText(null);
+
+    try {
+      const response = await generateJobAiDraftFromImage(selectedImage, contextText);
+      setDraft(response.draft);
+      setNeedsReview(response.needs_review ?? []);
+      setWarnings(response.warnings ?? []);
+      setSafetyCheck(response.safety_check ?? null);
+      setExtractedText(response.extracted_text ?? null);
+      setAiStatus("ready");
+    } catch (err: unknown) {
+      setAiStatus("error");
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível extrair a imagem e gerar o rascunho.";
       setErrorMessage(message);
     }
   }
@@ -242,6 +325,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     setNeedsReview([]);
     setWarnings([]);
     setSafetyCheck(null);
+    setExtractedText(null);
     setAiStatus("idle");
     setErrorMessage(null);
   }
@@ -252,6 +336,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     work_model: "Modelo de trabalho não informado",
     title: "Título não gerado",
     description: "Descrição não gerada",
+    extracted_text: "Texto extraído da imagem exige revisão",
   };
 
   const WARNING_LABELS: Record<string, string> = {
@@ -279,6 +364,12 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
       "Texto potencialmente discriminatório foi removido e precisa de validação humana.",
     safety_check_requires_review:
       "A checagem de segurança identificou pontos que exigem revisão humana antes de aplicar.",
+    nice_to_have_preserved_from_source:
+      "Um diferencial explícito da imagem foi mantido como opcional e não como requisito obrigatório.",
+    image_text_extraction_requires_review:
+      "O texto extraído da imagem pode conter OCR imperfeito. Revise antes de aplicar.",
+    ocr_text_may_be_incomplete:
+      "A extração da imagem parece parcial. Confirme título, requisitos, jornada e benefícios.",
   };
 
   const SAFETY_FIELD_LABELS: Record<string, string> = {
@@ -328,51 +419,142 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <label htmlFor="ai-draft-prompt" className="text-sm font-medium text-text">
-              Descrição da vaga para IA
-            </label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-text-muted hover:text-text"
-              onClick={() => setPrompt(JOB_AI_PROMPT_EXAMPLE)}
-            >
-              Usar exemplo
-            </Button>
-          </div>
-
-          <textarea
-            id="ai-draft-prompt"
-            aria-label="Descrição da vaga para IA"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            rows={5}
-            placeholder="Ex: Preciso contratar um frentista para posto de combustível..."
-            className="min-h-[128px] w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none transition focus:border-[hsl(var(--primary))] focus:ring-2 focus:ring-[hsl(var(--primary))]/20"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            onClick={() => void handleGenerate()}
-            disabled={isLoading}
-            data-testid="ai-draft-generate-btn"
+          <Tabs
+            value={inputMode}
+            onValueChange={(value) => setInputMode(value as DraftInputMode)}
+            data-testid="ai-draft-mode-tabs"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                Gerando rascunho...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
-                Gerar com IA
-              </>
-            )}
-          </Button>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="text">Colar descrição</TabsTrigger>
+              <TabsTrigger value="image">Enviar imagem</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="text" className="space-y-4" forceMount>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="ai-draft-prompt" className="text-sm font-medium text-text">
+                    Descrição da vaga para IA
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-text-muted hover:text-text"
+                    onClick={() => setPrompt(JOB_AI_PROMPT_EXAMPLE)}
+                  >
+                    Usar exemplo
+                  </Button>
+                </div>
+
+                <textarea
+                  id="ai-draft-prompt"
+                  aria-label="Descrição da vaga para IA"
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  rows={5}
+                  placeholder="Ex: Preciso contratar um frentista para posto de combustível..."
+                  className="min-h-[128px] w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none transition focus:border-[hsl(var(--primary))] focus:ring-2 focus:ring-[hsl(var(--primary))]/20"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={() => void handleGenerate()}
+                  disabled={isLoading}
+                  data-testid="ai-draft-generate-btn"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      Gerando rascunho...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
+                      Gerar com IA
+                    </>
+                  )}
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent
+              value="image"
+              className="space-y-4"
+              data-testid="ai-draft-image-tab"
+              forceMount
+            >
+              <div className="space-y-3 rounded-xl border border-dashed border-border bg-surface px-4 py-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-text">Enviar imagem da vaga</p>
+                  <p className="text-xs text-text-muted">
+                    Aceita PNG e JPG/JPEG. A imagem gera apenas um rascunho revisável.
+                  </p>
+                </div>
+
+                <label
+                  htmlFor="ai-draft-image-input"
+                  className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-border bg-background px-4 py-5 text-center text-sm text-text-muted transition hover:border-[hsl(var(--primary))]/40"
+                >
+                  <span className="font-medium text-text">Selecionar imagem</span>
+                  <span className="mt-1 text-xs">Clique para enviar a arte da vaga</span>
+                </label>
+                <input
+                  id="ai-draft-image-input"
+                  type="file"
+                  accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                  className="sr-only"
+                  data-testid="ai-draft-image-input"
+                  onChange={(event) => handleImageSelection(event.target.files?.[0] ?? null)}
+                />
+
+                {selectedImage && (
+                  <div
+                    className="rounded-lg border border-border bg-surface-muted/70 px-3 py-2 text-sm text-text"
+                    data-testid="ai-draft-image-filename"
+                  >
+                    {selectedImage.name}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="ai-draft-context-text" className="text-sm font-medium text-text">
+                  Contexto adicional opcional
+                </label>
+                <Textarea
+                  id="ai-draft-context-text"
+                  value={contextText}
+                  onChange={(event) => setContextText(event.target.value)}
+                  className="min-h-[96px] text-sm"
+                  placeholder="Ex: priorizar informações do banner e manter benefícios exatamente como estiverem na imagem."
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={() => void handleGenerateFromImage()}
+                  disabled={isLoading}
+                  data-testid="ai-draft-generate-image-btn"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      Extraindo e gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
+                      Extrair e gerar rascunho
+                    </>
+                  )}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+
           <p className="text-xs text-text-muted">
             O rascunho é para revisão humana — não salva nem publica automaticamente.
           </p>
@@ -444,6 +626,18 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                       .map((key) => NEEDS_REVIEW_LABELS[key] ?? key)
                       .join(", ")}
                   </div>
+                </div>
+              )}
+
+              {extractedText && (
+                <div
+                  className="space-y-2 rounded-xl border border-border bg-surface px-3 py-3"
+                  data-testid="ai-draft-extracted-text"
+                >
+                  <SectionTitle>Texto extraído da imagem</SectionTitle>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-text-muted">
+                    {extractedText}
+                  </p>
                 </div>
               )}
 

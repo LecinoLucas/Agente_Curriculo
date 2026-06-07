@@ -4,8 +4,14 @@ import { httpRequest } from "@/services/http";
 
 export type JobOcrExtractResponse = {
   extracted_text: string;
+  text_preview: string;
   character_count: number;
-  source: string;
+  confidence: number | null;
+  source: {
+    filename: string;
+    mime_type: string;
+    size_bytes: number;
+  };
 };
 
 // ── Draft ─────────────────────────────────────────────────────────────────────
@@ -77,6 +83,8 @@ export type JobAiDraftGenerateResponse = {
   draft: JobAiDraftFields;
   needs_review: string[];
   warnings?: string[];
+  extracted_text?: string | null;
+  extraction_confidence?: number | null;
   safety_check?: JobAiDraftSafetyCheck | null;
   source: JobAiDraftSource;
   usage: JobAiDraftUsage;
@@ -104,5 +112,21 @@ export async function generateJobAiDraft(
   return httpRequest<JobAiDraftGenerateResponse>("/api/v1/jobs/ai-draft/generate", {
     method: "POST",
     body: payload,
+  });
+}
+
+export async function generateJobAiDraftFromImage(
+  file: File,
+  contextText?: string | null,
+): Promise<JobAiDraftGenerateResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  if (contextText?.trim()) {
+    form.append("context_text", contextText.trim());
+  }
+
+  return httpRequest<JobAiDraftGenerateResponse>("/api/v1/jobs/ai-draft/from-image", {
+    method: "POST",
+    body: form,
   });
 }

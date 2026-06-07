@@ -892,9 +892,26 @@ class AiDraftSourceResponse(BaseModel):
     input_character_count: int
 
 
+class AiDraftSafetyFindingResponse(BaseModel):
+    field: str
+    severity: str
+    code: str
+    message: str
+    term: str | None = None
+
+
+class AiDraftSafetyCheckResponse(BaseModel):
+    status: str
+    highest_severity: str | None = None
+    findings: list[AiDraftSafetyFindingResponse] = Field(default_factory=list)
+
+
 class AiDraftGenerateResponse(BaseModel):
     draft: AiDraftFieldsResponse
     needs_review: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    extracted_text: str | None = None
+    extraction_confidence: float | None = None
+    safety_check: AiDraftSafetyCheckResponse | None = None
     source: AiDraftSourceResponse
     usage: AiDraftUsageResponse

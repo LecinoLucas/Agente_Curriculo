@@ -7,14 +7,19 @@ import { buildFrontendPublicationBlockers } from "../../features/jobs/utils/jobF
 import { MOCK_AI_PROMPT_EXAMPLE } from "../../features/jobs/utils/mockJobAiDraft";
 import { STEPS, MACRO_STEPS, JobFormPage } from "../JobFormPage";
 import { skillsService, type SkillCatalog } from "@/services/skillsService";
-import { generateJobAiDraft } from "../../features/jobs/services/jobAiDraftService";
+import {
+  generateJobAiDraft,
+  generateJobAiDraftFromImage,
+} from "../../features/jobs/services/jobAiDraftService";
 
-const { mockGenerateJobAiDraft } = vi.hoisted(() => ({
+const { mockGenerateJobAiDraft, mockGenerateJobAiDraftFromImage } = vi.hoisted(() => ({
   mockGenerateJobAiDraft: vi.fn(),
+  mockGenerateJobAiDraftFromImage: vi.fn(),
 }));
 
 vi.mock("../../features/jobs/services/jobAiDraftService", () => ({
   generateJobAiDraft: mockGenerateJobAiDraft,
+  generateJobAiDraftFromImage: mockGenerateJobAiDraftFromImage,
 }));
 
 vi.mock("@/services/skillsService", () => ({
@@ -240,6 +245,7 @@ describe("JobFormPage", () => {
     mockFormState.form = EMPTY_FORM;
     mockSkillLookup();
     mockGenerateJobAiDraft.mockResolvedValue(MOCK_GENERATE_DRAFT_RESPONSE);
+    mockGenerateJobAiDraftFromImage.mockResolvedValue(MOCK_GENERATE_DRAFT_RESPONSE);
   });
 
   // ── Existing: Step order (must not break) ────────────────────────────────
@@ -549,6 +555,16 @@ describe("JobFormPage", () => {
       expect(textarea).toHaveValue("");
       fireEvent.click(screen.getByRole("button", { name: /Usar exemplo/i }));
       expect(textarea).toHaveValue(MOCK_AI_PROMPT_EXAMPLE);
+    });
+
+    it("renderiza a aba 'Enviar imagem' sem publicar ou salvar automaticamente", async () => {
+      await openAiMode();
+      fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+
+      expect(screen.getByText(/Enviar imagem da vaga/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Extrair e gerar rascunho/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Publicar$/i })).not.toBeInTheDocument();
+      expect(mockGenerateJobAiDraftFromImage).not.toHaveBeenCalled();
     });
 
     it("botão 'Gerar com IA' mostra loading e depois o rascunho", async () => {
