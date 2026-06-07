@@ -4,6 +4,7 @@ import {
   AlertCircle,
   BrainCircuit,
   ChevronLeft,
+  ChevronRight,
   Compass,
   History,
   LoaderCircle,
@@ -33,7 +34,9 @@ import {
   summarizeResponse,
 } from "../utils/aiAssistantPresenters";
 import {
+  containsSensitiveAssistantText,
   normalizeErrorMessage,
+  sanitizeAssistantText,
   sanitizeResponse,
   sanitizeText,
 } from "../utils/aiAssistantSanitizer";
@@ -66,7 +69,7 @@ function buildHistoryItem(params: {
     const successfulSteps = params.compositeResult.steps.filter((step) => step.status === "success");
     return {
       id: crypto.randomUUID(),
-      label: params.action.label,
+      label: sanitizeAssistantText(params.action.label),
       intent: params.action.intent,
       source: params.source,
       kind: classifyIntent(params.action.intent),
@@ -74,14 +77,14 @@ function buildHistoryItem(params: {
       entityId: params.entityId ?? null,
       status: successfulSteps.length > 0 ? "success" : "error",
       timestamp: formatShortTime(),
-      query: params.query?.trim() ? params.query.trim() : null,
+      query: params.query?.trim() ? sanitizeAssistantText(params.query.trim()) : null,
       summary:
         successfulSteps.length > 0
           ? `Consulta composta com ${successfulSteps.length} etapa(s) concluída(s).`
           : "Consulta composta sem resultados disponíveis.",
       result: null,
       compositeResult: params.compositeResult,
-      errorMessage: params.errorMessage ?? null,
+      errorMessage: params.errorMessage ? sanitizeAssistantText(params.errorMessage) : null,
     };
   }
 
@@ -98,7 +101,7 @@ function buildHistoryItem(params: {
 
   return {
     id: crypto.randomUUID(),
-    label: params.action.label,
+    label: sanitizeAssistantText(params.action.label),
     intent: params.action.intent,
     source: params.source,
     kind: classifyIntent(params.action.intent),
@@ -106,11 +109,28 @@ function buildHistoryItem(params: {
     entityId: params.entityId ?? null,
     status,
     timestamp: formatShortTime(),
-    query: params.query?.trim() ? params.query.trim() : null,
-    summary,
+    query: params.query?.trim() ? sanitizeAssistantText(params.query.trim()) : null,
+    summary: sanitizeAssistantText(summary),
     result: storedResponse,
     compositeResult: null,
     errorMessage,
+  };
+}
+
+function sanitizeCompositeSnapshot(snapshot: AiCompositeExecutionResult): AiCompositeExecutionResult {
+  return {
+    ...snapshot,
+    label: sanitizeAssistantText(snapshot.label),
+    description: sanitizeAssistantText(snapshot.description),
+    summary: snapshot.summary.map((item) => sanitizeAssistantText(item)),
+    nextStep: sanitizeAssistantText(snapshot.nextStep),
+    limitations: snapshot.limitations.map((item) => sanitizeAssistantText(item)),
+    steps: snapshot.steps.map((step) => ({
+      ...step,
+      label: sanitizeAssistantText(step.label),
+      result: step.result ? sanitizeResponse(step.result) : null,
+      errorMessage: step.errorMessage ? sanitizeAssistantText(step.errorMessage) : null,
+    })),
   };
 }
 
@@ -173,6 +193,13 @@ export function AiAssistantDrawer({
     setCompositeResult(null);
     setErrorMessage(null);
 
+    const historyQuery =
+      options && "historyQuery" in options
+        ? options.historyQuery ?? null
+        : action.kind === "knowledge"
+          ? action.query
+          : null;
+
     try {
       const response = sanitizeResponse(
         await aiAssistantService.query({
@@ -191,7 +218,7 @@ export function AiAssistantDrawer({
             options?.historySource ??
             (action.section === "suggestions" ? "suggestion" : "context_action"),
           entityId: pageContext.entityId,
-          query: options?.historyQuery ?? (action.kind === "knowledge" ? action.query : null),
+          query: historyQuery,
           response,
         }),
       );
@@ -207,7 +234,7 @@ export function AiAssistantDrawer({
             options?.historySource ??
             (action.section === "suggestions" ? "suggestion" : "context_action"),
           entityId: pageContext.entityId,
-          query: options?.historyQuery ?? (action.kind === "knowledge" ? action.query : null),
+          query: historyQuery,
           errorMessage: msg,
         }),
       );
@@ -279,7 +306,7 @@ export function AiAssistantDrawer({
 
     const successfulSteps = stepResults.filter((step) => step.status === "success");
     const failedSteps = stepResults.filter((step) => step.status === "error");
-    const snapshot: AiCompositeExecutionResult = {
+    const snapshot = sanitizeCompositeSnapshot({
       id: plan.id,
       label: plan.label,
       description: plan.description,
@@ -297,7 +324,7 @@ export function AiAssistantDrawer({
       limitations: failedSteps.map(
         (step) => `Não consegui consultar ${step.label.toLowerCase()} agora.`,
       ),
-    };
+    });
 
     setCompositeResult(snapshot);
     setStatus("result");
@@ -394,18 +421,21 @@ export function AiAssistantDrawer({
   };
 
   return (
-    <>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Assistente IA"
+    >
       <div
-        className="fixed inset-0 z-40 bg-black/30"
+        className="absolute inset-0"
         onClick={onClose}
         aria-hidden="true"
         data-testid="ai-assistant-backdrop"
       />
 
       <div
-        role="dialog"
-        aria-label="Assistente IA"
-        className="fixed inset-y-0 right-0 z-50 flex w-[380px] max-w-[calc(100vw-16px)] flex-col overflow-hidden bg-surface shadow-xl"
+        className="relative z-10 flex w-full max-w-4xl max-h-[86vh] flex-col overflow-hidden rounded-xl bg-surface shadow-2xl ring-1 ring-border/50"
         data-testid="ai-assistant-drawer"
       >
         <div className="flex items-center gap-3 border-b border-border p-4">
@@ -439,7 +469,10 @@ export function AiAssistantDrawer({
             </div>
             {status === "idle" && (
               <p className="text-xs text-text-muted">
-                Somente leitura · Nenhuma ação será executada
+                {pageContext.domain === "job" ? "Insights e recomendações para esta vaga" :
+                 pageContext.domain === "candidate" ? "Resumo e orientações sobre este candidato" :
+                 pageContext.domain === "admission" ? "Acompanhamento e pendências desta admissão" :
+                 "Consulte informações do sistema com segurança"}
               </p>
             )}
           </div>
@@ -459,24 +492,30 @@ export function AiAssistantDrawer({
           {status === "idle" && (
             <div className="space-y-6">
               <div
-                className="rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3"
+                className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-border bg-surface-muted/50 p-4"
                 data-testid="ai-assistant-context-panel"
               >
-                <p
-                  className="text-xs font-semibold uppercase tracking-wide text-text-muted"
-                  data-testid="ai-assistant-context-label"
-                >
-                  Contexto atual: {pageContext.title}
-                </p>
-                <p className="mt-1 text-sm text-text">{pageContext.subtitle}</p>
-                <p className="mt-2 text-xs text-text-muted">{pageContext.guidance}</p>
-                {pageContext.entityLabel && (
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]">
+                  <Compass className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
                   <p
-                    className="mt-2 text-xs font-medium text-text-muted"
-                    data-testid="ai-assistant-context-entity"
+                    className="text-xs font-bold uppercase tracking-wide text-text-muted"
+                    data-testid="ai-assistant-context-label"
                   >
-                    {pageContext.entityLabel}
+                    Contexto da tela: {pageContext.title}
                   </p>
+                  <p className="truncate text-sm font-semibold text-text">{pageContext.subtitle}</p>
+                </div>
+                {pageContext.entityLabel && (
+                  <div className="shrink-0">
+                    <span
+                      className="inline-flex rounded-full border border-border bg-surface px-2.5 py-1 text-[10px] font-bold tracking-wide text-text-muted shadow-sm"
+                      data-testid="ai-assistant-context-entity"
+                    >
+                      {pageContext.entityLabel}
+                    </span>
+                  </div>
                 )}
               </div>
 
@@ -489,15 +528,6 @@ export function AiAssistantDrawer({
                   emptyTitle={pageContext.emptyTitle}
                   emptyDescription={pageContext.emptyDescription}
                   onAction={handleAction}
-                />
-              </div>
-
-              <div className="border-t border-border pt-6">
-                <TextIntentSection
-                  contextDomain={pageContext.domain}
-                  feedback={textIntentFeedback}
-                  preview={textIntentPreview}
-                  onAction={handleTextIntentAction}
                 />
               </div>
 
@@ -535,6 +565,15 @@ export function AiAssistantDrawer({
                   history={history}
                   onOpen={handleHistoryOpen}
                   onClear={handleClearHistory}
+                />
+              </div>
+
+              <div className="border-t border-border pt-6">
+                <TextIntentSection
+                  contextDomain={pageContext.domain}
+                  feedback={textIntentFeedback}
+                  preview={textIntentPreview}
+                  onAction={handleTextIntentAction}
                 />
               </div>
             </div>
@@ -600,7 +639,7 @@ export function AiAssistantDrawer({
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -715,7 +754,7 @@ function ActionList({
   }
 
   return (
-    <ul className="space-y-2" data-testid="ai-assistant-actions">
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="ai-assistant-actions">
       {actions.map((action) => (
         <li key={action.id}>
           <button
@@ -723,10 +762,16 @@ function ActionList({
             onClick={() => onAction(action)}
             data-testid={`ai-action-${action.id}`}
             data-action-kind={action.kind}
-            className="w-full rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3 text-left transition-colors hover:border-[hsl(var(--primary))]/30 hover:bg-surface-muted"
+            className="group flex h-full w-full flex-col rounded-xl border border-border bg-[hsl(var(--bg))]/60 p-4 text-left transition-all hover:border-[hsl(var(--primary))]/40 hover:bg-surface-muted hover:shadow-sm"
           >
-            <p className="text-sm font-medium text-text">{action.label}</p>
-            <p className="mt-0.5 text-xs text-text-muted">{action.description}</p>
+            <div className="mb-3 flex items-center justify-between text-[hsl(var(--primary))]">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <p className="text-sm font-bold text-text">{action.label}</p>
+            <p className="mt-1 flex-1 text-xs text-text-muted">{action.description}</p>
+            <div className="mt-3 flex w-full justify-end">
+              <ChevronRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-1" />
+            </div>
           </button>
         </li>
       ))}
@@ -759,7 +804,7 @@ function SuggestionList({
   }
 
   return (
-    <ul className="space-y-2" data-testid="ai-assistant-suggestions">
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="ai-assistant-suggestions">
       {actions.map((action) => (
         <li key={action.id}>
           <button
@@ -767,19 +812,18 @@ function SuggestionList({
             onClick={() => onAction(action)}
             data-testid={`ai-suggestion-${action.id}`}
             data-action-kind={action.kind}
-            className="w-full rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3 text-left transition-colors hover:border-[hsl(var(--primary))]/30 hover:bg-surface-muted"
+            className="group flex h-full w-full flex-col rounded-xl border border-border/70 bg-[hsl(var(--bg))]/60 p-4 text-left transition-all hover:border-[hsl(var(--primary))]/30 hover:bg-surface-muted hover:shadow-sm"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-text">{action.label}</p>
-                <p className="mt-0.5 text-xs text-text-muted">{action.description}</p>
-              </div>
-              <PanelTop className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <PanelTop className="h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
             </div>
-            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-text-muted">
-              <SuggestionMetaChip label={`Domínio: ${describeSuggestionDomain(action)}`} />
-              <SuggestionMetaChip label={`Intent: ${getActionIntentLabel(action)}`} />
-              <SuggestionMetaChip label={`Payload: ${describeSuggestionPayload(action)}`} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-text">{action.label}</p>
+              <p className="mt-1 text-xs text-text-muted">{action.description}</p>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-1.5 text-[10px] text-text-muted">
+              <SuggestionMetaChip label={`${describeSuggestionDomain(action)}`} />
+              <SuggestionMetaChip label={`${getActionIntentLabel(action)}`} />
             </div>
           </button>
         </li>
@@ -828,7 +872,7 @@ function describeSuggestionPayload(action: AiAssistantContextAction): string {
 function shouldStoreHistoryQuery(query: string): boolean {
   const trimmed = query.trim();
   if (!trimmed) return false;
-  return sanitizeText(trimmed) === trimmed;
+  return !containsSensitiveAssistantText(trimmed) && sanitizeText(trimmed) === trimmed;
 }
 
 function getTextIntentPlaceholder(contextDomain: string): string {
@@ -901,6 +945,9 @@ function TextIntentSection({
           <Sparkles className="h-3.5 w-3.5" />
           Consultar
         </button>
+        <p className="text-center text-[10px] text-text-muted/80">
+          O assistente pode cometer erros. Confirme informações importantes.
+        </p>
       </div>
 
       {preview && (

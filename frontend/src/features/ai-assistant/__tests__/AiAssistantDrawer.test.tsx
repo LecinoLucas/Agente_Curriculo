@@ -75,9 +75,9 @@ describe("AiAssistantDrawer", () => {
   it("renders the drawer with readonly notice", () => {
     renderDrawer();
     expect(screen.getByTestId("ai-assistant-drawer")).toBeInTheDocument();
-    expect(screen.getByText(/Somente leitura/i)).toBeInTheDocument();
+    expect(screen.getByText(/Insights e recomendações para esta vaga/i)).toBeInTheDocument();
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto atual: Vaga",
+      "Contexto da tela: Vaga",
     );
   });
 
@@ -127,7 +127,7 @@ describe("AiAssistantDrawer", () => {
 
     await waitFor(() => screen.getByTestId("ai-assistant-warnings"));
     expect(
-      screen.getByText(/Não foi possível consultar os embeddings agora/i),
+      screen.getByText(/Não foi possível consultar a indexação semântica agora/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/embedding_provider_error/i)).not.toBeInTheDocument();
   });
@@ -174,6 +174,27 @@ describe("AiAssistantDrawer", () => {
     expect(screen.queryByText("PROVIDER_RATE_LIMITED")).not.toBeInTheDocument();
   });
 
+  it("sanitizes warning with stack trace", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({
+        intent: "knowledge.search",
+        data: { chunks: [] },
+        warnings: ['Traceback (most recent call last): File "/app/main.py", line 10'],
+      }),
+    );
+    renderDrawer();
+
+    await user.type(screen.getByTestId("ai-knowledge-input"), "erro");
+    await user.click(screen.getByTestId("ai-knowledge-search"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-warnings"));
+    const warningsText = screen.getByTestId("ai-assistant-warnings").textContent ?? "";
+    expect(warningsText).toContain("Detalhes técnicos internos foram ocultados.");
+    expect(warningsText).not.toContain("Traceback");
+    expect(warningsText).not.toContain("/app/main.py");
+  });
+
   it("renders knowledge.search with the 'Fontes encontradas' section", async () => {
     const user = userEvent.setup();
     vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
@@ -199,6 +220,72 @@ describe("AiAssistantDrawer", () => {
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     expect(screen.getByText("Fontes encontradas")).toBeInTheDocument();
     expect(screen.getByText("Manual RH")).toBeInTheDocument();
+  });
+
+  it("does not render cpf phone or email in knowledge.search snippets", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({
+        intent: "knowledge.search",
+        data: {
+          query: "dados pessoais",
+          chunks: [
+            {
+              source_title: "Documento com CPF",
+              content: "CPF 123.456.789-00 telefone (11) 91234-5678 email qa@example.test",
+              score: 0.91,
+            },
+          ],
+        },
+      }),
+    );
+    renderDrawer();
+
+    await user.type(screen.getByTestId("ai-knowledge-input"), "dados pessoais");
+    await user.click(screen.getByTestId("ai-knowledge-search"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-result"));
+    const resultText = screen.getByTestId("ai-assistant-result").textContent ?? "";
+    expect(resultText).toContain("[cpf_removido]");
+    expect(resultText).toContain("[telefone_removido]");
+    expect(resultText).toContain("[email_removido]");
+    expect(resultText).not.toContain("123.456.789-00");
+    expect(resultText).not.toContain("91234-5678");
+    expect(resultText).not.toContain("qa@example.test");
+  });
+
+  it("does not render internal fields in knowledge.search snippets", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({
+        intent: "knowledge.search",
+        data: {
+          query: "campos internos",
+          chunks: [
+            {
+              source_title: "payload_json confidencial",
+              content:
+                'payload_json: {"cpf":"12345678900"} vector_json: [1,2] embedding: [0.1]',
+              content_hash: "abc123",
+              score: 0.82,
+            },
+          ],
+        },
+      }),
+    );
+    renderDrawer();
+
+    await user.type(screen.getByTestId("ai-knowledge-input"), "campos internos");
+    await user.click(screen.getByTestId("ai-knowledge-search"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-result"));
+    const resultText = screen.getByTestId("ai-assistant-result").textContent ?? "";
+    expect(resultText).toContain("[segredo_removido]");
+    expect(resultText).not.toContain("payload_json");
+    expect(resultText).not.toContain("vector_json");
+    expect(resultText).not.toContain("embedding");
+    expect(resultText).not.toContain("content_hash");
+    expect(resultText).not.toContain("12345678900");
   });
 
   it("renders friendly empty message for empty knowledge.search", async () => {
@@ -240,6 +327,52 @@ describe("AiAssistantDrawer", () => {
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
     expect(screen.getByText("Resposta")).toBeInTheDocument();
     expect(screen.getByText(/O home office é permitido/i)).toBeInTheDocument();
+  });
+
+  it("does not render cpf in knowledge.answer", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({
+        intent: "knowledge.answer",
+        data: {
+          answer: "O CPF 123.456.789-00 foi localizado para validação.",
+          sources: [{ source_title: "Documento com CPF", excerpt: "CPF 12345678900" }],
+        },
+      }),
+    );
+    renderDrawer();
+
+    await user.type(screen.getByTestId("ai-knowledge-input"), "cpf");
+    await user.click(screen.getByTestId("ai-knowledge-answer"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-result"));
+    const resultText = screen.getByTestId("ai-assistant-result").textContent ?? "";
+    expect(resultText).toContain("[cpf_removido]");
+    expect(resultText).not.toContain("123.456.789-00");
+    expect(resultText).not.toContain("12345678900");
+  });
+
+  it("renders friendly provider error without technical details", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({
+        intent: "knowledge.answer",
+        ok: false,
+        error_code: null,
+        message:
+          'Traceback (most recent call last): File "/app/main.py", line 10, in <module>',
+      }),
+    );
+    renderDrawer();
+
+    await user.type(screen.getByTestId("ai-knowledge-input"), "falha");
+    await user.click(screen.getByTestId("ai-knowledge-answer"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-result"));
+    const resultText = screen.getByTestId("ai-assistant-result").textContent ?? "";
+    expect(resultText).toContain("Detalhes técnicos internos foram ocultados");
+    expect(resultText).not.toContain("Traceback");
+    expect(resultText).not.toContain("/app/main.py");
   });
 
   it("renders sources for knowledge.answer", async () => {
@@ -311,6 +444,7 @@ describe("AiAssistantDrawer", () => {
     expect(screen.queryByText(/hash-secreto/)).not.toBeInTheDocument();
     expect(screen.queryByText(/vector_json/)).not.toBeInTheDocument();
     expect(screen.queryByText(/payload_json/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/embedding/)).not.toBeInTheDocument();
   });
 
   it("does not render stack traces", async () => {
@@ -380,7 +514,7 @@ describe("AiAssistantDrawer", () => {
   it("derives job context and keeps job actions visible on job routes", () => {
     renderDrawer("/vagas/job-123");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto atual: Vaga",
+      "Contexto da tela: Vaga",
     );
     expect(screen.getByTestId("ai-action-job.summary")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-job.requirements")).toBeInTheDocument();
@@ -400,7 +534,7 @@ describe("AiAssistantDrawer", () => {
   it("derives candidate context and keeps candidate actions visible on candidate routes", () => {
     renderDrawer("/candidatos/cand-456");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto atual: Candidato",
+      "Contexto da tela: Candidato",
     );
     expect(screen.getByTestId("ai-action-candidate.summary")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-candidate.active_pipeline")).toBeInTheDocument();
@@ -594,7 +728,7 @@ describe("AiAssistantDrawer", () => {
   it("derives admission context and renders admission actions", () => {
     renderDrawer("/admission/cases/case-456");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto atual: Admissão",
+      "Contexto da tela: Admissão",
     );
     expect(screen.getByTestId("ai-action-admission.case_summary")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-admission.documents_status")).toBeInTheDocument();
@@ -672,6 +806,41 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByText("Consultas realizadas")).toBeInTheDocument();
   });
 
+  it("does not render cpf inside composite step results", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query)
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "admission.case_summary", data: { candidate_name: "Ana" } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "admission.documents_status",
+          data: { documents: [{ checklist_title: "CPF", status: "pending" }] },
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "admission.events_summary", data: { events: ["CPF 123.456.789-00"] } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "knowledge.search",
+          data: {
+            query: "",
+            chunks: [{ source_title: "Documento com CPF", content: "CPF 123.456.789-00" }],
+          },
+        }),
+      );
+    render(<PersistentHistoryHarness path="/admission/cases/case-456" />);
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "o que falta para exportar");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-composite-result"));
+    const compositeText = screen.getByTestId("ai-assistant-composite-result").textContent ?? "";
+    expect(compositeText).toContain("[cpf_removido]");
+    expect(compositeText).not.toContain("123.456.789-00");
+  });
+
   it("classifies 'quais documentos estão pendentes' to admission.documents_status", async () => {
     const user = userEvent.setup();
     vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
@@ -743,7 +912,7 @@ describe("AiAssistantDrawer", () => {
   it("derives admin context and renders safe admin shortcuts", () => {
     renderDrawer("/admin");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      "Contexto atual: Administração",
+      "Contexto da tela: Administração",
     );
     expect(screen.getByTestId("ai-action-nav.admin.ia")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-nav.admin.health")).toBeInTheDocument();
@@ -1029,6 +1198,56 @@ describe("AiAssistantDrawer", () => {
     expect(historyJson).not.toContain("embedding_provider_error");
     expect(historyJson).not.toContain("RuntimeError");
     expect(historyJson).toContain("temporariamente indisponível");
+  });
+
+  it("does not save cpf in history after composite result", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query)
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "job.summary",
+          data: { title: "CPF 123.456.789-00" },
+        }),
+      ).mockResolvedValueOnce(makeResponse({ intent: "job.requirements", data: { required_items: ["Email qa@example.test"] } }))
+      .mockResolvedValueOnce(makeResponse({ intent: "pipeline.overview", data: { total_candidates: 3 } }))
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "knowledge.search",
+          data: { query: "", chunks: [{ source_title: "Telefone", content: "(11) 91234-5678" }] },
+        }),
+      );
+    render(<PersistentHistoryHarness path="/vagas/123" />);
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "essa vaga está pronta?");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+    await waitFor(() => screen.getByTestId("ai-assistant-composite-result"));
+
+    const historyJson = screen.getByTestId("history-json").textContent ?? "";
+    expect(historyJson).not.toContain("12345678900");
+    expect(historyJson).not.toContain("qa@example.test");
+    expect(historyJson).not.toContain("91234-5678");
+    expect(historyJson).toContain("[cpf_removido]");
+    expect(historyJson).toContain("[email_removido]");
+    expect(historyJson).toContain("[telefone_removido]");
+  });
+
+  it("does not save sensitive manual query in history", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({
+        intent: "knowledge.answer",
+        data: { answer: "CPF [cpf_removido]" },
+      }),
+    );
+    render(<PersistentHistoryHarness />);
+
+    await user.type(screen.getByTestId("ai-knowledge-input"), "Meu CPF é 123.456.789-00");
+    await user.click(screen.getByTestId("ai-knowledge-answer"));
+    await waitFor(() => screen.getByTestId("ai-assistant-result"));
+
+    const historyJson = screen.getByTestId("history-json").textContent ?? "";
+    expect(historyJson).not.toContain("123.456.789-00");
+    expect(historyJson).toContain('"query":null');
   });
 
   it("stores friendly label and text_intent source in history for controlled text input", async () => {
