@@ -81,7 +81,10 @@ class PostgresVectorRetriever(RetrieverContract):
                 query=query.query,
                 chunks=[],
                 total=0,
-                warnings=[f"embedding_provider_error: {type(exc).__name__}"],
+                warnings=[
+                    "embedding_provider_error: Não foi possível gerar embedding da consulta. "
+                    "Verifique se Gemini está configurado ou use provider fake."
+                ],
             )
 
         # Executa busca vetorial — falha vira warning controlado

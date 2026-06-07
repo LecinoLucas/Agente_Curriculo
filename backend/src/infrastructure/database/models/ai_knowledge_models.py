@@ -24,14 +24,40 @@ class AIKnowledgeDocumentModel(Base):
     title: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_type: Mapped[str] = mapped_column(sa.String(100), nullable=False)
     source_uri: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    domain: Mapped[str] = mapped_column(
+        sa.String(100), nullable=False, server_default=sa.text("'general'")
+    )
     content: Mapped[str] = mapped_column(sa.Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     metadata_json: Mapped[dict] = mapped_column(
         JSONB_COMPAT, nullable=False, server_default=sa.text("'{}'")
     )
+    visibility: Mapped[str] = mapped_column(
+        sa.String(30), nullable=False, server_default=sa.text("'internal'")
+    )
+    allowed_roles_json: Mapped[list[str]] = mapped_column(
+        JSONB_COMPAT, nullable=False, server_default=sa.text("'[]'")
+    )
+    sensitivity_level: Mapped[str] = mapped_column(
+        sa.String(30), nullable=False, server_default=sa.text("'low'")
+    )
+    tags_json: Mapped[list[str]] = mapped_column(
+        JSONB_COMPAT, nullable=False, server_default=sa.text("'[]'")
+    )
     status: Mapped[str] = mapped_column(
         sa.String(20), nullable=False, server_default=sa.text("'active'")
     )
+    reviewed_by: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        sa.TIMESTAMP(timezone=True), nullable=True
+    )
+    indexing_status: Mapped[str] = mapped_column(
+        sa.String(30), nullable=False, server_default=sa.text("'indexed'")
+    )
+    last_indexed_at: Mapped[datetime | None] = mapped_column(
+        sa.TIMESTAMP(timezone=True), nullable=True
+    )
+    last_index_error: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_by: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True), nullable=True
     )

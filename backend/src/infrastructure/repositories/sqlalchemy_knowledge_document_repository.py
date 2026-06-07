@@ -27,12 +27,25 @@ def _compute_hash(content: str) -> str:
 
 
 def _to_domain(row: AIKnowledgeDocumentModel) -> KnowledgeDocument:
+    metadata = dict(row.metadata_json or {})
+    metadata.setdefault("source_uri", row.source_uri)
+    metadata.setdefault("domain", row.domain)
+    metadata.setdefault("visibility", row.visibility)
+    metadata.setdefault("allowed_roles", list(row.allowed_roles_json or []))
+    metadata.setdefault("sensitivity_level", row.sensitivity_level)
+    metadata.setdefault("tags", list(row.tags_json or []))
+    metadata.setdefault("status", "published" if row.status == "active" else row.status)
+    metadata.setdefault("reviewed_by", row.reviewed_by)
+    metadata.setdefault("reviewed_at", row.reviewed_at.isoformat() if row.reviewed_at else None)
+    metadata.setdefault("indexing_status", row.indexing_status)
+    metadata.setdefault("last_indexed_at", row.last_indexed_at.isoformat() if row.last_indexed_at else None)
+    metadata.setdefault("last_index_error", row.last_index_error)
     return KnowledgeDocument(
         id=str(row.id),
         title=row.title,
         source_type=row.source_type,
         content=row.content,
-        metadata=dict(row.metadata_json or {}),
+        metadata=metadata,
         created_at=row.created_at,
     )
 
@@ -55,10 +68,20 @@ class SQLAlchemyKnowledgeDocumentRepository(KnowledgeDocumentRepositoryContract)
             title=document.title,
             source_type=document.source_type,
             source_uri=document.metadata.get("source_uri"),
+            domain=document.metadata.get("domain") or "general",
             content=document.content,
             content_hash=content_hash,
             metadata_json=dict(document.metadata),
-            status="active",
+            visibility=document.metadata.get("visibility") or "internal",
+            allowed_roles_json=list(document.metadata.get("allowed_roles") or []),
+            sensitivity_level=document.metadata.get("sensitivity_level") or "low",
+            tags_json=list(document.metadata.get("tags") or []),
+            status=document.metadata.get("status") or "published",
+            reviewed_by=document.metadata.get("reviewed_by"),
+            reviewed_at=_parse_datetime(document.metadata.get("reviewed_at")),
+            indexing_status=document.metadata.get("indexing_status") or "indexed",
+            last_indexed_at=_parse_datetime(document.metadata.get("last_indexed_at")) or now,
+            last_index_error=document.metadata.get("last_index_error"),
             created_at=now,
             updated_at=now,
         )
@@ -93,18 +116,16 @@ class SQLAlchemyKnowledgeDocumentRepository(KnowledgeDocumentRepositoryContract)
                     AIKnowledgeDocumentModel.status == filters.status
                 )
             else:
-                stmt = stmt.where(
-                    AIKnowledgeDocumentModel.status == "active"
-                )
+                stmt = stmt.where(AIKnowledgeDocumentModel.archived_at.is_(None))
             stmt = (
                 stmt.order_by(AIKnowledgeDocumentModel.created_at.desc())
                 .offset(filters.offset)
                 .limit(filters.limit)
             )
         else:
-            stmt = stmt.where(
-                AIKnowledgeDocumentModel.status == "active"
-            ).order_by(AIKnowledgeDocumentModel.created_at.desc())
+            stmt = stmt.where(AIKnowledgeDocumentModel.archived_at.is_(None)).order_by(
+                AIKnowledgeDocumentModel.created_at.desc()
+            )
 
         rows = (await self._session.scalars(stmt)).all()
         return [_to_domain(r) for r in rows]
@@ -132,7 +153,7 @@ class SQLAlchemyKnowledgeDocumentRepository(KnowledgeDocumentRepositoryContract)
     ) -> KnowledgeDocument | None:
         stmt = sa.select(AIKnowledgeDocumentModel).where(
             AIKnowledgeDocumentModel.content_hash == content_hash,
-            AIKnowledgeDocumentModel.status == "active",
+            AIKnowledgeDocumentModel.archived_at.is_(None),
         )
         row = await self._session.scalar(stmt)
         return _to_domain(row) if row is not None else None
@@ -144,3 +165,14 @@ def _is_valid_uuid(value: str) -> bool:
         return True
     except (ValueError, AttributeError):
         return False
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None

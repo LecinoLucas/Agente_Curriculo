@@ -153,7 +153,10 @@ class PostgresVectorStore(VectorStoreContract):
                 AIKnowledgeDocumentModel,
                 AIKnowledgeChunkModel.document_id == AIKnowledgeDocumentModel.id,
             )
-            .where(AIKnowledgeDocumentModel.archived_at.is_(None))
+            .where(
+                AIKnowledgeDocumentModel.archived_at.is_(None),
+                AIKnowledgeDocumentModel.status.in_(("active", "published")),
+            )
         )
 
         # Apply whitelisted filters only — unknown keys are silently ignored

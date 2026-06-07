@@ -182,6 +182,7 @@ class TestPostgresVectorRetriever:
         assert result.chunks == []
         assert result.total == 0
         assert any("embedding_provider_error" in w for w in result.warnings)
+        assert any("Verifique se Gemini está configurado ou use provider fake." in w for w in result.warnings)
         # Vector store NÃO deve ter sido chamado
         vector_store.similarity_search.assert_not_called()
 
