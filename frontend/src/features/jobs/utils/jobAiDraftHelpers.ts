@@ -103,9 +103,16 @@ export function applyApiDraftToForm(draft: JobAiDraftFields): Partial<JobFormVal
 
   // ── Boolean fields ───────────────────────────────────────────────────────────
 
-  // Always map booleans — backend provides sensible defaults (true / false).
-  updates.requires_manager_review = draft.requires_manager_review;
-  updates.requires_behavioral_assessment = draft.requires_behavioral_assessment;
+  if (draft.requires_manager_review !== null && draft.requires_manager_review !== undefined) {
+    updates.requires_manager_review = draft.requires_manager_review;
+  }
+
+  if (
+    draft.requires_behavioral_assessment !== null &&
+    draft.requires_behavioral_assessment !== undefined
+  ) {
+    updates.requires_behavioral_assessment = draft.requires_behavioral_assessment;
+  }
 
   // NOT mapped (intentionally):
   // - salary_min / salary_max → requires careful human review

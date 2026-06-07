@@ -871,8 +871,9 @@ class AiDraftFieldsResponse(BaseModel):
     screening_questions: list[str] = Field(default_factory=list)
     pipeline_steps: list[str] = Field(default_factory=list)
     matching_criteria: list[str] = Field(default_factory=list)
-    requires_manager_review: bool = True
-    requires_behavioral_assessment: bool = False
+    selection_flow_type: str | None = None
+    requires_manager_review: bool | None = None
+    requires_behavioral_assessment: bool | None = None
     quality_score: float | None = None
 
 

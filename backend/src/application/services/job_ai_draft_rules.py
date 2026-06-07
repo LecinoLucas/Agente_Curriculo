@@ -38,8 +38,9 @@ class AiDraftFields:
     screening_questions: list[str]
     pipeline_steps: list[str]
     matching_criteria: list[str]
-    requires_manager_review: bool
-    requires_behavioral_assessment: bool
+    selection_flow_type: str | None
+    requires_manager_review: bool | None
+    requires_behavioral_assessment: bool | None
     quality_score: float | None = None
 
 @dataclass
@@ -129,6 +130,39 @@ _EXPERIENCE_CONTEXT_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 
+_VALID_SELECTION_FLOW_TYPES = frozenset({"simple", "standard", "technical", "leadership"})
+
+_MANAGER_REVIEW_EVIDENCE_PHRASES = (
+    "entrevista com gestor",
+    "aprovacao do gestor",
+    "validacao do gestor",
+    "entrevista com gerente",
+    "aprovacao gerencial",
+    "entrevista com lideranca",
+    "validacao da lideranca",
+    "gestor participa da selecao",
+    "gerente participa da entrevista",
+)
+
+_BEHAVIORAL_ASSESSMENT_EVIDENCE_PHRASES = (
+    "avaliacao comportamental",
+    "teste comportamental",
+    "perfil comportamental",
+    "disc",
+    "fit cultural",
+    "teste de perfil",
+    "avaliacao de perfil",
+)
+
+_SELECTION_FLOW_EVIDENCE_PHRASES = (
+    "processo com triagem e entrevista",
+    "entrevista unica",
+    "entrevista tecnica",
+    "entrevista com rh e gestor",
+    "prova tecnica",
+    "teste pratico",
+)
+
 _SYSTEM_PROMPT = """\
 Você é um assistente especializado em estruturar descrições de vagas de emprego.
 
@@ -152,9 +186,13 @@ Regras obrigatórias:
 - Não invente salário se não estiver explícito no texto.
 - Não invente benefícios ou unidade se não estiverem no texto.
 - Não invente escolaridade, anos de experiência ou contexto de experiência.
+- Não invente fluxo de seleção nem ative flags de aprovação/avaliação sem evidência explícita no texto.
 - minimum_years_experience: preencher somente com anos/meses explícitos no texto. Converta meses para anos decimais (6 meses = 0.5). Não inferir por senioridade.
 - minimum_education_level: "none" | "high_school" | "technical" | "bachelor" | "postgraduate" | "master" | "phd" | null. Preencher somente com escolaridade explícita.
 - experience_context: resumo curto somente de experiência, vivência ou conhecimento explicitamente citados.
+- selection_flow_type: "simple" | "standard" | "technical" | "leadership" | null. Preencher somente com mapeamento seguro e explícito; se houver dúvida, usar null.
+- requires_manager_review: true somente se houver evidência explícita de entrevista/aprovação/validação com gestor, gerente ou liderança.
+- requires_behavioral_assessment: true somente se houver evidência explícita de avaliação comportamental, DISC, fit cultural ou teste de perfil.
 - Se escala aparecer (6x1, 12x36, 44h semanais), preencha working_hours.
 - work_model: "onsite" | "hybrid" | "remote" | null.
 - Escreva em português do Brasil, texto profissional e objetivo.
@@ -198,8 +236,9 @@ SCHEMA OBRIGATÓRIO:
   "screening_questions": ["string — pergunta técnica e objetiva de triagem, 2-5 itens"],
   "pipeline_steps": ["string — etapa do processo seletivo"],
   "matching_criteria": ["string — critério chave para match com candidato, máx 5"],
-  "requires_manager_review": "boolean — true se mencionar entrevista com gestor",
-  "requires_behavioral_assessment": "boolean — false a menos que haja sinal explícito"
+  "selection_flow_type": "simple | standard | technical | leadership | null — usar null se não houver mapeamento seguro",
+  "requires_manager_review": "boolean | null — true somente com evidência explícita",
+  "requires_behavioral_assessment": "boolean | null — true somente com evidência explícita"
 }"""
 
 def sanitize(text: str) -> str:
@@ -250,6 +289,19 @@ def _coerce_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+def _coerce_optional_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    return None
 
 def _nonempty_str(value: Any) -> str | None:
     """Return stripped string or None if absent / blank."""
@@ -347,6 +399,28 @@ def extract_experience_context(source_text: str) -> str | None:
     context = f"{prefix} {body}"
     return context[:240].strip()
 
+def _normalize_selection_flow_type(value: Any) -> str | None:
+    cleaned = _nonempty_str(value)
+    if not cleaned:
+        return None
+    normalized = _normalize_evidence_text(cleaned)
+    return normalized if normalized in _VALID_SELECTION_FLOW_TYPES else None
+
+def _source_contains_any_phrase(source_text: str, phrases: tuple[str, ...]) -> bool:
+    normalized_source = _normalize_evidence_text(source_text)
+    if not normalized_source:
+        return False
+    return any(phrase in normalized_source for phrase in phrases)
+
+def has_manager_review_source_evidence(source_text: str) -> bool:
+    return _source_contains_any_phrase(source_text, _MANAGER_REVIEW_EVIDENCE_PHRASES)
+
+def has_behavioral_assessment_source_evidence(source_text: str) -> bool:
+    return _source_contains_any_phrase(source_text, _BEHAVIORAL_ASSESSMENT_EVIDENCE_PHRASES)
+
+def has_selection_flow_source_evidence(source_text: str) -> bool:
+    return _source_contains_any_phrase(source_text, _SELECTION_FLOW_EVIDENCE_PHRASES)
+
 def has_experience_context_source_evidence(context: str, source_text: str) -> bool:
     source_context = extract_experience_context(source_text)
     if not source_context:
@@ -389,8 +463,9 @@ def parse_draft(data: dict[str, Any]) -> AiDraftFields:
         screening_questions=_safe_list(data.get("screening_questions")),
         pipeline_steps=_safe_list(data.get("pipeline_steps")),
         matching_criteria=_safe_list(data.get("matching_criteria"), limit=5),
-        requires_manager_review=bool(data.get("requires_manager_review", True)),
-        requires_behavioral_assessment=bool(data.get("requires_behavioral_assessment", False)),
+        selection_flow_type=_normalize_selection_flow_type(data.get("selection_flow_type")),
+        requires_manager_review=_coerce_optional_bool(data.get("requires_manager_review")),
+        requires_behavioral_assessment=_coerce_optional_bool(data.get("requires_behavioral_assessment")),
         quality_score=_coerce_float(data.get("quality_score")),
     )
 
@@ -556,6 +631,28 @@ def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields
         if wh_words and not any(w in src_lower for w in wh_words):
             warnings.append("Jornada/escala inferida ou inventada pela IA foi removida.")
             draft.working_hours = None
+
+    # 10. Guard selection flow booleans with explicit source evidence
+    if draft.requires_manager_review is True:
+        if has_manager_review_source_evidence(source_text):
+            warnings.append("requires_manager_review_preserved_from_source")
+        else:
+            warnings.append("requires_manager_review_removed_no_source_evidence")
+            draft.requires_manager_review = None
+
+    if draft.requires_behavioral_assessment is True:
+        if has_behavioral_assessment_source_evidence(source_text):
+            warnings.append("requires_behavioral_assessment_preserved_from_source")
+        else:
+            warnings.append("requires_behavioral_assessment_removed_no_source_evidence")
+            draft.requires_behavioral_assessment = None
+
+    # 11. selection_flow_type is never auto-applied in this phase.
+    if has_selection_flow_source_evidence(source_text):
+        warnings.append("selection_flow_type_requires_manual_review")
+        draft.selection_flow_type = None
+    elif draft.selection_flow_type is not None:
+        draft.selection_flow_type = None
 
     return draft, warnings
 

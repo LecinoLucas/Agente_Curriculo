@@ -256,6 +256,16 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
       "Escolaridade mínima removida porque não havia evidência explícita no texto.",
     experience_context_removed_no_source_evidence:
       "Contexto de experiência removido porque não havia evidência explícita no texto.",
+    requires_manager_review_removed_no_source_evidence:
+      "Revisão do gestor removida porque não havia evidência explícita no texto.",
+    requires_manager_review_preserved_from_source:
+      "Revisão do gestor preservada porque havia evidência explícita no texto.",
+    requires_behavioral_assessment_removed_no_source_evidence:
+      "Avaliação comportamental removida porque não havia evidência explícita no texto.",
+    requires_behavioral_assessment_preserved_from_source:
+      "Avaliação comportamental preservada porque havia evidência explícita no texto.",
+    selection_flow_type_requires_manual_review:
+      "Fluxo de seleção identificado no texto, mas exige revisão manual antes de configurar o formulário.",
   };
 
   return (

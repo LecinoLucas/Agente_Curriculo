@@ -51,6 +51,7 @@ const MOCK_API_RESPONSE: JobAiDraftGenerateResponse = {
     screening_questions: ["Tem disponibilidade para turno integral?"],
     pipeline_steps: ["Triagem", "Entrevista RH"],
     matching_criteria: ["Atendimento ao cliente"],
+    selection_flow_type: null,
     requires_manager_review: true,
     requires_behavioral_assessment: false,
   },
@@ -194,12 +195,18 @@ describe("applyApiDraftToForm", () => {
       experience_context: null,
       minimum_education_level: null,
       minimum_years_experience: null,
+      requires_manager_review: null,
+      requires_behavioral_assessment: null,
+      selection_flow_type: null,
     };
     const result = applyApiDraftToForm(draftNoTitle);
     expect(result.title).toBeUndefined();
     expect(result.experience_context).toBeUndefined();
     expect(result.minimum_education_level).toBeUndefined();
     expect(result.minimum_years_experience).toBeUndefined();
+    expect(result.requires_manager_review).toBeUndefined();
+    expect(result.requires_behavioral_assessment).toBeUndefined();
+    expect(result.selection_flow_type).toBeUndefined();
   });
 
   it("omite strings vazias dos novos campos", () => {
@@ -217,6 +224,32 @@ describe("applyApiDraftToForm", () => {
     const result = applyApiDraftToForm(MOCK_API_RESPONSE.draft);
     expect(result.requires_manager_review).toBe(true);
     expect(result.requires_behavioral_assessment).toBe(false);
+  });
+
+  it("não aplica requires_manager_review quando ausente", () => {
+    const result = applyApiDraftToForm({
+      ...MOCK_API_RESPONSE.draft,
+      requires_manager_review: null,
+    });
+    expect(result.requires_manager_review).toBeUndefined();
+  });
+
+  it("não sobrescreve booleans manuais com null", () => {
+    const result = applyApiDraftToForm({
+      ...MOCK_API_RESPONSE.draft,
+      requires_manager_review: null,
+      requires_behavioral_assessment: null,
+    });
+    expect(result.requires_manager_review).toBeUndefined();
+    expect(result.requires_behavioral_assessment).toBeUndefined();
+  });
+
+  it("não aplica selection_flow_type vazio", () => {
+    const result = applyApiDraftToForm({
+      ...MOCK_API_RESPONSE.draft,
+      selection_flow_type: "",
+    });
+    expect(result.selection_flow_type).toBeUndefined();
   });
 });
 
@@ -308,15 +341,17 @@ describe("JobAiDraftPanel — API real", () => {
     mockGenerateJobAiDraft.mockResolvedValue({
       ...MOCK_API_RESPONSE,
       warnings: [
-        "minimum_years_experience_removed_no_source_evidence",
-        "minimum_education_level_removed_no_source_evidence",
+        "requires_manager_review_removed_no_source_evidence",
+        "requires_behavioral_assessment_removed_no_source_evidence",
+        "selection_flow_type_requires_manual_review",
       ],
     });
     renderPanel();
     fillAndSubmit();
     const warnings = await screen.findByTestId("ai-draft-warnings");
-    expect(warnings).toHaveTextContent(/Experiência mínima removida/i);
-    expect(warnings).toHaveTextContent(/Escolaridade mínima removida/i);
+    expect(warnings).toHaveTextContent(/Revisão do gestor removida/i);
+    expect(warnings).toHaveTextContent(/Avaliação comportamental removida/i);
+    expect(warnings).toHaveTextContent(/Fluxo de seleção identificado/i);
   });
 
   it("exibe aviso de needs_review quando a API retorna campos ausentes", async () => {

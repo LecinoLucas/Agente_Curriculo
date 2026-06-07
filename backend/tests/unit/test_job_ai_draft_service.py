@@ -52,6 +52,7 @@ _DRAFT_JSON: dict = {
     "screening_questions": ["Tem disponibilidade para turno integral?"],
     "pipeline_steps": ["Triagem", "Entrevista RH", "Decisão"],
     "matching_criteria": ["Experiência em atendimento ao cliente"],
+    "selection_flow_type": None,
     "requires_manager_review": True,
     "requires_behavioral_assessment": False,
 }
@@ -231,7 +232,7 @@ class TestAiDraftServiceHappyPath:
             return_value=_mock_ai(),
         ):
             result = await svc.generate(
-                text_input="Operador de Caixa para São Paulo, SP. Jornada 6x1.",
+                text_input="Operador de Caixa para São Paulo, SP. Jornada 6x1. Processo com entrevista com gestor.",
                 ocr_text=None,
                 session=session,
             )
@@ -951,6 +952,141 @@ class TestExperienceEducationEvidenceGuardrails:
         result = await self._generate_with_draft(draft, "Vaga para vendedor.")
         assert result.draft.benefits == []
         assert "benefit_removed_no_source_evidence" in result.warnings
+
+    async def _generate_with_draft(self, draft_payload: dict, text_input: str):
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_payload))),
+        ):
+            return await svc.generate(text_input=text_input, ocr_text=None, session=session)
+
+
+# ── Selection flow and boolean evidence guardrails ────────────────────────────
+
+@pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
+class TestSelectionFlowBooleanGuardrails:
+    @pytest.mark.asyncio
+    async def test_json_without_requires_manager_review_does_not_activate_manager_review(self) -> None:
+        draft = dict(_DRAFT_JSON)
+        draft.pop("requires_manager_review")
+        result = await self._generate_with_draft(draft, "Vaga para vendedor.")
+        assert result.draft.requires_manager_review is None
+
+    @pytest.mark.asyncio
+    async def test_manager_review_true_without_evidence_is_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, requires_manager_review=True)
+        result = await self._generate_with_draft(draft, "Vaga para analista administrativo.")
+        assert result.draft.requires_manager_review is None
+        assert "requires_manager_review_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_manager_review_true_preserved_with_entrevista_com_gestor(self) -> None:
+        draft = dict(_DRAFT_JSON, requires_manager_review=True)
+        result = await self._generate_with_draft(
+            draft,
+            "Processo com entrevista com gestor após a triagem inicial.",
+        )
+        assert result.draft.requires_manager_review is True
+        assert "requires_manager_review_preserved_from_source" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_manager_review_true_preserved_with_aprovacao_gerencial(self) -> None:
+        draft = dict(_DRAFT_JSON, requires_manager_review=True)
+        result = await self._generate_with_draft(
+            draft,
+            "A contratação depende de aprovação gerencial ao final do processo.",
+        )
+        assert result.draft.requires_manager_review is True
+        assert "requires_manager_review_preserved_from_source" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_json_without_behavioral_assessment_does_not_activate_behavioral_assessment(self) -> None:
+        draft = dict(_DRAFT_JSON)
+        draft.pop("requires_behavioral_assessment")
+        result = await self._generate_with_draft(draft, "Vaga para vendedor.")
+        assert result.draft.requires_behavioral_assessment is None
+
+    @pytest.mark.asyncio
+    async def test_behavioral_assessment_true_without_evidence_is_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, requires_behavioral_assessment=True)
+        result = await self._generate_with_draft(draft, "Vaga com boa comunicação e trabalho em equipe.")
+        assert result.draft.requires_behavioral_assessment is None
+        assert "requires_behavioral_assessment_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_behavioral_assessment_true_preserved_with_avaliacao_comportamental(self) -> None:
+        draft = dict(_DRAFT_JSON, requires_behavioral_assessment=True)
+        result = await self._generate_with_draft(
+            draft,
+            "Etapa obrigatória com avaliação comportamental antes da entrevista final.",
+        )
+        assert result.draft.requires_behavioral_assessment is True
+        assert "requires_behavioral_assessment_preserved_from_source" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_behavioral_assessment_true_preserved_with_disc(self) -> None:
+        draft = dict(_DRAFT_JSON, requires_behavioral_assessment=True)
+        result = await self._generate_with_draft(
+            draft,
+            "O processo inclui DISC e entrevista final com RH.",
+        )
+        assert result.draft.requires_behavioral_assessment is True
+        assert "requires_behavioral_assessment_preserved_from_source" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_selection_flow_type_without_evidence_is_cleared(self) -> None:
+        draft = dict(_DRAFT_JSON, selection_flow_type="technical")
+        result = await self._generate_with_draft(draft, "Vaga para desenvolvedor sênior.")
+        assert result.draft.selection_flow_type is None
+        assert "selection_flow_type_requires_manual_review" not in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_generic_processo_seletivo_completo_does_not_generate_selection_flow_type(self) -> None:
+        draft = dict(_DRAFT_JSON, selection_flow_type="standard")
+        result = await self._generate_with_draft(draft, "A empresa oferece processo seletivo completo.")
+        assert result.draft.selection_flow_type is None
+        assert "selection_flow_type_requires_manual_review" not in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_explicit_selection_flow_requires_manual_review_instead_of_inventing(self) -> None:
+        draft = dict(_DRAFT_JSON, selection_flow_type="technical")
+        result = await self._generate_with_draft(
+            draft,
+            "Processo com triagem e entrevista, seguido de prova técnica.",
+        )
+        assert result.draft.selection_flow_type is None
+        assert "selection_flow_type_requires_manual_review" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_regression_salary_without_evidence_still_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, salary_min=2800, salary_max=3200)
+        result = await self._generate_with_draft(draft, "Vaga para vendedor em loja.")
+        assert result.draft.salary_min is None
+        assert result.draft.salary_max is None
+        assert "salary_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_regression_benefits_without_evidence_still_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, benefits=["Vale-transporte"])
+        result = await self._generate_with_draft(draft, "Vaga para vendedor.")
+        assert result.draft.benefits == []
+        assert "benefit_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_regression_experience_and_education_without_evidence_still_removed(self) -> None:
+        draft = dict(
+            _DRAFT_JSON,
+            minimum_years_experience=3,
+            minimum_education_level="bachelor",
+        )
+        result = await self._generate_with_draft(draft, "Vaga para analista pleno.")
+        assert result.draft.minimum_years_experience is None
+        assert result.draft.minimum_education_level is None
+        assert "minimum_years_experience_removed_no_source_evidence" in result.warnings
+        assert "minimum_education_level_removed_no_source_evidence" in result.warnings
 
     async def _generate_with_draft(self, draft_payload: dict, text_input: str):
         svc = JobAiDraftService()
