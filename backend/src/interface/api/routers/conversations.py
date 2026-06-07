@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.conversation_service import ConversationService
@@ -15,6 +15,11 @@ from src.infrastructure.repositories.sqlalchemy_resume_repository import (
 )
 from src.interface.api.dependencies import get_db
 from src.interface.api.rate_limiting import rate_limit_conversation_messages
+from src.interface.api.routers.conversation_upload import (
+    CONVERSATION_SESSION_COOKIE_NAME,
+    CONVERSATION_SESSION_TOKEN_TTL_HOURS,
+    create_conversation_session_token,
+)
 from src.interface.api.schemas.conversation_schemas import (
     ConversationCreateRequest,
     ConversationMessageCreateRequest,
@@ -38,9 +43,20 @@ def _service(db: AsyncSession) -> ConversationService:
 @router.post("", response_model=ConversationTurnResponse, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     body: ConversationCreateRequest,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> ConversationTurnResponse:
     turn = await _service(db).create_session(body)
+    response.set_cookie(
+        key=CONVERSATION_SESSION_COOKIE_NAME,
+        value=create_conversation_session_token(turn.session_id),
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        max_age=CONVERSATION_SESSION_TOKEN_TTL_HOURS * 3600,
+        path="/api/v1/conversations",
+    )
     await db.commit()
     return turn
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, HTTPException, UploadFile, status
+from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.upload_validation_service import (
@@ -12,6 +14,7 @@ from src.application.services.upload_validation_service import (
     resume_upload_policy,
     validate_upload,
 )
+from src.core.settings import settings
 from src.infrastructure.database.models.conversation_model import ConversationSessionModel
 from src.interface.api.dependencies import get_db
 
@@ -23,6 +26,54 @@ router = APIRouter(prefix="/conversations", tags=["Conversations"])
 logger = structlog.get_logger(__name__)
 
 TEMP_RESUME_DIR = Path(__file__).resolve().parents[4] / "private_uploads" / "temp_resumes"
+CONVERSATION_SESSION_COOKIE_NAME = "conversation_session_token"
+CONVERSATION_SESSION_TOKEN_TTL_HOURS = 24
+CONVERSATION_SESSION_TOKEN_TYPE = "conversation_session"
+
+
+def create_conversation_session_token(session_id: UUID) -> str:
+    now = datetime.now(UTC)
+    payload = {
+        "sub": str(session_id),
+        "session_id": str(session_id),
+        "iat": now,
+        "exp": now + timedelta(hours=CONVERSATION_SESSION_TOKEN_TTL_HOURS),
+        "type": CONVERSATION_SESSION_TOKEN_TYPE,
+    }
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def validate_conversation_session_token(token: str | None, session_id: UUID) -> None:
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Conversation session authorization required",
+        )
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired conversation session token",
+        ) from exc
+
+    if payload.get("type") != CONVERSATION_SESSION_TOKEN_TYPE:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired conversation session token",
+        )
+
+    token_session_id = payload.get("session_id") or payload.get("sub")
+    if token_session_id != str(session_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Conversation session token does not match the requested session",
+        )
 
 
 class ConversationUploadService:
@@ -70,7 +121,6 @@ class ConversationUploadService:
         logger.info(
             "conversation.pending_resume_uploaded",
             session_id=session.id,
-            temp_path=str(temp_file_path),
         )
 
         return session
@@ -80,12 +130,17 @@ class ConversationUploadService:
 async def upload_conversation_resume(
     session_id: UUID,
     file: UploadFile = File(...),
+    conversation_session_token: str | None = Cookie(
+        default=None,
+        alias=CONVERSATION_SESSION_COOKIE_NAME,
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """
     Upload a resume for a conversation session.
     The resume is stored temporarily and processed later in the conversation flow.
     """
+    validate_conversation_session_token(conversation_session_token, session_id)
     service = ConversationUploadService(db)
     await service.upload_pending_resume(session_id, file)
     return {"message": "Resume uploaded successfully. Please continue the conversation."}

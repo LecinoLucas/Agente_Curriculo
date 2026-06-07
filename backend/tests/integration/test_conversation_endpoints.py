@@ -13,6 +13,10 @@ from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
 )
+from src.interface.api.routers.conversation_upload import (
+    CONVERSATION_SESSION_COOKIE_NAME,
+    create_conversation_session_token,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -39,7 +43,9 @@ async def test_create_conversation_returns_initial_state_and_quick_replies(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    payload = await _create_conversation(client)
+    response = await client.post("/api/v1/conversations", json={"channel": "web"})
+    assert response.status_code == 201
+    payload = response.json()
 
     assert payload["session_id"]
     assert payload["current_state"] == "IDENTIFY"
@@ -55,6 +61,7 @@ async def test_create_conversation_returns_initial_state_and_quick_replies(
     assert payload["options"] == payload["quick_replies"]
     assert payload["message"]["role"] == "assistant"
     assert payload["message"]["direction"] == "outbound"
+    assert response.cookies.get(CONVERSATION_SESSION_COOKIE_NAME) is not None
 
     session = await db_session.get(ConversationSessionModel, UUID(payload["session_id"]))
     assert session is not None
@@ -375,11 +382,77 @@ async def test_resume_upload_accepts_valid_pdf(client: AsyncClient):
     assert "uploaded successfully" in response.json()["message"].lower()
 
 
-async def test_resume_upload_unknown_session_returns_clear_404(client: AsyncClient):
+async def test_resume_upload_without_conversation_cookie_returns_401(client: AsyncClient):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+    client.cookies.clear()
+
     response = await client.post(
-        f"/api/v1/conversations/{uuid4()}/resume",
+        f"/api/v1/conversations/{session_id}/resume",
+        files={"file": ("cv.pdf", _MINIMAL_PDF, "application/pdf")},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Conversation session authorization required"
+    assert "traceback" not in response.text.lower()
+
+
+async def test_resume_upload_cookie_for_other_session_returns_403(client: AsyncClient):
+    first = await _create_conversation(client)
+    second = await _create_conversation(client)
+    client.cookies.set(
+        CONVERSATION_SESSION_COOKIE_NAME,
+        create_conversation_session_token(UUID(first["session_id"])),
+        path="/api/v1/conversations",
+    )
+
+    response = await client.post(
+        f"/api/v1/conversations/{second['session_id']}/resume",
+        files={"file": ("cv.pdf", _MINIMAL_PDF, "application/pdf")},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Conversation session token does not match the requested session"
+
+
+async def test_resume_upload_unknown_session_returns_clear_404(client: AsyncClient):
+    missing_session_id = uuid4()
+    client.cookies.set(
+        CONVERSATION_SESSION_COOKIE_NAME,
+        create_conversation_session_token(missing_session_id),
+        path="/api/v1/conversations",
+    )
+    response = await client.post(
+        f"/api/v1/conversations/{missing_session_id}/resume",
         files={"file": ("cv.pdf", _MINIMAL_PDF, "application/pdf")},
     )
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Conversation session not found"
+
+
+async def test_resume_upload_invalid_file_still_blocked_when_authorized(client: AsyncClient):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+
+    response = await client.post(
+        f"/api/v1/conversations/{session_id}/resume",
+        files={"file": ("cv.pdf", b"not-a-pdf", "application/pdf")},
+    )
+
+    assert response.status_code == 400
+    assert "pdf válido" in response.json()["detail"].lower()
+
+
+async def test_resume_upload_oversized_file_still_blocked_when_authorized(client: AsyncClient):
+    create_payload = await _create_conversation(client)
+    session_id = create_payload["session_id"]
+    oversized_pdf = b"%PDF-1.4\n" + (b"x" * (11 * 1024 * 1024)) + b"\n%%EOF"
+
+    response = await client.post(
+        f"/api/v1/conversations/{session_id}/resume",
+        files={"file": ("cv.pdf", oversized_pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 400
+    assert "arquivo muito grande" in response.json()["detail"].lower()
