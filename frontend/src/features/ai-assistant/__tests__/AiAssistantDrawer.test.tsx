@@ -500,6 +500,63 @@ describe("AiAssistantDrawer", () => {
     );
   });
 
+  it("creates a composite plan for 'essa vaga está pronta' on job routes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query)
+      .mockResolvedValueOnce(makeResponse({ intent: "job.summary", data: { title: "Vaga A" } }))
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "job.requirements", data: { required_items: ["Python"] } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "pipeline.overview", data: { total_candidates: 3 } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "knowledge.search",
+          data: { query: "", chunks: [{ source_title: "Guia", content: "Texto seguro" }] },
+        }),
+      );
+    renderDrawer("/vagas/123");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "essa vaga está pronta?");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-composite-result"));
+    expect(aiAssistantService.query).toHaveBeenCalledTimes(4);
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        intent: "job.summary",
+        arguments: { job_id: "123" },
+      }),
+    );
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        intent: "job.requirements",
+        arguments: { job_id: "123" },
+      }),
+    );
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        intent: "pipeline.overview",
+        arguments: { job_id: "123" },
+      }),
+    );
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        intent: "knowledge.search",
+        arguments: {
+          query: "Quais critérios tornam uma vaga objetiva, segura e bem estruturada?",
+          limit: 5,
+        },
+      }),
+    );
+    expect(screen.getByText("Consultas realizadas")).toBeInTheDocument();
+  });
+
   it("uses job_id on job suggestions with safe payload", async () => {
     const user = userEvent.setup();
     vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
@@ -552,22 +609,67 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-suggestion-suggestion.admission.pre_admission_rules")).toBeInTheDocument();
   });
 
-  it("classifies 'o que falta para exportar' to admission.case_summary", async () => {
+  it("creates a composite plan for 'o que falta para exportar' on admission routes", async () => {
     const user = userEvent.setup();
-    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
-      makeResponse({ intent: "admission.case_summary" }),
-    );
+    vi.mocked(aiAssistantService.query)
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "admission.case_summary", data: { candidate_name: "Ana" } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "admission.documents_status",
+          data: { documents: [{ checklist_title: "CPF", status: "pending" }] },
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "admission.events_summary", data: { events: ["Envio"] } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "knowledge.search",
+          data: { query: "", chunks: [{ source_title: "Regras", content: "Texto seguro" }] },
+        }),
+      );
     renderDrawer("/admission/cases/case-456");
 
     await user.type(screen.getByTestId("ai-text-intent-input"), "o que falta para exportar");
     await user.click(screen.getByTestId("ai-text-intent-submit"));
 
-    expect(aiAssistantService.query).toHaveBeenCalledWith(
+    await waitFor(() => screen.getByTestId("ai-assistant-composite-result"));
+    expect(aiAssistantService.query).toHaveBeenCalledTimes(4);
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         intent: "admission.case_summary",
         arguments: { admission_case_id: "case-456" },
       }),
     );
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        intent: "admission.documents_status",
+        arguments: { admission_case_id: "case-456" },
+      }),
+    );
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        intent: "admission.events_summary",
+        arguments: { admission_case_id: "case-456" },
+      }),
+    );
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        intent: "knowledge.search",
+        arguments: {
+          query:
+            "Quais documentos e condições precisam estar aprovados antes da exportação admissional para o Protheus?",
+          limit: 5,
+        },
+      }),
+    );
+    expect(screen.getByText("Consultas realizadas")).toBeInTheDocument();
   });
 
   it("classifies 'quais documentos estão pendentes' to admission.documents_status", async () => {
@@ -612,6 +714,32 @@ describe("AiAssistantDrawer", () => {
     ).toBeInTheDocument();
   });
 
+  it("includes protheus.export_status in admission composite only when package_id exists", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query)
+      .mockResolvedValueOnce(makeResponse({ intent: "admission.case_summary", data: {} }))
+      .mockResolvedValueOnce(makeResponse({ intent: "admission.documents_status", data: {} }))
+      .mockResolvedValueOnce(makeResponse({ intent: "admission.events_summary", data: {} }))
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "knowledge.search", data: { query: "", chunks: [] } }),
+      )
+      .mockResolvedValueOnce(makeResponse({ intent: "protheus.export_status", data: {} }));
+    renderDrawer("/admission/cases/case-456?packageId=pkg-9");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "o que falta para exportar");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-composite-result"));
+    expect(aiAssistantService.query).toHaveBeenCalledTimes(5);
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      5,
+      expect.objectContaining({
+        intent: "protheus.export_status",
+        arguments: { package_id: "pkg-9" },
+      }),
+    );
+  });
+
   it("derives admin context and renders safe admin shortcuts", () => {
     renderDrawer("/admin");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
@@ -635,6 +763,80 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-suggestion-suggestion.generic.pre_admission_rules")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-suggestion.generic.protheus_rules")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-suggestion.generic.anti_discrimination")).toBeInTheDocument();
+  });
+
+  it("creates a composite plan for 'qual próximo passo com esse candidato'", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query)
+      .mockResolvedValueOnce(makeResponse({ intent: "candidate.summary", data: { name: "Ana" } }))
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "candidate.resume_analysis", data: { stage: "triagem" } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "knowledge.search",
+          data: { query: "", chunks: [{ source_title: "Guia", content: "Sem viés" }] },
+        }),
+      );
+    renderDrawer("/candidatos/456");
+
+    await user.type(
+      screen.getByTestId("ai-text-intent-input"),
+      "qual próximo passo com esse candidato?",
+    );
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-composite-result"));
+    expect(aiAssistantService.query).toHaveBeenCalledTimes(3);
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        intent: "candidate.summary",
+        arguments: { candidate_id: "456" },
+      }),
+    );
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        intent: "candidate.resume_analysis",
+        arguments: { candidate_id: "456" },
+      }),
+    );
+    expect(aiAssistantService.query).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        intent: "knowledge.search",
+        arguments: {
+          query: "Quais cuidados devem ser observados para avaliar candidatos sem viés?",
+          limit: 5,
+        },
+      }),
+    );
+  });
+
+  it("renders partial composite results when one step fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query)
+      .mockResolvedValueOnce(makeResponse({ intent: "admission.case_summary", data: { ok: true } }))
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "admission.documents_status", data: { ready_for_export: false } }),
+      )
+      .mockRejectedValueOnce(new Error("events timeout"))
+      .mockResolvedValueOnce(
+        makeResponse({
+          intent: "knowledge.search",
+          data: { query: "", chunks: [{ source_title: "Base", content: "Regra" }] },
+        }),
+      );
+    renderDrawer("/admission/cases/case-456");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "o que falta para exportar");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    await waitFor(() => screen.getByTestId("ai-assistant-composite-result"));
+    expect(screen.getByText("Limitações")).toBeInTheDocument();
+    expect(screen.getByText(/não consegui consultar eventos recentes agora/i)).toBeInTheDocument();
+    expect(screen.getByText("Evidências")).toBeInTheDocument();
   });
 
   it("classifies knowledge question to knowledge.search", async () => {
@@ -666,6 +868,19 @@ describe("AiAssistantDrawer", () => {
     renderDrawer("/vagas");
 
     await user.type(screen.getByTestId("ai-text-intent-input"), "resumo da vaga");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
+    expect(screen.getByTestId("ai-text-intent-feedback")).toHaveTextContent(
+      /Abra uma vaga específica/i,
+    );
+  });
+
+  it("does not execute a composite plan when the required id is missing", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/vagas");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "essa vaga está pronta?");
     await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     expect(aiAssistantService.query).not.toHaveBeenCalled();
@@ -830,6 +1045,30 @@ describe("AiAssistantDrawer", () => {
     const historyJson = screen.getByTestId("history-json").textContent ?? "";
     expect(historyJson).toContain('"label":"Resumo da vaga"');
     expect(historyJson).toContain('"source":"text_intent"');
+  });
+
+  it("stores composite_intent source in history for composite answers", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query)
+      .mockResolvedValueOnce(makeResponse({ intent: "job.summary", data: { title: "Vaga A" } }))
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "job.requirements", data: { required_items: ["Python"] } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "pipeline.overview", data: { total_candidates: 3 } }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse({ intent: "knowledge.search", data: { query: "", chunks: [] } }),
+      );
+    render(<PersistentHistoryHarness path="/vagas/123" />);
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "essa vaga está pronta?");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+    await waitFor(() => screen.getByTestId("ai-assistant-composite-result"));
+
+    const historyJson = screen.getByTestId("history-json").textContent ?? "";
+    expect(historyJson).toContain('"source":"composite_intent"');
+    expect(historyJson).toContain("Diagnóstico de prontidão da vaga");
   });
 
   it("does not save blocked controlled text content in history", async () => {

@@ -18,6 +18,9 @@ import {
 import { aiAssistantService } from "../services/aiAssistantService";
 import type {
   AiAssistantContextAction,
+  AiCompositeAction,
+  AiCompositeExecutionResult,
+  AiCompositeStepResult,
   AiAssistantHistoryItem,
   AiAssistantHistorySource,
   AiAssistantResponse,
@@ -36,6 +39,7 @@ import {
 } from "../utils/aiAssistantSanitizer";
 import { deriveAiAssistantPageContext } from "../utils/aiAssistantContext";
 import { classifyAssistantTextInput } from "../utils/aiAssistantIntentClassifier";
+import { detectCompositeAction } from "../utils/aiAssistantCompositeActions";
 
 const HISTORY_LIMIT = 5;
 
@@ -55,8 +59,32 @@ function buildHistoryItem(params: {
   entityId?: string;
   query?: string | null;
   response?: AiAssistantResponse | null;
+  compositeResult?: AiCompositeExecutionResult | null;
   errorMessage?: string | null;
 }): AiAssistantHistoryItem {
+  if (params.compositeResult) {
+    const successfulSteps = params.compositeResult.steps.filter((step) => step.status === "success");
+    return {
+      id: crypto.randomUUID(),
+      label: params.action.label,
+      intent: params.action.intent,
+      source: params.source,
+      kind: classifyIntent(params.action.intent),
+      domain: params.domain,
+      entityId: params.entityId ?? null,
+      status: successfulSteps.length > 0 ? "success" : "error",
+      timestamp: formatShortTime(),
+      query: params.query?.trim() ? params.query.trim() : null,
+      summary:
+        successfulSteps.length > 0
+          ? `Consulta composta com ${successfulSteps.length} etapa(s) concluída(s).`
+          : "Consulta composta sem resultados disponíveis.",
+      result: null,
+      compositeResult: params.compositeResult,
+      errorMessage: params.errorMessage ?? null,
+    };
+  }
+
   const response = params.response ? sanitizeResponse(params.response) : null;
   const errorMessage = params.errorMessage ? sanitizeText(params.errorMessage) : null;
   const storedResponse = response
@@ -81,6 +109,7 @@ function buildHistoryItem(params: {
     query: params.query?.trim() ? params.query.trim() : null,
     summary,
     result: storedResponse,
+    compositeResult: null,
     errorMessage,
   };
 }
@@ -102,6 +131,7 @@ export function AiAssistantDrawer({
   const [status, setStatus] = useState<DrawerStatus>("idle");
   const [activeAction, setActiveAction] = useState<AiAssistantContextAction | null>(null);
   const [result, setResult] = useState<AiAssistantResponse | null>(null);
+  const [compositeResult, setCompositeResult] = useState<AiCompositeExecutionResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localSessionHistory, setLocalSessionHistory] = useState<AiAssistantHistoryItem[]>([]);
   const [textIntentFeedback, setTextIntentFeedback] = useState<string | null>(null);
@@ -140,6 +170,7 @@ export function AiAssistantDrawer({
     setActiveAction(action);
     setStatus("loading");
     setResult(null);
+    setCompositeResult(null);
     setErrorMessage(null);
 
     try {
@@ -202,8 +233,118 @@ export function AiAssistantDrawer({
     });
   };
 
+  const executeCompositeAction = async (plan: AiCompositeAction, rawQuery: string) => {
+    setStatus("loading");
+    setResult(null);
+    setCompositeResult(null);
+    setErrorMessage(null);
+    setActiveAction({
+      id: plan.id,
+      kind: "assistant",
+      label: plan.label,
+      description: plan.description,
+      intent: plan.steps[0]?.intent ?? "knowledge.search",
+      arguments: {},
+    });
+
+    const stepResults: AiCompositeStepResult[] = [];
+    for (const step of plan.steps) {
+      try {
+        const response = sanitizeResponse(
+          await aiAssistantService.query({
+            intent: step.intent,
+            arguments: step.payload,
+            session_id: sessionId,
+          }),
+        );
+        stepResults.push({
+          id: step.id,
+          label: step.label,
+          intent: step.intent,
+          status: response.ok ? "success" : "error",
+          result: response,
+          errorMessage: response.ok ? null : friendlyError(response.error_code, response.message),
+        });
+      } catch (err: unknown) {
+        stepResults.push({
+          id: step.id,
+          label: step.label,
+          intent: step.intent,
+          status: "error",
+          result: null,
+          errorMessage: normalizeErrorMessage(err),
+        });
+      }
+    }
+
+    const successfulSteps = stepResults.filter((step) => step.status === "success");
+    const failedSteps = stepResults.filter((step) => step.status === "error");
+    const snapshot: AiCompositeExecutionResult = {
+      id: plan.id,
+      label: plan.label,
+      description: plan.description,
+      domain: plan.domain,
+      steps: stepResults,
+      summary: [
+        `Executei ${plan.steps.length} consulta(s) read-only para montar esta resposta.`,
+        successfulSteps.length > 0
+          ? `${successfulSteps.length} consulta(s) retornaram dados utilizáveis.`
+          : "Nenhuma consulta retornou dados utilizáveis.",
+      ],
+      nextStep:
+        plan.safeNextStep ??
+        "Revise as evidências disponíveis antes de qualquer decisão operacional.",
+      limitations: failedSteps.map(
+        (step) => `Não consegui consultar ${step.label.toLowerCase()} agora.`,
+      ),
+    };
+
+    setCompositeResult(snapshot);
+    setStatus("result");
+    pushHistory(
+      buildHistoryItem({
+        action: {
+          id: plan.id,
+          kind: "assistant",
+          label: plan.label,
+          description: plan.description,
+          intent: plan.steps[0]?.intent ?? "knowledge.search",
+          arguments: {},
+        },
+        domain: pageContext.domain,
+        source: "composite_intent",
+        entityId: pageContext.entityId,
+        query: shouldStoreHistoryQuery(rawQuery) ? rawQuery : null,
+        compositeResult: snapshot,
+        errorMessage:
+          successfulSteps.length === 0
+            ? "Não foi possível concluir nenhuma das consultas compostas agora."
+            : null,
+      }),
+    );
+  };
+
   const handleTextIntentAction = async (query: string) => {
     const rawQuery = query.trim();
+    const normalizedQuery = rawQuery
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    const compositePlan = detectCompositeAction(normalizedQuery, pageContext);
+
+    if (compositePlan) {
+      setTextIntentFeedback(null);
+      setTextIntentPreview({
+        label: compositePlan.label,
+        intent: "composite",
+        reason: `Plano composto com ${compositePlan.steps.length} consulta(s) read-only.`,
+      });
+      await executeCompositeAction(compositePlan, rawQuery);
+      return;
+    }
+
     const classification = classifyAssistantTextInput(rawQuery, pageContext);
 
     if (classification.status !== "classified") {
@@ -234,9 +375,10 @@ export function AiAssistantDrawer({
       intent: item.intent,
       arguments: {},
     });
+    setCompositeResult(item.compositeResult ?? null);
     setResult(item.result);
     setErrorMessage(item.errorMessage);
-    setStatus(item.status === "error" && !item.result ? "error" : "result");
+    setStatus(item.status === "error" && !item.result && !item.compositeResult ? "error" : "result");
   };
 
   const handleClearHistory = () => {
@@ -247,6 +389,7 @@ export function AiAssistantDrawer({
     setStatus("idle");
     setActiveAction(null);
     setResult(null);
+    setCompositeResult(null);
     setErrorMessage(null);
   };
 
@@ -440,9 +583,110 @@ export function AiAssistantDrawer({
               </button>
             </div>
           )}
+
+          {status === "result" && compositeResult && (
+            <div className="space-y-4">
+              <CompositeResultRenderer result={compositeResult} />
+              <button
+                type="button"
+                onClick={handleBack}
+                data-testid="ai-assistant-new-query"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Nova consulta
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>
+  );
+}
+
+function CompositeResultRenderer({ result }: { result: AiCompositeExecutionResult }) {
+  const successfulSteps = result.steps.filter((step) => step.status === "success");
+  const failedSteps = result.steps.filter((step) => step.status === "error");
+
+  return (
+    <div className="space-y-4" data-testid="ai-assistant-composite-result">
+      <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+          Consulta composta
+        </h3>
+        {result.summary.map((line) => (
+          <p key={line} className="text-sm text-text">
+            {line}
+          </p>
+        ))}
+      </section>
+
+      <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+          Consultas realizadas
+        </h3>
+        <ul className="space-y-2" data-testid="ai-assistant-composite-steps">
+          {result.steps.map((step) => (
+            <li key={step.id} className="text-sm text-text">
+              {step.status === "success" ? "✓" : "⚠"} {step.label}
+              {step.status === "error" && step.errorMessage ? ` — ${step.errorMessage}` : ""}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {successfulSteps.length > 0 && (
+        <section className="space-y-3 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Evidências</h3>
+          <div className="space-y-4">
+            {successfulSteps.map((step) =>
+              step.result ? (
+                <div key={step.id}>
+                  <p className="mb-2 text-sm font-medium text-text">{step.label}</p>
+                  <AiAssistantResultRenderer result={step.result} />
+                </div>
+              ) : null,
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+          Próximo passo sugerido
+        </h3>
+        <p className="text-sm text-text">{result.nextStep}</p>
+      </section>
+
+      {result.domain === "admin" && (
+        <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Atalhos úteis
+          </h3>
+          <ul className="space-y-2 text-sm text-text">
+            <li>Laboratório IA</li>
+            <li>Credenciais IA</li>
+            <li>Health do Sistema</li>
+            <li>Aba IA em Administração</li>
+          </ul>
+        </section>
+      )}
+
+      {failedSteps.length > 0 && (
+        <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Limitações
+          </h3>
+          <ul className="space-y-2">
+            {result.limitations.map((item) => (
+              <li key={item} className="text-sm text-text-muted">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }
 

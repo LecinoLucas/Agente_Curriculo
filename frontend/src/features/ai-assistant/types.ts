@@ -20,7 +20,45 @@ export type AiAssistantHistorySource =
   | "context_action"
   | "suggestion"
   | "knowledge_manual"
-  | "text_intent";
+  | "text_intent"
+  | "composite_intent";
+
+export type AiCompositeStep = {
+  id: string;
+  label: string;
+  intent: string;
+  payload: Record<string, unknown>;
+};
+
+export type AiCompositeAction = {
+  id: string;
+  label: string;
+  description: string;
+  domain: "job" | "candidate" | "admission" | "admin" | "knowledge";
+  steps: AiCompositeStep[];
+  summaryHint?: string;
+  safeNextStep?: string;
+};
+
+export type AiCompositeStepResult = {
+  id: string;
+  label: string;
+  intent: string;
+  status: "success" | "error";
+  result: AiAssistantResponse | null;
+  errorMessage: string | null;
+};
+
+export type AiCompositeExecutionResult = {
+  id: string;
+  label: string;
+  description: string;
+  domain: AiCompositeAction["domain"];
+  steps: AiCompositeStepResult[];
+  summary: string[];
+  nextStep: string;
+  limitations: string[];
+};
 
 export type AiAssistantHistoryKind =
   | "vaga"
@@ -50,6 +88,7 @@ export type AiAssistantHistoryItem = {
   query: string | null;
   summary: string;
   result: AiAssistantResponse | null;
+  compositeResult?: AiCompositeExecutionResult | null;
   errorMessage: string | null;
 };
 
