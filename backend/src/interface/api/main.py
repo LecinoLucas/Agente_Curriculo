@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import sentry_sdk
 from fastapi import FastAPI, Request, status
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -81,10 +82,35 @@ from src.interface.api.routers import (
 from src.interface.api.routers.integrations import google_calendar
 from src.observability.logging import configure_structured_logging
 
+_SENTRY_CONFIGURED = False
+
+
+def configure_sentry() -> bool:
+    global _SENTRY_CONFIGURED
+
+    if _SENTRY_CONFIGURED:
+        return False
+
+    if not settings.SENTRY_DSN.strip():
+        return False
+
+    if settings.APP_ENV == "test":
+        return False
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.APP_ENV,
+        release=APP_VERSION,
+        traces_sample_rate=0.0,
+    )
+    _SENTRY_CONFIGURED = True
+    return True
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     configure_structured_logging()
+    configure_sentry()
     validate_ai_credentials_encryption_key()
     yield
     await close_redis()
