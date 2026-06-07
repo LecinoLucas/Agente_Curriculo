@@ -15,7 +15,10 @@ from src.ai_orchestration.rag.answer_schemas import (
     RagAnswerResult,
     RagSource,
 )
-from src.ai_orchestration.rag.gemini_rag_synthesis_provider import GeminiRagSynthesisProvider
+from src.ai_orchestration.rag.gemini_rag_synthesis_provider import (
+    GeminiRagSynthesisProvider,
+    GeminiSynthesisError,
+)
 from src.ai_orchestration.rag.rag_prompting import RagPrompting
 from src.ai_orchestration.rag.schemas import KnowledgeChunk
 from src.application.services.ai_usage_log_service import AIUsageLogPayload, persist_ai_usage_log
@@ -99,13 +102,36 @@ class RagAnswerService:
                 model=self._provider.model_name,
             )
 
+        except GeminiSynthesisError as exc:
+            await self._record_usage(
+                status="error",
+                error_message=self._build_usage_error_message(exc.error_code, exc.provider_message),
+            )
+            logger.warning(
+                "rag_answer.synthesis_provider_error",
+                extra={
+                    "error_code": exc.error_code,
+                    "provider": self._provider.provider_name,
+                    "model": self._provider.model_name,
+                    "status_code": exc.status_code,
+                },
+            )
+            return RagAnswerResult(
+                ok=False,
+                error_code=exc.error_code,
+                message=exc.user_message,
+            )
+
         except Exception as exc:
-            await self._record_usage(status="error", error_message=type(exc).__name__)
-            logger.error(f"Erro no RagAnswerService: {exc}", exc_info=True)
+            await self._record_usage(
+                status="error",
+                error_message=self._build_usage_error_message("SYNTHESIS_ERROR", type(exc).__name__),
+            )
+            logger.error("Erro no RagAnswerService: %s", type(exc).__name__, exc_info=True)
             return RagAnswerResult(
                 ok=False,
                 error_code="SYNTHESIS_ERROR",
-                message=f"Falha ao sintetizar resposta: {type(exc).__name__}",
+                message="Não foi possível gerar a resposta agora. Tente novamente em instantes.",
             )
 
     def _filter_sensitive_data(self, chunks: list[KnowledgeChunk]) -> list[KnowledgeChunk]:
@@ -157,3 +183,9 @@ class RagAnswerService:
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Falha ao registrar uso de RAG synthesis: %s", type(exc).__name__)
+
+    @staticmethod
+    def _build_usage_error_message(error_code: str, provider_message: str | None = None) -> str:
+        if provider_message:
+            return f"{error_code}: {provider_message}"
+        return error_code
