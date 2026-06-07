@@ -15,274 +15,187 @@ import {
 import { aiAssistantService } from "../services/aiAssistantService";
 import type {
   AiAssistantHistoryItem,
-  AiAssistantHistoryKind,
   AiAssistantResponse,
   QuickAction,
 } from "../types";
-
-const SENSITIVE_KEYS = new Set([
-  "vector_json",
-  "content_hash",
-  "embedding",
-  "embeddings",
-  "payload_json",
-  "review_notes",
-  "internal_notes",
-  "stack",
-  "stack_trace",
-  "api_key",
-]);
+import { AiAssistantResultRenderer } from "./AiAssistantResultRenderer";
+import {
+  classifyIntent,
+  friendlyError,
+  friendlyWarning,
+  summarizeResponse,
+} from "../utils/aiAssistantPresenters";
+import {
+  normalizeErrorMessage,
+  sanitizeResponse,
+  sanitizeText,
+} from "../utils/aiAssistantSanitizer";
 
 const HISTORY_LIMIT = 5;
 
-function sanitizeText(value: string): string {
-  if (!value) return value;
+type DrawerStatus = "idle" | "loading" | "result" | "error";
 
-  const looksLikeTrace =
-    value.includes("Traceback (most recent call last)") ||
-    /(?:^|\n)\s*at\s+\S+/m.test(value) ||
-    /File ".*", line \d+/m.test(value);
-  if (looksLikeTrace) return "Detalhes técnicos internos foram ocultados.";
+type PageContextKind = "job" | "candidate" | "admission" | "generic";
 
-  return value
-    .replace(/\bAIza[0-9A-Za-z\-_]{20,}\b/g, "[redacted-api-key]")
-    .replace(/\bsk-[0-9A-Za-z]{20,}\b/g, "[redacted-api-key]");
-}
-
-function filterSensitive(value: unknown): unknown {
-  if (typeof value === "string") return sanitizeText(value);
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(filterSensitive);
-  const filtered: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (!SENSITIVE_KEYS.has(k)) filtered[k] = filterSensitive(v);
-  }
-  return filtered;
-}
-
-function sanitizeResponse(response: AiAssistantResponse): AiAssistantResponse {
-  return {
-    ...response,
-    data: filterSensitive(response.data),
-    message: response.message ? sanitizeText(response.message) : response.message,
-    warnings: response.warnings.map(sanitizeText),
-  };
-}
-
-function isEmptyObject(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value as object).length === 0
-  );
-}
-
-const ERROR_MESSAGES: Record<string, string> = {
-  PERMISSION_DENIED: "Você não tem permissão para usar esta consulta.",
-  INVALID_INPUT: "Dados inválidos para esta consulta.",
-  NOT_FOUND: "Recurso não encontrado.",
-  INTERNAL_ERROR: "Erro interno ao processar a consulta. Tente novamente.",
-  INTENT_NOT_FOUND: "Tipo de consulta não reconhecido.",
+type PageContext = {
+  kind: PageContextKind;
+  params: Record<string, string>;
+  emptyTitle: string;
+  emptyDescription: string;
 };
-
-const WARNING_MESSAGES: Record<string, string> = {
-  rag_synthesis_disabled_by_flag: "Síntese de resposta desabilitada (modo busca simples ativo).",
-  low_score: "Resultados com baixa relevância.",
-  no_chunks_found: "Nenhum trecho relevante encontrado na base de conhecimento.",
-  fallback_mode: "Operando em modo fallback (pgvector indisponível).",
-};
-
-function friendlyError(errorCode: string | null, message: string | null): string {
-  if (errorCode && errorCode in ERROR_MESSAGES) return ERROR_MESSAGES[errorCode];
-  return message ? sanitizeText(message) : errorCode ?? "Erro desconhecido.";
-}
-
-function friendlyWarning(code: string): string {
-  return WARNING_MESSAGES[code] ?? code;
-}
 
 const QUICK_ACTIONS: QuickAction[] = [
   {
     id: "job.summary",
     label: "Resumo da vaga",
-    description: "Título, área, status e informações principais",
+    description: "Veja status, requisitos e pendências principais.",
     intent: "job.summary",
-    buildArgs: (p) => (p.jobId ? { job_id: p.jobId } : null),
+    buildArgs: (params) => (params.jobId ? { job_id: params.jobId } : null),
   },
   {
     id: "job.requirements",
     label: "Requisitos da vaga",
-    description: "Skills, experiência e requisitos técnicos",
+    description: "Entenda skills, experiência e critérios técnicos já cadastrados.",
     intent: "job.requirements",
-    buildArgs: (p) => (p.jobId ? { job_id: p.jobId } : null),
+    buildArgs: (params) => (params.jobId ? { job_id: params.jobId } : null),
   },
   {
     id: "pipeline.overview",
     label: "Visão da pipeline",
-    description: "Candidatos por etapa nesta vaga",
+    description: "Veja volumes por etapa e onde a vaga concentra mais candidatos.",
     intent: "pipeline.overview",
-    buildArgs: (p) => (p.jobId ? { job_id: p.jobId } : null),
+    buildArgs: (params) => (params.jobId ? { job_id: params.jobId } : null),
   },
   {
     id: "candidate.summary",
     label: "Resumo do candidato",
-    description: "Perfil, skills e status na pipeline",
+    description: "Entenda dados principais, pipeline ativo e próximos passos.",
     intent: "candidate.summary",
-    buildArgs: (p) => (p.candidateId ? { candidate_id: p.candidateId } : null),
+    buildArgs: (params) => (params.candidateId ? { candidate_id: params.candidateId } : null),
   },
   {
     id: "candidate.active_pipeline",
-    label: "Pipeline ativa",
-    description: "Etapa atual e histórico recente",
-    intent: "candidate.active_pipeline",
-    buildArgs: (p) => (p.candidateId ? { candidate_id: p.candidateId } : null),
+    label: "Status do currículo",
+    description: "Veja se o currículo está pronto para análise e o que ainda limita a triagem.",
+    intent: "candidate.resume_analysis",
+    buildArgs: (params) => (params.candidateId ? { candidate_id: params.candidateId } : null),
   },
   {
     id: "admission.case_summary",
-    label: "Resumo do caso admissional",
-    description: "Status, etapa e dados principais",
+    label: "Status admissional",
+    description: "Veja pendências, documentos e bloqueios antes do Protheus.",
     intent: "admission.case_summary",
-    buildArgs: (p) => (p.admissionId ? { admission_id: p.admissionId } : null),
+    buildArgs: (params) => (
+      params.admissionCaseId ? { admission_case_id: params.admissionCaseId } : null
+    ),
   },
   {
     id: "admission.documents_status",
     label: "Status dos documentos",
-    description: "Documentos pendentes e enviados",
+    description: "Confira documentos pendentes, rejeitados e pontos que travam o caso.",
     intent: "admission.documents_status",
-    buildArgs: (p) => (p.admissionId ? { admission_id: p.admissionId } : null),
+    buildArgs: (params) => (
+      params.admissionCaseId ? { admission_case_id: params.admissionCaseId } : null
+    ),
   },
 ];
 
-function extractParams(pathname: string, search: string): Record<string, string> {
+function extractPageContext(pathname: string, search: string): PageContext {
   const params: Record<string, string> = {};
 
   const jobMatch = pathname.match(/^\/vagas\/([^/?]+)/);
-  if (jobMatch) params.jobId = jobMatch[1];
+  if (jobMatch && jobMatch[1] !== "nova") {
+    params.jobId = jobMatch[1];
+  }
+
+  const pipelineMatch = pathname.match(/^\/pipeline\/([^/?]+)/);
+  if (pipelineMatch) {
+    params.jobId = pipelineMatch[1];
+  }
 
   const candidateMatch = pathname.match(/^\/candidatos\/([^/?]+)/);
-  if (candidateMatch) params.candidateId = candidateMatch[1];
+  if (candidateMatch) {
+    params.candidateId = candidateMatch[1];
+  }
 
-  const admissionMatch = pathname.match(/^\/admitidos\/([^/?]+)/);
-  if (admissionMatch) params.admissionId = admissionMatch[1];
+  const admissionMatch =
+    pathname.match(/^\/admissao\/([^/?]+)/) ??
+    pathname.match(/^\/admission\/cases\/([^/?]+)/) ??
+    pathname.match(/^\/admitidos\/([^/?]+)/);
+  if (admissionMatch) {
+    params.admissionCaseId = admissionMatch[1];
+  }
 
-  const sp = new URLSearchParams(search);
-  const jobFromSearch = sp.get("job") ?? sp.get("job_id");
+  const searchParams = new URLSearchParams(search);
+  const jobFromSearch = searchParams.get("job") ?? searchParams.get("job_id");
   if (jobFromSearch && !params.jobId) params.jobId = jobFromSearch;
 
-  return params;
-}
-
-const LABEL_MAP: Record<string, string> = {
-  title: "Título",
-  area: "Área",
-  status: "Status",
-  location: "Localidade",
-  full_name: "Nome",
-  email: "E-mail",
-  phone: "Telefone",
-  stage: "Etapa",
-  total: "Total",
-  count: "Quantidade",
-  skills: "Skills",
-  description: "Descrição",
-  summary: "Resumo",
-  message: "Mensagem",
-  answer: "Resposta",
-  name: "Nome",
-  type: "Tipo",
-  created_at: "Criado em",
-  updated_at: "Atualizado em",
-  source_title: "Fonte",
-  excerpt: "Trecho",
-  score: "Relevância",
-};
-
-const ID_KEYS = new Set(["job_id", "candidate_id", "admission_id", "chunk_id", "document_id", "id"]);
-
-function formatLabel(key: string): string {
-  return LABEL_MAP[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  if (typeof value === "boolean") return value ? "Sim" : "Não";
-  if (typeof value === "number") return String(value);
-  if (typeof value === "string") return value || "—";
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "Nenhum";
-    if (value.every((v) => typeof v !== "object" || v === null)) return value.join(", ");
-  }
-  return JSON.stringify(value);
-}
-
-function DataNode({ value, depth = 0 }: { value: unknown; depth?: number }) {
-  if (value === null || value === undefined) return null;
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-sm text-text-muted">Nenhum</span>;
-    if (value.every((v) => typeof v !== "object" || v === null)) {
-      return (
-        <span className="break-words text-sm text-text">
-          {(value as unknown[]).map(String).join(", ")}
-        </span>
-      );
-    }
-    return (
-      <div className="space-y-2">
-        {value.map((item, i) => (
-          <div key={i} className="rounded border border-border/60 bg-[hsl(var(--bg))]/40 p-2">
-            <DataNode value={item} depth={depth + 1} />
-          </div>
-        ))}
-      </div>
-    );
+  if (/^\/vagas(?:\/|$)/.test(pathname) && !params.jobId) {
+    return {
+      kind: "job",
+      params,
+      emptyTitle: "Não identifiquei a vaga atual",
+      emptyDescription: "Abra uma vaga específica para usar ações contextuais.",
+    };
   }
 
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) return null;
-    return (
-      <dl className={depth > 0 ? "space-y-1" : "space-y-2"}>
-        {entries.map(([k, v]) => {
-          const isId = ID_KEYS.has(k);
-          const isNested = !isId && v !== null && typeof v === "object";
-          return (
-            <div key={k} className={isNested ? "space-y-0.5" : "flex items-baseline gap-2"}>
-              <dt className="shrink-0 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                {formatLabel(k)}
-              </dt>
-              {isNested ? (
-                <dd className="pl-2">
-                  <DataNode value={v} depth={depth + 1} />
-                </dd>
-              ) : (
-                <dd className="min-w-0 break-words text-sm text-text">
-                  {isId ? (
-                    <span className="font-mono text-xs text-text-muted">
-                      {String(v).slice(0, 8)}…
-                    </span>
-                  ) : (
-                    formatValue(v)
-                  )}
-                </dd>
-              )}
-            </div>
-          );
-        })}
-      </dl>
-    );
+  if (/^\/candidatos(?:\/|$)/.test(pathname) && !params.candidateId) {
+    return {
+      kind: "candidate",
+      params,
+      emptyTitle: "Não identifiquei o candidato atual",
+      emptyDescription: "Abra um perfil de candidato para usar ações contextuais.",
+    };
   }
 
-  return <span className="break-words text-sm text-text">{formatValue(value)}</span>;
-}
+  if (
+    (/^\/admissao(?:\/|$)/.test(pathname) ||
+      /^\/admission\/cases(?:\/|$)/.test(pathname) ||
+      /^\/admitidos(?:\/|$)/.test(pathname)) &&
+    !params.admissionCaseId
+  ) {
+    return {
+      kind: "admission",
+      params,
+      emptyTitle: "Não identifiquei o caso admissional atual",
+      emptyDescription: "Abra um caso admissional específico para usar ações contextuais.",
+    };
+  }
 
-type DrawerStatus = "idle" | "loading" | "result" | "error";
+  if (params.jobId) {
+    return {
+      kind: "job",
+      params,
+      emptyTitle: "",
+      emptyDescription: "",
+    };
+  }
 
-function normalizeErrorMessage(err: unknown): string {
-  const msg =
-    err instanceof Error ? err.message : "Não foi possível processar a solicitação.";
-  return sanitizeText(msg);
+  if (params.candidateId) {
+    return {
+      kind: "candidate",
+      params,
+      emptyTitle: "",
+      emptyDescription: "",
+    };
+  }
+
+  if (params.admissionCaseId) {
+    return {
+      kind: "admission",
+      params,
+      emptyTitle: "",
+      emptyDescription: "",
+    };
+  }
+
+  return {
+    kind: "generic",
+    params,
+    emptyTitle: "Nenhuma ação disponível",
+    emptyDescription:
+      "Abra uma vaga, candidato ou caso admissional para ver ações contextuais. Você também pode consultar a Base de Conhecimento.",
+  };
 }
 
 function formatShortTime(date = new Date()): string {
@@ -290,67 +203,6 @@ function formatShortTime(date = new Date()): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function truncateText(value: string, maxLength = 80): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
-}
-
-function classifyIntent(intent: string): AiAssistantHistoryKind {
-  if (intent.startsWith("job.") || intent.startsWith("pipeline.")) return "vaga";
-  if (intent.startsWith("candidate.")) return "candidato";
-  if (intent.startsWith("admission.")) return "admissao";
-  if (intent.startsWith("knowledge.")) return "conhecimento";
-  return "geral";
-}
-
-function summarizeData(data: unknown): string {
-  if (data == null) return "Sem dados para exibir.";
-  if (typeof data === "string") return truncateText(data);
-  if (typeof data === "number" || typeof data === "boolean") return String(data);
-  if (Array.isArray(data)) {
-    if (data.length === 0) return "Nenhum resultado.";
-    const first = data[0];
-    if (first && typeof first === "object") {
-      const sourceTitle = (first as Record<string, unknown>).source_title;
-      if (typeof sourceTitle === "string" && sourceTitle.trim()) {
-        return truncateText(`${data.length} fonte(s). Primeira: ${sourceTitle}`);
-      }
-    }
-    return `${data.length} resultado(s).`;
-  }
-  if (typeof data === "object") {
-    const record = data as Record<string, unknown>;
-    const answer = record.answer;
-    if (typeof answer === "string" && answer.trim()) return truncateText(answer);
-    const summary = record.summary;
-    if (typeof summary === "string" && summary.trim()) return truncateText(summary);
-    const message = record.message;
-    if (typeof message === "string" && message.trim()) return truncateText(message);
-    const title = record.title ?? record.source_title ?? record.name;
-    if (typeof title === "string" && title.trim()) return truncateText(title);
-    const total = record.total ?? record.count;
-    if (typeof total === "number") return `${total} resultado(s).`;
-    return "Resultado disponível.";
-  }
-  return "Resultado disponível.";
-}
-
-function buildHistorySummary(
-  response: AiAssistantResponse | null,
-  errorMessage: string | null,
-): { status: "success" | "error"; summary: string } {
-  if (errorMessage) return { status: "error", summary: truncateText(errorMessage) };
-  if (!response) return { status: "error", summary: "Resultado indisponível." };
-  if (!response.ok) {
-    return {
-      status: "error",
-      summary: truncateText(friendlyError(response.error_code, response.message)),
-    };
-  }
-  return { status: "success", summary: summarizeData(response.data) };
 }
 
 function buildHistoryItem(params: {
@@ -361,7 +213,14 @@ function buildHistoryItem(params: {
 }): AiAssistantHistoryItem {
   const response = params.response ? sanitizeResponse(params.response) : null;
   const errorMessage = params.errorMessage ? sanitizeText(params.errorMessage) : null;
-  const { status, summary } = buildHistorySummary(response, errorMessage);
+  const storedResponse = response
+    ? {
+        ...response,
+        message: response.ok ? response.message : friendlyError(response.error_code, response.message),
+        warnings: response.warnings.map(friendlyWarning),
+      }
+    : null;
+  const { status, summary } = summarizeResponse(storedResponse, errorMessage);
 
   return {
     id: crypto.randomUUID(),
@@ -372,7 +231,7 @@ function buildHistoryItem(params: {
     timestamp: formatShortTime(),
     query: params.query?.trim() ? params.query.trim() : null,
     summary,
-    result: response,
+    result: storedResponse,
     errorMessage,
   };
 }
@@ -396,7 +255,7 @@ export function AiAssistantDrawer({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localSessionHistory, setLocalSessionHistory] = useState<AiAssistantHistoryItem[]>([]);
 
-  const pageParams = extractParams(pathname, search);
+  const pageContext = extractPageContext(pathname, search);
   const history = sessionHistory ?? localSessionHistory;
 
   const setHistory = (updater: (current: AiAssistantHistoryItem[]) => AiAssistantHistoryItem[]) => {
@@ -410,11 +269,11 @@ export function AiAssistantDrawer({
   };
 
   const availableActions = QUICK_ACTIONS.filter(
-    (action) => action.buildArgs(pageParams) !== null,
+    (action) => action.buildArgs(pageContext.params) !== null,
   );
 
   const handleAction = async (action: QuickAction) => {
-    const args = action.buildArgs(pageParams);
+    const args = action.buildArgs(pageContext.params);
     if (!args) return;
 
     setActiveAction(action);
@@ -448,7 +307,7 @@ export function AiAssistantDrawer({
     const normalizedQuery = query.trim();
     const action = {
       id: intent,
-      label: intent === "knowledge.search" ? "Buscar fontes" : "Responder",
+      label: intent === "knowledge.search" ? "Buscar fontes" : "Responder com fontes",
       description: normalizedQuery,
       intent,
       buildArgs: () => ({ query: normalizedQuery, limit: 5 }),
@@ -547,7 +406,9 @@ export function AiAssistantDrawer({
               </span>
             </div>
             {status === "idle" && (
-              <p className="text-xs text-text-muted">Somente leitura · Nenhuma ação será executada</p>
+              <p className="text-xs text-text-muted">
+                Somente leitura · Nenhuma ação será executada
+              </p>
             )}
           </div>
 
@@ -569,7 +430,12 @@ export function AiAssistantDrawer({
                 <h3 className="px-1 text-xs font-bold uppercase tracking-wider text-text-muted">
                   Ações contextuais
                 </h3>
-                <ActionList actions={availableActions} onAction={handleAction} />
+                <ActionList
+                  actions={availableActions}
+                  emptyTitle={pageContext.emptyTitle}
+                  emptyDescription={pageContext.emptyDescription}
+                  onAction={handleAction}
+                />
               </div>
 
               <div className="border-t border-border pt-6">
@@ -592,7 +458,7 @@ export function AiAssistantDrawer({
               data-testid="ai-assistant-loading"
             >
               <LoaderCircle className="h-6 w-6 animate-spin text-[hsl(var(--primary))]" />
-              <p className="text-sm text-text-muted">Consultando…</p>
+              <p className="text-sm text-text-muted">Consultando informações com segurança…</p>
             </div>
           )}
 
@@ -616,7 +482,18 @@ export function AiAssistantDrawer({
           )}
 
           {status === "result" && result && (
-            <ResultView result={result} onNewQuery={handleBack} />
+            <div className="space-y-4">
+              <AiAssistantResultRenderer result={result} />
+              <button
+                type="button"
+                onClick={handleBack}
+                data-testid="ai-assistant-new-query"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Nova consulta
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -626,9 +503,13 @@ export function AiAssistantDrawer({
 
 function ActionList({
   actions,
+  emptyTitle,
+  emptyDescription,
   onAction,
 }: {
   actions: QuickAction[];
+  emptyTitle: string;
+  emptyDescription: string;
   onAction: (action: QuickAction) => void;
 }) {
   if (actions.length === 0) {
@@ -638,10 +519,8 @@ function ActionList({
         data-testid="ai-assistant-empty"
       >
         <BrainCircuit className="h-8 w-8 text-text-muted/40" />
-        <p className="text-sm font-medium text-text">Nenhuma ação disponível</p>
-        <p className="max-w-[260px] text-xs text-text-muted">
-          Abra uma vaga, candidato ou caso admissional para usar ações contextuais.
-        </p>
+        <p className="text-sm font-medium text-text">{emptyTitle}</p>
+        <p className="max-w-[260px] text-xs text-text-muted">{emptyDescription}</p>
       </div>
     );
   }
@@ -671,7 +550,6 @@ function KnowledgeSection({
   onAction: (intent: "knowledge.search" | "knowledge.answer", query: string) => void;
 }) {
   const [query, setQuery] = useState("");
-
   const isDisabled = !query.trim();
 
   return (
@@ -689,7 +567,7 @@ function KnowledgeSection({
       <div className="space-y-2">
         <textarea
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(event) => setQuery(event.target.value)}
           placeholder="Digite uma pergunta sobre regras, processos ou documentação…"
           className="min-h-[80px] w-full resize-none rounded-lg border border-border bg-surface-muted p-3 text-sm placeholder:text-text-muted/60 transition-shadow focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
           data-testid="ai-knowledge-input"
@@ -770,6 +648,7 @@ function SessionHistorySection({
               item.status === "error"
                 ? "border-danger/20 bg-danger/5"
                 : "border-border/70 bg-[hsl(var(--bg))]/60";
+
             return (
               <li key={item.id}>
                 <button
@@ -798,62 +677,6 @@ function SessionHistorySection({
           })}
         </ul>
       )}
-    </div>
-  );
-}
-
-function ResultView({
-  result,
-  onNewQuery,
-}: {
-  result: AiAssistantResponse;
-  onNewQuery: () => void;
-}) {
-  const hasData = result.data != null && !isEmptyObject(result.data);
-
-  return (
-    <div className="space-y-4" data-testid="ai-assistant-result">
-      {!result.ok && (
-        <div className="flex items-start gap-2 rounded-lg border border-danger/20 bg-danger/5 p-3">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
-          <p className="break-words text-sm text-danger">
-            {friendlyError(result.error_code, result.message)}
-          </p>
-        </div>
-      )}
-
-      {result.ok && hasData && (
-        <div className="rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
-          <DataNode value={result.data} />
-        </div>
-      )}
-
-      {result.ok && !hasData && (
-        <p className="text-sm text-text-muted">{result.message ?? "Sem dados para exibir."}</p>
-      )}
-
-      {result.warnings.length > 0 && (
-        <div
-          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30"
-          data-testid="ai-assistant-warnings"
-        >
-          {result.warnings.map((w) => (
-            <p key={w} className="text-xs text-amber-800 dark:text-amber-300">
-              {friendlyWarning(w)}
-            </p>
-          ))}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={onNewQuery}
-        data-testid="ai-assistant-new-query"
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-        Nova consulta
-      </button>
     </div>
   );
 }
