@@ -73,3 +73,23 @@ backend/private_uploads/
 __pycache__/
 *.pyc
 backend/private_uploads/
+
+# PROD-HARDENING-1A - artefatos locais e sensiveis
+dump.rdb
+**/dump.rdb
+backup_*.dump
+**/backup_*.dump
+*.dump
+**/*.dump
+*.bak
+**/*.bak
+*.sqlite
+**/*.sqlite
+*.db
+**/*.db
+.coverage*
+**/.coverage*
+*.log
+**/*.log
+test_output.log
+**/test_output.log
