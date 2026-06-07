@@ -17,6 +17,21 @@ const SENSITIVE_KEYS = new Set([
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const PHONE_PATTERN = /(?:\+55\s?)?(?:\(?\d{2}\)?\s?)?\d{4,5}-?\d{4}/g;
 const CPF_PATTERN = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g;
+const SENSITIVE_TEXT_PATTERNS: Array<[RegExp, string]> = [
+  [/\bstack trace\b/gi, "[redacted-sensitive-term]"],
+  [/\btraceback\b/gi, "[redacted-sensitive-term]"],
+  [/\braw_ocr_text\b/gi, "[redacted-sensitive-term]"],
+  [/\braw_resume_text\b/gi, "[redacted-sensitive-term]"],
+  [/\binternal_notes\b/gi, "[redacted-sensitive-term]"],
+  [/\breview_notes\b/gi, "[redacted-sensitive-term]"],
+  [/\bpayload_json\b/gi, "[redacted-sensitive-term]"],
+  [/\bcontent_hash\b/gi, "[redacted-sensitive-term]"],
+  [/\bvector_json\b/gi, "[redacted-sensitive-term]"],
+  [/\bembeddings?\b/gi, "[redacted-sensitive-term]"],
+  [/\bapi_key\b/gi, "[redacted-sensitive-term]"],
+  [/\bphone\b/gi, "[redacted-sensitive-term]"],
+  [/\bcpf\b/gi, "[redacted-sensitive-term]"],
+];
 
 export function sanitizeText(value: string): string {
   if (!value) return value;
@@ -28,12 +43,18 @@ export function sanitizeText(value: string): string {
 
   if (looksLikeTrace) return "Detalhes técnicos internos foram ocultados.";
 
-  return value
+  let sanitized = value
     .replace(/\bAIza[0-9A-Za-z\-_]{20,}\b/g, "[redacted-api-key]")
     .replace(/\bsk-[0-9A-Za-z]{20,}\b/g, "[redacted-api-key]")
     .replace(EMAIL_PATTERN, "[redacted-email]")
     .replace(PHONE_PATTERN, "[redacted-phone]")
     .replace(CPF_PATTERN, "[redacted-cpf]");
+
+  for (const [pattern, replacement] of SENSITIVE_TEXT_PATTERNS) {
+    sanitized = sanitized.replace(pattern, replacement);
+  }
+
+  return sanitized;
 }
 
 export function filterSensitive(value: unknown): unknown {
