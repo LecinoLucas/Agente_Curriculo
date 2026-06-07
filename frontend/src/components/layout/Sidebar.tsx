@@ -72,6 +72,14 @@ export function Sidebar({
           isHovered && "lg:w-56"
         )}
       >
+        {/* Subtle indicator line when collapsed */}
+        <div
+          className={cn(
+            "absolute right-0 top-0 bottom-0 w-[3px] bg-[hsl(var(--nav-active-bg))] transition-opacity duration-200 pointer-events-none lg:block hidden",
+            isHovered || mobileMenuOpen ? "opacity-0" : "opacity-80"
+          )}
+        />
+
         <div
           className={cn(
             "flex flex-col flex-1 min-w-0 transition-opacity duration-200",
