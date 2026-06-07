@@ -15,6 +15,7 @@
 import type { JobFormValues } from "../jobFormConfig";
 import { normalizeAiDraftStringList } from "../jobFormConfig";
 import type { JobAiDraftFields } from "../services/jobAiDraftService";
+import { extractSkillSuggestionsFromDraft } from "./jobAiSkillSuggestions";
 
 /** Trim string or return undefined if blank. */
 function trimOrUndefined(value: string | null | undefined): string | undefined {
@@ -130,8 +131,5 @@ export function extractSkillSuggestions(draft: JobAiDraftFields): {
   mandatory: string[];
   optional: string[];
 } {
-  return {
-    mandatory: normalizeAiDraftStringList(draft.mandatory_skills),
-    optional: normalizeAiDraftStringList(draft.nice_to_have_skills),
-  };
+  return extractSkillSuggestionsFromDraft(draft);
 }

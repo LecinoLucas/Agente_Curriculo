@@ -8,11 +8,17 @@ import { useAuth } from "@/features/auth/useAuth";
 import { canManageJobs } from "@/shared/auth/roles";
 import { CreateSkillModal } from "./CreateSkillModal";
 import { toast } from "@/shared/utils/toast";
+import {
+  getSuggestedSkillAliases,
+  getSuggestedSkillCategory,
+  skillNamesAreEquivalent,
+} from "../utils/jobAiSkillSuggestions";
 
 type SkillItem = {
   key: string;
   name: string;
   priority: "priority" | "complementary";
+  suggestedCategory: string;
   checked: boolean;
   status: "loading" | "found" | "not_found" | "already_added" | "pending_validation";
   skill: SkillCatalog | null;
@@ -44,19 +50,6 @@ function normalizeSkillName(value: string | null | undefined): string {
     .toLowerCase();
 }
 
-function getSuggestedAliases(skillName: string): string {
-  const map: Record<string, string> = {
-    "atendimento ao cliente": "Atendimento, Atendimento ao público, Relacionamento com cliente, Experiência do cliente",
-    "responsabilidade com caixa": "Operação de caixa, Fechamento de caixa, Controle de valores, Manuseio de dinheiro",
-    "rotina operacional": "Operação de pista, Procedimentos operacionais, Rotina de posto, Organização operacional",
-    "experiencia em posto de combustivel": "Posto de combustível, Atendimento em pista, Abastecimento, Operação de posto",
-    "venda adicional na pista": "Venda adicional, Oferta de produtos, Venda consultiva, Abordagem comercial",
-  };
-  const normalized = normalizeSkillName(skillName);
-  if (map[normalized]) return map[normalized];
-  return skillName;
-}
-
 function buildItems(mandatory: string[], optional: string[]): SkillItem[] {
   const seen = new Set<string>();
   const items: SkillItem[] = [];
@@ -74,6 +67,7 @@ function buildItems(mandatory: string[], optional: string[]): SkillItem[] {
         key: `${priority}:${normalized}`,
         name,
         priority,
+        suggestedCategory: getSuggestedSkillCategory(name),
         checked: false,
         status: "loading",
         skill: null,
@@ -85,12 +79,13 @@ function buildItems(mandatory: string[], optional: string[]): SkillItem[] {
 }
 
 function findExactSkillMatch(name: string, candidates: SkillCatalog[]): SkillCatalog | null {
-  const normalizedName = normalizeSkillName(name);
   return (
     candidates.find((skill) => {
-      if (normalizeSkillName(skill.name) === normalizedName) return true;
-      if (normalizeSkillName(skill.normalized_name) === normalizedName) return true;
-      return skill.aliases.some((alias) => normalizeSkillName(alias.alias) === normalizedName || normalizeSkillName(alias.normalized_alias) === normalizedName);
+      if (skillNamesAreEquivalent(skill.name, name)) return true;
+      if (skillNamesAreEquivalent(skill.normalized_name, name)) return true;
+      return skill.aliases.some(
+        (alias) => skillNamesAreEquivalent(alias.alias, name) || skillNamesAreEquivalent(alias.normalized_alias, name),
+      );
     }) ?? null
   );
 }
@@ -103,7 +98,7 @@ function isAlreadyLinked(
   const normalizedName = normalizeSkillName(itemName);
   return linkedSkills.some((linked) => {
     if (skill && linked.skill_id === skill.id) return true;
-    return normalizeSkillName(linked.skill_name) === normalizedName;
+    return normalizeSkillName(linked.skill_name) === normalizedName || skillNamesAreEquivalent(linked.skill_name, itemName);
   });
 }
 
@@ -360,7 +355,8 @@ export function AiSkillSuggestionsBlock({
       <CreateSkillModal
         open={creatingSkillItem !== null}
         initialName={creatingSkillItem?.name ?? ""}
-        initialAliases={creatingSkillItem ? getSuggestedAliases(creatingSkillItem.name) : ""}
+        initialAliases={creatingSkillItem ? getSuggestedSkillAliases(creatingSkillItem.name) : ""}
+        initialCategory={creatingSkillItem?.suggestedCategory ?? ""}
         onClose={() => setCreatingSkillItem(null)}
         onSuccess={(createdSkill) => {
           setItems((prev) =>

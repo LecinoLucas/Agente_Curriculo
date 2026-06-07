@@ -12,6 +12,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { JobAiDraftPanel, draftToFormUpdates } from "../components/JobAiDraftPanel";
 import { MOCK_JOB_AI_DRAFT } from "../utils/mockJobAiDraft";
 import { applyApiDraftToForm } from "../utils/jobAiDraftHelpers";
+import {
+  extractSkillSuggestionsFromDraft,
+  getSuggestedSkillAliases,
+  getSuggestedSkillCategory,
+  skillNamesAreEquivalent,
+} from "../utils/jobAiSkillSuggestions";
 import type { JobAiDraftGenerateResponse } from "../services/jobAiDraftService";
 
 // ── Mock the real API service ────────────────────────────────────────────────
@@ -57,6 +63,7 @@ const MOCK_API_RESPONSE: JobAiDraftGenerateResponse = {
   },
   needs_review: ["salary_range"],
   warnings: [],
+  safety_check: null,
   source: { text_used: true, ocr_used: false, input_character_count: 42 },
   usage: {
     provider: "anthropic",
@@ -253,6 +260,91 @@ describe("applyApiDraftToForm", () => {
   });
 });
 
+describe("jobAiSkillSuggestions", () => {
+  it("enriquece sugestões de skill com base em requirements, responsibilities e experience_context", () => {
+    const suggestions = extractSkillSuggestionsFromDraft({
+      ...MOCK_API_RESPONSE.draft,
+      mandatory_skills: ["Excel", "Comunicação", "Organização"],
+      nice_to_have_skills: [],
+      requirements: [
+        "Excel",
+        "Boa comunicação",
+        "Organização",
+        "Atendimento interno",
+        "Conferência de documentos",
+        "Lançamentos",
+        "Planilhas",
+        "Organização de arquivos",
+      ],
+      responsibilities: [
+        "Lançamentos",
+        "Conferência de documentos",
+        "Atendimento interno",
+        "Planilhas",
+        "Organização de arquivos",
+      ],
+      experience_context:
+        "Rotinas com Atendimento interno, Conferência de documentos, Lançamentos, Planilhas, Organização de arquivos.",
+    });
+
+    expect(suggestions.mandatory).toEqual(
+      expect.arrayContaining([
+        "Excel",
+        "Comunicação",
+        "Organização",
+        "Atendimento interno",
+        "Conferência de documentos",
+        "Planilhas",
+      ]),
+    );
+    expect(suggestions.optional).toEqual(
+      expect.arrayContaining([
+        "Lançamentos administrativos",
+        "Organização de arquivos",
+        "Rotinas administrativas",
+      ]),
+    );
+  });
+
+  it("não sugere termos discriminatórios ou ruído operacional como skill", () => {
+    const suggestions = extractSkillSuggestionsFromDraft({
+      ...MOCK_API_RESPONSE.draft,
+      mandatory_skills: [],
+      nice_to_have_skills: [],
+      requirements: [
+        "Pessoa jovem",
+        "Boa aparência",
+        "Morar perto da empresa",
+        "6x1",
+        "44 horas semanais",
+      ],
+      responsibilities: [],
+      experience_context: null,
+    });
+
+    expect(suggestions.mandatory).toEqual([]);
+    expect(suggestions.optional).toEqual([]);
+  });
+
+  it("sugere aliases úteis para skill nova sem repetir o próprio nome", () => {
+    expect(getSuggestedSkillAliases("Organização")).toContain("Organização administrativa");
+    expect(getSuggestedSkillAliases("Organização")).not.toContain("Organização,");
+    expect(getSuggestedSkillAliases("Excel")).toContain("Microsoft Excel");
+  });
+
+  it("sugere categoria compatível para skills comuns", () => {
+    expect(getSuggestedSkillCategory("Excel")).toBe("tool");
+    expect(getSuggestedSkillCategory("Comunicação")).toBe("behavioral");
+    expect(getSuggestedSkillCategory("Conferência de documentos")).toBe("business_process");
+  });
+
+  it("reconhece equivalência entre nomes próximos", () => {
+    expect(skillNamesAreEquivalent("Planilhas", "Planilha")).toBe(true);
+    expect(skillNamesAreEquivalent("Excel", "Microsoft Excel")).toBe(true);
+    expect(skillNamesAreEquivalent("Comunicação", "Boa comunicação")).toBe(true);
+  });
+});
+
 // ── 3. JobAiDraftPanel — componente com API real (mockada) ────────────────────
 
 describe("JobAiDraftPanel — API real", () => {
@@ -352,6 +444,66 @@ describe("JobAiDraftPanel — API real", () => {
     expect(warnings).toHaveTextContent(/Revisão do gestor removida/i);
     expect(warnings).toHaveTextContent(/Avaliação comportamental removida/i);
     expect(warnings).toHaveTextContent(/Fluxo de seleção identificado/i);
+  });
+
+  it("exibe revisão de segurança necessária", async () => {
+    mockGenerateJobAiDraft.mockResolvedValue({
+      ...MOCK_API_RESPONSE,
+      draft: {
+        ...MOCK_API_RESPONSE.draft,
+        title: null,
+        description: null,
+      },
+      warnings: ["discriminatory_text_removed", "safety_check_requires_review"],
+      safety_check: {
+        status: "needs_review",
+        highest_severity: "high",
+        findings: [
+          {
+            field: "title",
+            severity: "high",
+            code: "discriminatory_age_requirement",
+            message: "Critério de idade removido do texto.",
+          },
+        ],
+      },
+    });
+    renderPanel();
+    fillAndSubmit();
+
+    const safety = await screen.findByTestId("ai-draft-safety-check");
+    expect(safety).toHaveTextContent(/Revisão de segurança necessária/i);
+    expect(safety).toHaveTextContent(/Severidade Alta/i);
+    expect(safety).toHaveTextContent(/Título/i);
+  });
+
+  it("não mostra texto discriminatório removido no preview", async () => {
+    mockGenerateJobAiDraft.mockResolvedValue({
+      ...MOCK_API_RESPONSE,
+      draft: {
+        ...MOCK_API_RESPONSE.draft,
+        description: null,
+      },
+      warnings: ["discriminatory_text_removed"],
+      safety_check: {
+        status: "needs_review",
+        highest_severity: "high",
+        findings: [
+          {
+            field: "description",
+            severity: "high",
+            code: "discriminatory_age_requirement",
+            message: "Critério de idade removido do texto.",
+          },
+        ],
+      },
+    });
+    renderPanel();
+    fillAndSubmit();
+
+    await screen.findByTestId("ai-draft-result");
+    expect(screen.getByLabelText(/Resumo da vaga/i)).toHaveValue("");
+    expect(screen.queryByText(/até 30 anos/i)).not.toBeInTheDocument();
   });
 
   it("exibe aviso de needs_review quando a API retorna campos ausentes", async () => {
