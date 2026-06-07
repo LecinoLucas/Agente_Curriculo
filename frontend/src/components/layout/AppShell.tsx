@@ -46,6 +46,7 @@ import {
 import { UserRole } from "../../types/auth";
 import { TopNavbar } from "./TopNavbar";
 import { Sidebar } from "./Sidebar";
+import { AiAssistantDrawer } from "../../features/ai-assistant/components/AiAssistantDrawer";
 
 export type NavItem = {
   to: string;
@@ -277,6 +278,7 @@ export function AppShell() {
   const { isAllowed, version } = usePathAllowed();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -345,6 +347,7 @@ export function AppShell() {
           onLogout={() => void logout()}
           onToggleTheme={toggleTheme}
           onNavigate={(path) => navigate(path)}
+          onOpenAssistant={() => setAssistantOpen(true)}
         />
 
         <main className="flex-1 flex flex-col p-4 sm:p-6">
@@ -359,6 +362,10 @@ export function AppShell() {
           </div>
         </footer>
       </div>
+
+      {assistantOpen && (
+        <AiAssistantDrawer onClose={() => setAssistantOpen(false)} />
+      )}
     </div>
   );
 }

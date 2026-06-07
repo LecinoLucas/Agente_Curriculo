@@ -1,6 +1,5 @@
-import { Menu, Moon, Sun, UserRound, LogOut } from "lucide-react";
+import { Menu, BrainCircuit } from "lucide-react";
 import { NotificationsBell } from "../../features/notifications/components/NotificationsBell";
-import { VisualThemeSwitcher } from "./VisualThemeSwitcher";
 
 type TopNavbarProps = {
   mobileMenuOpen: boolean;
@@ -9,15 +8,13 @@ type TopNavbarProps = {
   onLogout: () => void;
   onToggleTheme: () => void;
   onNavigate: (path: string) => void;
+  onOpenAssistant: () => void;
 };
 
 export function TopNavbar({
   mobileMenuOpen,
-  theme,
   onToggleMobileMenu,
-  onLogout,
-  onToggleTheme,
-  onNavigate,
+  onOpenAssistant,
 }: TopNavbarProps) {
   return (
     <header className="absolute top-0 left-0 right-0 z-50 flex h-14 w-full items-center justify-between bg-transparent px-3 shadow-none sm:px-4 pointer-events-none">
@@ -34,6 +31,15 @@ export function TopNavbar({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 pointer-events-auto pr-2">
+        <button
+          type="button"
+          onClick={onOpenAssistant}
+          aria-label="Abrir Assistente IA"
+          data-testid="topnav-open-assistant"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] transition-colors hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--primary))]"
+        >
+          <BrainCircuit className="h-4 w-4" aria-hidden="true" />
+        </button>
         <NotificationsBell />
       </div>
     </header>
