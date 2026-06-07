@@ -26,6 +26,7 @@ from src.application.services.candidate_service import CandidateNotFoundError
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 _SENSITIVE_KEYS = frozenset({
+    "phone",
     "cpf", "cpf_hash", "cpf_last4",
     "salary_expectation",
     "password_hash", "password_created_at",
@@ -132,7 +133,7 @@ class TestGetCandidateSummary:
         result = await get_candidate_summary(ctx, str(mock_candidate.id), svc)
         assert result.ok is True
         data = result.data
-        for field in ("id", "full_name", "email", "phone", "location",
+        for field in ("id", "full_name", "email", "location",
                       "location_city", "location_state", "location_country",
                       "tags", "application_source", "data_quality_status",
                       "created_at", "updated_at"):
@@ -150,6 +151,21 @@ class TestGetCandidateSummary:
         data = result.data
         for key in _SENSITIVE_KEYS:
             assert key not in data, f"Campo sensível exposto: {key}"
+
+    async def test_does_not_expose_phone_cpf_salary_or_internal_notes(self, ctx, svc, mock_candidate) -> None:
+        svc.get.return_value = mock_candidate
+        result = await get_candidate_summary(ctx, str(mock_candidate.id), svc)
+        assert result.ok is True
+        serialized = str(result.data)
+        for key in ("phone", "cpf", "salary_expectation", "internal_notes"):
+            assert key not in result.data
+        for value in (
+            mock_candidate.phone,
+            mock_candidate.cpf,
+            mock_candidate.salary_expectation,
+            mock_candidate.internal_notes,
+        ):
+            assert value not in serialized
 
     async def test_not_found_returns_controlled_error(self, ctx, svc) -> None:
         svc.get.side_effect = CandidateNotFoundError()
@@ -421,6 +437,15 @@ class TestGetCandidateResumeAnalysisSummary:
         assert result.ok is True
         # Deve indicar explicitamente que texto bruto NÃO está disponível
         assert result.data["resume_raw_text_available"] is False
+
+    async def test_does_not_expose_raw_resume_text(self, ctx, svc, mock_candidate) -> None:
+        mock_candidate.raw_resume = "Curriculo bruto com telefone +55 11 99999-0000"
+        svc.get.return_value = mock_candidate
+        result = await get_candidate_resume_analysis_summary(ctx, str(mock_candidate.id), svc)
+        assert result.ok is True
+        serialized = str(result.data)
+        assert "raw_resume" not in result.data
+        assert "Curriculo bruto com telefone" not in serialized
 
     async def test_does_not_expose_sensitive_fields(self, ctx, svc, mock_candidate) -> None:
         svc.get.return_value = mock_candidate

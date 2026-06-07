@@ -290,6 +290,58 @@ class TestInternalErrorControlled:
         assert "simulated db crash" not in body_str
 
 
+class TestCandidateSummaryPayloadSanitization:
+    async def test_candidate_summary_endpoint_does_not_return_phone(self) -> None:
+        user = _user(UserRole.RECRUITER)
+        _fastapi_app.dependency_overrides[get_current_user] = lambda: user
+
+        candidate_id = uuid4()
+        mock_candidate_service = MagicMock()
+        mock_candidate_service.get = AsyncMock()
+        mock_candidate_service.get.return_value = MagicMock(
+            id=candidate_id,
+            full_name="Ana Souza",
+            email="ana@example.com",
+            phone="+55 11 99999-0000",
+            cpf="123.456.789-00",
+            salary_expectation="8000.00",
+            internal_notes="nota sigilosa",
+            location_city="Sao Paulo",
+            location_state="SP",
+            location_country="BR",
+            tags=["Python"],
+            application_source="manual",
+            data_quality_status="valid",
+            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
+        )
+
+        try:
+            with patch(
+                "src.interface.api.routers.ai_assistant._build_services",
+                return_value={"candidate_service": mock_candidate_service},
+            ):
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                    resp = await c.post(
+                        _ENDPOINT,
+                        json={"intent": "candidate.summary", "arguments": {"candidate_id": str(candidate_id)}},
+                    )
+        finally:
+            _fastapi_app.dependency_overrides.pop(get_current_user, None)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["tool_name"] == "get_candidate_summary"
+        assert "phone" not in body["data"]
+        assert "cpf" not in body["data"]
+        assert "salary_expectation" not in body["data"]
+        assert "internal_notes" not in body["data"]
+        serialized = str(body["data"])
+        for value in ("+55 11 99999-0000", "123.456.789-00", "8000.00", "nota sigilosa"):
+            assert value not in serialized
+
+
 # ── Test 9: Endpoint não chama LLM ────────────────────────────────────────────
 
 

@@ -49,7 +49,7 @@ async def get_candidate_summary(
         candidate_service: CandidateService injetado pelo caller.
 
     Returns:
-        ToolResult com id, full_name, email, phone, location, tags,
+        ToolResult com id, full_name, email, location, tags,
         application_source, data_quality_status, created_at, updated_at.
     """
     if denied := ToolPermissionGuard.enforce(context, _REQUIRED_PERMISSION):
@@ -67,7 +67,6 @@ async def get_candidate_summary(
                 "id": str(candidate.id),
                 "full_name": candidate.full_name,
                 "email": candidate.email,
-                "phone": candidate.phone,
                 "location": _location_string(
                     candidate.location_city,
                     candidate.location_state,
