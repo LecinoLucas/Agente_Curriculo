@@ -24,11 +24,21 @@ export type AiAssistantHistoryKind =
   | "conhecimento"
   | "geral";
 
+export type AiAssistantPageDomain =
+  | "job"
+  | "candidate"
+  | "admission"
+  | "admin"
+  | "knowledge"
+  | "generic";
+
 export type AiAssistantHistoryItem = {
   id: string;
   label: string;
   intent: string;
   kind: AiAssistantHistoryKind;
+  domain?: AiAssistantPageDomain;
+  entityId?: string | null;
   status: AiAssistantHistoryStatus;
   timestamp: string;
   query: string | null;
@@ -43,4 +53,43 @@ export type QuickAction = {
   description: string;
   intent: string;
   buildArgs: (params: Record<string, string>) => Record<string, unknown> | null;
+};
+
+export type AiAssistantContextAction =
+  | {
+      id: string;
+      kind: "assistant";
+      label: string;
+      description: string;
+      intent: string;
+      arguments: Record<string, unknown>;
+    }
+  | {
+      id: string;
+      kind: "knowledge";
+      label: string;
+      description: string;
+      intent: "knowledge.search" | "knowledge.answer";
+      query: string;
+      arguments: Record<string, unknown>;
+    }
+  | {
+      id: string;
+      kind: "navigation";
+      label: string;
+      description: string;
+      href: string;
+    };
+
+export type AiAssistantPageContext = {
+  route: string;
+  domain: AiAssistantPageDomain;
+  entityId?: string;
+  entityLabel?: string;
+  title: string;
+  subtitle: string;
+  guidance: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  availableActions: AiAssistantContextAction[];
 };

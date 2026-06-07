@@ -76,6 +76,9 @@ describe("AiAssistantDrawer", () => {
     renderDrawer();
     expect(screen.getByTestId("ai-assistant-drawer")).toBeInTheDocument();
     expect(screen.getByText(/Somente leitura/i)).toBeInTheDocument();
+    expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
+      "Contexto atual: Vaga",
+    );
   });
 
   it("renders friendly warning for embedding_provider_error", async () => {
@@ -323,36 +326,70 @@ describe("AiAssistantDrawer", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the generic empty state", () => {
-    renderDrawer("/admin/usuarios");
+  it("shows generic empty state on non-contextual routes", () => {
+    renderDrawer("/rh");
     expect(screen.getByTestId("ai-assistant-empty")).toBeInTheDocument();
     expect(
-      screen.getByText(/Abra uma vaga, candidato ou caso admissional para ver ações contextuais/i),
-    ).toBeInTheDocument();
+      screen.getAllByText(
+        /Abra uma vaga, candidato ou caso admissional para ver ações contextuais/i,
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("shows route-specific empty state for candidates without candidateId", () => {
     renderDrawer("/candidatos");
     expect(screen.getByText("Não identifiquei o candidato atual")).toBeInTheDocument();
+    expect(screen.queryByTestId("ai-action-candidate.summary")).not.toBeInTheDocument();
   });
 
-  it("keeps contextual actions visible on supported routes", () => {
+  it("hides job actions when the job id is missing", () => {
+    renderDrawer("/vagas");
+    expect(screen.getByText("Não identifiquei a vaga atual")).toBeInTheDocument();
+    expect(screen.queryByTestId("ai-action-job.summary")).not.toBeInTheDocument();
+  });
+
+  it("derives job context and keeps job actions visible on job routes", () => {
     renderDrawer("/vagas/job-123");
+    expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
+      "Contexto atual: Vaga",
+    );
     expect(screen.getByTestId("ai-action-job.summary")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-job.requirements")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-pipeline.overview")).toBeInTheDocument();
-
-    renderDrawer("/candidatos/cand-456");
-    expect(screen.getByTestId("ai-action-candidate.summary")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-action-candidate.active_pipeline")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-action-knowledge.job_quality_rules")).toBeInTheDocument();
   });
 
-  it("uses admission_case_id on admission routes and preserves candidate quick action slot", async () => {
+  it("derives candidate context and keeps candidate actions visible on candidate routes", () => {
+    renderDrawer("/candidatos/cand-456");
+    expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
+      "Contexto atual: Candidato",
+    );
+    expect(screen.getByTestId("ai-action-candidate.summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-action-candidate.active_pipeline")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-action-knowledge.fair_evaluation_rules")).toBeInTheDocument();
+  });
+
+  it("uses job_id on job routes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(makeResponse());
+    renderDrawer("/vagas/123");
+
+    await user.click(screen.getByTestId("ai-action-job.summary"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "job.summary",
+        arguments: { job_id: "123" },
+      }),
+    );
+  });
+
+  it("uses admission_case_id on admission routes", async () => {
     const user = userEvent.setup();
     vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
       makeResponse({ intent: "admission.case_summary" }),
     );
-    renderDrawer("/admissao/case-456");
+    renderDrawer("/admission/cases/case-456");
 
     await user.click(screen.getByTestId("ai-action-admission.case_summary"));
 
@@ -362,6 +399,37 @@ describe("AiAssistantDrawer", () => {
         arguments: { admission_case_id: "case-456" },
       }),
     );
+  });
+
+  it("derives admission context and renders admission actions", () => {
+    renderDrawer("/admission/cases/case-456");
+    expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
+      "Contexto atual: Admissão",
+    );
+    expect(screen.getByTestId("ai-action-admission.case_summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-action-admission.documents_status")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-action-admission.events_summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-action-knowledge.pre_admission_rules")).toBeInTheDocument();
+  });
+
+  it("hides actions that require a missing ID", () => {
+    renderDrawer("/admission/cases/case-456");
+    expect(screen.queryByTestId("ai-action-protheus.export_status")).not.toBeInTheDocument();
+  });
+
+  it("shows protheus action when package_id is available in the route", () => {
+    renderDrawer("/admission/cases/case-456?packageId=pkg-9");
+    expect(screen.getByTestId("ai-action-protheus.export_status")).toBeInTheDocument();
+  });
+
+  it("derives admin context and renders safe admin shortcuts", () => {
+    renderDrawer("/admin");
+    expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
+      "Contexto atual: Administração",
+    );
+    expect(screen.getByTestId("ai-action-nav.admin.ia")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-action-nav.admin.health")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-action-knowledge.assistant_policy")).toBeInTheDocument();
   });
 
   it("does not use dangerouslySetInnerHTML in the assistant drawer implementation", () => {
@@ -396,9 +464,16 @@ describe("AiAssistantDrawer", () => {
     await waitFor(() => screen.getByTestId("ai-assistant-result"));
 
     const historyJson = screen.getByTestId("history-json").textContent ?? "";
+    expect(historyJson).toContain('"domain":"job"');
+    expect(historyJson).toContain('"entityId":"job-123"');
     expect(historyJson).not.toContain("embedding_provider_error");
     expect(historyJson).not.toContain("RuntimeError");
     expect(historyJson).toContain("temporariamente indisponível");
+  });
+
+  it("keeps base de conhecimento available in every context", () => {
+    renderDrawer("/admin");
+    expect(screen.getByTestId("ai-knowledge-section")).toBeInTheDocument();
   });
 
   it("reopens history without issuing a new request", async () => {

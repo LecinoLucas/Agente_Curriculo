@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   BrainCircuit,
@@ -14,9 +14,9 @@ import {
 } from "lucide-react";
 import { aiAssistantService } from "../services/aiAssistantService";
 import type {
+  AiAssistantContextAction,
   AiAssistantHistoryItem,
   AiAssistantResponse,
-  QuickAction,
 } from "../types";
 import { AiAssistantResultRenderer } from "./AiAssistantResultRenderer";
 import {
@@ -30,173 +30,11 @@ import {
   sanitizeResponse,
   sanitizeText,
 } from "../utils/aiAssistantSanitizer";
+import { deriveAiAssistantPageContext } from "../utils/aiAssistantContext";
 
 const HISTORY_LIMIT = 5;
 
 type DrawerStatus = "idle" | "loading" | "result" | "error";
-
-type PageContextKind = "job" | "candidate" | "admission" | "generic";
-
-type PageContext = {
-  kind: PageContextKind;
-  params: Record<string, string>;
-  emptyTitle: string;
-  emptyDescription: string;
-};
-
-const QUICK_ACTIONS: QuickAction[] = [
-  {
-    id: "job.summary",
-    label: "Resumo da vaga",
-    description: "Veja status, requisitos e pendências principais.",
-    intent: "job.summary",
-    buildArgs: (params) => (params.jobId ? { job_id: params.jobId } : null),
-  },
-  {
-    id: "job.requirements",
-    label: "Requisitos da vaga",
-    description: "Entenda skills, experiência e critérios técnicos já cadastrados.",
-    intent: "job.requirements",
-    buildArgs: (params) => (params.jobId ? { job_id: params.jobId } : null),
-  },
-  {
-    id: "pipeline.overview",
-    label: "Visão da pipeline",
-    description: "Veja volumes por etapa e onde a vaga concentra mais candidatos.",
-    intent: "pipeline.overview",
-    buildArgs: (params) => (params.jobId ? { job_id: params.jobId } : null),
-  },
-  {
-    id: "candidate.summary",
-    label: "Resumo do candidato",
-    description: "Entenda dados principais, pipeline ativo e próximos passos.",
-    intent: "candidate.summary",
-    buildArgs: (params) => (params.candidateId ? { candidate_id: params.candidateId } : null),
-  },
-  {
-    id: "candidate.active_pipeline",
-    label: "Status do currículo",
-    description: "Veja se o currículo está pronto para análise e o que ainda limita a triagem.",
-    intent: "candidate.resume_analysis",
-    buildArgs: (params) => (params.candidateId ? { candidate_id: params.candidateId } : null),
-  },
-  {
-    id: "admission.case_summary",
-    label: "Status admissional",
-    description: "Veja pendências, documentos e bloqueios antes do Protheus.",
-    intent: "admission.case_summary",
-    buildArgs: (params) => (
-      params.admissionCaseId ? { admission_case_id: params.admissionCaseId } : null
-    ),
-  },
-  {
-    id: "admission.documents_status",
-    label: "Status dos documentos",
-    description: "Confira documentos pendentes, rejeitados e pontos que travam o caso.",
-    intent: "admission.documents_status",
-    buildArgs: (params) => (
-      params.admissionCaseId ? { admission_case_id: params.admissionCaseId } : null
-    ),
-  },
-];
-
-function extractPageContext(pathname: string, search: string): PageContext {
-  const params: Record<string, string> = {};
-
-  const jobMatch = pathname.match(/^\/vagas\/([^/?]+)/);
-  if (jobMatch && jobMatch[1] !== "nova") {
-    params.jobId = jobMatch[1];
-  }
-
-  const pipelineMatch = pathname.match(/^\/pipeline\/([^/?]+)/);
-  if (pipelineMatch) {
-    params.jobId = pipelineMatch[1];
-  }
-
-  const candidateMatch = pathname.match(/^\/candidatos\/([^/?]+)/);
-  if (candidateMatch) {
-    params.candidateId = candidateMatch[1];
-  }
-
-  const admissionMatch =
-    pathname.match(/^\/admissao\/([^/?]+)/) ??
-    pathname.match(/^\/admission\/cases\/([^/?]+)/) ??
-    pathname.match(/^\/admitidos\/([^/?]+)/);
-  if (admissionMatch) {
-    params.admissionCaseId = admissionMatch[1];
-  }
-
-  const searchParams = new URLSearchParams(search);
-  const jobFromSearch = searchParams.get("job") ?? searchParams.get("job_id");
-  if (jobFromSearch && !params.jobId) params.jobId = jobFromSearch;
-
-  if (/^\/vagas(?:\/|$)/.test(pathname) && !params.jobId) {
-    return {
-      kind: "job",
-      params,
-      emptyTitle: "Não identifiquei a vaga atual",
-      emptyDescription: "Abra uma vaga específica para usar ações contextuais.",
-    };
-  }
-
-  if (/^\/candidatos(?:\/|$)/.test(pathname) && !params.candidateId) {
-    return {
-      kind: "candidate",
-      params,
-      emptyTitle: "Não identifiquei o candidato atual",
-      emptyDescription: "Abra um perfil de candidato para usar ações contextuais.",
-    };
-  }
-
-  if (
-    (/^\/admissao(?:\/|$)/.test(pathname) ||
-      /^\/admission\/cases(?:\/|$)/.test(pathname) ||
-      /^\/admitidos(?:\/|$)/.test(pathname)) &&
-    !params.admissionCaseId
-  ) {
-    return {
-      kind: "admission",
-      params,
-      emptyTitle: "Não identifiquei o caso admissional atual",
-      emptyDescription: "Abra um caso admissional específico para usar ações contextuais.",
-    };
-  }
-
-  if (params.jobId) {
-    return {
-      kind: "job",
-      params,
-      emptyTitle: "",
-      emptyDescription: "",
-    };
-  }
-
-  if (params.candidateId) {
-    return {
-      kind: "candidate",
-      params,
-      emptyTitle: "",
-      emptyDescription: "",
-    };
-  }
-
-  if (params.admissionCaseId) {
-    return {
-      kind: "admission",
-      params,
-      emptyTitle: "",
-      emptyDescription: "",
-    };
-  }
-
-  return {
-    kind: "generic",
-    params,
-    emptyTitle: "Nenhuma ação disponível",
-    emptyDescription:
-      "Abra uma vaga, candidato ou caso admissional para ver ações contextuais. Você também pode consultar a Base de Conhecimento.",
-  };
-}
 
 function formatShortTime(date = new Date()): string {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -206,7 +44,9 @@ function formatShortTime(date = new Date()): string {
 }
 
 function buildHistoryItem(params: {
-  action: QuickAction;
+  action: Extract<AiAssistantContextAction, { kind: "assistant" | "knowledge" }>;
+  domain: AiAssistantHistoryItem["domain"];
+  entityId?: string;
   query?: string | null;
   response?: AiAssistantResponse | null;
   errorMessage?: string | null;
@@ -227,6 +67,8 @@ function buildHistoryItem(params: {
     label: params.action.label,
     intent: params.action.intent,
     kind: classifyIntent(params.action.intent),
+    domain: params.domain,
+    entityId: params.entityId ?? null,
     status,
     timestamp: formatShortTime(),
     query: params.query?.trim() ? params.query.trim() : null,
@@ -248,14 +90,15 @@ export function AiAssistantDrawer({
   onSessionHistoryChange,
 }: AiAssistantDrawerProps) {
   const { pathname, search } = useLocation();
+  const navigate = useNavigate();
   const sessionId = useRef(crypto.randomUUID()).current;
   const [status, setStatus] = useState<DrawerStatus>("idle");
-  const [activeAction, setActiveAction] = useState<QuickAction | null>(null);
+  const [activeAction, setActiveAction] = useState<AiAssistantContextAction | null>(null);
   const [result, setResult] = useState<AiAssistantResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localSessionHistory, setLocalSessionHistory] = useState<AiAssistantHistoryItem[]>([]);
 
-  const pageContext = extractPageContext(pathname, search);
+  const pageContext = deriveAiAssistantPageContext(pathname, search);
   const history = sessionHistory ?? localSessionHistory;
 
   const setHistory = (updater: (current: AiAssistantHistoryItem[]) => AiAssistantHistoryItem[]) => {
@@ -268,13 +111,11 @@ export function AiAssistantDrawer({
     setHistory((current) => [item, ...current].slice(0, HISTORY_LIMIT));
   };
 
-  const availableActions = QUICK_ACTIONS.filter(
-    (action) => action.buildArgs(pageContext.params) !== null,
-  );
-
-  const handleAction = async (action: QuickAction) => {
-    const args = action.buildArgs(pageContext.params);
-    if (!args) return;
+  const handleAction = async (action: AiAssistantContextAction) => {
+    if (action.kind === "navigation") {
+      navigate(action.href);
+      return;
+    }
 
     setActiveAction(action);
     setStatus("loading");
@@ -285,18 +126,34 @@ export function AiAssistantDrawer({
       const response = sanitizeResponse(
         await aiAssistantService.query({
           intent: action.intent,
-          arguments: args,
+          arguments: action.arguments,
           session_id: sessionId,
         }),
       );
       setResult(response);
       setStatus("result");
-      pushHistory(buildHistoryItem({ action, response }));
+      pushHistory(
+        buildHistoryItem({
+          action,
+          domain: pageContext.domain,
+          entityId: pageContext.entityId,
+          query: action.kind === "knowledge" ? action.query : null,
+          response,
+        }),
+      );
     } catch (err: unknown) {
       const msg = normalizeErrorMessage(err);
       setErrorMessage(msg);
       setStatus("error");
-      pushHistory(buildHistoryItem({ action, errorMessage: msg }));
+      pushHistory(
+        buildHistoryItem({
+          action,
+          domain: pageContext.domain,
+          entityId: pageContext.entityId,
+          query: action.kind === "knowledge" ? action.query : null,
+          errorMessage: msg,
+        }),
+      );
     }
   };
 
@@ -305,45 +162,25 @@ export function AiAssistantDrawer({
     query: string,
   ) => {
     const normalizedQuery = query.trim();
-    const action = {
+    await handleAction({
       id: intent,
+      kind: "knowledge",
       label: intent === "knowledge.search" ? "Buscar fontes" : "Responder com fontes",
       description: normalizedQuery,
       intent,
-      buildArgs: () => ({ query: normalizedQuery, limit: 5 }),
-    } satisfies QuickAction;
-
-    setActiveAction(action);
-    setStatus("loading");
-    setResult(null);
-    setErrorMessage(null);
-
-    try {
-      const response = sanitizeResponse(
-        await aiAssistantService.query({
-          intent,
-          arguments: { query: normalizedQuery, limit: 5 },
-          session_id: sessionId,
-        }),
-      );
-      setResult(response);
-      setStatus("result");
-      pushHistory(buildHistoryItem({ action, query: normalizedQuery, response }));
-    } catch (err: unknown) {
-      const msg = normalizeErrorMessage(err);
-      setErrorMessage(msg);
-      setStatus("error");
-      pushHistory(buildHistoryItem({ action, query: normalizedQuery, errorMessage: msg }));
-    }
+      query: normalizedQuery,
+      arguments: { query: normalizedQuery, limit: 5 },
+    });
   };
 
   const handleHistoryOpen = (item: AiAssistantHistoryItem) => {
     setActiveAction({
       id: item.id,
       label: item.label,
+      kind: "assistant",
       description: item.query ?? item.summary,
       intent: item.intent,
-      buildArgs: () => null,
+      arguments: {},
     });
     setResult(item.result);
     setErrorMessage(item.errorMessage);
@@ -426,12 +263,34 @@ export function AiAssistantDrawer({
         <div className="flex-1 overflow-y-auto p-4">
           {status === "idle" && (
             <div className="space-y-6">
+              <div
+                className="rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3"
+                data-testid="ai-assistant-context-panel"
+              >
+                <p
+                  className="text-xs font-semibold uppercase tracking-wide text-text-muted"
+                  data-testid="ai-assistant-context-label"
+                >
+                  Contexto atual: {pageContext.title}
+                </p>
+                <p className="mt-1 text-sm text-text">{pageContext.subtitle}</p>
+                <p className="mt-2 text-xs text-text-muted">{pageContext.guidance}</p>
+                {pageContext.entityLabel && (
+                  <p
+                    className="mt-2 text-xs font-medium text-text-muted"
+                    data-testid="ai-assistant-context-entity"
+                  >
+                    {pageContext.entityLabel}
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-3">
                 <h3 className="px-1 text-xs font-bold uppercase tracking-wider text-text-muted">
-                  Ações contextuais
+                  Ações recomendadas para esta tela
                 </h3>
                 <ActionList
-                  actions={availableActions}
+                  actions={pageContext.availableActions}
                   emptyTitle={pageContext.emptyTitle}
                   emptyDescription={pageContext.emptyDescription}
                   onAction={handleAction}
@@ -507,10 +366,10 @@ function ActionList({
   emptyDescription,
   onAction,
 }: {
-  actions: QuickAction[];
+  actions: AiAssistantContextAction[];
   emptyTitle: string;
   emptyDescription: string;
-  onAction: (action: QuickAction) => void;
+  onAction: (action: AiAssistantContextAction) => void;
 }) {
   if (actions.length === 0) {
     return (
@@ -533,6 +392,7 @@ function ActionList({
             type="button"
             onClick={() => onAction(action)}
             data-testid={`ai-action-${action.id}`}
+            data-action-kind={action.kind}
             className="w-full rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3 text-left transition-colors hover:border-[hsl(var(--primary))]/30 hover:bg-surface-muted"
           >
             <p className="text-sm font-medium text-text">{action.label}</p>
@@ -665,6 +525,11 @@ function SessionHistorySection({
                       <p className="mt-0.5 text-xs uppercase tracking-wide text-text-muted">
                         {item.kind} · {item.status === "error" ? "erro" : "sucesso"}
                       </p>
+                      {(item.domain || item.entityId) && (
+                        <p className="mt-1 text-xs text-text-muted">
+                          {[item.domain, item.entityId].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
                     </div>
                   </div>
                   {item.query && (
