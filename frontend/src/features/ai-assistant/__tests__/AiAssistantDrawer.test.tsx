@@ -127,7 +127,7 @@ describe("AiAssistantDrawer", () => {
 
     await waitFor(() => screen.getByTestId("ai-assistant-warnings"));
     expect(
-      screen.getByText(/Não foi possível consultar a indexação semântica agora/i),
+      screen.getByText(/Não foi possível consultar os embeddings agora/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/embedding_provider_error/i)).not.toBeInTheDocument();
   });
@@ -1023,7 +1023,7 @@ describe("AiAssistantDrawer", () => {
 
     await user.type(
       screen.getByTestId("ai-text-intent-input"),
-      "consegui cadastrar novos conhecimentos nesse sistema?",
+      "como posso cadastrar novos conhecimentos?",
     );
     await user.click(screen.getByTestId("ai-text-intent-submit"));
 
@@ -1038,7 +1038,7 @@ describe("AiAssistantDrawer", () => {
     const user = userEvent.setup();
     renderDrawer("/admin");
 
-    await user.type(screen.getByTestId("ai-text-intent-input"), "onde vejo tokens?");
+    await user.type(screen.getByTestId("ai-text-intent-input"), "como vejo o uso de tokens e faturamento?");
     await user.click(screen.getByTestId("ai-text-intent-submit"));
 
     expect(aiAssistantService.query).not.toHaveBeenCalled();
@@ -1386,5 +1386,22 @@ describe("AiAssistantDrawer", () => {
 
     expect(screen.getByText("<strong>texto bruto</strong>")).toBeInTheDocument();
     expect(document.querySelector("strong")).not.toBeInTheDocument();
+  });
+
+  it("tenho tela de vagas? retorna resposta local e nao chama endpoint", async () => {
+    const user = userEvent.setup();
+    renderDrawer();
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "tenho tela de vagas?");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Você tem telas relacionadas a Vagas/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("ai-local-next-action-/vagas")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-local-next-action-/vagas/nova")).toBeInTheDocument();
+
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
   });
 });

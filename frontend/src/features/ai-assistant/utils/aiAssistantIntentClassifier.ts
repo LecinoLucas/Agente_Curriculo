@@ -4,6 +4,7 @@ import type {
   AiAssistantLocalNextAction,
   AiAssistantPageContext,
 } from "../types";
+import { searchSiteMap } from "./aiAssistantSiteMap";
 
 const MAX_INPUT_LENGTH = 300;
 
@@ -683,6 +684,47 @@ export function classifyAssistantTextInput(
         "Por segurança, o assistente não executa ações de escrita. Posso consultar informações e indicar próximos passos para revisão humana.",
     };
   }
+
+  const isNavigationQuery = includesAny(normalizedInput, [
+    "onde", "tela", "telas", "pagina", "menu", "sistema", "acessar", "acesso",
+    "ir para", "navegar", "qual tela", "quais telas", "onde vejo", "onde fica",
+    "onde cadastro", "onde crio", "tem tela", "tenho tela", "existe tela", "existem", "o que posso fazer"
+  ]);
+
+  const siteMapMatches = searchSiteMap(input);
+  
+  // Apenas aceitamos o match se houver gatilho explícito de navegação 
+  // OU se a query for muito curta/exata e representar o nome exato de uma tela (ex: "vagas", "nova vaga")
+  const isExactAliasMatch = siteMapMatches.length > 0 && siteMapMatches.some(m => m.aliases.includes(normalizedInput));
+  
+  if ((isNavigationQuery && siteMapMatches.length > 0) || isExactAliasMatch) {
+    const nextActions = siteMapMatches.map(m => ({ label: m.label, href: m.path }));
+      
+      let answer = "Encontrei as seguintes telas relacionadas ao que você perguntou.";
+      let label = "Orientação do sistema";
+
+      if (siteMapMatches.length > 5) {
+        label = "Visão geral do sistema";
+        answer = "Sim, você tem acesso a diversas áreas do sistema: Vagas, Pipeline, Candidatos, Admissão, Administração, Base de Conhecimento, IA e Perfil. Para abrir um detalhe específico, primeiro selecione um item na listagem principal.";
+      } else if (normalizedInput.includes("vaga") && !normalizedInput.includes("crio") && !normalizedInput.includes("nova") && isNavigationQuery) {
+        answer = "Sim. Você tem telas relacionadas a Vagas.";
+      }
+
+      const hasJobCreate = siteMapMatches.some(m => m.id === "job-create");
+      if (hasJobCreate && (normalizedInput.includes("cria") || normalizedInput.includes("nova"))) {
+        answer += " O assistente não cria nem publica vagas automaticamente. Ele apenas orienta e abre a tela correta.";
+      }
+
+      return {
+        status: "local_answer",
+        kind: "local_answer",
+        label,
+        reason: "O assistente identificou telas que respondem a esta pergunta de navegação.",
+        normalizedInput,
+        answer: answer.trim(),
+        nextActions,
+      };
+    }
 
   const contextual =
     (context.domain === "job" ? classifyJobIntent(normalizedInput, context) : null) ??
