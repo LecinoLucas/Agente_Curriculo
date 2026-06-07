@@ -51,6 +51,19 @@ export type JobAiDraftSource = {
   input_character_count: number;
 };
 
+export type JobAiDraftSafetyFinding = {
+  field: string;
+  severity: "low" | "medium" | "high";
+  code: string;
+  message: string;
+};
+
+export type JobAiDraftSafetyCheck = {
+  status: "ok" | "needs_review";
+  highest_severity: "low" | "medium" | "high" | null;
+  findings: JobAiDraftSafetyFinding[];
+};
+
 export type JobAiDraftGenerateRequest = {
   text_input: string | null;
   ocr_text: string | null;
@@ -64,6 +77,7 @@ export type JobAiDraftGenerateResponse = {
   draft: JobAiDraftFields;
   needs_review: string[];
   warnings?: string[];
+  safety_check?: JobAiDraftSafetyCheck | null;
   source: JobAiDraftSource;
   usage: JobAiDraftUsage;
 };

@@ -398,8 +398,8 @@ describe("JobAiDraftPanel — API real", () => {
     renderPanel();
     fillAndSubmit();
     await screen.findByTestId("ai-draft-result");
-    // se o mock da API real foi chamado, o mock local não foi usado
     expect(mockGenerateJobAiDraft).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Usar exemplo/i })).toBeInTheDocument();
   });
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -475,6 +475,7 @@ describe("JobAiDraftPanel — API real", () => {
     expect(safety).toHaveTextContent(/Revisão de segurança necessária/i);
     expect(safety).toHaveTextContent(/Severidade Alta/i);
     expect(safety).toHaveTextContent(/Título/i);
+    expect(safety).toHaveTextContent(/Critério de idade removido do texto/i);
   });
 
   it("não mostra texto discriminatório removido no preview", async () => {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Info, Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, Loader2, Plus, ShieldAlert, Sparkles, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,12 +8,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { JobFormValues } from "../jobFormConfig";
 import {
-  applyDraftToForm as _legacyApplyDraftToForm,
-  MOCK_AI_PROMPT_EXAMPLE,
-  type JobAiDraft,
-} from "../utils/mockJobAiDraft";
-import { applyApiDraftToForm, extractSkillSuggestions } from "../utils/jobAiDraftHelpers";
-import { generateJobAiDraft, type JobAiDraftFields } from "../services/jobAiDraftService";
+  applyApiDraftToForm,
+  applyLegacyDraftToForm,
+  extractSkillSuggestions,
+  JOB_AI_PROMPT_EXAMPLE,
+} from "../utils/jobAiDraftHelpers";
+import {
+  generateJobAiDraft,
+  type JobAiDraftFields,
+  type JobAiDraftSafetyCheck,
+} from "../services/jobAiDraftService";
 
 interface JobAiDraftPanelProps {
   formHasData: boolean;
@@ -30,7 +34,7 @@ type AiStatus = "idle" | "loading" | "ready" | "error";
  * @deprecated Use applyApiDraftToForm from jobAiDraftHelpers.ts instead.
  * Kept only for backwards-compat with existing tests that import this.
  */
-export const draftToFormUpdates = _legacyApplyDraftToForm;
+export const draftToFormUpdates = applyLegacyDraftToForm;
 
 function SectionTitle({ children }: { children: string }) {
   return <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{children}</p>;
@@ -111,6 +115,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
   const [draft, setDraft] = useState<JobAiDraftFields | null>(null);
   const [needsReview, setNeedsReview] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [safetyCheck, setSafetyCheck] = useState<JobAiDraftSafetyCheck | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -142,6 +147,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
       setDraft(null);
       setNeedsReview([]);
       setWarnings([]);
+      setSafetyCheck(null);
       setErrorMessage("Informe uma descrição para gerar o rascunho.");
       return;
     }
@@ -151,12 +157,14 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     setDraft(null);
     setNeedsReview([]);
     setWarnings([]);
+    setSafetyCheck(null);
 
     try {
       const response = await generateJobAiDraft({ text_input: prompt, ocr_text: null });
       setDraft(response.draft);
       setNeedsReview(response.needs_review ?? []);
       setWarnings(response.warnings ?? []);
+      setSafetyCheck(response.safety_check ?? null);
       setAiStatus("ready");
     } catch (err: unknown) {
       setAiStatus("error");
@@ -233,6 +241,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     setDraft(null);
     setNeedsReview([]);
     setWarnings([]);
+    setSafetyCheck(null);
     setAiStatus("idle");
     setErrorMessage(null);
   }
@@ -266,6 +275,27 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
       "Avaliação comportamental preservada porque havia evidência explícita no texto.",
     selection_flow_type_requires_manual_review:
       "Fluxo de seleção identificado no texto, mas exige revisão manual antes de configurar o formulário.",
+    discriminatory_text_removed:
+      "Texto potencialmente discriminatório foi removido e precisa de validação humana.",
+    safety_check_requires_review:
+      "A checagem de segurança identificou pontos que exigem revisão humana antes de aplicar.",
+  };
+
+  const SAFETY_FIELD_LABELS: Record<string, string> = {
+    title: "Título",
+    description: "Descrição",
+    requirements: "Requisitos",
+    responsibilities: "Responsabilidades",
+    benefits: "Benefícios",
+    salary_range: "Faixa salarial",
+    minimum_education_level: "Escolaridade mínima",
+    minimum_years_experience: "Experiência mínima",
+  };
+
+  const SAFETY_SEVERITY_LABELS: Record<"low" | "medium" | "high", string> = {
+    low: "Baixa",
+    medium: "Média",
+    high: "Alta",
   };
 
   return (
@@ -307,7 +337,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs text-text-muted hover:text-text"
-              onClick={() => setPrompt(MOCK_AI_PROMPT_EXAMPLE)}
+              onClick={() => setPrompt(JOB_AI_PROMPT_EXAMPLE)}
             >
               Usar exemplo
             </Button>
@@ -428,6 +458,46 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                       <li key={warning}>{WARNING_LABELS[warning] ?? warning}</li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {safetyCheck?.status === "needs_review" && (
+                <div
+                  role="alert"
+                  className="space-y-2 rounded-xl border border-[hsl(var(--danger))]/25 bg-danger-soft px-3 py-3 text-sm text-danger"
+                  data-testid="ai-draft-safety-check"
+                >
+                  <div className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <div className="space-y-1">
+                      <p className="font-medium">Revisão de segurança necessária</p>
+                      <p>
+                        A IA removeu ou bloqueou conteúdo sensível. Revise os campos sinalizados
+                        antes de aplicar o rascunho ao formulário.
+                      </p>
+                    </div>
+                  </div>
+
+                  {safetyCheck.highest_severity && (
+                    <p className="pl-6">
+                      <span className="font-medium">Severidade </span>
+                      {SAFETY_SEVERITY_LABELS[safetyCheck.highest_severity]}
+                    </p>
+                  )}
+
+                  {safetyCheck.findings.length > 0 && (
+                    <ul className="list-disc space-y-1 pl-10">
+                      {safetyCheck.findings.map((finding, index) => (
+                        <li key={`${finding.field}-${finding.code}-${index}`}>
+                          <span className="font-medium">
+                            {SAFETY_FIELD_LABELS[finding.field] ?? finding.field}
+                          </span>
+                          {": "}
+                          {finding.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
 

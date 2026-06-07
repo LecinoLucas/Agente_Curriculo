@@ -17,11 +17,80 @@ import { normalizeAiDraftStringList } from "../jobFormConfig";
 import type { JobAiDraftFields } from "../services/jobAiDraftService";
 import { extractSkillSuggestionsFromDraft } from "./jobAiSkillSuggestions";
 
+export type LegacyJobAiDraft = {
+  title: string;
+  area: string;
+  work_model: string;
+  location: string;
+  description: string;
+  responsibilities: string[];
+  requirements: string[];
+  mandatory_skills: string[];
+  nice_to_have_skills: string[];
+  screening_questions: string[];
+  benefits: string[];
+  working_hours: string;
+  seniority: string;
+  experience_context: string;
+  minimum_years_experience: number | null;
+  requires_manager_review: boolean;
+  requires_behavioral_assessment: boolean;
+};
+
+export const JOB_AI_PROMPT_EXAMPLE =
+  "Preciso contratar um frentista para posto de combustível. A pessoa deve ter boa comunicação, disponibilidade para escala, experiência com atendimento ao cliente e responsabilidade com caixa. Será um diferencial já ter trabalhado em posto.";
+
 /** Trim string or return undefined if blank. */
 function trimOrUndefined(value: string | null | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
+}
+
+function normalizeLegacyStringList(items: string[]): string[] {
+  const seen = new Set<string>();
+  return items
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .filter((item) => {
+      const key = item.toLocaleLowerCase("pt-BR");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+export function applyLegacyDraftToForm(draft: LegacyJobAiDraft): Partial<JobFormValues> {
+  const updates: Partial<JobFormValues> = {
+    title: draft.title,
+    description: draft.description,
+    responsibilities:
+      draft.responsibilities.length > 0 ? draft.responsibilities.join("\n") : undefined,
+    requirements: draft.requirements.length > 0 ? draft.requirements.join("\n") : undefined,
+    experience_context: draft.experience_context,
+    job_area: draft.area,
+    seniority_level: draft.seniority,
+    minimum_years_experience: draft.minimum_years_experience ?? undefined,
+    work_model: draft.work_model,
+    working_hours: draft.working_hours,
+    location: draft.location,
+    requires_manager_review: draft.requires_manager_review,
+    requires_behavioral_assessment: draft.requires_behavioral_assessment,
+  };
+
+  const mandatorySkills = normalizeLegacyStringList(draft.mandatory_skills);
+  if (mandatorySkills.length > 0) updates.mandatory_skills = mandatorySkills;
+
+  const niceToHave = normalizeLegacyStringList(draft.nice_to_have_skills);
+  if (niceToHave.length > 0) updates.nice_to_have_skills = niceToHave;
+
+  const screeningQuestions = normalizeLegacyStringList(draft.screening_questions);
+  if (screeningQuestions.length > 0) updates.screening_questions = screeningQuestions;
+
+  const benefitsList = normalizeLegacyStringList(draft.benefits);
+  if (benefitsList.length > 0) updates.benefits = benefitsList;
+
+  return updates;
 }
 
 /**
