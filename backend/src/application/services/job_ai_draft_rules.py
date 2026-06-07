@@ -83,6 +83,17 @@ _DISCRIMINATORY_PATTERNS = [
     r"\bcaucasian[oa]s?\b",
 ]
 
+_SALARY_EVIDENCE_PATTERNS = [
+    r"\bsal[áa]rio\b",
+    r"\bfaixa salarial\b",
+    r"\bremunera[çc][ãa]o\b",
+    r"\bbrl\b",
+    r"\bmensal\b",
+    r"\bpor m[êe]s\b",
+    r"\bao m[êe]s\b",
+    r"r\s*\$",
+]
+
 _SYSTEM_PROMPT = """\
 Você é um assistente especializado em estruturar descrições de vagas de emprego.
 
@@ -205,6 +216,28 @@ def _nonempty_str(value: Any) -> str | None:
     cleaned = str(value).strip()
     return cleaned if cleaned else None
 
+def _normalize_evidence_text(value: str) -> str:
+    """Normalize source/AI text for conservative evidence matching."""
+    normalized = unicodedata.normalize("NFKD", value.casefold())
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+def has_salary_source_evidence(source_text: str) -> bool:
+    """Return True only when the input explicitly mentions salary context."""
+    if not source_text:
+        return False
+    source = source_text.casefold()
+    return any(re.search(pattern, source, flags=re.IGNORECASE) for pattern in _SALARY_EVIDENCE_PATTERNS)
+
+def has_benefit_source_evidence(benefit: str, source_text: str) -> bool:
+    """Return True when this specific benefit is explicitly present in input."""
+    benefit_key = _normalize_evidence_text(benefit)
+    source_key = _normalize_evidence_text(source_text)
+    if not benefit_key or not source_key:
+        return False
+    return benefit_key in source_key
+
 def parse_draft(data: dict[str, Any]) -> AiDraftFields:
     wm = str(data.get("work_model") or "").strip().lower()
     work_model = wm if wm in _VALID_WORK_MODELS else None
@@ -290,10 +323,6 @@ def evaluate_quality(draft: AiDraftFields) -> tuple[float, list[str]]:
         missing.append("weak_mandatory_requirements")
         score -= 0.1
         
-    if not draft.benefits:
-        missing.append("missing_benefits")
-        score -= 0.05
-        
     if not draft.screening_questions:
         missing.append("missing_screening_questions")
         score -= 0.05
@@ -340,12 +369,25 @@ def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields
 
     # 3. Detect invented salary
     if draft.salary_min is not None or draft.salary_max is not None:
-        if not re.search(r'\d', source_text):
-            warnings.append("Salário inferido ou inventado pela IA foi removido.")
+        if not has_salary_source_evidence(source_text):
+            warnings.append("salary_removed_no_source_evidence")
             draft.salary_min = None
             draft.salary_max = None
 
-    # 4. Detect invented location/unit
+    # 4. Detect invented benefits item by item
+    if draft.benefits:
+        source_backed_benefits = []
+        removed_benefit = False
+        for benefit in draft.benefits:
+            if has_benefit_source_evidence(benefit, source_text):
+                source_backed_benefits.append(benefit)
+            else:
+                removed_benefit = True
+        if removed_benefit:
+            warnings.append("benefit_removed_no_source_evidence")
+        draft.benefits = source_backed_benefits
+
+    # 5. Detect invented location/unit
     if draft.unit:
         unit_words = [w for w in re.split(r'\W+', draft.unit.casefold()) if len(w) > 3]
         src_lower = source_text.casefold()
@@ -353,7 +395,7 @@ def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields
             warnings.append("Local/unidade inferido ou inventado pela IA foi removido.")
             draft.unit = None
 
-    # 5. Detect invented working hours
+    # 6. Detect invented working hours
     if draft.working_hours:
         wh_words = [w for w in re.split(r'\W+', draft.working_hours.casefold()) if len(w) > 1]
         src_lower = source_text.casefold()

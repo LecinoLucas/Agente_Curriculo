@@ -22,7 +22,9 @@ from src.application.services.job_ai_draft_rules import (
     AiDraftParseError,
     AiDraftValidationError,
     _nonempty_str,
+    evaluate_quality,
     parse_draft as _parse_draft,
+    post_validate as _post_validate,
     sanitize as _sanitize,
     _SYSTEM_PROMPT,
 )
@@ -674,13 +676,13 @@ class TestSecurityGuardrails:
             return_value=_mock_ai(_ai_response(json.dumps(draft_invented))),
         ):
             result = await svc.generate(
-                text_input="Vaga sem menção de salário",
+                text_input="Vaga para atendimento em loja",
                 ocr_text=None,
                 session=session,
             )
         assert result.draft.salary_min is None
         assert result.draft.salary_max is None
-        assert any("Salário inferido ou inventado" in w for w in result.warnings)
+        assert "salary_removed_no_source_evidence" in result.warnings
         assert "salary_range" in result.needs_review
 
     @pytest.mark.asyncio
@@ -739,6 +741,114 @@ class TestSecurityGuardrails:
         data = dict(_DRAFT_JSON, mandatory_skills=["Python", "python", "JAVA", "java", "C#"])
         draft = _parse_draft(data)
         assert draft.mandatory_skills == ["Python", "JAVA", "C#"]
+
+
+# ── Salary and benefits evidence guardrails ───────────────────────────────────
+
+@pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
+class TestSalaryBenefitsEvidenceGuardrails:
+    @pytest.mark.asyncio
+    async def test_salary_removed_when_only_schedule_hours_experience_and_openings(self) -> None:
+        draft_salary = dict(_DRAFT_JSON, salary_min=2800, salary_max=3200)
+        result = await self._generate_with_draft(
+            draft_salary,
+            "Vendedor escala 6x1, 44h semanais, 2 anos de experiência, 3 vagas, turno de 8 horas.",
+        )
+        assert result.draft.salary_min is None
+        assert result.draft.salary_max is None
+        assert "salary_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_salary_preserved_with_explicit_salary_amount(self) -> None:
+        draft_salary = dict(_DRAFT_JSON, salary_min=3000, salary_max=3000)
+        result = await self._generate_with_draft(draft_salary, "Vendedor com salário R$ 3000.")
+        assert result.draft.salary_min == 3000
+        assert result.draft.salary_max == 3000
+        assert "salary_removed_no_source_evidence" not in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_salary_preserved_with_salary_range(self) -> None:
+        draft_salary = dict(_DRAFT_JSON, salary_min=2500, salary_max=3500)
+        result = await self._generate_with_draft(
+            draft_salary,
+            "Vaga com faixa salarial de R$ 2500 a R$ 3500.",
+        )
+        assert result.draft.salary_min == 2500
+        assert result.draft.salary_max == 3500
+
+    @pytest.mark.asyncio
+    async def test_salary_removed_from_common_role_without_salary_evidence(self) -> None:
+        draft_salary = dict(_DRAFT_JSON, salary_min=2500, salary_max=3500)
+        result = await self._generate_with_draft(draft_salary, "Vaga para vendedor em loja de varejo.")
+        assert result.draft.salary_min is None
+        assert result.draft.salary_max is None
+
+    @pytest.mark.asyncio
+    async def test_salary_preserved_with_monthly_compensation(self) -> None:
+        draft_salary = dict(_DRAFT_JSON, salary_min=4000, salary_max=4000)
+        result = await self._generate_with_draft(draft_salary, "Remuneração mensal 4000.")
+        assert result.draft.salary_min == 4000
+        assert result.draft.salary_max == 4000
+
+    @pytest.mark.asyncio
+    async def test_single_benefit_removed_without_source_evidence(self) -> None:
+        draft_benefits = dict(_DRAFT_JSON, benefits=["Vale-transporte"])
+        result = await self._generate_with_draft(draft_benefits, "Vaga para vendedor.")
+        assert result.draft.benefits == []
+        assert "benefit_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_multiple_benefits_removed_without_source_evidence(self) -> None:
+        draft_benefits = dict(_DRAFT_JSON, benefits=["Vale-transporte", "Plano de saúde", "Bônus"])
+        result = await self._generate_with_draft(draft_benefits, "Vaga para vendedor.")
+        assert result.draft.benefits == []
+        assert result.warnings.count("benefit_removed_no_source_evidence") == 1
+
+    @pytest.mark.asyncio
+    async def test_only_transport_voucher_preserved_when_explicit(self) -> None:
+        draft_benefits = dict(_DRAFT_JSON, benefits=["Vale-transporte"])
+        result = await self._generate_with_draft(draft_benefits, "Benefícios: vale transporte.")
+        assert result.draft.benefits == ["Vale-transporte"]
+        assert "benefit_removed_no_source_evidence" not in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_only_health_plan_preserved_when_explicit(self) -> None:
+        draft_benefits = dict(_DRAFT_JSON, benefits=["Plano de saúde"])
+        result = await self._generate_with_draft(draft_benefits, "Benefícios: plano de saúde.")
+        assert result.draft.benefits == ["Plano de saúde"]
+
+    @pytest.mark.asyncio
+    async def test_keeps_only_benefits_with_item_level_source_evidence(self) -> None:
+        draft_benefits = dict(_DRAFT_JSON, benefits=["Vale-transporte", "Plano de saúde"])
+        result = await self._generate_with_draft(draft_benefits, "Benefícios: vale transporte.")
+        assert result.draft.benefits == ["Vale-transporte"]
+        assert "benefit_removed_no_source_evidence" in result.warnings
+
+    def test_missing_benefits_is_not_quality_penalty_or_warning(self) -> None:
+        with_benefits = _parse_draft(dict(_DRAFT_JSON, benefits=["Vale-transporte"]))
+        without_benefits = _parse_draft(dict(_DRAFT_JSON, benefits=[]))
+        with_score, with_missing = evaluate_quality(with_benefits)
+        without_score, without_missing = evaluate_quality(without_benefits)
+        assert "missing_benefits" not in with_missing
+        assert "missing_benefits" not in without_missing
+        assert without_score == with_score
+
+    def test_backend_warnings_contract_stays_plain_string_list(self) -> None:
+        draft = _parse_draft(dict(_DRAFT_JSON, salary_min=3000, benefits=["Vale-transporte"]))
+        _, warnings = _post_validate(draft, "Vaga para vendedor.")
+        assert "salary_removed_no_source_evidence" in warnings
+        assert "benefit_removed_no_source_evidence" in warnings
+        assert all(isinstance(warning, str) for warning in warnings)
+
+    async def _generate_with_draft(self, draft_payload: dict, text_input: str):
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_payload))),
+        ):
+            return await svc.generate(text_input=text_input, ocr_text=None, session=session)
 
 
 # ── LangGraph Active Path ─────────────────────────────────────────────────────
@@ -807,17 +917,17 @@ class TestLangGraphActivePath:
 
     @pytest.mark.asyncio
     async def test_post_validate_node_removes_invented_salary(self) -> None:
-        """3. Com LangGraph ativo, salary inventado deve ser descartado (sem dígitos no input)."""
+        """3. Com LangGraph ativo, salary inventado deve ser descartado sem evidência salarial."""
         draft = _parse_draft(_DRAFT_JSON)
         draft.salary_min = 2000.0  # Invented
         state = {
             "draft": draft,
-            "combined_text": "Apenas texto sem numeros."
+            "combined_text": "Escala 6x1, 44h semanais e 2 anos de experiência."
         }
         
         result_state = await post_validate_node(state, {})
         assert result_state["draft"].salary_min is None
-        assert any("Salário inferido ou inventado" in w for w in result_state["warnings"])
+        assert "salary_removed_no_source_evidence" in result_state["warnings"]
 
     @pytest.mark.asyncio
     async def test_post_validate_node_removes_discriminatory_items(self) -> None:
