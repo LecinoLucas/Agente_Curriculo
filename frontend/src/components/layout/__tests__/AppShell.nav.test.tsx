@@ -101,7 +101,7 @@ describe("AppShell — Sidebar Nav", () => {
       ]);
 
       fireEvent.click(within(topNav()).getByRole("button", { name: "Administração" }));
-      expect(screen.getByRole("link", { name: /Credenciais IA/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Painel Admin/ })).toBeInTheDocument();
 
       fireEvent.click(within(topNav()).getByRole("button", { name: "Admissão" }));
       expect(screen.getByRole("link", { name: /Admitidos/ })).toBeInTheDocument();

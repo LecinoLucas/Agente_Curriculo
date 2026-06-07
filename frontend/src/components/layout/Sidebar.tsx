@@ -60,7 +60,7 @@ export function Sidebar({
       />
 
       {/* Placeholder space for the fixed sidebar so main content doesn't underlap */}
-      <div className="hidden lg:block lg:w-[4.5rem] shrink-0" />
+      <div className="hidden lg:block lg:w-[8px] shrink-0" />
 
       {/* ── Sidebar Container ── */}
       <aside
@@ -68,10 +68,16 @@ export function Sidebar({
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
           "group/sidebar sidebar-glass fixed inset-y-0 left-0 z-50 flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]/70",
-          mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[4.5rem]",
+          mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-[8px]",
           isHovered && "lg:w-56"
         )}
       >
+        <div
+          className={cn(
+            "flex flex-col flex-1 min-w-0 transition-opacity duration-200",
+            !isHovered && !mobileMenuOpen ? "lg:opacity-0 lg:pointer-events-none" : "opacity-100"
+          )}
+        >
         {/* Header / Logo */}
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-[hsl(var(--nav-border))]/50 px-4">
           <button
@@ -311,6 +317,7 @@ export function Sidebar({
               Sair
             </span>
           </button>
+        </div>
         </div>
       </aside>
     </>

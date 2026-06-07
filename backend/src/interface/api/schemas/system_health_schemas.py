@@ -20,6 +20,25 @@ class ComponentStatusResponse(APISchemaModel):
     message: str | None = None
 
 
+class InfraDependencyStatusResponse(APISchemaModel):
+    connected: bool
+    status: HealthStatus
+    latency_ms: int | None = None
+    message: str | None = None
+
+
+class ReadinessHealthResponse(APISchemaModel):
+    status: Literal["ok", "degraded"]
+    version: str
+    database: InfraDependencyStatusResponse
+    redis: InfraDependencyStatusResponse
+
+
+class LivenessHealthResponse(APISchemaModel):
+    status: Literal["ok"]
+    version: str
+
+
 class AIProviderHealthResponse(APISchemaModel):
     configured_provider: str
     status: HealthStatus

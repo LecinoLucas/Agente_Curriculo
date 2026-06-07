@@ -7,6 +7,15 @@ import { buildFrontendPublicationBlockers } from "../../features/jobs/utils/jobF
 import { MOCK_AI_PROMPT_EXAMPLE } from "../../features/jobs/utils/mockJobAiDraft";
 import { STEPS, MACRO_STEPS, JobFormPage } from "../JobFormPage";
 import { skillsService, type SkillCatalog } from "@/services/skillsService";
+import { generateJobAiDraft } from "../../features/jobs/services/jobAiDraftService";
+
+const { mockGenerateJobAiDraft } = vi.hoisted(() => ({
+  mockGenerateJobAiDraft: vi.fn(),
+}));
+
+vi.mock("../../features/jobs/services/jobAiDraftService", () => ({
+  generateJobAiDraft: mockGenerateJobAiDraft,
+}));
 
 vi.mock("@/services/skillsService", () => ({
   skillsService: {
@@ -19,6 +28,36 @@ const MOCK_MANDATORY_SKILLS = [
   "Responsabilidade com caixa",
   "Rotina operacional",
 ];
+
+const MOCK_GENERATE_DRAFT_RESPONSE = {
+  draft: {
+    title: "Frentista",
+    area: "Operação de pista",
+    seniority: "junior",
+    work_model: "onsite",
+    unit: "São Paulo, SP",
+    salary_min: null,
+    salary_max: null,
+    minimum_education_level: "high_school",
+    minimum_years_experience: 1,
+    experience_context: "Boa comunicação",
+    description: "Vaga para frentista.",
+    responsibilities: ["Abastecer veículos"],
+    requirements: ["Boa comunicação"],
+    mandatory_skills: ["Atendimento ao cliente", "Responsabilidade com caixa", "Rotina operacional"],
+    nice_to_have_skills: [],
+    benefits: ["Vale-transporte"],
+    working_hours: "6x1",
+    screening_questions: ["Você tem disponibilidade para trabalhar em escala?"],
+    pipeline_steps: ["Triagem", "Entrevista RH"],
+    matching_criteria: ["Atendimento ao cliente"],
+    requires_manager_review: false,
+    requires_behavioral_assessment: false,
+  },
+  needs_review: [],
+  source: { text_used: true, ocr_used: false, input_character_count: 50 },
+  usage: { provider: "gemini", model: "gemini-1.5-flash", input_tokens: 100, output_tokens: 200, total_tokens: 300, estimated_cost: 0.001 }
+};
 
 function skill(name: string, id = name.toLowerCase().replace(/\s+/g, "-")): SkillCatalog {
   return {
@@ -200,6 +239,7 @@ describe("JobFormPage", () => {
     vi.clearAllMocks();
     mockFormState.form = EMPTY_FORM;
     mockSkillLookup();
+    mockGenerateJobAiDraft.mockResolvedValue(MOCK_GENERATE_DRAFT_RESPONSE);
   });
 
   // ── Existing: Step order (must not break) ────────────────────────────────
@@ -487,7 +527,7 @@ describe("JobFormPage", () => {
       fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
         target: { value: "Preciso contratar um frentista para posto de combustível." },
       });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar exemplo com IA/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Gerar com IA/i }));
       await screen.findByTestId("ai-draft-result");
     }
 
@@ -511,16 +551,25 @@ describe("JobFormPage", () => {
       expect(textarea).toHaveValue(MOCK_AI_PROMPT_EXAMPLE);
     });
 
-    it("botão 'Gerar exemplo com IA' mostra loading e depois o rascunho", async () => {
+    it("botão 'Gerar com IA' mostra loading e depois o rascunho", async () => {
+      let resolvePromise!: (val: typeof MOCK_GENERATE_DRAFT_RESPONSE) => void;
+      const delayedPromise = new Promise<typeof MOCK_GENERATE_DRAFT_RESPONSE>((resolve) => {
+        resolvePromise = resolve;
+      });
+      mockGenerateJobAiDraft.mockReturnValueOnce(delayedPromise);
+
       await openAiMode();
 
       fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
         target: { value: "Preciso contratar um frentista para posto de combustível." },
       });
-      fireEvent.click(screen.getByRole("button", { name: /Gerar exemplo com IA/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Gerar com IA/i }));
 
       expect(screen.getByRole("status")).toBeInTheDocument();
-      expect(screen.getByText(/Gerando rascunho de exemplo/i)).toBeInTheDocument();
+      expect(screen.getByText(/Gerando rascunho com IA/i)).toBeInTheDocument();
+
+      resolvePromise(MOCK_GENERATE_DRAFT_RESPONSE);
+
       expect(await screen.findByTestId("ai-draft-result")).toBeInTheDocument();
     });
 

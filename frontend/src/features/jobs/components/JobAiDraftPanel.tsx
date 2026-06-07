@@ -538,6 +538,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                     value={draft.minimum_years_experience ?? ""}
                     onChange={(e) => updateDraftNumberField("minimum_years_experience", e.target.value)}
                     className="mt-1 h-8 text-sm"
+                    data-testid="draft-min-years"
                     aria-label="Anos mínimos de experiência"
                   />
                 </div>
@@ -559,6 +560,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                     value={draft.experience_context ?? ""}
                     onChange={(e) => updateDraftField("experience_context", e.target.value)}
                     className="mt-2 min-h-[100px] text-sm leading-6"
+                    data-testid="draft-experience-context"
                     aria-label="Contexto de experiência"
                   />
                 </div>

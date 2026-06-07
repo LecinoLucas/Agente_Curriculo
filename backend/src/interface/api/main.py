@@ -1,5 +1,7 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
+import time as time_module
 from typing import Any
 
 import sentry_sdk
@@ -23,11 +25,17 @@ from src.domain.exceptions import (
     ValidationException,
 )
 from src.infrastructure.cache.redis_client import close_redis
+from src.infrastructure.cache.redis_client import get_redis
 from src.infrastructure.database.connection import check_database_health, engine
 from src.infrastructure.security.encryption_service import validate_ai_credentials_encryption_key
 from src.interface.api.middlewares.audit_middleware import AuditMiddleware
 from src.interface.api.middlewares.request_id_middleware import RequestIDMiddleware
 from src.interface.api.middlewares.security_headers_middleware import SecurityHeadersMiddleware
+from src.interface.api.schemas.system_health_schemas import (
+    InfraDependencyStatusResponse,
+    LivenessHealthResponse,
+    ReadinessHealthResponse,
+)
 from src.interface.api.routers import (
     admin_ai_knowledge,
     admin_ai_limits,
@@ -304,16 +312,82 @@ async def handle_sqlalchemy_error(request: Request, exc: SQLAlchemyError) -> JSO
 
 
 # ── Health check ─────────────────────────────────────────────────────────────
-@app.get("/health", tags=["infra"])
-async def health() -> dict[str, Any]:
+async def _get_redis_readiness() -> InfraDependencyStatusResponse:
+    started = time_module.perf_counter()
+    redis = None
+    try:
+        redis = await get_redis()
+        latency_ms = int((time_module.perf_counter() - started) * 1000)
+        ping = getattr(redis, "ping", None)
+        if ping is None:
+            return InfraDependencyStatusResponse(
+                connected=True,
+                status="ok",
+                latency_ms=latency_ms,
+            )
+        result = await asyncio.wait_for(ping(), timeout=1.0)
+        if result is True:
+            return InfraDependencyStatusResponse(
+                connected=True,
+                status="ok",
+                latency_ms=latency_ms,
+            )
+        return InfraDependencyStatusResponse(
+            connected=False,
+            status="degraded",
+            latency_ms=latency_ms,
+            message="Redis respondeu de forma inesperada",
+        )
+    except Exception:
+        return InfraDependencyStatusResponse(
+            connected=False,
+            status="down",
+            message="Redis indisponível",
+        )
+    finally:
+        if redis is not None and hasattr(redis, "aclose"):
+            try:
+                await redis.aclose()
+            except Exception:
+                pass
+
+
+async def _build_readiness_payload() -> tuple[int, ReadinessHealthResponse]:
     database_connected = await check_database_health()
-    return {
-        "status": "ok" if database_connected else "degraded",
-        "version": APP_VERSION,
-        "database": {
-            "connected": database_connected,
-        },
-    }
+    redis = await _get_redis_readiness()
+    database = InfraDependencyStatusResponse(
+        connected=database_connected,
+        status="ok" if database_connected else "down",
+        message=None if database_connected else "Banco de dados indisponível",
+    )
+    readiness_ok = database_connected and redis.status == "ok"
+    payload = ReadinessHealthResponse(
+        status="ok" if readiness_ok else "degraded",
+        version=APP_VERSION,
+        database=database,
+        redis=redis,
+    )
+    return (
+        status.HTTP_200_OK if readiness_ok else status.HTTP_503_SERVICE_UNAVAILABLE,
+        payload,
+    )
+
+
+@app.get("/health/live", tags=["infra"], response_model=LivenessHealthResponse)
+async def health_live() -> LivenessHealthResponse:
+    return LivenessHealthResponse(status="ok", version=APP_VERSION)
+
+
+@app.get("/health/ready", tags=["infra"], response_model=ReadinessHealthResponse)
+async def health_ready() -> JSONResponse:
+    status_code, payload = await _build_readiness_payload()
+    return JSONResponse(status_code=status_code, content=payload.model_dump())
+
+
+@app.get("/health", tags=["infra"], response_model=ReadinessHealthResponse)
+async def health() -> JSONResponse:
+    status_code, payload = await _build_readiness_payload()
+    return JSONResponse(status_code=status_code, content=payload.model_dump())
 
 
 # CORS global wrapper:
