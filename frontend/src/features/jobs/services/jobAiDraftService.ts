@@ -18,6 +18,9 @@ export type JobAiDraftFields = {
   unit: string | null;
   salary_min: number | null;
   salary_max: number | null;
+  minimum_education_level: string | null;
+  minimum_years_experience: number | null;
+  experience_context: string | null;
   description: string | null;
   responsibilities: string[];
   requirements: string[];

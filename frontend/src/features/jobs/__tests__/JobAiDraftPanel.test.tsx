@@ -38,6 +38,9 @@ const MOCK_API_RESPONSE: JobAiDraftGenerateResponse = {
     unit: "São Paulo, SP",
     salary_min: null,
     salary_max: null,
+    minimum_education_level: "high_school",
+    minimum_years_experience: 2,
+    experience_context: "experiência com atendimento ao cliente",
     description: "Vaga para operador de caixa em loja de varejo.",
     responsibilities: ["Operar caixa registradora", "Atender clientes"],
     requirements: ["Ensino médio completo"],
@@ -52,6 +55,7 @@ const MOCK_API_RESPONSE: JobAiDraftGenerateResponse = {
     requires_behavioral_assessment: false,
   },
   needs_review: ["salary_range"],
+  warnings: [],
   source: { text_used: true, ocr_used: false, input_character_count: 42 },
   usage: {
     provider: "anthropic",
@@ -156,6 +160,21 @@ describe("applyApiDraftToForm", () => {
     expect(result.benefits).toEqual(expect.arrayContaining(["Vale-transporte"]));
   });
 
+  it("aplica experience_context", () => {
+    const result = applyApiDraftToForm(MOCK_API_RESPONSE.draft);
+    expect(result.experience_context).toBe("experiência com atendimento ao cliente");
+  });
+
+  it("aplica minimum_education_level", () => {
+    const result = applyApiDraftToForm(MOCK_API_RESPONSE.draft);
+    expect(result.minimum_education_level).toBe("high_school");
+  });
+
+  it("aplica minimum_years_experience", () => {
+    const result = applyApiDraftToForm(MOCK_API_RESPONSE.draft);
+    expect(result.minimum_years_experience).toBe(2);
+  });
+
   it("não mapeia salary_min nem salary_max", () => {
     const result = applyApiDraftToForm(MOCK_API_RESPONSE.draft);
     expect(result.salary_min).toBeUndefined();
@@ -169,9 +188,29 @@ describe("applyApiDraftToForm", () => {
   });
 
   it("omite campos ausentes (não sobrescreve formulário com undefined)", () => {
-    const draftNoTitle = { ...MOCK_API_RESPONSE.draft, title: null };
+    const draftNoTitle = {
+      ...MOCK_API_RESPONSE.draft,
+      title: null,
+      experience_context: null,
+      minimum_education_level: null,
+      minimum_years_experience: null,
+    };
     const result = applyApiDraftToForm(draftNoTitle);
     expect(result.title).toBeUndefined();
+    expect(result.experience_context).toBeUndefined();
+    expect(result.minimum_education_level).toBeUndefined();
+    expect(result.minimum_years_experience).toBeUndefined();
+  });
+
+  it("omite strings vazias dos novos campos", () => {
+    const draftWithEmptyStrings = {
+      ...MOCK_API_RESPONSE.draft,
+      experience_context: "   ",
+      minimum_education_level: "",
+    };
+    const result = applyApiDraftToForm(draftWithEmptyStrings);
+    expect(result.experience_context).toBeUndefined();
+    expect(result.minimum_education_level).toBeUndefined();
   });
 
   it("mapeia requires_manager_review e requires_behavioral_assessment", () => {
@@ -256,8 +295,28 @@ describe("JobAiDraftPanel — API real", () => {
     await generateAndWaitForDraft();
 
     expect(screen.getByTestId("draft-title-input")).toHaveValue("Operador de Caixa");
+    expect(screen.getByLabelText(/Contexto de experiência/i)).toHaveValue(
+      "experiência com atendimento ao cliente",
+    );
+    expect(screen.getByLabelText(/Escolaridade mínima/i)).toHaveValue("high_school");
+    expect(screen.getByLabelText(/Anos mínimos de experiência/i)).toHaveValue(2);
     expect(screen.getByTestId("draft-responsibilities")).toBeInTheDocument();
     expect(screen.getByTestId("draft-mandatory-skills")).toBeInTheDocument();
+  });
+
+  it("exibe warnings novos de forma legível", async () => {
+    mockGenerateJobAiDraft.mockResolvedValue({
+      ...MOCK_API_RESPONSE,
+      warnings: [
+        "minimum_years_experience_removed_no_source_evidence",
+        "minimum_education_level_removed_no_source_evidence",
+      ],
+    });
+    renderPanel();
+    fillAndSubmit();
+    const warnings = await screen.findByTestId("ai-draft-warnings");
+    expect(warnings).toHaveTextContent(/Experiência mínima removida/i);
+    expect(warnings).toHaveTextContent(/Escolaridade mínima removida/i);
   });
 
   it("exibe aviso de needs_review quando a API retorna campos ausentes", async () => {
@@ -279,6 +338,9 @@ describe("JobAiDraftPanel — API real", () => {
       expect.objectContaining({
         title: "Operador de Caixa",
         location: "São Paulo, SP",
+        experience_context: "experiência com atendimento ao cliente",
+        minimum_education_level: "high_school",
+        minimum_years_experience: 2,
         mandatory_skills: expect.arrayContaining(["Atendimento ao cliente"]),
       }),
       expect.objectContaining({

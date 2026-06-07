@@ -39,6 +39,9 @@ _DRAFT_JSON: dict = {
     "unit": "São Paulo, SP",
     "salary_min": None,
     "salary_max": None,
+    "minimum_education_level": None,
+    "minimum_years_experience": None,
+    "experience_context": None,
     "description": "Vaga para operador de caixa em loja de varejo.",
     "responsibilities": ["Operar caixa registradora", "Atender clientes"],
     "requirements": ["Ensino médio completo"],
@@ -840,6 +843,114 @@ class TestSalaryBenefitsEvidenceGuardrails:
         assert "salary_removed_no_source_evidence" in warnings
         assert "benefit_removed_no_source_evidence" in warnings
         assert all(isinstance(warning, str) for warning in warnings)
+
+    async def _generate_with_draft(self, draft_payload: dict, text_input: str):
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with patch(
+            "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+            return_value=_mock_ai(_ai_response(json.dumps(draft_payload))),
+        ):
+            return await svc.generate(text_input=text_input, ocr_text=None, session=session)
+
+
+# ── Experience and education evidence guardrails ──────────────────────────────
+
+@pytest.mark.unit
+@patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False)
+class TestExperienceEducationEvidenceGuardrails:
+    @pytest.mark.asyncio
+    async def test_preserves_two_years_experience_when_explicit(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_years_experience=2)
+        result = await self._generate_with_draft(draft, "Necessário 2 anos de experiência.")
+        assert result.draft.minimum_years_experience == 2
+
+    @pytest.mark.asyncio
+    async def test_preserves_minimum_one_year_when_explicit(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_years_experience=1)
+        result = await self._generate_with_draft(draft, "Requisito: mínimo 1 ano na função.")
+        assert result.draft.minimum_years_experience == 1
+
+    @pytest.mark.asyncio
+    async def test_converts_six_months_experience_to_half_year(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_years_experience=1)
+        result = await self._generate_with_draft(
+            draft,
+            "Experiência mínima de 6 meses em atendimento.",
+        )
+        assert result.draft.minimum_years_experience == 0.5
+
+    @pytest.mark.asyncio
+    async def test_senior_without_years_does_not_preserve_minimum_years(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_years_experience=5, seniority="senior")
+        result = await self._generate_with_draft(draft, "Vaga para profissional sênior.")
+        assert result.draft.minimum_years_experience is None
+        assert "minimum_years_experience_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_openings_count_does_not_preserve_minimum_years(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_years_experience=3)
+        result = await self._generate_with_draft(draft, "Vaga para vendedor, 3 vagas disponíveis.")
+        assert result.draft.minimum_years_experience is None
+
+    @pytest.mark.asyncio
+    async def test_ai_years_without_evidence_are_removed_with_warning(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_years_experience=2)
+        result = await self._generate_with_draft(draft, "Vaga para vendedor com vivência em loja.")
+        assert result.draft.minimum_years_experience is None
+        assert "minimum_years_experience_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_preserves_high_school_when_explicit(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_education_level="high_school")
+        result = await self._generate_with_draft(draft, "Requisito: ensino médio completo.")
+        assert result.draft.minimum_education_level == "high_school"
+
+    @pytest.mark.asyncio
+    async def test_preserves_bachelor_when_explicit(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_education_level="bachelor")
+        result = await self._generate_with_draft(draft, "Requisito: superior completo.")
+        assert result.draft.minimum_education_level == "bachelor"
+
+    @pytest.mark.asyncio
+    async def test_ai_education_without_evidence_is_removed_with_warning(self) -> None:
+        draft = dict(_DRAFT_JSON, minimum_education_level="superior completo")
+        result = await self._generate_with_draft(draft, "Vaga para analista administrativo.")
+        assert result.draft.minimum_education_level is None
+        assert "minimum_education_level_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_preserves_experience_context_when_explicit(self) -> None:
+        draft = dict(_DRAFT_JSON, experience_context="experiência com atendimento ao cliente")
+        result = await self._generate_with_draft(
+            draft,
+            "Requisito: experiência com atendimento ao cliente.",
+        )
+        assert result.draft.experience_context == "experiência com atendimento ao cliente"
+
+    @pytest.mark.asyncio
+    async def test_reduces_invented_experience_context_to_source_evidence(self) -> None:
+        draft = dict(_DRAFT_JSON, experience_context="experiência com vendas externas")
+        result = await self._generate_with_draft(
+            draft,
+            "Requisito: experiência com atendimento ao cliente.",
+        )
+        assert result.draft.experience_context == "experiência com atendimento ao cliente"
+
+    @pytest.mark.asyncio
+    async def test_regression_salary_without_evidence_still_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, salary_min=3000, salary_max=3500)
+        result = await self._generate_with_draft(draft, "Vaga para vendedor com escala 6x1.")
+        assert result.draft.salary_min is None
+        assert result.draft.salary_max is None
+        assert "salary_removed_no_source_evidence" in result.warnings
+
+    @pytest.mark.asyncio
+    async def test_regression_benefit_without_evidence_still_removed(self) -> None:
+        draft = dict(_DRAFT_JSON, benefits=["Vale-transporte"])
+        result = await self._generate_with_draft(draft, "Vaga para vendedor.")
+        assert result.draft.benefits == []
+        assert "benefit_removed_no_source_evidence" in result.warnings
 
     async def _generate_with_draft(self, draft_payload: dict, text_input: str):
         svc = JobAiDraftService()

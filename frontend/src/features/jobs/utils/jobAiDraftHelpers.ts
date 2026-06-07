@@ -59,6 +59,16 @@ export function applyApiDraftToForm(draft: JobAiDraftFields): Partial<JobFormVal
   const workingHours = trimOrUndefined(draft.working_hours);
   if (workingHours !== undefined) updates.working_hours = workingHours;
 
+  const experienceContext = trimOrUndefined(draft.experience_context);
+  if (experienceContext !== undefined) updates.experience_context = experienceContext;
+
+  const minimumEducationLevel = trimOrUndefined(draft.minimum_education_level);
+  if (minimumEducationLevel !== undefined) updates.minimum_education_level = minimumEducationLevel;
+
+  if (draft.minimum_years_experience !== null && draft.minimum_years_experience !== undefined) {
+    updates.minimum_years_experience = draft.minimum_years_experience;
+  }
+
   // ── List → textarea fields (join with newline) ───────────────────────────────
 
   if (Array.isArray(draft.responsibilities) && draft.responsibilities.length > 0) {

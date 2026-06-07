@@ -858,6 +858,9 @@ class AiDraftFieldsResponse(BaseModel):
     unit: str | None = None
     salary_min: float | None = None
     salary_max: float | None = None
+    minimum_education_level: str | None = None
+    minimum_years_experience: float | None = None
+    experience_context: str | None = None
     description: str | None = None
     responsibilities: list[str] = Field(default_factory=list)
     requirements: list[str] = Field(default_factory=list)

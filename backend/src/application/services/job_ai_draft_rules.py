@@ -25,6 +25,9 @@ class AiDraftFields:
     unit: str | None
     salary_min: float | None
     salary_max: float | None
+    minimum_education_level: str | None
+    minimum_years_experience: float | None
+    experience_context: str | None
     description: str | None
     responsibilities: list[str]
     requirements: list[str]
@@ -94,6 +97,38 @@ _SALARY_EVIDENCE_PATTERNS = [
     r"r\s*\$",
 ]
 
+_EDUCATION_LEVEL_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("postgraduate", r"\bp[óo]s[- ]?gradua[çc][ãa]o\b|\bmba\b"),
+    ("master", r"\bmestrado\b|\bmestre\b"),
+    ("phd", r"\bdoutorado\b|\bdoutor(?:ado|a)?\b|\bphd\b"),
+    ("bachelor", r"\bsuperior\b|\bgradua[çc][ãa]o\b"),
+    ("technical", r"\b(?:curso\s+)?t[ée]cnico\b"),
+    ("high_school", r"\bensino m[ée]dio\b"),
+    ("none", r"\bensino fundamental\b"),
+)
+
+_EXPERIENCE_YEARS_PATTERNS = [
+    r"\b(?P<value>\d+(?:[,.]\d+)?)\s*\+\s*anos?\s+de\s+experi[êe]ncia\b",
+    r"\bmais\s+de\s+(?P<value>\d+(?:[,.]\d+)?)\s+anos?\s+de\s+experi[êe]ncia\b",
+    r"\bpelo\s+menos\s+(?P<value>\d+(?:[,.]\d+)?)\s+anos?\b",
+    r"\bm[íi]nimo\s+(?P<value>\d+(?:[,.]\d+)?)\s+anos?\b",
+    r"\bexperi[êe]ncia\s+m[íi]nima\s+de\s+(?P<value>\d+(?:[,.]\d+)?)\s+anos?\b",
+    r"\b(?P<value>\d+(?:[,.]\d+)?)\s+anos?\s+de\s+experi[êe]ncia\b",
+]
+
+_EXPERIENCE_MONTHS_PATTERNS = [
+    r"\bexperi[êe]ncia\s+m[íi]nima\s+de\s+(?P<value>\d+(?:[,.]\d+)?)\s+mes(?:es)?\b",
+    r"\bm[íi]nimo\s+(?P<value>\d+(?:[,.]\d+)?)\s+mes(?:es)?\b",
+    r"\bpelo\s+menos\s+(?P<value>\d+(?:[,.]\d+)?)\s+mes(?:es)?\b",
+    r"\b(?P<value>\d+(?:[,.]\d+)?)\s+mes(?:es)?\s+de\s+experi[êe]ncia\b",
+]
+
+_EXPERIENCE_CONTEXT_PATTERN = re.compile(
+    r"\b(?P<prefix>experi[êe]ncia|viv[êe]ncia|conhecimento)\s+"
+    r"(?P<body>(?:com|em|de)\s+[^\n.;:,]+)",
+    flags=re.IGNORECASE,
+)
+
 _SYSTEM_PROMPT = """\
 Você é um assistente especializado em estruturar descrições de vagas de emprego.
 
@@ -116,6 +151,10 @@ Regras obrigatórias:
 - Use [] para listas sem dados suficientes.
 - Não invente salário se não estiver explícito no texto.
 - Não invente benefícios ou unidade se não estiverem no texto.
+- Não invente escolaridade, anos de experiência ou contexto de experiência.
+- minimum_years_experience: preencher somente com anos/meses explícitos no texto. Converta meses para anos decimais (6 meses = 0.5). Não inferir por senioridade.
+- minimum_education_level: "none" | "high_school" | "technical" | "bachelor" | "postgraduate" | "master" | "phd" | null. Preencher somente com escolaridade explícita.
+- experience_context: resumo curto somente de experiência, vivência ou conhecimento explicitamente citados.
 - Se escala aparecer (6x1, 12x36, 44h semanais), preencha working_hours.
 - work_model: "onsite" | "hybrid" | "remote" | null.
 - Escreva em português do Brasil, texto profissional e objetivo.
@@ -146,6 +185,9 @@ SCHEMA OBRIGATÓRIO:
   "unit": "string | null — unidade, cidade ou local de trabalho",
   "salary_min": "number | null — salário mínimo BRL (null se ausente)",
   "salary_max": "number | null — salário máximo BRL (null se ausente)",
+  "minimum_education_level": "none | high_school | technical | bachelor | postgraduate | master | phd | null",
+  "minimum_years_experience": "number | null — anos mínimos explícitos, meses em decimal (6 meses = 0.5)",
+  "experience_context": "string | null — contexto curto de experiência explicitamente citado",
   "description": "string | null — resumo objetivo, 2-4 frases",
   "responsibilities": ["string — responsabilidade principal, máx 8"],
   "requirements": ["string — requisito obrigatório, máx 8"],
@@ -238,6 +280,87 @@ def has_benefit_source_evidence(benefit: str, source_text: str) -> bool:
         return False
     return benefit_key in source_key
 
+def extract_minimum_years_experience(source_text: str) -> float | None:
+    """Extract explicit minimum experience in years; months are converted to decimals."""
+    if not source_text:
+        return None
+    for pattern in _EXPERIENCE_YEARS_PATTERNS:
+        match = re.search(pattern, source_text, flags=re.IGNORECASE)
+        if match:
+            return _coerce_float(str(match.group("value")).replace(",", "."))
+    for pattern in _EXPERIENCE_MONTHS_PATTERNS:
+        match = re.search(pattern, source_text, flags=re.IGNORECASE)
+        if match:
+            months = _coerce_float(str(match.group("value")).replace(",", "."))
+            return round(months / 12, 2) if months is not None else None
+    return None
+
+def extract_minimum_education_level(source_text: str) -> str | None:
+    """Return normalized form enum only when schooling is explicit in source."""
+    if not source_text:
+        return None
+    for level, pattern in _EDUCATION_LEVEL_PATTERNS:
+        if re.search(pattern, source_text, flags=re.IGNORECASE):
+            return level
+    return None
+
+def _normalize_education_level(value: Any) -> str | None:
+    cleaned = _nonempty_str(value)
+    if not cleaned:
+        return None
+    normalized = _normalize_evidence_text(cleaned)
+    aliases = {
+        "none": "none",
+        "ensino fundamental": "none",
+        "fundamental": "none",
+        "high school": "high_school",
+        "high school complete": "high_school",
+        "high_school": "high_school",
+        "ensino medio": "high_school",
+        "ensino medio completo": "high_school",
+        "technical": "technical",
+        "tecnico": "technical",
+        "curso tecnico": "technical",
+        "bachelor": "bachelor",
+        "superior": "bachelor",
+        "superior completo": "bachelor",
+        "graduacao": "bachelor",
+        "postgraduate": "postgraduate",
+        "pos graduacao": "postgraduate",
+        "mba": "postgraduate",
+        "master": "master",
+        "mestrado": "master",
+        "phd": "phd",
+        "doutorado": "phd",
+    }
+    return aliases.get(normalized)
+
+def extract_experience_context(source_text: str) -> str | None:
+    """Extract short explicit experience context from source text."""
+    if not source_text:
+        return None
+    match = _EXPERIENCE_CONTEXT_PATTERN.search(source_text)
+    if not match:
+        return None
+    prefix = match.group("prefix").strip()
+    body = match.group("body").strip()
+    context = f"{prefix} {body}"
+    return context[:240].strip()
+
+def has_experience_context_source_evidence(context: str, source_text: str) -> bool:
+    source_context = extract_experience_context(source_text)
+    if not source_context:
+        return False
+    context_tokens = {
+        token
+        for token in _normalize_evidence_text(context).split()
+        if len(token) > 3 and token not in {"experiencia", "vivencia", "conhecimento"}
+    }
+    source_tokens = set(_normalize_evidence_text(source_context).split())
+    if not context_tokens:
+        return False
+    return context_tokens.issubset(source_tokens)
+
 def parse_draft(data: dict[str, Any]) -> AiDraftFields:
     wm = str(data.get("work_model") or "").strip().lower()
     work_model = wm if wm in _VALID_WORK_MODELS else None
@@ -253,6 +376,9 @@ def parse_draft(data: dict[str, Any]) -> AiDraftFields:
         unit=_nonempty_str(data.get("unit")),
         salary_min=_coerce_float(data.get("salary_min")),
         salary_max=_coerce_float(data.get("salary_max")),
+        minimum_education_level=_normalize_education_level(data.get("minimum_education_level")),
+        minimum_years_experience=_coerce_float(data.get("minimum_years_experience")),
+        experience_context=_nonempty_str(data.get("experience_context")),
         description=_nonempty_str(data.get("description")),
         responsibilities=_safe_list(data.get("responsibilities")),
         requirements=_safe_list(data.get("requirements")),
@@ -387,7 +513,35 @@ def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields
             warnings.append("benefit_removed_no_source_evidence")
         draft.benefits = source_backed_benefits
 
-    # 5. Detect invented location/unit
+    # 5. Detect invented minimum experience years
+    source_years = extract_minimum_years_experience(source_text)
+    if draft.minimum_years_experience is not None:
+        if source_years is None:
+            warnings.append("minimum_years_experience_removed_no_source_evidence")
+            draft.minimum_years_experience = None
+        else:
+            draft.minimum_years_experience = source_years
+
+    # 6. Detect invented education level
+    source_education = extract_minimum_education_level(source_text)
+    if draft.minimum_education_level is not None:
+        if source_education is None:
+            warnings.append("minimum_education_level_removed_no_source_evidence")
+            draft.minimum_education_level = None
+        else:
+            draft.minimum_education_level = source_education
+
+    # 7. Detect invented experience context
+    if draft.experience_context:
+        if not has_experience_context_source_evidence(draft.experience_context, source_text):
+            source_context = extract_experience_context(source_text)
+            if source_context:
+                draft.experience_context = source_context
+            else:
+                warnings.append("experience_context_removed_no_source_evidence")
+                draft.experience_context = None
+
+    # 8. Detect invented location/unit
     if draft.unit:
         unit_words = [w for w in re.split(r'\W+', draft.unit.casefold()) if len(w) > 3]
         src_lower = source_text.casefold()
@@ -395,7 +549,7 @@ def post_validate(draft: AiDraftFields, source_text: str) -> tuple[AiDraftFields
             warnings.append("Local/unidade inferido ou inventado pela IA foi removido.")
             draft.unit = None
 
-    # 6. Detect invented working hours
+    # 9. Detect invented working hours
     if draft.working_hours:
         wh_words = [w for w in re.split(r'\W+', draft.working_hours.casefold()) if len(w) > 1]
         src_lower = source_text.casefold()

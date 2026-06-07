@@ -110,6 +110,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
   const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
   const [draft, setDraft] = useState<JobAiDraftFields | null>(null);
   const [needsReview, setNeedsReview] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -140,6 +141,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
       setAiStatus("error");
       setDraft(null);
       setNeedsReview([]);
+      setWarnings([]);
       setErrorMessage("Informe uma descrição para gerar o rascunho.");
       return;
     }
@@ -148,11 +150,13 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     setErrorMessage(null);
     setDraft(null);
     setNeedsReview([]);
+    setWarnings([]);
 
     try {
       const response = await generateJobAiDraft({ text_input: prompt, ocr_text: null });
       setDraft(response.draft);
       setNeedsReview(response.needs_review ?? []);
+      setWarnings(response.warnings ?? []);
       setAiStatus("ready");
     } catch (err: unknown) {
       setAiStatus("error");
@@ -164,6 +168,10 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
 
   function updateDraftField(field: keyof JobAiDraftFields, value: string) {
     setDraft((prev) => (prev ? { ...prev, [field]: value } : null));
+  }
+
+  function updateDraftNumberField(field: keyof JobAiDraftFields, value: string) {
+    setDraft((prev) => (prev ? { ...prev, [field]: value ? Number(value) : null } : null));
   }
 
   function updateDraftListItem(field: keyof JobAiDraftFields, index: number, value: string) {
@@ -224,6 +232,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
   function handleDiscard() {
     setDraft(null);
     setNeedsReview([]);
+    setWarnings([]);
     setAiStatus("idle");
     setErrorMessage(null);
   }
@@ -234,6 +243,19 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     work_model: "Modelo de trabalho não informado",
     title: "Título não gerado",
     description: "Descrição não gerada",
+  };
+
+  const WARNING_LABELS: Record<string, string> = {
+    salary_removed_no_source_evidence:
+      "Salário removido porque não havia evidência explícita no texto.",
+    benefit_removed_no_source_evidence:
+      "Benefício removido porque não havia evidência explícita no texto.",
+    minimum_years_experience_removed_no_source_evidence:
+      "Experiência mínima removida porque não havia evidência explícita no texto.",
+    minimum_education_level_removed_no_source_evidence:
+      "Escolaridade mínima removida porque não havia evidência explícita no texto.",
+    experience_context_removed_no_source_evidence:
+      "Contexto de experiência removido porque não havia evidência explícita no texto.",
   };
 
   return (
@@ -385,6 +407,20 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                 </div>
               )}
 
+              {warnings.length > 0 && (
+                <div
+                  className="space-y-1 rounded-xl border border-[hsl(var(--warning))]/25 bg-warning-soft px-3 py-2 text-sm text-warning"
+                  data-testid="ai-draft-warnings"
+                >
+                  <span className="font-medium">Ajustes automáticos de segurança:</span>
+                  <ul className="list-disc space-y-1 pl-4">
+                    {warnings.map((warning) => (
+                      <li key={warning}>{WARNING_LABELS[warning] ?? warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <SectionTitle>Senioridade</SectionTitle>
@@ -404,6 +440,27 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                     aria-label="Jornada"
                   />
                 </div>
+                <div>
+                  <SectionTitle>Escolaridade mínima</SectionTitle>
+                  <Input
+                    value={draft.minimum_education_level ?? ""}
+                    onChange={(e) => updateDraftField("minimum_education_level", e.target.value)}
+                    className="mt-1 h-8 text-sm"
+                    aria-label="Escolaridade mínima"
+                  />
+                </div>
+                <div>
+                  <SectionTitle>Anos mínimos de experiência</SectionTitle>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={draft.minimum_years_experience ?? ""}
+                    onChange={(e) => updateDraftNumberField("minimum_years_experience", e.target.value)}
+                    className="mt-1 h-8 text-sm"
+                    aria-label="Anos mínimos de experiência"
+                  />
+                </div>
               </div>
 
               <div className="grid gap-4 xl:grid-cols-2 mt-4">
@@ -414,6 +471,15 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                     onChange={(e) => updateDraftField("description", e.target.value)}
                     className="mt-2 min-h-[100px] text-sm leading-6"
                     aria-label="Resumo da vaga"
+                  />
+                </div>
+                <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                  <SectionTitle>Contexto de experiência</SectionTitle>
+                  <Textarea
+                    value={draft.experience_context ?? ""}
+                    onChange={(e) => updateDraftField("experience_context", e.target.value)}
+                    className="mt-2 min-h-[100px] text-sm leading-6"
+                    aria-label="Contexto de experiência"
                   />
                 </div>
               </div>
