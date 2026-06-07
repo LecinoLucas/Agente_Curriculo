@@ -12,7 +12,10 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.ai_orchestration.rag.ingestion_service import TextIngestionService
 from src.ai_orchestration.rag.ingestion_plan import IngestionPipelineInput
+from src.ai_orchestration.rag.embedding_provider_factory import get_embedding_provider
+from src.ai_orchestration.rag.embedding_service import EmbeddingService
 from src.infrastructure.database.connection import AsyncSessionFactory, engine
+from src.infrastructure.repositories.postgres_vector_store import PostgresVectorStore
 from src.infrastructure.repositories.sqlalchemy_knowledge_document_repository import SQLAlchemyKnowledgeDocumentRepository
 from src.infrastructure.repositories.sqlalchemy_knowledge_chunk_repository import SQLAlchemyKnowledgeChunkRepository
 
@@ -96,6 +99,11 @@ async def run_seed(dry_run: bool = False, force: bool = False) -> None:
         doc_repo = SQLAlchemyKnowledgeDocumentRepository(session)
         chunk_repo = SQLAlchemyKnowledgeChunkRepository(session)
         service = TextIngestionService(doc_repo, chunk_repo)
+        vector_store = PostgresVectorStore(session)
+        embedding_service = EmbeddingService(
+            provider=get_embedding_provider(),
+            vector_store=vector_store,
+        )
         
         counts = {"created": 0, "duplicated": 0, "reingested": 0, "failed": 0}
         
@@ -153,6 +161,24 @@ async def run_seed(dry_run: bool = False, force: bool = False) -> None:
                         else:
                             print(f"CRIADO: {doc_cfg['title']} (chunks: {result.chunks_created})")
                             counts["created"] += 1
+
+                        if result.document_id:
+                            existing_embeddings = await vector_store.count_embeddings(result.document_id)
+                            should_generate_embeddings = force or existing_embeddings == 0
+                            if should_generate_embeddings:
+                                chunks = await chunk_repo.get_chunks_by_document(result.document_id)
+                                embedding_result = await embedding_service.generate_and_save_embeddings(chunks)
+                                if embedding_result.ok:
+                                    print(
+                                        f"EMBEDDINGS: {doc_cfg['title']} "
+                                        f"(chunks vetorizados: {embedding_result.embeddings_created})"
+                                    )
+                                else:
+                                    print(
+                                        f"ERRO embeddings '{doc_cfg['title']}': "
+                                        f"{embedding_result.error}"
+                                    )
+                                    counts["failed"] += 1
                     else:
                         print(f"ERRO ao ingerir '{doc_cfg['title']}': {result.error}")
                         counts["failed"] += 1

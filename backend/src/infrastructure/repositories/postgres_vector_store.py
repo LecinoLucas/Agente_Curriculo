@@ -118,13 +118,9 @@ class PostgresVectorStore(VectorStoreContract):
         Não retorna embedding bruto — apenas chunk content + metadata + score.
         """
         is_available = await is_pgvector_available(self._session)
-
+        warnings: list[str] = []
         if not is_available:
-            return RetrievalResult(
-                query=query.query,
-                chunks=[],
-                warnings=[build_pgvector_unavailable_warning()],
-            )
+            warnings.append(build_pgvector_unavailable_warning())
 
         # Validação de query vector
         if not query_vector:
@@ -171,7 +167,6 @@ class PostgresVectorStore(VectorStoreContract):
 
         # Compute cosine similarity in Python (bridge: no native vector column yet)
         scored: list[tuple[float, object]] = []
-        warnings = []
         skipped_count = 0
 
         for row in rows:

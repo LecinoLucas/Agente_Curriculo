@@ -8,7 +8,9 @@ from uuid import uuid4
 import pytest
 from src.ai_orchestration.rag.embedding_service import EmbeddingService
 from src.ai_orchestration.rag.fake_embedding_provider import FakeEmbeddingProvider
+from src.ai_orchestration.rag.hash_utils import compute_content_hash
 from src.ai_orchestration.rag.schemas import KnowledgeChunk
+from src.ai_orchestration.rag.vector_store_contract import VectorStoreContract
 
 
 def _make_chunk(content: str) -> KnowledgeChunk:
@@ -93,3 +95,37 @@ class TestEmbeddingService:
         q_vector = await service.embed_query("busca")
         assert len(q_vector) == 4
         assert q_vector == await provider.embed_query("busca")
+
+    async def test_content_hash_defaults_to_chunk_content_hash(self) -> None:
+        provider = FakeEmbeddingProvider(dimensions=4)
+
+        captured_embeddings = []
+
+        class CaptureVectorStore(VectorStoreContract):
+            async def upsert_embeddings(self, embeddings):
+                captured_embeddings.extend(embeddings)
+                return len(embeddings)
+
+            async def similarity_search(self, query, query_vector, options=None):
+                raise NotImplementedError
+
+            async def delete_embeddings_by_document(self, document_id):
+                raise NotImplementedError
+
+            async def health_check(self):
+                raise NotImplementedError
+
+            async def count_embeddings(self, document_id=None):
+                raise NotImplementedError
+
+        chunk = _make_chunk("Texto sem hash persistido")
+        service = EmbeddingService(provider=provider, vector_store=CaptureVectorStore())
+
+        result = await service.generate_and_save_embeddings([chunk])
+
+        assert result.ok is True
+        assert len(captured_embeddings) == 1
+        assert (
+            captured_embeddings[0].metadata["content_hash"]
+            == compute_content_hash(chunk.content)
+        )

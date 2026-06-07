@@ -58,17 +58,21 @@ def _make_row(
 class TestPostgresVectorStore:
     # ── Testes AI-RAG-5 (mantidos) ──────────────────────────────────────────────
 
-    async def test_similarity_search_returns_fallback_when_pgvector_missing(self) -> None:
+    async def test_similarity_search_uses_json_fallback_when_pgvector_missing(self) -> None:
         session = AsyncMock()
-        session.execute.return_value = _pgvector_unavailable_mock()
+        row = _make_row(vector=[1.0, 0.0], content="regra Protheus", idx=0)
+        search_result = MagicMock()
+        search_result.all.return_value = [row]
+        session.execute.side_effect = [_pgvector_unavailable_mock(), search_result]
 
         store = PostgresVectorStore(session)
         result = await store.similarity_search(
-            RetrievalQuery(query="teste"), query_vector=[0.1, 0.2]
+            RetrievalQuery(query="teste"), query_vector=[1.0, 0.0]
         )
 
         assert result.query == "teste"
-        assert result.chunks == []
+        assert len(result.chunks) == 1
+        assert result.chunks[0].chunk.content == "regra Protheus"
         assert any("pgvector" in w.lower() for w in result.warnings)
 
     async def test_health_check_reports_correct_mode(self) -> None:

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.ai_orchestration.rag.embedding_contract import EmbeddingProviderContract
+from src.ai_orchestration.rag.hash_utils import compute_content_hash
 from src.ai_orchestration.rag.schemas import KnowledgeChunk
 from src.ai_orchestration.rag.vector_store_contract import (
     EmbeddingVector,
@@ -84,7 +85,10 @@ class EmbeddingService:
                     model=batch.model,
                     dimensions=batch.dimensions,
                     vector=vector,
-                    metadata={"content_hash": getattr(chunk, "content_hash", None)},
+                    metadata={
+                        "content_hash": chunk.metadata.get("content_hash")
+                        or compute_content_hash(chunk.content)
+                    },
                 )
                 embedding_vectors.append(ev)
 
