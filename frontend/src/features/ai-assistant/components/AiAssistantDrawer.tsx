@@ -9,6 +9,7 @@ import {
   LoaderCircle,
   MessageSquare,
   PanelTop,
+  Sparkles,
   RotateCcw,
   Search,
   Trash2,
@@ -18,6 +19,7 @@ import { aiAssistantService } from "../services/aiAssistantService";
 import type {
   AiAssistantContextAction,
   AiAssistantHistoryItem,
+  AiAssistantHistorySource,
   AiAssistantResponse,
 } from "../types";
 import { AiAssistantResultRenderer } from "./AiAssistantResultRenderer";
@@ -33,6 +35,7 @@ import {
   sanitizeText,
 } from "../utils/aiAssistantSanitizer";
 import { deriveAiAssistantPageContext } from "../utils/aiAssistantContext";
+import { classifyAssistantTextInput } from "../utils/aiAssistantIntentClassifier";
 
 const HISTORY_LIMIT = 5;
 
@@ -48,6 +51,7 @@ function formatShortTime(date = new Date()): string {
 function buildHistoryItem(params: {
   action: Extract<AiAssistantContextAction, { kind: "assistant" | "knowledge" }>;
   domain: AiAssistantHistoryItem["domain"];
+  source?: AiAssistantHistorySource;
   entityId?: string;
   query?: string | null;
   response?: AiAssistantResponse | null;
@@ -68,6 +72,7 @@ function buildHistoryItem(params: {
     id: crypto.randomUUID(),
     label: params.action.label,
     intent: params.action.intent,
+    source: params.source,
     kind: classifyIntent(params.action.intent),
     domain: params.domain,
     entityId: params.entityId ?? null,
@@ -99,6 +104,12 @@ export function AiAssistantDrawer({
   const [result, setResult] = useState<AiAssistantResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localSessionHistory, setLocalSessionHistory] = useState<AiAssistantHistoryItem[]>([]);
+  const [textIntentFeedback, setTextIntentFeedback] = useState<string | null>(null);
+  const [textIntentPreview, setTextIntentPreview] = useState<{
+    label: string;
+    intent: string;
+    reason: string;
+  } | null>(null);
 
   const pageContext = deriveAiAssistantPageContext(pathname, search);
   const history = sessionHistory ?? localSessionHistory;
@@ -114,7 +125,13 @@ export function AiAssistantDrawer({
     setHistory((current) => [item, ...current].slice(0, HISTORY_LIMIT));
   };
 
-  const handleAction = async (action: AiAssistantContextAction) => {
+  const handleAction = async (
+    action: AiAssistantContextAction,
+    options?: {
+      historyQuery?: string | null;
+      historySource?: AiAssistantHistorySource;
+    },
+  ) => {
     if (action.kind === "navigation") {
       navigate(action.href);
       return;
@@ -139,8 +156,11 @@ export function AiAssistantDrawer({
         buildHistoryItem({
           action,
           domain: pageContext.domain,
+          source:
+            options?.historySource ??
+            (action.section === "suggestions" ? "suggestion" : "context_action"),
           entityId: pageContext.entityId,
-          query: action.kind === "knowledge" ? action.query : null,
+          query: options?.historyQuery ?? (action.kind === "knowledge" ? action.query : null),
           response,
         }),
       );
@@ -152,8 +172,11 @@ export function AiAssistantDrawer({
         buildHistoryItem({
           action,
           domain: pageContext.domain,
+          source:
+            options?.historySource ??
+            (action.section === "suggestions" ? "suggestion" : "context_action"),
           entityId: pageContext.entityId,
-          query: action.kind === "knowledge" ? action.query : null,
+          query: options?.historyQuery ?? (action.kind === "knowledge" ? action.query : null),
           errorMessage: msg,
         }),
       );
@@ -173,6 +196,32 @@ export function AiAssistantDrawer({
       intent,
       query: normalizedQuery,
       arguments: { query: normalizedQuery, limit: 5 },
+    }, {
+      historyQuery: shouldStoreHistoryQuery(normalizedQuery) ? normalizedQuery : null,
+      historySource: "knowledge_manual",
+    });
+  };
+
+  const handleTextIntentAction = async (query: string) => {
+    const rawQuery = query.trim();
+    const classification = classifyAssistantTextInput(rawQuery, pageContext);
+
+    if (classification.status !== "classified") {
+      setTextIntentPreview(null);
+      setTextIntentFeedback(classification.message);
+      return;
+    }
+
+    setTextIntentFeedback(null);
+    setTextIntentPreview({
+      label: classification.label,
+      intent: classification.intent,
+      reason: classification.reason,
+    });
+
+    await handleAction(classification.action, {
+      historyQuery: shouldStoreHistoryQuery(rawQuery) ? rawQuery : null,
+      historySource: "text_intent",
     });
   };
 
@@ -297,6 +346,15 @@ export function AiAssistantDrawer({
                   emptyTitle={pageContext.emptyTitle}
                   emptyDescription={pageContext.emptyDescription}
                   onAction={handleAction}
+                />
+              </div>
+
+              <div className="border-t border-border pt-6">
+                <TextIntentSection
+                  contextDomain={pageContext.domain}
+                  feedback={textIntentFeedback}
+                  preview={textIntentPreview}
+                  onAction={handleTextIntentAction}
                 />
               </div>
 
@@ -521,6 +579,110 @@ function describeSuggestionPayload(action: AiAssistantContextAction): string {
     .filter(([, value]) => value !== null && value !== undefined && `${value}`.trim() !== "")
     .map(([key]) => key)
     .join(", ");
+}
+
+function shouldStoreHistoryQuery(query: string): boolean {
+  const trimmed = query.trim();
+  if (!trimmed) return false;
+  return sanitizeText(trimmed) === trimmed;
+}
+
+function getTextIntentPlaceholder(contextDomain: string): string {
+  switch (contextDomain) {
+    case "job":
+      return "Ex.: Essa vaga está bem estruturada?";
+    case "candidate":
+      return "Ex.: Onde esse candidato está no processo?";
+    case "admission":
+      return "Ex.: O que falta para exportar essa admissão?";
+    case "admin":
+      return "Ex.: O Gemini está configurado?";
+    default:
+      return "Ex.: Quais critérios não podem ser usados em uma vaga?";
+  }
+}
+
+function TextIntentSection({
+  contextDomain,
+  feedback,
+  preview,
+  onAction,
+}: {
+  contextDomain: string;
+  feedback: string | null;
+  preview: { label: string; intent: string; reason: string } | null;
+  onAction: (query: string) => Promise<void>;
+}) {
+  const [query, setQuery] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isDisabled = !query.trim() || isSubmitting;
+
+  const handleSubmit = async () => {
+    if (isDisabled) return;
+    setIsSubmitting(true);
+    try {
+      await onAction(query);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3" data-testid="ai-text-intent-section">
+      <div className="px-1">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted">
+          Pergunte ao assistente
+        </h3>
+        <p className="mt-1 text-xs text-text-muted">
+          Faça perguntas sobre esta tela ou sobre a base de conhecimento. O assistente só
+          executa consultas read-only.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <textarea
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={getTextIntentPlaceholder(contextDomain)}
+          className="min-h-[76px] w-full resize-none rounded-lg border border-border bg-surface-muted p-3 text-sm placeholder:text-text-muted/60 transition-shadow focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+          data-testid="ai-text-intent-input"
+        />
+        <button
+          type="button"
+          disabled={isDisabled}
+          onClick={() => void handleSubmit()}
+          data-testid="ai-text-intent-submit"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[hsl(var(--primary))]/90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Consultar
+        </button>
+      </div>
+
+      {preview && (
+        <div
+          className="rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3"
+          data-testid="ai-text-intent-preview"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Intent classificada
+          </p>
+          <p className="mt-1 text-sm font-medium text-text">{preview.label}</p>
+          <p className="mt-1 text-xs text-text-muted">Intent: {preview.intent}</p>
+          <p className="mt-2 text-xs text-text-muted">{preview.reason}</p>
+        </div>
+      )}
+
+      {feedback && (
+        <div
+          className="rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs text-text"
+          data-testid="ai-text-intent-feedback"
+        >
+          {feedback}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function KnowledgeSection({

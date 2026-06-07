@@ -81,6 +81,36 @@ describe("AiAssistantDrawer", () => {
     );
   });
 
+  it("renders the controlled text intent field", () => {
+    renderDrawer("/vagas/job-123");
+    expect(screen.getByTestId("ai-text-intent-section")).toBeInTheDocument();
+    expect(screen.getByText("Pergunte ao assistente")).toBeInTheDocument();
+  });
+
+  it("uses the job placeholder in text intent input", () => {
+    renderDrawer("/vagas/job-123");
+    expect(screen.getByTestId("ai-text-intent-input")).toHaveAttribute(
+      "placeholder",
+      "Ex.: Essa vaga está bem estruturada?",
+    );
+  });
+
+  it("uses the candidate placeholder in text intent input", () => {
+    renderDrawer("/candidatos/cand-456");
+    expect(screen.getByTestId("ai-text-intent-input")).toHaveAttribute(
+      "placeholder",
+      "Ex.: Onde esse candidato está no processo?",
+    );
+  });
+
+  it("uses the admission placeholder in text intent input", () => {
+    renderDrawer("/admission/cases/case-456");
+    expect(screen.getByTestId("ai-text-intent-input")).toHaveAttribute(
+      "placeholder",
+      "Ex.: O que falta para exportar essa admissão?",
+    );
+  });
+
   it("renders friendly warning for embedding_provider_error", async () => {
     const user = userEvent.setup();
     vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
@@ -384,6 +414,24 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-suggestion-suggestion.candidate.bias")).toBeInTheDocument();
   });
 
+  it("classifies 'resumo do candidato' to candidate.summary", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "candidate.summary" }),
+    );
+    renderDrawer("/candidatos/456");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "resumo do candidato");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "candidate.summary",
+        arguments: { candidate_id: "456" },
+      }),
+    );
+  });
+
   it("uses job_id on job routes", async () => {
     const user = userEvent.setup();
     vi.mocked(aiAssistantService.query).mockResolvedValueOnce(makeResponse());
@@ -394,6 +442,59 @@ describe("AiAssistantDrawer", () => {
     expect(aiAssistantService.query).toHaveBeenCalledWith(
       expect.objectContaining({
         intent: "job.summary",
+        arguments: { job_id: "123" },
+      }),
+    );
+  });
+
+  it("classifies 'resumo da vaga' to job.summary on job routes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(makeResponse());
+    renderDrawer("/vagas/123");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "resumo da vaga");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "job.summary",
+        arguments: { job_id: "123" },
+      }),
+    );
+    expect(screen.getByText("Resumo da vaga")).toBeInTheDocument();
+  });
+
+  it("classifies 'quais requisitos da vaga' to job.requirements on job routes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "job.requirements" }),
+    );
+    renderDrawer("/vagas/123");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "quais requisitos da vaga");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "job.requirements",
+        arguments: { job_id: "123" },
+      }),
+    );
+  });
+
+  it("classifies 'como está a pipeline' to pipeline.overview on job routes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "pipeline.overview" }),
+    );
+    renderDrawer("/vagas/123");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "como está a pipeline");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "pipeline.overview",
         arguments: { job_id: "123" },
       }),
     );
@@ -451,6 +552,42 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-suggestion-suggestion.admission.pre_admission_rules")).toBeInTheDocument();
   });
 
+  it("classifies 'o que falta para exportar' to admission.case_summary", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "admission.case_summary" }),
+    );
+    renderDrawer("/admission/cases/case-456");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "o que falta para exportar");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "admission.case_summary",
+        arguments: { admission_case_id: "case-456" },
+      }),
+    );
+  });
+
+  it("classifies 'quais documentos estão pendentes' to admission.documents_status", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "admission.documents_status" }),
+    );
+    renderDrawer("/admission/cases/case-456");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "quais documentos estão pendentes");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "admission.documents_status",
+        arguments: { admission_case_id: "case-456" },
+      }),
+    );
+  });
+
   it("hides actions that require a missing ID", () => {
     renderDrawer("/admission/cases/case-456");
     expect(screen.queryByTestId("ai-action-protheus.export_status")).not.toBeInTheDocument();
@@ -498,6 +635,98 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-suggestion-suggestion.generic.pre_admission_rules")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-suggestion.generic.protheus_rules")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-suggestion.generic.anti_discrimination")).toBeInTheDocument();
+  });
+
+  it("classifies knowledge question to knowledge.search", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "knowledge.search", data: { query: "", chunks: [] } }),
+    );
+    renderDrawer("/rh");
+
+    await user.type(
+      screen.getByTestId("ai-text-intent-input"),
+      "quais critérios não podem ser usados em uma vaga",
+    );
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "knowledge.search",
+        arguments: {
+          query: "quais criterios nao podem ser usados em uma vaga",
+          limit: 5,
+        },
+      }),
+    );
+  });
+
+  it("does not execute contextual intent without required id", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/vagas");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "resumo da vaga");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
+    expect(screen.getByTestId("ai-text-intent-feedback")).toHaveTextContent(
+      /Abra uma vaga específica/i,
+    );
+  });
+
+  it("blocks prohibited write commands in controlled text input", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/admission/cases/case-456?packageId=pkg-9");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "aprovar documento");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+    await user.clear(screen.getByTestId("ai-text-intent-input"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "mover candidato");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+    await user.clear(screen.getByTestId("ai-text-intent-input"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "exportar agora para Protheus");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+    await user.clear(screen.getByTestId("ai-text-intent-input"));
+    await user.type(screen.getByTestId("ai-text-intent-input"), "rejeitar candidato");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
+    expect(screen.getByTestId("ai-text-intent-feedback")).toHaveTextContent(
+      /não executa ações de escrita/i,
+    );
+  });
+
+  it("does not execute empty controlled text input", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/vagas/123");
+
+    expect(screen.getByTestId("ai-text-intent-submit")).toBeDisabled();
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
+  });
+
+  it("does not execute overly long controlled text input", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/vagas/123");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "a".repeat(301));
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
+    expect(screen.getByTestId("ai-text-intent-feedback")).toHaveTextContent(/no máximo 300/i);
+  });
+
+  it("shows friendly error when controlled text input cannot be classified", async () => {
+    const user = userEvent.setup();
+    renderDrawer("/rh");
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "banana cinza orbital");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    expect(aiAssistantService.query).not.toHaveBeenCalled();
+    expect(screen.getByTestId("ai-text-intent-feedback")).toHaveTextContent(
+      /Não consegui associar sua pergunta/i,
+    );
   });
 
   it("clicking a suggestion calls assistant endpoint with the correct intent", async () => {
@@ -585,6 +814,33 @@ describe("AiAssistantDrawer", () => {
     expect(historyJson).not.toContain("embedding_provider_error");
     expect(historyJson).not.toContain("RuntimeError");
     expect(historyJson).toContain("temporariamente indisponível");
+  });
+
+  it("stores friendly label and text_intent source in history for controlled text input", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "job.summary" }),
+    );
+    render(<PersistentHistoryHarness path="/vagas/123" />);
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "resumo da vaga");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+    await waitFor(() => screen.getByTestId("ai-assistant-result"));
+
+    const historyJson = screen.getByTestId("history-json").textContent ?? "";
+    expect(historyJson).toContain('"label":"Resumo da vaga"');
+    expect(historyJson).toContain('"source":"text_intent"');
+  });
+
+  it("does not save blocked controlled text content in history", async () => {
+    const user = userEvent.setup();
+    render(<PersistentHistoryHarness path="/candidatos/456" />);
+
+    await user.type(screen.getByTestId("ai-text-intent-input"), "rejeitar candidato");
+    await user.click(screen.getByTestId("ai-text-intent-submit"));
+
+    const historyJson = screen.getByTestId("history-json").textContent ?? "";
+    expect(historyJson).toBe("[]");
   });
 
   it("stores the clicked suggestion label in history", async () => {

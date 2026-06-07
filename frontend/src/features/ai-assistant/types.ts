@@ -16,6 +16,11 @@ export type AiAssistantResponse = {
 };
 
 export type AiAssistantHistoryStatus = "success" | "error";
+export type AiAssistantHistorySource =
+  | "context_action"
+  | "suggestion"
+  | "knowledge_manual"
+  | "text_intent";
 
 export type AiAssistantHistoryKind =
   | "vaga"
@@ -36,6 +41,7 @@ export type AiAssistantHistoryItem = {
   id: string;
   label: string;
   intent: string;
+  source?: AiAssistantHistorySource;
   kind: AiAssistantHistoryKind;
   domain?: AiAssistantPageDomain;
   entityId?: string | null;
