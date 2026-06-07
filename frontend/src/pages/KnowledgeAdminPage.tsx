@@ -2,17 +2,21 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Archive,
-  ChevronDown,
-  ChevronUp,
+  Eye,
   FileSearch,
   LoaderCircle,
   Plus,
   RefreshCcw,
   Search,
   ShieldAlert,
+  X,
+  Pencil,
+  FileText,
 } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { aiAssistantService } from "../features/ai-assistant/services/aiAssistantService";
 import type { AiAssistantResponse } from "../features/ai-assistant/types";
 import {
@@ -163,21 +167,13 @@ function normalizeProviderDiagnostic(message: string | null) {
   return sanitizeAssistantText(message);
 }
 
-function SummaryCard({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "danger" | "success" | "muted" }) {
-  const toneClasses =
-    tone === "danger"
-      ? "border-rose-200 bg-rose-50 text-rose-700"
-      : tone === "success"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : tone === "muted"
-          ? "border-slate-200 bg-slate-50 text-slate-700"
-          : "border-border bg-surface text-text";
-
+function SummaryStat({ label, value, isDanger, isSuccess }: { label: string; value: string | number; isDanger?: boolean; isSuccess?: boolean }) {
+  const valueColor = isDanger ? "text-red-600" : isSuccess ? "text-emerald-600" : "text-text";
   return (
-    <article className={`rounded-2xl border p-4 ${toneClasses}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide opacity-75">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-    </article>
+    <div className="flex flex-col bg-white border border-border rounded-xl p-3 shadow-sm">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">{label}</span>
+      <span className={`mt-1 text-lg font-bold ${valueColor}`}>{value}</span>
+    </div>
   );
 }
 
@@ -187,16 +183,19 @@ export function KnowledgeAdminPage() {
   const [form, setForm] = useState<KnowledgeDocumentPayload>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [formNotice, setFormNotice] = useState<string | null>(null);
   const [providerMessage, setProviderMessage] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<string | null>(null);
   const [reindexingId, setReindexingId] = useState<string | null>(null);
-  const [reindexNotice, setReindexNotice] = useState<Record<string, string>>({});
-  const [archiveTarget, setArchiveTarget] = useState<KnowledgeDocument | null>(null);
-  const [expandedChunks, setExpandedChunks] = useState<Record<string, boolean>>({});
+  
+  // Modals & Drawers state
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [composerMode, setComposerMode] = useState<"create" | "edit">("create");
+  const [viewerDoc, setViewerDoc] = useState<KnowledgeDocument | null>(null);
+  
+  // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -249,10 +248,11 @@ export function KnowledgeAdminPage() {
     setForm(emptyForm);
     setFormError(null);
     setFormNotice(null);
+    setComposerMode("create");
     setIsComposerOpen(true);
   }
 
-  async function selectDocument(id: string) {
+  async function openEditDocument(id: string) {
     setSelectedId(id);
     setFormError(null);
     setFormNotice(null);
@@ -273,10 +273,33 @@ export function KnowledgeAdminPage() {
         reviewed_at: document.reviewed_at,
         source_uri: document.source_uri,
       });
+      setComposerMode("edit");
       setIsComposerOpen(true);
     } catch (error) {
       setPageError(normalizeErrorMessage(error));
     }
+  }
+
+  async function openViewDocument(document: KnowledgeDocument) {
+    setPageError(null);
+    try {
+      const fullDocument = await knowledgeAdminService.get(document.id);
+      setViewerDoc(fullDocument);
+    } catch (error) {
+      setPageError(normalizeErrorMessage(error));
+    }
+  }
+
+  function closeComposer() {
+    setIsComposerOpen(false);
+    setSelectedId(null);
+    setForm(emptyForm);
+    setFormError(null);
+    setFormNotice(null);
+  }
+
+  function closeViewer() {
+    setViewerDoc(null);
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -291,7 +314,7 @@ export function KnowledgeAdminPage() {
 
     if (looksSensitiveContent(form.content) || looksSensitiveContent(form.title)) {
       setFormError(
-        "Este conteúdo parece conter dados sensíveis. Remova essas informações antes de salvar na Base de Conhecimento.",
+        "Este conteúdo parece conter dados sensíveis. Remova essas informações antes de salvar na Base de Conhecimento."
       );
       return;
     }
@@ -308,17 +331,13 @@ export function KnowledgeAdminPage() {
         tags: form.tags,
       };
 
-      if (selectedId) {
+      if (composerMode === "edit" && selectedId) {
         await knowledgeAdminService.update(selectedId, payload);
-        setFormNotice("Documento atualizado com sucesso.");
       } else {
         await knowledgeAdminService.create(payload);
-        setFormNotice("Documento criado com sucesso.");
       }
 
-      setForm(emptyForm);
-      setSelectedId(null);
-      setIsComposerOpen(false);
+      closeComposer();
       await loadDocuments();
     } catch (error) {
       setFormError(normalizeErrorMessage(error));
@@ -327,40 +346,30 @@ export function KnowledgeAdminPage() {
     }
   }
 
-  async function confirmArchive() {
-    if (!archiveTarget) return;
+  async function confirmArchive(id: string) {
     setPageError(null);
     try {
-      await knowledgeAdminService.archive(archiveTarget.id);
-      if (selectedId === archiveTarget.id) {
-        setSelectedId(null);
-        setForm(emptyForm);
-        setIsComposerOpen(false);
-      }
-      setArchiveTarget(null);
+      await knowledgeAdminService.archive(id);
       await loadDocuments();
     } catch (error) {
-      setArchiveTarget(null);
       setPageError(normalizeErrorMessage(error));
+    }
+  }
+
+  function handleTriggerArchive(document: KnowledgeDocument) {
+    if (window.confirm("Arquivar documento? Este documento deixará de ser usado como fonte pelo Assistente IA. Essa ação não apaga o histórico.")) {
+      void confirmArchive(document.id);
     }
   }
 
   async function handleReindex(id: string) {
     setReindexingId(id);
     setPageError(null);
-    setReindexNotice((current) => ({ ...current, [id]: "" }));
     try {
-      const response = await knowledgeAdminService.reindex(id);
-      setReindexNotice((current) => ({
-        ...current,
-        [id]: `Reindexação concluída. ${response.chunks_created} chunk(s) processado(s).`,
-      }));
+      await knowledgeAdminService.reindex(id);
       await loadDocuments();
     } catch (error) {
-      setReindexNotice((current) => ({
-        ...current,
-        [id]: normalizeReindexError(error),
-      }));
+      setPageError(normalizeReindexError(error));
     } finally {
       setReindexingId(null);
     }
@@ -372,7 +381,7 @@ export function KnowledgeAdminPage() {
     setSearchResult(null);
 
     if (!searchQuery.trim()) {
-      setSearchError("Digite uma pergunta para testar a busca nesta base.");
+      setSearchError("Digite uma pergunta para pesquisar nesta base.");
       return;
     }
 
@@ -382,7 +391,7 @@ export function KnowledgeAdminPage() {
         await aiAssistantService.query({
           intent: "knowledge.search",
           arguments: { query: searchQuery.trim(), limit: 3 },
-        }),
+        })
       );
       setSearchResult(response);
     } catch (error) {
@@ -396,562 +405,421 @@ export function KnowledgeAdminPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
-      <PageHeader
-        title="Base de Conhecimento"
-        subtitle="Gerencie documentos usados pelo Assistente IA para responder com fontes."
-      />
+      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between rounded-2xl border border-border bg-[linear-gradient(135deg,rgba(4,120,87,0.08),rgba(15,23,42,0.02))] p-5 shadow-sm">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Admin / IA</p>
+          <h1 className="mt-1 text-xl font-semibold text-text">Base de Conhecimento</h1>
+          <p className="mt-1 text-sm text-text-muted">
+            Gerencie documentos, indexação e testes de recuperação usados pelo Assistente IA.
+          </p>
+        </div>
+        <Button onClick={() => void openNewDocument()} data-testid="new-document-btn">
+          <Plus className="mr-2 h-4 w-4" />
+          Novo documento
+        </Button>
+      </header>
 
-      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <div className="flex items-start gap-3">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <div className="space-y-1">
-            <p className="font-semibold">Aviso de segurança</p>
-            <p>
-              Não cadastre currículos, documentos pessoais, CPFs, telefones, e-mails reais,
-              laudos, exames ou payloads internos.
-            </p>
+      {/* Estatísticas / Diagnóstico em linha */}
+      <section className="flex flex-wrap gap-4">
+        <SummaryStat label="Publicados" value={summary.published} isSuccess />
+        <SummaryStat label="Pendentes" value={summary.drafts} />
+        <SummaryStat label="Indexados (Chunks)" value={summary.chunkCount} />
+        <SummaryStat label="Erros de indexação" value={summary.errors} isDanger={summary.errors > 0} />
+        <SummaryStat label="Última indexação" value={summary.lastIndexed} />
+        <div className="flex-1 min-w-[200px] flex items-center justify-between border border-border bg-white rounded-xl p-3 shadow-sm">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Status do Provider</p>
+            <p className="mt-1 text-sm font-medium text-text">{providerStatus ? sanitizeAssistantText(providerStatus) : "Operacional"}</p>
           </div>
+          {providerMessage ? (
+            <div className="flex items-center text-amber-600 gap-1" title={providerMessage}>
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+          ) : (
+            <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm" title="Online" />
+          )}
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Documentos publicados" value={summary.published} tone="success" />
-        <SummaryCard label="Rascunhos" value={summary.drafts} />
-        <SummaryCard label="Arquivados" value={summary.archived} tone="muted" />
-        <SummaryCard label="Chunks indexados" value={summary.chunkCount} />
-        <SummaryCard label="Embeddings gerados" value={summary.embeddingsGenerated} />
-        <SummaryCard label="Documentos com erro" value={summary.errors} tone="danger" />
-        <SummaryCard label="Última indexação" value={summary.lastIndexed} />
-      </section>
-
-      {pageError ? (
-        <section className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+      {pageError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {pageError}
-        </section>
-      ) : null}
+        </div>
+      )}
 
-      {providerMessage ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="flex flex-col">
+        {/* Tabela de Documentos (Main Area) */}
+        <section className="rounded-2xl border border-border bg-white shadow-sm flex flex-col">
+          <div className="border-b border-border/60 bg-surface-muted/20 px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <p className="font-semibold">Diagnóstico de embeddings</p>
-              <p>{providerMessage}</p>
+              <h2 className="text-base font-semibold text-text">Lista de documentos</h2>
+              <p className="text-[13px] text-text-muted">Gerencie a governança do conhecimento do agente.</p>
             </div>
-          </div>
-        </section>
-      ) : null}
-
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-text">Documentos da base</h2>
-              <p className="text-sm text-text-muted">
-                Acompanhe status, chunks seguros e diagnóstico de indexação por documento.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void openNewDocument()}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
-            >
-              <Plus className="h-4 w-4" />
-              Novo documento
-            </button>
-          </div>
-
-          {loading ? (
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              Carregando documentos...
-            </div>
-          ) : null}
-
-          {!loading && documents.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-text-muted">
-              Nenhum documento cadastrado ainda.
-            </div>
-          ) : null}
-
-          <div className="space-y-4">
-            {documents.map((document) => {
-              const cardTitle = sanitizeAssistantText(document.title);
-              const isExpanded = expandedChunks[document.id] ?? false;
-              const docNotice = reindexNotice[document.id];
-
-              return (
-                <article key={document.id} className="rounded-2xl border border-border p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => void selectDocument(document.id)}
-                        className="text-left text-base font-semibold text-text underline-offset-4 hover:underline"
-                      >
-                        {cardTitle}
-                      </button>
-                      <div className="flex flex-wrap gap-2 text-xs text-text-muted">
-                        <span className="rounded-full border border-border px-2 py-1">
-                          Tipo de fonte: {labelFromOptions(SOURCE_TYPE_OPTIONS, document.source_type)}
-                        </span>
-                        <span className="rounded-full border border-border px-2 py-1">
-                          Domínio: {labelFromOptions(DOMAIN_OPTIONS, document.domain)}
-                        </span>
-                        <span className="rounded-full border border-border px-2 py-1">
-                          Status: {labelFromOptions(STATUS_OPTIONS, document.status)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleReindex(document.id)}
-                        disabled={reindexingId === document.id}
-                        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {reindexingId === document.id ? (
-                          <LoaderCircle className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCcw className="h-4 w-4" />
-                        )}
-                        {reindexingId === document.id ? "Reindexando..." : "Reindexar"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setArchiveTarget(document)}
-                        className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-700"
-                      >
-                        <Archive className="h-4 w-4" />
-                        Arquivar
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <div className="rounded-xl bg-surface-muted p-3 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Status</p>
-                      <p className="mt-1 text-text">{formatIndexingStatus(document.indexing_status)}</p>
-                    </div>
-                    <div className="rounded-xl bg-surface-muted p-3 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Provider</p>
-                      <p className="mt-1 text-text">{providerStatus ? sanitizeAssistantText(providerStatus) : "—"}</p>
-                    </div>
-                    <div className="rounded-xl bg-surface-muted p-3 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Modelo</p>
-                      <p className="mt-1 text-text">—</p>
-                    </div>
-                    <div className="rounded-xl bg-surface-muted p-3 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Dimensões</p>
-                      <p className="mt-1 text-text">—</p>
-                    </div>
-                    <div className="rounded-xl bg-surface-muted p-3 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Última indexação</p>
-                      <p className="mt-1 text-text">{formatDateTime(document.last_indexed_at)}</p>
-                    </div>
-                    <div className="rounded-xl bg-surface-muted p-3 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Chunks</p>
-                      <p className="mt-1 text-text">{document.chunk_count}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs text-text-muted">
-                    {document.tags.map((tag) => (
-                      <span key={tag} className="rounded-full border border-border px-2 py-1">
-                        {sanitizeAssistantText(tag)}
-                      </span>
-                    ))}
-                  </div>
-
-                  {document.last_index_error ? (
-                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      <p className="font-semibold">Erro sanitizado</p>
-                      <p>{sanitizeAssistantText(document.last_index_error)}</p>
-                    </div>
-                  ) : null}
-
-                  {docNotice ? (
-                    <div
-                      className="mt-4 rounded-xl border border-border bg-surface-muted p-3 text-sm text-text"
-                      data-testid={`knowledge-reindex-feedback-${document.id}`}
-                    >
-                      {docNotice}
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-text">Chunks gerados</p>
-                        <p className="text-sm text-text-muted">
-                          Prévia sanitizada dos trechos que podem sustentar respostas do assistente.
-                        </p>
-                      </div>
-                      {document.chunks.length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedChunks((current) => ({
-                              ...current,
-                              [document.id]: !isExpanded,
-                            }))
-                          }
-                          className="inline-flex items-center gap-2 text-sm font-medium text-text-muted hover:text-text"
-                        >
-                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          {isExpanded ? "Ver menos" : "Ver mais"}
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {document.chunks.length === 0 ? (
-                      <p className="text-sm text-text-muted">Nenhum chunk disponível.</p>
-                    ) : (
-                      (isExpanded ? document.chunks : document.chunks.slice(0, 2)).map((chunk) => (
-                        <div key={chunk.id} className="rounded-xl border border-border/70 bg-surface-muted p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-text">
-                              Chunk {chunk.chunk_index + 1}
-                            </p>
-                            <span className="text-xs text-text-muted">
-                              Tokens: {chunk.token_count ?? "—"}
-                            </span>
-                          </div>
-                          <p className="mt-2 max-h-28 overflow-hidden whitespace-pre-wrap text-sm text-text">
-                            {sanitizeAssistantText(chunk.content_preview)}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
-        <div className="space-y-6">
-          <section className="rounded-2xl border border-border bg-surface p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-text">Novo documento</h2>
-                <p className="text-sm text-text-muted">
-                  Use texto institucional revisado. Não cole dados de candidatos, documentos pessoais ou informações sensíveis.
-                </p>
+            
+            <form className="flex items-center gap-2 w-full md:max-w-md" onSubmit={handleTestSearch}>
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
+                <input
+                  type="text"
+                  className="w-full rounded-full border border-border bg-white pl-9 pr-4 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all shadow-sm"
+                  placeholder="Pesquisar recuperação de fontes reais..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isComposerOpen) {
-                    setIsComposerOpen(false);
-                    setSelectedId(null);
-                    setForm(emptyForm);
-                    setFormError(null);
-                    setFormNotice(null);
-                  } else {
-                    void openNewDocument();
-                  }
-                }}
-                className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-text"
-              >
-                {isComposerOpen ? "Fechar formulário" : "Novo documento"}
+              <Button type="submit" size="sm" className="rounded-full shrink-0 h-9 px-4" disabled={searchLoading}>
+                {searchLoading ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : "Pesquisar"}
+              </Button>
+            </form>
+          </div>
+
+          {/* Search Results Area */}
+          {searchError ? (
+            <div className="border-b border-border/60 bg-red-50 p-3 px-5 text-sm text-red-700 flex items-center justify-between">
+              <span>{searchError}</span>
+              <button type="button" onClick={() => setSearchError(null)} className="text-red-500 hover:text-red-700">
+                <X className="h-4 w-4" />
               </button>
             </div>
+          ) : null}
 
-            {isComposerOpen ? (
-              <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-                <label className="block text-sm font-medium text-text">
-                  Título
-                  <input
-                    aria-label="Título"
-                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                    value={form.title}
-                    onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                  />
-                </label>
-
-                <label className="block text-sm font-medium text-text">
-                  Domínio
-                  <select
-                    aria-label="Domínio"
-                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                    value={form.domain}
-                    onChange={(event) => setForm((current) => ({ ...current, domain: event.target.value }))}
-                  >
-                    {DOMAIN_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-text">
-                  Tipo de fonte
-                  <select
-                    aria-label="Tipo de fonte"
-                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                    value={form.source_type}
-                    onChange={(event) => setForm((current) => ({ ...current, source_type: event.target.value }))}
-                  >
-                    {SOURCE_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-text">
-                  Status
-                  <select
-                    aria-label="Status"
-                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                    value={form.status}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        status: event.target.value as KnowledgeDocumentStatus,
-                      }))
-                    }
-                  >
-                    {STATUS_OPTIONS.filter((option) => option.value !== "archived").map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-text">
-                  Tags
-                  <input
-                    aria-label="Tags"
-                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                    placeholder="Ex.: admissão, checklist, política"
-                    value={form.tags.join(", ")}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        tags: event.target.value
-                          .split(",")
-                          .map((tag) => tag.trim())
-                          .filter(Boolean),
-                      }))
-                    }
-                  />
-                </label>
-
-                <label className="block text-sm font-medium text-text">
-                  Visibilidade
-                  <select
-                    aria-label="Visibilidade"
-                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                    value={form.visibility}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        visibility: event.target.value as "internal" | "admin_only",
-                      }))
-                    }
-                  >
-                    {VISIBILITY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-text">
-                  Nível de sensibilidade
-                  <select
-                    aria-label="Nível de sensibilidade"
-                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                    value={form.sensitivity_level}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        sensitivity_level: event.target.value as
-                          | "low"
-                          | "medium"
-                          | "high"
-                          | "restricted",
-                      }))
-                    }
-                  >
-                    {SENSITIVITY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium text-text">
-                  Conteúdo
-                  <textarea
-                    aria-label="Conteúdo"
-                    className="mt-1 min-h-64 w-full rounded-lg border border-border bg-background px-3 py-3 text-sm leading-6"
-                    value={form.content}
-                    onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))}
-                  />
-                </label>
-
-                {formError ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                    {formError}
-                  </div>
-                ) : null}
-
-                {formNotice ? (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                    {formNotice}
-                  </div>
-                ) : null}
-
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saving ? "Salvando..." : selectedId ? "Salvar alterações" : "Salvar documento"}
+          {searchView ? (
+            <div className="border-b border-border/60 bg-surface/30 p-5 animate-in fade-in slide-in-from-top-2" data-testid="knowledge-search-results">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-text flex items-center gap-2">
+                  <FileSearch className="h-4 w-4 text-emerald-600" />
+                  Resultados do teste de busca
+                </h3>
+                <button type="button" onClick={() => setSearchResult(null)} className="rounded-full p-1.5 text-text-muted hover:bg-surface-muted hover:text-text transition-colors" title="Fechar resultados">
+                  <X className="h-4 w-4" />
                 </button>
-              </form>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed border-border p-6 text-sm text-text-muted">
-                O formulário fica fechado por padrão para manter a tela mais limpa.
               </div>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-border bg-surface p-4">
-            <div className="flex items-start gap-3">
-              <FileSearch className="mt-1 h-5 w-5 text-[hsl(var(--primary))]" />
-              <div>
-                <h2 className="text-base font-semibold text-text">Testar busca nesta base</h2>
-                <p className="text-sm text-text-muted">
-                  Digite uma pergunta para testar quais fontes seriam encontradas...
-                </p>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {searchView.evidence.length > 0 ? (
+                  searchView.evidence.map((item, idx) => (
+                    <article key={idx} className="rounded-xl border border-border p-3 bg-white shadow-sm flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-semibold text-text line-clamp-2" title={item.title}>{item.title}</p>
+                        {item.emphasis ? (
+                          <Badge variant="outline" className="text-[9px] py-0 shrink-0 bg-surface-muted/50">{item.emphasis}</Badge>
+                        ) : null}
+                      </div>
+                      {item.description ? (
+                        <p className="text-[11px] text-text-muted line-clamp-4 leading-relaxed">
+                          {item.description}
+                        </p>
+                      ) : null}
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-sm text-text-muted col-span-full">Nenhuma evidência encontrada para esta pergunta.</p>
+                )}
               </div>
+              {searchView.warnings.length > 0 ? (
+                <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-3">
+                  {searchView.warnings.map((warn, i) => (
+                    <p key={i} className="text-xs text-amber-800 flex items-center gap-2">
+                      <AlertTriangle className="h-3 w-3" />
+                      {warn}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
+          ) : null}
 
-            <form className="mt-4 space-y-4" onSubmit={handleTestSearch}>
-              <label className="block text-sm font-medium text-text">
-                Pergunta de teste
-                <textarea
-                  aria-label="Pergunta de teste"
-                  className="mt-1 min-h-28 w-full rounded-lg border border-border bg-background px-3 py-3 text-sm"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Digite uma pergunta para testar quais fontes seriam encontradas..."
+          {loading ? (
+            <div className="flex items-center justify-center p-12 text-sm text-text-muted">
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              Carregando documentos...
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center">
+              <div className="h-12 w-12 rounded-full bg-surface-muted flex items-center justify-center mb-3">
+                <FileText className="h-6 w-6 text-text-muted/60" />
+              </div>
+              <p className="text-sm font-medium text-text">Nenhum documento encontrado.</p>
+              <p className="mt-1 text-sm text-text-muted">Adicione documentos à base para o Assistente ter contexto.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm" data-testid="documents-table">
+                <thead className="bg-surface/50 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-b border-border/60">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Documento</th>
+                    <th className="px-4 py-3 font-medium">Status / Indexação</th>
+                    <th className="px-4 py-3 font-medium">Metadados</th>
+                    <th className="px-4 py-3 font-medium text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {documents.map((doc) => (
+                    <tr key={doc.id} className="transition-colors hover:bg-surface/30">
+                      <td className="px-4 py-3 min-w-[200px]">
+                        <p className="font-semibold text-text max-w-xs truncate" title={sanitizeAssistantText(doc.title)}>
+                          {sanitizeAssistantText(doc.title)}
+                        </p>
+                        <p className="text-[11px] text-text-muted mt-0.5">
+                          {labelFromOptions(DOMAIN_OPTIONS, doc.domain)} • {labelFromOptions(SOURCE_TYPE_OPTIONS, doc.source_type)}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex flex-col gap-1.5">
+                          <Badge variant="outline" className={`w-fit text-[10px] uppercase font-bold py-0.5 h-auto ${
+                            doc.status === "published" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                            doc.status === "archived" ? "bg-slate-50 text-slate-600 border-slate-200" :
+                            "bg-amber-50 text-amber-700 border-amber-200"
+                          }`}>
+                            {labelFromOptions(STATUS_OPTIONS, doc.status)}
+                          </Badge>
+                          <span className="text-[11px] text-text-muted">
+                            {formatIndexingStatus(doc.indexing_status)} ({doc.chunk_count} chunks)
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[11px] text-text-muted">
+                            Modificado: {formatDateTime(doc.last_indexed_at)}
+                          </span>
+                          <span className="text-[11px] text-text-muted truncate max-w-[120px]">
+                            {doc.tags.length > 0 ? doc.tags.join(", ") : "Sem tags"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => void openViewDocument(doc)}
+                            className="p-1.5 text-text-muted hover:text-emerald-600 transition-colors rounded-md hover:bg-surface-muted"
+                            title="Ver detalhes"
+                            data-testid={`view-details-${doc.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void openEditDocument(doc.id)}
+                            className="p-1.5 text-text-muted hover:text-emerald-600 transition-colors rounded-md hover:bg-surface-muted"
+                            title="Editar"
+                            data-testid={`edit-doc-${doc.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <div className="w-px h-4 bg-border/80 mx-1" />
+                          <button
+                            type="button"
+                            disabled={reindexingId === doc.id}
+                            onClick={() => void handleReindex(doc.id)}
+                            className="p-1.5 text-text-muted hover:text-emerald-600 transition-colors rounded-md hover:bg-surface-muted disabled:opacity-30"
+                            title="Reindexar"
+                            data-testid={`reindex-doc-${doc.id}`}
+                          >
+                            {reindexingId === doc.id ? (
+                              <LoaderCircle className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCcw className="h-4 w-4" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleTriggerArchive(doc)}
+                            className="p-1.5 text-text-muted hover:text-red-600 transition-colors rounded-md hover:bg-red-50"
+                            title="Arquivar"
+                            data-testid={`archive-doc-${doc.id}`}
+                          >
+                            <Archive className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Drawer: Composer (Create / Edit Form) */}
+      {isComposerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-950/30 backdrop-blur-[2px] transition-opacity" onClick={closeComposer} aria-hidden="true" />
+          <div 
+            className="relative w-full max-w-lg h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right-8 duration-300"
+            role="dialog"
+            aria-label={composerMode === "create" ? "Novo documento" : "Editar documento"}
+          >
+            <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-surface-muted/20">
+              <div>
+                <h3 className="text-base font-semibold text-text">
+                  {composerMode === "create" ? "Novo documento" : "Editar documento"}
+                </h3>
+                <p className="text-[11px] text-text-muted mt-0.5">Defina as fontes institucionais.</p>
+              </div>
+              <button onClick={closeComposer} className="rounded-full p-2 text-text-muted hover:bg-surface-muted hover:text-text transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <label className="block space-y-1.5 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Título</span>
+                <input
+                  className="w-full rounded-xl border border-border px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  value={form.title}
+                  onChange={(e) => setForm((c) => ({ ...c, title: e.target.value }))}
+                  placeholder="Ex: Política de Férias 2026"
                 />
               </label>
 
-              <button
-                type="submit"
-                disabled={searchLoading}
-                className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {searchLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Buscar fontes
-              </button>
-            </form>
-
-            {searchError ? (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                {searchError}
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block space-y-1.5 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Domínio</span>
+                  <select
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    value={form.domain}
+                    onChange={(e) => setForm((c) => ({ ...c, domain: e.target.value }))}
+                  >
+                    {DOMAIN_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </label>
+                <label className="block space-y-1.5 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Tipo de Fonte</span>
+                  <select
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    value={form.source_type}
+                    onChange={(e) => setForm((c) => ({ ...c, source_type: e.target.value }))}
+                  >
+                    {SOURCE_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </label>
               </div>
-            ) : null}
 
-            {searchView ? (
-              <div className="mt-4 space-y-4" data-testid="knowledge-search-results">
-                {searchView.summary.length > 0 ? (
-                  <div className="rounded-xl bg-surface-muted p-3 text-sm text-text">
-                    {searchView.summary.map((item) => (
-                      <p key={item}>{item}</p>
-                    ))}
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block space-y-1.5 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Status</span>
+                  <select
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    value={form.status}
+                    onChange={(e) => setForm((c) => ({ ...c, status: e.target.value as KnowledgeDocumentStatus }))}
+                  >
+                    {STATUS_OPTIONS.filter((o) => o.value !== "archived").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </label>
+                <label className="block space-y-1.5 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Sensibilidade</span>
+                  <select
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    value={form.sensitivity_level}
+                    onChange={(e) => setForm((c) => ({ ...c, sensitivity_level: e.target.value as any }))}
+                  >
+                    {SENSITIVITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              <label className="block space-y-1.5 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Conteúdo</span>
+                <textarea
+                  className="w-full min-h-[250px] rounded-xl border border-border px-3 py-3 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y leading-relaxed font-mono text-[13px]"
+                  value={form.content}
+                  onChange={(e) => setForm((c) => ({ ...c, content: e.target.value }))}
+                  placeholder="Insira o conteúdo completo do documento aqui..."
+                />
+              </label>
+
+              {formError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {formError}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="border-t border-border p-5 flex justify-end gap-3 bg-white">
+              <Button type="button" variant="outline" onClick={closeComposer} disabled={saving}>Cancelar</Button>
+              <Button type="button" onClick={(e) => void handleSubmit(e as unknown as FormEvent)} disabled={saving} data-testid="save-document-btn">
+                {saving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {composerMode === "create" ? "Criar documento" : "Salvar alterações"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer: Viewer (Details & Sanitized Chunks) */}
+      {viewerDoc && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-950/30 backdrop-blur-[2px] transition-opacity" onClick={closeViewer} aria-hidden="true" />
+          <div 
+            className="relative w-full max-w-lg h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right-8 duration-300"
+            role="dialog"
+            aria-label="Ver detalhes do documento"
+          >
+            <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-surface-muted/20">
+              <div>
+                <h3 className="text-base font-semibold text-text max-w-[320px] truncate" title={sanitizeAssistantText(viewerDoc.title)}>
+                  {sanitizeAssistantText(viewerDoc.title)}
+                </h3>
+                <p className="text-[11px] text-text-muted mt-0.5">Detalhes e Chunks Sanitizados</p>
+              </div>
+              <button onClick={closeViewer} className="rounded-full p-2 text-text-muted hover:bg-surface-muted hover:text-text transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              <section>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-3">Metadados</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="p-3 rounded-xl border border-border bg-surface-muted/30">
+                    <p className="text-[10px] text-text-muted uppercase">Status</p>
+                    <p className="font-medium text-text">{formatIndexingStatus(viewerDoc.indexing_status)}</p>
                   </div>
-                ) : null}
+                  <div className="p-3 rounded-xl border border-border bg-surface-muted/30">
+                    <p className="text-[10px] text-text-muted uppercase">Última Indexação</p>
+                    <p className="font-medium text-text">{formatDateTime(viewerDoc.last_indexed_at)}</p>
+                  </div>
+                </div>
+                {viewerDoc.last_index_error && (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                    <p className="font-bold">Erro (Sanitizado):</p>
+                    <p className="mt-1">{sanitizeAssistantText(viewerDoc.last_index_error)}</p>
+                  </div>
+                )}
+              </section>
 
-                {searchView.evidence.length > 0 ? (
+              <section>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Chunks Gerados ({viewerDoc.chunks.length})</h4>
+                </div>
+                {viewerDoc.chunks.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-text-muted">
+                    Nenhum chunk foi gerado ou indexado ainda.
+                  </div>
+                ) : (
                   <div className="space-y-3">
-                    {searchView.evidence.map((item) => (
-                      <article key={`${item.title}-${item.description ?? ""}`} className="rounded-xl border border-border p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <p className="font-semibold text-text">{item.title}</p>
-                            {item.description ? (
-                              <p className="whitespace-pre-wrap text-sm text-text-muted">
-                                {item.description}
-                              </p>
-                            ) : null}
-                          </div>
-                          {item.emphasis ? (
-                            <span className="rounded-full bg-[hsl(var(--primary))]/10 px-2 py-1 text-xs font-semibold text-[hsl(var(--primary))]">
-                              {item.emphasis}
-                            </span>
-                          ) : null}
+                    {viewerDoc.chunks.map((chunk) => (
+                      <article key={chunk.id} className="rounded-xl border border-border p-3 bg-surface">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[11px] font-bold text-text">Chunk #{chunk.chunk_index + 1}</span>
+                          <span className="text-[10px] bg-surface-muted px-2 py-0.5 rounded-full text-text-muted border border-border/50">
+                            {chunk.token_count ?? "?"} tokens
+                          </span>
                         </div>
+                        <p className="text-[12px] leading-relaxed text-text whitespace-pre-wrap">
+                          {sanitizeAssistantText(chunk.content_preview)}
+                        </p>
                       </article>
                     ))}
                   </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-border p-4 text-sm text-text-muted">
-                    Nenhuma fonte encontrada para essa pergunta.
-                  </div>
                 )}
-
-                {searchView.warnings.length > 0 ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                    <p className="font-semibold">Limitações e avisos</p>
-                    <div className="mt-2 space-y-1">
-                      {searchView.warnings.map((warning) => (
-                        <p key={warning}>{warning}</p>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
-        </div>
-      </div>
-
-      {archiveTarget ? (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/30" aria-hidden="true" />
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            role="dialog"
-            aria-label="Confirmar arquivamento"
-          >
-            <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-xl">
-              <h2 className="text-lg font-semibold text-text">Arquivar documento?</h2>
-              <p className="mt-2 text-sm text-text-muted">
-                Este documento deixará de ser usado como fonte pelo Assistente IA. Essa ação não apaga o histórico.
-              </p>
-              <div className="mt-5 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setArchiveTarget(null)}
-                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void confirmArchive()}
-                  className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Confirmar arquivamento
-                </button>
-              </div>
+              </section>
             </div>
           </div>
-        </>
-      ) : null}
+        </div>
+      )}
     </div>
   );
 }
