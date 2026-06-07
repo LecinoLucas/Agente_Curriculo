@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.ai_orchestration.rag.answer_schemas import (
     RagAnswerRequest,
     RagAnswerResult,
@@ -16,6 +18,7 @@ from src.ai_orchestration.rag.answer_schemas import (
 from src.ai_orchestration.rag.gemini_rag_synthesis_provider import GeminiRagSynthesisProvider
 from src.ai_orchestration.rag.rag_prompting import RagPrompting
 from src.ai_orchestration.rag.schemas import KnowledgeChunk
+from src.application.services.ai_usage_log_service import AIUsageLogPayload, persist_ai_usage_log
 from src.core.ai_response_redactor import redact_ai_response_text
 from src.core.settings import settings
 
@@ -28,8 +31,10 @@ class RagAnswerService:
     def __init__(
         self,
         synthesis_provider: GeminiRagSynthesisProvider | None = None,
+        usage_session: AsyncSession | None = None,
     ):
         self._provider = synthesis_provider or GeminiRagSynthesisProvider()
+        self._usage_session = usage_session
 
     async def synthesize_answer(self, request: RagAnswerRequest) -> RagAnswerResult:
         """Gera uma resposta baseada estritamente nos chunks fornecidos."""
@@ -61,6 +66,7 @@ class RagAnswerService:
 
             # 5. Chamada ao Provider
             answer_text = await self._provider.generate_response(prompt)
+            await self._record_usage(status="success")
 
             # 5.1 Redação de PII (H-01)
             safe_answer = redact_ai_response_text(answer_text)
@@ -88,6 +94,7 @@ class RagAnswerService:
             )
 
         except Exception as exc:
+            await self._record_usage(status="error", error_message=type(exc).__name__)
             logger.error(f"Erro no RagAnswerService: {exc}", exc_info=True)
             return RagAnswerResult(
                 ok=False,
@@ -115,3 +122,24 @@ class RagAnswerService:
             )
             cleaned.append(new_chunk)
         return cleaned
+
+    async def _record_usage(self, *, status: str, error_message: str | None = None) -> None:
+        """Registra a chamada RAG sem armazenar prompt, resposta ou chunks."""
+        if self._usage_session is None:
+            return
+
+        try:
+            await persist_ai_usage_log(
+                self._usage_session,
+                AIUsageLogPayload(
+                    provider=self._provider.provider_name,
+                    model=self._provider.model_name,
+                    operation="rag_synthesis",
+                    input_tokens=0,
+                    output_tokens=0,
+                    status=status,
+                    error_message=error_message,
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Falha ao registrar uso de RAG synthesis: %s", type(exc).__name__)

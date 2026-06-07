@@ -102,6 +102,12 @@ const AdminAiProviderCredentialsPage = lazy(() =>
   }))
 );
 
+const AiSettingsPage = lazy(() =>
+  import("../features/ai-settings/pages/AiSettingsPage").then((m) => ({
+    default: m.AiSettingsPage,
+  }))
+);
+
 const AdminBiPage = lazy(() =>
   import("../pages/AdminBiPage").then((m) => ({ default: m.AdminBiPage }))
 );
@@ -394,6 +400,11 @@ export function AppRouter() {
         <Route
           path="admin/ai-provider-credentials"
           element={protectedPage(<AdminAiProviderCredentialsPage />, ADMIN_ONLY_ROLES)}
+        />
+
+        <Route
+          path="admin/ia"
+          element={protectedPage(<AiSettingsPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route

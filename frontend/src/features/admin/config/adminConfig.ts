@@ -40,6 +40,7 @@ export const SCREENS: { label: string; path: string; roles: Role[] }[] = [
   { label: "Auditoria",       path: "/admin/auditoria", roles: ADMIN_ONLY_ROLES },
   { label: "System Health",   path: "/admin/health",    roles: ADMIN_ONLY_ROLES },
   { label: "Credenciais IA",  path: "/admin/ai-provider-credentials", roles: ADMIN_ONLY_ROLES },
+  { label: "Laboratório IA",  path: "/admin/ia", roles: ADMIN_ONLY_ROLES },
   { label: "BI & Métricas",   path: "/admin/bi",        roles: ADMIN_ONLY_ROLES },
   { label: "Templates IA",    path: "/admin/behavioral-templates", roles: JOB_MANAGEMENT_ROLES },
   { label: "Checklists Admissionais", path: "/admissao/checklists", roles: PRE_ADMISSION_AREA_ROLES },

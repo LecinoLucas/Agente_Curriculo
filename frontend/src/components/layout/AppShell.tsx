@@ -47,6 +47,7 @@ import { UserRole } from "../../types/auth";
 import { TopNavbar } from "./TopNavbar";
 import { Sidebar } from "./Sidebar";
 import { AiAssistantDrawer } from "../../features/ai-assistant/components/AiAssistantDrawer";
+import type { AiAssistantHistoryItem } from "../../features/ai-assistant/types";
 
 export type NavItem = {
   to: string;
@@ -134,19 +135,15 @@ function buildNavigationConfig(): NavGroup[] {
   },
   {
     label: "Administração",
-    caption: "Configurações Gerais",
+    caption: "Hub de Governança",
     roles: OPERATIONAL_MASTER_ROLES,
     isDropdown: true,
     items: [
-      { to: "/admin/estrutura-operacional", label: "Estrutura operacional", caption: "Grupos, localidades e filiais", roles: OPERATIONAL_MASTER_ROLES },
-      { to: "/admin/usuarios", label: "Usuários", caption: "Equipe e acessos", roles: ADMIN_ONLY_ROLES },
+      { to: "/admin", label: "Painel Admin", caption: "Hub de governança e abas", roles: ADMIN_ONLY_ROLES },
+      { to: "/admin/estrutura-operacional", label: "Estrutura operacional", caption: "Grupos e filiais", roles: OPERATIONAL_MASTER_ROLES },
       { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ADMIN_ONLY_ROLES },
-      { to: "/admin/ai-provider-credentials", label: "Credenciais IA", caption: "Chaves Gemini e Claude", roles: ADMIN_ONLY_ROLES },
-      { to: "/admin/bi", label: "BI", caption: "Indicadores e gráficos", roles: ADMIN_ONLY_ROLES },
-      { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ADMIN_ONLY_ROLES },
-      { to: "/admin/health", label: "Saúde do sistema", caption: "Diagnósticos e Logs", roles: ADMIN_ONLY_ROLES },
-      { to: "/importar", label: "Importação de CVs", caption: "Carga de arquivos", roles: JOB_MANAGEMENT_ROLES },
-      { to: "/importar-formulario", label: "Importação por form", caption: "Google Forms / Drive", roles: JOB_MANAGEMENT_ROLES },
+      { to: "/admin/bi", label: "BI", caption: "Indicadores e métricas", roles: ADMIN_ONLY_ROLES },
+      { to: "/importar", label: "Importação", caption: "Carga de candidatos", roles: JOB_MANAGEMENT_ROLES },
     ],
   },
   {
@@ -211,6 +208,7 @@ const ICON_MAP: Record<string, any> = {
   "/admin/bi": BarChart3,
   "/admin/health": Activity,
   "/admin/ai-provider-credentials": KeyRound,
+  "/admin/ia": FlaskConical,
   "/candidato/portal": User,
   "Novo portal do candidato": ExternalLink,
   "Protótipo do portal": ExternalLink,
@@ -279,6 +277,9 @@ export function AppShell() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantSessionHistory, setAssistantSessionHistory] = useState<
+    AiAssistantHistoryItem[]
+  >([]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -364,7 +365,11 @@ export function AppShell() {
       </div>
 
       {assistantOpen && (
-        <AiAssistantDrawer onClose={() => setAssistantOpen(false)} />
+        <AiAssistantDrawer
+          onClose={() => setAssistantOpen(false)}
+          sessionHistory={assistantSessionHistory}
+          onSessionHistoryChange={setAssistantSessionHistory}
+        />
       )}
     </div>
   );

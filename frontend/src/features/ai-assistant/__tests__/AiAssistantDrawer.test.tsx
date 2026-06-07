@@ -1,11 +1,12 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AiAssistantDrawer } from "../components/AiAssistantDrawer";
 import { aiAssistantService } from "../services/aiAssistantService";
-import type { AiAssistantResponse } from "../types";
+import type { AiAssistantHistoryItem, AiAssistantResponse } from "../types";
 
 const routerFuture = {
   v7_startTransition: true,
@@ -26,6 +27,29 @@ function renderDrawer(path = "/vagas/job-123") {
     </MemoryRouter>,
   );
   return { ...result, onClose };
+}
+
+function PersistentHistoryHarness({ path = "/vagas/job-123" }: { path?: string }) {
+  const [open, setOpen] = useState(true);
+  const [history, setHistory] = useState<AiAssistantHistoryItem[]>([]);
+
+  return (
+    <MemoryRouter initialEntries={[path]} future={routerFuture}>
+      <div>
+        <button type="button" onClick={() => setOpen(true)} data-testid="open-assistant">
+          abrir
+        </button>
+        {open ? (
+          <AiAssistantDrawer
+            onClose={() => setOpen(false)}
+            sessionHistory={history}
+            onSessionHistoryChange={setHistory}
+          />
+        ) : null}
+        <pre data-testid="history-json">{JSON.stringify(history)}</pre>
+      </div>
+    </MemoryRouter>
+  );
 }
 
 function makeResponse(overrides: Partial<AiAssistantResponse> = {}): AiAssistantResponse {
@@ -490,6 +514,187 @@ describe("AiAssistantDrawer", () => {
       await waitFor(() => screen.getByTestId("ai-assistant-result"));
       expect(screen.getByText(/Sim, o home office é permitido/)).toBeInTheDocument();
       expect(screen.getByText("Manual RH")).toBeInTheDocument();
+    });
+  });
+
+  describe("session history", () => {
+    it("shows the session history section with an empty state", () => {
+      renderDrawer();
+      expect(screen.getByTestId("ai-session-history")).toBeInTheDocument();
+      expect(screen.getByTestId("ai-session-history-empty")).toBeInTheDocument();
+    });
+
+    it("adds a successful action to history with label, time and summary", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+        makeResponse({ data: { title: "Dev Sênior" } }),
+      );
+      renderDrawer("/vagas/job-123");
+
+      await user.click(screen.getByTestId("ai-action-job.summary"));
+      await waitFor(() => screen.getByTestId("ai-assistant-result"));
+      await user.click(screen.getByTestId("ai-assistant-new-query"));
+
+      const history = screen.getByTestId("ai-session-history-list");
+      expect(history).toBeInTheDocument();
+      expect(within(history).getByText(/Resumo da vaga/)).toBeInTheDocument();
+      expect(within(history).getByText(/Dev Sênior/)).toBeInTheDocument();
+      expect(within(history).getByText(/\d{2}:\d{2}/)).toBeInTheDocument();
+    });
+
+    it("registers RAG queries in history", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+        makeResponse({
+          intent: "knowledge.search",
+          data: [{ source_title: "Manual RH", excerpt: "Trecho", score: 0.91 }],
+        }),
+      );
+      renderDrawer();
+
+      await user.type(screen.getByTestId("ai-knowledge-input"), "exportação Protheus");
+      await user.click(screen.getByTestId("ai-knowledge-search"));
+      await waitFor(() => screen.getByTestId("ai-assistant-result"));
+      await user.click(screen.getByTestId("ai-assistant-new-query"));
+
+      const history = screen.getByTestId("ai-session-history-list");
+      expect(within(history).getByText("Buscar fontes")).toBeInTheDocument();
+      expect(within(history).getByText("exportação Protheus")).toBeInTheDocument();
+    });
+
+    it("limits history to the latest five items", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query)
+        .mockResolvedValueOnce(makeResponse({ data: { title: "Item 1" } }))
+        .mockResolvedValueOnce(makeResponse({ data: { title: "Item 2" } }))
+        .mockResolvedValueOnce(makeResponse({ data: { title: "Item 3" } }))
+        .mockResolvedValueOnce(makeResponse({ data: { title: "Item 4" } }))
+        .mockResolvedValueOnce(makeResponse({ data: { title: "Item 5" } }))
+        .mockResolvedValueOnce(makeResponse({ data: { title: "Item 6" } }));
+      renderDrawer("/vagas/job-123");
+
+      for (let i = 0; i < 6; i += 1) {
+        await user.click(screen.getByTestId("ai-action-job.summary"));
+        await waitFor(() => screen.getByTestId("ai-assistant-result"));
+        await user.click(screen.getByTestId("ai-assistant-new-query"));
+      }
+
+      expect(screen.getAllByRole("button").filter((node) => node.dataset.testid?.startsWith("ai-session-history-item-"))).toHaveLength(5);
+      expect(screen.queryByText("Item 1")).not.toBeInTheDocument();
+      expect(screen.getByText("Item 6")).toBeInTheDocument();
+    });
+
+    it("reopens a history item without calling the API again", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+        makeResponse({ data: { title: "Snapshot salvo" } }),
+      );
+      renderDrawer("/vagas/job-123");
+
+      await user.click(screen.getByTestId("ai-action-job.summary"));
+      await waitFor(() => screen.getByTestId("ai-assistant-result"));
+      await user.click(screen.getByTestId("ai-assistant-new-query"));
+
+      expect(aiAssistantService.query).toHaveBeenCalledTimes(1);
+      await user.click(screen.getAllByRole("button").find((node) => node.dataset.testid?.startsWith("ai-session-history-item-"))!);
+
+      expect(aiAssistantService.query).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Snapshot salvo")).toBeInTheDocument();
+    });
+
+    it("clears history when requested", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query).mockResolvedValueOnce(makeResponse());
+      renderDrawer("/vagas/job-123");
+
+      await user.click(screen.getByTestId("ai-action-job.summary"));
+      await waitFor(() => screen.getByTestId("ai-assistant-result"));
+      await user.click(screen.getByTestId("ai-assistant-new-query"));
+      await user.click(screen.getByTestId("ai-session-history-clear"));
+
+      expect(screen.getByTestId("ai-session-history-empty")).toBeInTheDocument();
+    });
+
+    it("records thrown errors in history", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query).mockRejectedValueOnce(new Error("Erro de permissão"));
+      renderDrawer("/vagas/job-123");
+
+      await user.click(screen.getByTestId("ai-action-job.summary"));
+      await waitFor(() => screen.getByTestId("ai-assistant-error"));
+      await user.click(screen.getByTestId("ai-assistant-back"));
+
+      expect(screen.getByText("Erro de permissão")).toBeInTheDocument();
+      expect(screen.getByText(/erro/)).toBeInTheDocument();
+    });
+
+    it("stores sanitized results in history snapshots", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+        makeResponse({
+          data: {
+            title: "Resultado seguro",
+            content_hash: "hash-secreto",
+            vector_json: [1, 2, 3],
+            embedding: [0.1, 0.2],
+            embeddings: [[0.3, 0.4]],
+          },
+        }),
+      );
+      render(<PersistentHistoryHarness />);
+
+      await user.click(screen.getByTestId("ai-action-job.summary"));
+      await waitFor(() => screen.getByTestId("ai-assistant-result"));
+
+      const historyJson = screen.getByTestId("history-json").textContent ?? "";
+      expect(historyJson).toContain("Resultado seguro");
+      expect(historyJson).not.toContain("content_hash");
+      expect(historyJson).not.toContain("vector_json");
+      expect(historyJson).not.toContain("embedding");
+      expect(historyJson).not.toContain("embeddings");
+    });
+
+    it("keeps history after close and reopen while parent remains mounted", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+        makeResponse({ data: { title: "Persistido no shell" } }),
+      );
+      render(<PersistentHistoryHarness />);
+
+      await user.click(screen.getByTestId("ai-action-job.summary"));
+      await waitFor(() => screen.getByTestId("ai-assistant-result"));
+      await user.click(screen.getByTestId("ai-assistant-new-query"));
+      await user.click(screen.getByTestId("ai-assistant-close"));
+      await user.click(screen.getByTestId("open-assistant"));
+
+      expect(screen.getByText("Persistido no shell")).toBeInTheDocument();
+    });
+
+    it("does not use localStorage or sessionStorage while recording history", async () => {
+      const user = userEvent.setup();
+      const localSpy = vi.spyOn(Storage.prototype, "setItem");
+      vi.mocked(aiAssistantService.query).mockResolvedValueOnce(makeResponse());
+      renderDrawer("/vagas/job-123");
+
+      await user.click(screen.getByTestId("ai-action-job.summary"));
+      await waitFor(() => screen.getByTestId("ai-assistant-result"));
+
+      expect(localSpy).not.toHaveBeenCalled();
+      localSpy.mockRestore();
+    });
+
+    it("renders HTML-like text as plain text", async () => {
+      const user = userEvent.setup();
+      vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+        makeResponse({ data: { summary: "<strong>texto bruto</strong>" } }),
+      );
+      renderDrawer("/vagas/job-123");
+
+      await user.click(screen.getByTestId("ai-action-job.summary"));
+      await waitFor(() => screen.getByTestId("ai-assistant-result"));
+
+      expect(screen.getByText("<strong>texto bruto</strong>")).toBeInTheDocument();
+      expect(document.querySelector("strong")).not.toBeInTheDocument();
     });
   });
 

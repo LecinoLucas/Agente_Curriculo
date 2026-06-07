@@ -19,9 +19,12 @@ from src.ai_orchestration.assistant.assistant_router import AssistantRouter
 from src.ai_orchestration.core.agent_context import AgentContext
 from src.ai_orchestration.core.tool_execution_context import ToolExecutionContext
 from src.ai_orchestration.core.tool_runtime import ToolRuntime
+from src.ai_orchestration.rag.pgvector_support import is_pgvector_available
+from src.core.settings import settings
 from src.ai_orchestration.tools.registry import DEFAULT_REGISTRY
+from src.application.services.ai_usage_log_service import AIUsageService
 from src.domain.entities.user import User, UserRole
-from src.interface.api.dependencies import InternalUser, get_db
+from src.interface.api.dependencies import AdminOnly, InternalUser, get_db
 from src.interface.api.schemas.ai_assistant_schemas import (
     AiAssistantReadOnlyRequest,
     AiAssistantReadOnlyResponse,
@@ -30,6 +33,7 @@ from src.interface.api.schemas.ai_assistant_schemas import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai/assistant", tags=["ai-assistant"])
+status_router = APIRouter(prefix="/ai", tags=["ai-status"])
 
 # Mapa de role → permissões granulares reconhecidas pelas AI tools.
 # Segue a semântica do sistema: RECRUITER opera vagas/candidatos/pipeline;
@@ -107,8 +111,78 @@ def _build_services(db: AsyncSession) -> dict[str, Any]:
             embedding_provider=embedding_provider,
             document_repository=SQLAlchemyKnowledgeDocumentRepository(db),
         ),
-        "answer_service": RagAnswerService(),
+        "answer_service": RagAnswerService(usage_session=db),
     }
+
+
+def _gemini_api_key_configured() -> bool:
+    return any(
+        key.strip()
+        for key in (
+            settings.GOOGLE_API_KEY_1,
+            settings.GOOGLE_API_KEY_2,
+            settings.GOOGLE_API_KEY_3,
+            settings.GOOGLE_API_KEY_4,
+            settings.GOOGLE_API_KEY_5,
+        )
+    )
+
+
+@status_router.get("/status")
+async def ai_status(
+    _current_user: AdminOnly,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Retorna status read-only das features IA sem expor secrets."""
+    pgvector_available = await is_pgvector_available(db)
+    vector_storage_mode = "pgvector" if pgvector_available else "json_fallback"
+    warnings: list[str] = []
+
+    if not pgvector_available:
+        warnings.append("pgvector_not_available")
+    if settings.RAG_SYNTHESIS_ENABLED and not _gemini_api_key_configured():
+        warnings.append("gemini_api_key_not_configured")
+
+    return {
+        "ok": True,
+        "environment": settings.APP_ENV,
+        "assistant": {
+            "enabled": True,
+            "read_only": True,
+            "free_text_enabled": False,
+        },
+        "rag": {
+            "embedding_provider": settings.RAG_EMBEDDING_PROVIDER,
+            "gemini_embedding_enabled": settings.RAG_GEMINI_EMBEDDING_ENABLED,
+            "embedding_model": settings.RAG_GEMINI_EMBEDDING_MODEL,
+            "synthesis_enabled": settings.RAG_SYNTHESIS_ENABLED,
+            "synthesis_provider": settings.RAG_SYNTHESIS_PROVIDER,
+            "synthesis_model": settings.RAG_GEMINI_SYNTHESIS_MODEL,
+            "vector_storage_mode": vector_storage_mode,
+            "pgvector_available": pgvector_available,
+        },
+        "providers": {
+            "provider": settings.AI_PROVIDER,
+            "model": settings.AI_MODEL_ID,
+            "gemini_api_key_configured": _gemini_api_key_configured(),
+        },
+        "protheus": {
+            "real_send_enabled": settings.PROTHEUS_REAL_SEND_ENABLED,
+            "erp_allow_real_send": settings.ERP_ALLOW_REAL_SEND,
+        },
+        "warnings": warnings,
+    }
+
+
+@status_router.get("/usage/summary")
+async def ai_usage_summary(
+    _current_user: AdminOnly,
+    period: str = "today",
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Retorna consumo agregado de IA sem prompts, respostas ou secrets."""
+    normalized_period = period if period in {"today", "7d", "30d"} else "today"
+    return await AIUsageService(db).get_usage_summary(normalized_period)  # type: ignore[arg-type]
 
 
 @router.post("/read-only", response_model=AiAssistantReadOnlyResponse)

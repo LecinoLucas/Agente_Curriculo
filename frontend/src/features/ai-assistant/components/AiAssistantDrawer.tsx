@@ -1,19 +1,24 @@
 import { useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
-  BrainCircuit,
-  X,
-  ChevronLeft,
-  LoaderCircle,
   AlertCircle,
+  BrainCircuit,
+  ChevronLeft,
+  History,
+  LoaderCircle,
+  MessageSquare,
   RotateCcw,
   Search,
-  MessageSquare,
+  Trash2,
+  X,
 } from "lucide-react";
 import { aiAssistantService } from "../services/aiAssistantService";
-import type { AiAssistantResponse, QuickAction } from "../types";
-
-// ── Sensitive keys never rendered in the UI ──────────────────────────────────
+import type {
+  AiAssistantHistoryItem,
+  AiAssistantHistoryKind,
+  AiAssistantResponse,
+  QuickAction,
+} from "../types";
 
 const SENSITIVE_KEYS = new Set([
   "vector_json",
@@ -23,9 +28,29 @@ const SENSITIVE_KEYS = new Set([
   "payload_json",
   "review_notes",
   "internal_notes",
+  "stack",
+  "stack_trace",
+  "api_key",
 ]);
 
+const HISTORY_LIMIT = 5;
+
+function sanitizeText(value: string): string {
+  if (!value) return value;
+
+  const looksLikeTrace =
+    value.includes("Traceback (most recent call last)") ||
+    /(?:^|\n)\s*at\s+\S+/m.test(value) ||
+    /File ".*", line \d+/m.test(value);
+  if (looksLikeTrace) return "Detalhes técnicos internos foram ocultados.";
+
+  return value
+    .replace(/\bAIza[0-9A-Za-z\-_]{20,}\b/g, "[redacted-api-key]")
+    .replace(/\bsk-[0-9A-Za-z]{20,}\b/g, "[redacted-api-key]");
+}
+
 function filterSensitive(value: unknown): unknown {
+  if (typeof value === "string") return sanitizeText(value);
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(filterSensitive);
   const filtered: Record<string, unknown> = {};
@@ -33,6 +58,15 @@ function filterSensitive(value: unknown): unknown {
     if (!SENSITIVE_KEYS.has(k)) filtered[k] = filterSensitive(v);
   }
   return filtered;
+}
+
+function sanitizeResponse(response: AiAssistantResponse): AiAssistantResponse {
+  return {
+    ...response,
+    data: filterSensitive(response.data),
+    message: response.message ? sanitizeText(response.message) : response.message,
+    warnings: response.warnings.map(sanitizeText),
+  };
 }
 
 function isEmptyObject(value: unknown): boolean {
@@ -43,8 +77,6 @@ function isEmptyObject(value: unknown): boolean {
     Object.keys(value as object).length === 0
   );
 }
-
-// ── Error and warning message maps ───────────────────────────────────────────
 
 const ERROR_MESSAGES: Record<string, string> = {
   PERMISSION_DENIED: "Você não tem permissão para usar esta consulta.",
@@ -63,14 +95,12 @@ const WARNING_MESSAGES: Record<string, string> = {
 
 function friendlyError(errorCode: string | null, message: string | null): string {
   if (errorCode && errorCode in ERROR_MESSAGES) return ERROR_MESSAGES[errorCode];
-  return message ?? errorCode ?? "Erro desconhecido.";
+  return message ? sanitizeText(message) : errorCode ?? "Erro desconhecido.";
 }
 
 function friendlyWarning(code: string): string {
   return WARNING_MESSAGES[code] ?? code;
 }
-
-// ── Quick actions ─────────────────────────────────────────────────────────────
 
 const QUICK_ACTIONS: QuickAction[] = [
   {
@@ -124,8 +154,6 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
 ];
 
-// ── URL param extraction ──────────────────────────────────────────────────────
-
 function extractParams(pathname: string, search: string): Record<string, string> {
   const params: Record<string, string> = {};
 
@@ -144,8 +172,6 @@ function extractParams(pathname: string, search: string): Record<string, string>
 
   return params;
 }
-
-// ── Response data renderer ────────────────────────────────────────────────────
 
 const LABEL_MAP: Record<string, string> = {
   title: "Título",
@@ -172,7 +198,6 @@ const LABEL_MAP: Record<string, string> = {
   score: "Relevância",
 };
 
-// Keys that are internal identifiers — shown only as truncated to avoid clutter
 const ID_KEYS = new Set(["job_id", "candidate_id", "admission_id", "chunk_id", "document_id", "id"]);
 
 function formatLabel(key: string): string {
@@ -186,9 +211,7 @@ function formatValue(value: unknown): string {
   if (typeof value === "string") return value || "—";
   if (Array.isArray(value)) {
     if (value.length === 0) return "Nenhum";
-    if (value.every((v) => typeof v !== "object" || v === null)) {
-      return value.join(", ");
-    }
+    if (value.every((v) => typeof v !== "object" || v === null)) return value.join(", ");
   }
   return JSON.stringify(value);
 }
@@ -254,25 +277,137 @@ function DataNode({ value, depth = 0 }: { value: unknown; depth?: number }) {
   return <span className="break-words text-sm text-text">{formatValue(value)}</span>;
 }
 
-// ── Main drawer ───────────────────────────────────────────────────────────────
-
 type DrawerStatus = "idle" | "loading" | "result" | "error";
+
+function normalizeErrorMessage(err: unknown): string {
+  const msg =
+    err instanceof Error ? err.message : "Não foi possível processar a solicitação.";
+  return sanitizeText(msg);
+}
+
+function formatShortTime(date = new Date()): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function truncateText(value: string, maxLength = 80): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function classifyIntent(intent: string): AiAssistantHistoryKind {
+  if (intent.startsWith("job.") || intent.startsWith("pipeline.")) return "vaga";
+  if (intent.startsWith("candidate.")) return "candidato";
+  if (intent.startsWith("admission.")) return "admissao";
+  if (intent.startsWith("knowledge.")) return "conhecimento";
+  return "geral";
+}
+
+function summarizeData(data: unknown): string {
+  if (data == null) return "Sem dados para exibir.";
+  if (typeof data === "string") return truncateText(data);
+  if (typeof data === "number" || typeof data === "boolean") return String(data);
+  if (Array.isArray(data)) {
+    if (data.length === 0) return "Nenhum resultado.";
+    const first = data[0];
+    if (first && typeof first === "object") {
+      const sourceTitle = (first as Record<string, unknown>).source_title;
+      if (typeof sourceTitle === "string" && sourceTitle.trim()) {
+        return truncateText(`${data.length} fonte(s). Primeira: ${sourceTitle}`);
+      }
+    }
+    return `${data.length} resultado(s).`;
+  }
+  if (typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    const answer = record.answer;
+    if (typeof answer === "string" && answer.trim()) return truncateText(answer);
+    const summary = record.summary;
+    if (typeof summary === "string" && summary.trim()) return truncateText(summary);
+    const message = record.message;
+    if (typeof message === "string" && message.trim()) return truncateText(message);
+    const title = record.title ?? record.source_title ?? record.name;
+    if (typeof title === "string" && title.trim()) return truncateText(title);
+    const total = record.total ?? record.count;
+    if (typeof total === "number") return `${total} resultado(s).`;
+    return "Resultado disponível.";
+  }
+  return "Resultado disponível.";
+}
+
+function buildHistorySummary(
+  response: AiAssistantResponse | null,
+  errorMessage: string | null,
+): { status: "success" | "error"; summary: string } {
+  if (errorMessage) return { status: "error", summary: truncateText(errorMessage) };
+  if (!response) return { status: "error", summary: "Resultado indisponível." };
+  if (!response.ok) {
+    return {
+      status: "error",
+      summary: truncateText(friendlyError(response.error_code, response.message)),
+    };
+  }
+  return { status: "success", summary: summarizeData(response.data) };
+}
+
+function buildHistoryItem(params: {
+  action: QuickAction;
+  query?: string | null;
+  response?: AiAssistantResponse | null;
+  errorMessage?: string | null;
+}): AiAssistantHistoryItem {
+  const response = params.response ? sanitizeResponse(params.response) : null;
+  const errorMessage = params.errorMessage ? sanitizeText(params.errorMessage) : null;
+  const { status, summary } = buildHistorySummary(response, errorMessage);
+
+  return {
+    id: crypto.randomUUID(),
+    label: params.action.label,
+    intent: params.action.intent,
+    kind: classifyIntent(params.action.intent),
+    status,
+    timestamp: formatShortTime(),
+    query: params.query?.trim() ? params.query.trim() : null,
+    summary,
+    result: response,
+    errorMessage,
+  };
+}
 
 export type AiAssistantDrawerProps = {
   onClose: () => void;
+  sessionHistory?: AiAssistantHistoryItem[];
+  onSessionHistoryChange?: (items: AiAssistantHistoryItem[]) => void;
 };
 
-export function AiAssistantDrawer({ onClose }: AiAssistantDrawerProps) {
+export function AiAssistantDrawer({
+  onClose,
+  sessionHistory,
+  onSessionHistoryChange,
+}: AiAssistantDrawerProps) {
   const { pathname, search } = useLocation();
-  // Stable UUID for the lifetime of this drawer mount — not useId() which gives :r0:
   const sessionId = useRef(crypto.randomUUID()).current;
-
   const [status, setStatus] = useState<DrawerStatus>("idle");
   const [activeAction, setActiveAction] = useState<QuickAction | null>(null);
   const [result, setResult] = useState<AiAssistantResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [localSessionHistory, setLocalSessionHistory] = useState<AiAssistantHistoryItem[]>([]);
 
   const pageParams = extractParams(pathname, search);
+  const history = sessionHistory ?? localSessionHistory;
+
+  const setHistory = (updater: (current: AiAssistantHistoryItem[]) => AiAssistantHistoryItem[]) => {
+    const next = updater(history);
+    if (onSessionHistoryChange) onSessionHistoryChange(next);
+    else setLocalSessionHistory(next);
+  };
+
+  const pushHistory = (item: AiAssistantHistoryItem) => {
+    setHistory((current) => [item, ...current].slice(0, HISTORY_LIMIT));
+  };
 
   const availableActions = QUICK_ACTIONS.filter(
     (action) => action.buildArgs(pageParams) !== null,
@@ -288,18 +423,21 @@ export function AiAssistantDrawer({ onClose }: AiAssistantDrawerProps) {
     setErrorMessage(null);
 
     try {
-      const response = await aiAssistantService.query({
-        intent: action.intent,
-        arguments: args,
-        session_id: sessionId,
-      });
+      const response = sanitizeResponse(
+        await aiAssistantService.query({
+          intent: action.intent,
+          arguments: args,
+          session_id: sessionId,
+        }),
+      );
       setResult(response);
       setStatus("result");
+      pushHistory(buildHistoryItem({ action, response }));
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Não foi possível processar a solicitação.";
+      const msg = normalizeErrorMessage(err);
       setErrorMessage(msg);
       setStatus("error");
+      pushHistory(buildHistoryItem({ action, errorMessage: msg }));
     }
   };
 
@@ -307,31 +445,54 @@ export function AiAssistantDrawer({ onClose }: AiAssistantDrawerProps) {
     intent: "knowledge.search" | "knowledge.answer",
     query: string,
   ) => {
-    setActiveAction({
+    const normalizedQuery = query.trim();
+    const action = {
       id: intent,
-      label: intent === "knowledge.search" ? "Busca na base" : "Resposta da base",
-      description: query,
+      label: intent === "knowledge.search" ? "Buscar fontes" : "Responder",
+      description: normalizedQuery,
       intent,
-      buildArgs: () => ({ query, limit: 5 }),
-    });
+      buildArgs: () => ({ query: normalizedQuery, limit: 5 }),
+    } satisfies QuickAction;
+
+    setActiveAction(action);
     setStatus("loading");
     setResult(null);
     setErrorMessage(null);
 
     try {
-      const response = await aiAssistantService.query({
-        intent,
-        arguments: { query, limit: 5 },
-        session_id: sessionId,
-      });
+      const response = sanitizeResponse(
+        await aiAssistantService.query({
+          intent,
+          arguments: { query: normalizedQuery, limit: 5 },
+          session_id: sessionId,
+        }),
+      );
       setResult(response);
       setStatus("result");
+      pushHistory(buildHistoryItem({ action, query: normalizedQuery, response }));
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Não foi possível processar a solicitação.";
+      const msg = normalizeErrorMessage(err);
       setErrorMessage(msg);
       setStatus("error");
+      pushHistory(buildHistoryItem({ action, query: normalizedQuery, errorMessage: msg }));
     }
+  };
+
+  const handleHistoryOpen = (item: AiAssistantHistoryItem) => {
+    setActiveAction({
+      id: item.id,
+      label: item.label,
+      description: item.query ?? item.summary,
+      intent: item.intent,
+      buildArgs: () => null,
+    });
+    setResult(item.result);
+    setErrorMessage(item.errorMessage);
+    setStatus(item.status === "error" && !item.result ? "error" : "result");
+  };
+
+  const handleClearHistory = () => {
+    setHistory(() => []);
   };
 
   const handleBack = () => {
@@ -356,7 +517,6 @@ export function AiAssistantDrawer({ onClose }: AiAssistantDrawerProps) {
         className="fixed inset-y-0 right-0 z-50 flex w-[380px] max-w-[calc(100vw-16px)] flex-col overflow-hidden bg-surface shadow-xl"
         data-testid="ai-assistant-drawer"
       >
-        {/* Header */}
         <div className="flex items-center gap-3 border-b border-border p-4">
           {status !== "idle" ? (
             <button
@@ -402,7 +562,6 @@ export function AiAssistantDrawer({ onClose }: AiAssistantDrawerProps) {
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto p-4">
           {status === "idle" && (
             <div className="space-y-6">
@@ -415,6 +574,14 @@ export function AiAssistantDrawer({ onClose }: AiAssistantDrawerProps) {
 
               <div className="border-t border-border pt-6">
                 <KnowledgeSection onAction={handleKnowledgeAction} />
+              </div>
+
+              <div className="border-t border-border pt-6">
+                <SessionHistorySection
+                  history={history}
+                  onOpen={handleHistoryOpen}
+                  onClear={handleClearHistory}
+                />
               </div>
             </div>
           )}
@@ -456,8 +623,6 @@ export function AiAssistantDrawer({ onClose }: AiAssistantDrawerProps) {
     </>
   );
 }
-
-// ── Sub-components ────────────────────────────────────────────────────────────
 
 function ActionList({
   actions,
@@ -557,6 +722,86 @@ function KnowledgeSection({
   );
 }
 
+function SessionHistorySection({
+  history,
+  onOpen,
+  onClear,
+}: {
+  history: AiAssistantHistoryItem[];
+  onOpen: (item: AiAssistantHistoryItem) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-3" data-testid="ai-session-history">
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted">
+            Histórico da sessão
+          </h3>
+          <p className="mt-1 text-xs text-text-muted">
+            Últimas consultas desta sessão. Reabrir não faz nova chamada.
+          </p>
+        </div>
+        {history.length > 0 && (
+          <button
+            type="button"
+            onClick={onClear}
+            data-testid="ai-session-history-clear"
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Limpar
+          </button>
+        )}
+      </div>
+
+      {history.length === 0 ? (
+        <div
+          className="flex items-center gap-3 rounded-lg border border-dashed border-border/70 bg-[hsl(var(--bg))]/40 p-3"
+          data-testid="ai-session-history-empty"
+        >
+          <History className="h-4 w-4 text-text-muted/60" />
+          <p className="text-xs text-text-muted">Nenhuma ação nesta sessão.</p>
+        </div>
+      ) : (
+        <ul className="space-y-2" data-testid="ai-session-history-list">
+          {history.map((item) => {
+            const tone =
+              item.status === "error"
+                ? "border-danger/20 bg-danger/5"
+                : "border-border/70 bg-[hsl(var(--bg))]/60";
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(item)}
+                  data-testid={`ai-session-history-item-${item.id}`}
+                  className={`w-full rounded-lg border p-3 text-left transition-colors hover:bg-surface-muted ${tone}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-text">
+                        {item.label} <span className="text-text-muted">— {item.timestamp}</span>
+                      </p>
+                      <p className="mt-0.5 text-xs uppercase tracking-wide text-text-muted">
+                        {item.kind} · {item.status === "error" ? "erro" : "sucesso"}
+                      </p>
+                    </div>
+                  </div>
+                  {item.query && (
+                    <p className="mt-2 line-clamp-1 text-xs text-text-muted">{item.query}</p>
+                  )}
+                  <p className="mt-1 line-clamp-2 text-sm text-text">{item.summary}</p>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ResultView({
   result,
   onNewQuery,
@@ -564,8 +809,7 @@ function ResultView({
   result: AiAssistantResponse;
   onNewQuery: () => void;
 }) {
-  const safeData = filterSensitive(result.data);
-  const hasData = safeData != null && !isEmptyObject(safeData);
+  const hasData = result.data != null && !isEmptyObject(result.data);
 
   return (
     <div className="space-y-4" data-testid="ai-assistant-result">
@@ -580,14 +824,12 @@ function ResultView({
 
       {result.ok && hasData && (
         <div className="rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
-          <DataNode value={safeData} />
+          <DataNode value={result.data} />
         </div>
       )}
 
       {result.ok && !hasData && (
-        <p className="text-sm text-text-muted">
-          {result.message ?? "Sem dados para exibir."}
-        </p>
+        <p className="text-sm text-text-muted">{result.message ?? "Sem dados para exibir."}</p>
       )}
 
       {result.warnings.length > 0 && (

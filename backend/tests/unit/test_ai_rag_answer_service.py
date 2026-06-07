@@ -23,6 +23,18 @@ def _make_chunk(content: str, metadata: dict | None = None) -> KnowledgeChunk:
     )
 
 
+class _UsageSession:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+        self.flushed = False
+
+    def add(self, row: object) -> None:
+        self.added.append(row)
+
+    async def flush(self) -> None:
+        self.flushed = True
+
+
 @pytest.mark.asyncio
 class TestRagAnswerService:
     async def test_synthesis_disabled_by_flag(self) -> None:
@@ -144,3 +156,33 @@ class TestRagAnswerService:
             assert result.ok is True
             assert "123.456.789-00" not in result.answer
             assert "[cpf_removido]" in result.answer
+
+    async def test_records_rag_synthesis_usage_without_prompt_or_answer(self) -> None:
+        """AI-USAGE-1: registra usage da síntese sem persistir prompt/resposta."""
+        with patch("src.core.settings.settings.RAG_SYNTHESIS_ENABLED", True):
+            mock_provider = AsyncMock()
+            mock_provider.generate_response.return_value = "Resposta segura."
+            mock_provider.provider_name = "mock"
+            mock_provider.model_name = "m1"
+            usage_session = _UsageSession()
+
+            service = RagAnswerService(
+                synthesis_provider=mock_provider,
+                usage_session=usage_session,  # type: ignore[arg-type]
+            )
+            req = RagAnswerRequest(query="Q", retrieved_chunks=[_make_chunk("A")])
+
+            result = await service.synthesize_answer(req)
+
+            assert result.ok is True
+            assert usage_session.flushed is True
+            assert len(usage_session.added) == 1
+            row = usage_session.added[0]
+            assert row.provider == "mock"
+            assert row.model == "m1"
+            assert row.operation == "rag_synthesis"
+            assert row.input_tokens == 0
+            assert row.output_tokens == 0
+            assert row.status == "success"
+            assert not hasattr(row, "prompt")
+            assert not hasattr(row, "answer")
