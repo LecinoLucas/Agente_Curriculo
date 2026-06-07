@@ -63,6 +63,7 @@ export type AiAssistantContextAction =
       description: string;
       intent: string;
       arguments: Record<string, unknown>;
+      section?: "actions" | "suggestions";
     }
   | {
       id: string;
@@ -72,6 +73,7 @@ export type AiAssistantContextAction =
       intent: "knowledge.search" | "knowledge.answer";
       query: string;
       arguments: Record<string, unknown>;
+      section?: "actions" | "suggestions";
     }
   | {
       id: string;
@@ -79,6 +81,7 @@ export type AiAssistantContextAction =
       label: string;
       description: string;
       href: string;
+      section?: "actions" | "suggestions";
     };
 
 export type AiAssistantPageContext = {
@@ -92,4 +95,5 @@ export type AiAssistantPageContext = {
   emptyTitle: string;
   emptyDescription: string;
   availableActions: AiAssistantContextAction[];
+  suggestedActions: AiAssistantContextAction[];
 };

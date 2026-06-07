@@ -15,6 +15,7 @@ function buildKnowledgeAction(
   label: string,
   description: string,
   query: string,
+  section: "actions" | "suggestions" = "actions",
 ): AiAssistantContextAction {
   return {
     id,
@@ -24,6 +25,7 @@ function buildKnowledgeAction(
     intent: "knowledge.search",
     query,
     arguments: { query, limit: 5 },
+    section,
   };
 }
 
@@ -33,6 +35,7 @@ function buildAssistantAction(
   description: string,
   intent: string,
   args: Record<string, unknown> | null,
+  section: "actions" | "suggestions" = "actions",
 ): AiAssistantContextAction | null {
   if (!args) return null;
   return {
@@ -42,6 +45,24 @@ function buildAssistantAction(
     description,
     intent,
     arguments: args,
+    section,
+  };
+}
+
+function buildNavigationAction(
+  id: string,
+  label: string,
+  description: string,
+  href: string,
+  section: "actions" | "suggestions" = "actions",
+): AiAssistantContextAction {
+  return {
+    id,
+    kind: "navigation",
+    label,
+    description,
+    href,
+    section,
   };
 }
 
@@ -90,6 +111,22 @@ function buildJobContext(pathname: string, params: RouteParams): AiAssistantPage
       emptyTitle: "Não identifiquei a vaga atual",
       emptyDescription: "Abra uma vaga específica para usar ações contextuais.",
       availableActions: [],
+      suggestedActions: [
+        buildKnowledgeAction(
+          "suggestion.generic.pre_admission_rules",
+          "Consultar regras de pré-admissão",
+          "Veja quais documentos precisam estar aprovados antes do avanço admissional.",
+          "Quais documentos precisam estar aprovados na pré-admissão?",
+          "suggestions",
+        ),
+        buildKnowledgeAction(
+          "suggestion.generic.anti_discrimination",
+          "Consultar política antidiscriminatória",
+          "Revise critérios que não devem ser usados em vagas e avaliações.",
+          "Quais critérios não podem ser usados em uma vaga?",
+          "suggestions",
+        ),
+      ],
     };
   }
 
@@ -132,6 +169,38 @@ function buildJobContext(pathname: string, params: RouteParams): AiAssistantPage
         "regras internas de qualidade de vaga requisitos publicacao pendencias",
       ),
     ]),
+    suggestedActions: compactActions([
+      buildKnowledgeAction(
+        "suggestion.job.structured_job",
+        "Essa vaga está bem estruturada?",
+        "Consulte critérios para uma descrição de vaga clara, objetiva e útil para triagem.",
+        "Quais critérios tornam uma vaga bem estruturada e objetiva?",
+        "suggestions",
+      ),
+      buildAssistantAction(
+        "suggestion.job.requirements",
+        "Ver requisitos da vaga",
+        "Abra rapidamente os requisitos atuais cadastrados para esta vaga.",
+        "job.requirements",
+        { job_id: params.jobId },
+        "suggestions",
+      ),
+      buildAssistantAction(
+        "suggestion.job.pipeline",
+        "Ver visão da pipeline",
+        "Consulte o volume por etapa para esta vaga sem executar nenhuma ação operacional.",
+        "pipeline.overview",
+        { job_id: params.jobId },
+        "suggestions",
+      ),
+      buildKnowledgeAction(
+        "suggestion.job.anti_discrimination",
+        "Quais cuidados antidiscriminatórios devo observar?",
+        "Revise critérios que não devem aparecer em vagas ou filtros de triagem.",
+        "Quais critérios não podem ser usados em uma vaga?",
+        "suggestions",
+      ),
+    ]),
   };
 }
 
@@ -146,6 +215,15 @@ function buildCandidateContext(pathname: string, params: RouteParams): AiAssista
       emptyTitle: "Não identifiquei o candidato atual",
       emptyDescription: "Abra um perfil de candidato para usar ações contextuais.",
       availableActions: [],
+      suggestedActions: [
+        buildKnowledgeAction(
+          "suggestion.generic.fair_evaluation",
+          "Como avaliar sem viés?",
+          "Consulte orientações de avaliação justa usando apenas a base de conhecimento.",
+          "Quais critérios devem ser evitados na avaliação de candidatos?",
+          "suggestions",
+        ),
+      ],
     };
   }
 
@@ -181,6 +259,31 @@ function buildCandidateContext(pathname: string, params: RouteParams): AiAssista
         "regras de avaliacao justa triagem antidiscriminatoria candidatos",
       ),
     ]),
+    suggestedActions: compactActions([
+      buildAssistantAction(
+        "suggestion.candidate.summary",
+        "Resumo seguro do candidato",
+        "Veja um resumo do perfil com foco informativo e sem ações de escrita.",
+        "candidate.summary",
+        { candidate_id: params.candidateId },
+        "suggestions",
+      ),
+      buildAssistantAction(
+        "suggestion.candidate.active_pipeline",
+        "Ver pipeline ativa",
+        "Consulte a análise resumida do currículo e o contexto ativo já disponível.",
+        "candidate.resume_analysis",
+        { candidate_id: params.candidateId },
+        "suggestions",
+      ),
+      buildKnowledgeAction(
+        "suggestion.candidate.bias",
+        "Como avaliar sem viés?",
+        "Consulte critérios que devem ser evitados na avaliação de candidatos.",
+        "Quais critérios devem ser evitados na avaliação de candidatos?",
+        "suggestions",
+      ),
+    ]),
   };
 }
 
@@ -195,6 +298,22 @@ function buildAdmissionContext(pathname: string, params: RouteParams): AiAssista
       emptyTitle: "Não identifiquei o caso admissional atual",
       emptyDescription: "Abra um caso admissional específico para usar ações contextuais.",
       availableActions: [],
+      suggestedActions: [
+        buildKnowledgeAction(
+          "suggestion.generic.protheus_rules",
+          "Consultar regras de Protheus",
+          "Veja quando uma admissão pode ser exportada com segurança.",
+          "Quando posso exportar uma admissão para o Protheus?",
+          "suggestions",
+        ),
+        buildKnowledgeAction(
+          "suggestion.generic.pre_admission_rules",
+          "Consultar regras de pré-admissão",
+          "Veja quais documentos precisam estar aprovados antes do avanço admissional.",
+          "Quais documentos precisam estar aprovados na pré-admissão?",
+          "suggestions",
+        ),
+      ],
     };
   }
 
@@ -244,6 +363,39 @@ function buildAdmissionContext(pathname: string, params: RouteParams): AiAssista
         "regras de pre-admissao documentos obrigatorios checklist exportacao protheus",
       ),
     ]),
+    suggestedActions: compactActions([
+      buildAssistantAction(
+        "suggestion.admission.export_readiness",
+        "O que falta para exportar?",
+        "Veja um resumo do caso para identificar pendências sem disparar exportação real.",
+        "admission.case_summary",
+        { admission_case_id: params.admissionCaseId },
+        "suggestions",
+      ),
+      buildAssistantAction(
+        "suggestion.admission.documents",
+        "Ver status dos documentos",
+        "Confirme pendências documentais antes de qualquer decisão operacional.",
+        "admission.documents_status",
+        { admission_case_id: params.admissionCaseId },
+        "suggestions",
+      ),
+      buildKnowledgeAction(
+        "suggestion.admission.pre_admission_rules",
+        "Quais regras de pré-admissão se aplicam?",
+        "Consulte a base de conhecimento para entender as travas e exigências do processo.",
+        "Quais documentos precisam estar aprovados na pré-admissão?",
+        "suggestions",
+      ),
+      buildAssistantAction(
+        "suggestion.admission.protheus_status",
+        "Status Protheus",
+        "Consulte apenas o status do pacote quando houver package_id válido na rota.",
+        "protheus.export_status",
+        params.packageId ? { package_id: params.packageId } : null,
+        "suggestions",
+      ),
+    ]),
   };
 }
 
@@ -257,25 +409,53 @@ function buildAdminContext(pathname: string): AiAssistantPageContext {
     emptyTitle: "",
     emptyDescription: "",
     availableActions: [
-      {
-        id: "nav.admin.ia",
-        kind: "navigation",
-        label: "Abrir Laboratório IA",
-        description: "Ver status do provider, limites e governança em Administração.",
-        href: "/admin/ia",
-      },
-      {
-        id: "nav.admin.health",
-        kind: "navigation",
-        label: "Abrir Saúde do sistema",
-        description: "Consultar saúde técnica, filas e indicadores disponíveis para IA.",
-        href: "/admin/health",
-      },
+      buildNavigationAction(
+        "nav.admin.ia",
+        "Abrir Laboratório IA",
+        "Ver status do provider, limites e governança em Administração.",
+        "/admin/ia",
+      ),
+      buildNavigationAction(
+        "nav.admin.health",
+        "Abrir Saúde do sistema",
+        "Consultar saúde técnica, filas e indicadores disponíveis para IA.",
+        "/admin/health",
+      ),
       buildKnowledgeAction(
         "knowledge.assistant_policy",
         "Buscar política de uso do assistente",
         "Consulte documentação interna sobre uso seguro, limites e governança do assistente.",
         "politica de uso do assistente interno ia governanca limites",
+      ),
+    ],
+    suggestedActions: [
+      buildKnowledgeAction(
+        "suggestion.admin.assistant_policy",
+        "Ver política de uso do assistente",
+        "Consulte se o assistente pode executar ações automaticamente e quais são seus limites.",
+        "O assistente pode executar ações automaticamente?",
+        "suggestions",
+      ),
+      buildKnowledgeAction(
+        "suggestion.admin.safe_ai_rules",
+        "Quais cuidados de IA devo observar?",
+        "Revise regras de uso seguro, governança e limites do assistente.",
+        "Quais são as regras de uso seguro do assistente IA?",
+        "suggestions",
+      ),
+      buildNavigationAction(
+        "suggestion.admin.lab",
+        "Abrir Laboratório IA",
+        "Abra a área segura de testes e diagnósticos do assistente.",
+        "/admin/ia",
+        "suggestions",
+      ),
+      buildNavigationAction(
+        "suggestion.admin.credentials",
+        "Abrir Credenciais IA",
+        "Abra a tela administrativa para gerenciar chaves sem expor segredos já salvos.",
+        "/admin/ai-provider-credentials",
+        "suggestions",
       ),
     ],
   };
@@ -296,6 +476,22 @@ function buildKnowledgeContext(pathname: string): AiAssistantPageContext {
         "Buscar regras sobre indexação e uso",
         "Consulte orientações sobre alimentação da base de conhecimento e limitações do RAG.",
         "base de conhecimento indexacao ingestao documentos limitacoes rag",
+      ),
+    ],
+    suggestedActions: [
+      buildKnowledgeAction(
+        "suggestion.knowledge.pre_admission_rules",
+        "Consultar regras de pré-admissão",
+        "Veja quais documentos precisam estar aprovados na pré-admissão.",
+        "Quais documentos precisam estar aprovados na pré-admissão?",
+        "suggestions",
+      ),
+      buildKnowledgeAction(
+        "suggestion.knowledge.protheus_rules",
+        "Consultar regras de Protheus",
+        "Consulte quando uma admissão pode seguir para exportação.",
+        "Quando posso exportar uma admissão para o Protheus?",
+        "suggestions",
       ),
     ],
   };
@@ -339,9 +535,32 @@ export function deriveAiAssistantPageContext(
     title: "Assistente IA",
     subtitle: "Ações recomendadas para esta tela",
     guidance: "Abra uma vaga, candidato ou caso admissional para ver ações contextuais. Você também pode consultar a Base de Conhecimento.",
-    emptyTitle: "Nenhuma ação contextual disponível",
+    emptyTitle: "Não encontrei uma vaga, candidato ou admissão nesta tela.",
     emptyDescription:
-      "Abra uma vaga, candidato ou caso admissional para ver ações contextuais. Você também pode consultar a Base de Conhecimento.",
+      "Você ainda pode consultar a Base de Conhecimento.",
     availableActions: [],
+    suggestedActions: [
+      buildKnowledgeAction(
+        "suggestion.generic.pre_admission_rules",
+        "Consultar regras de pré-admissão",
+        "Veja quais documentos precisam estar aprovados na pré-admissão.",
+        "Quais documentos precisam estar aprovados na pré-admissão?",
+        "suggestions",
+      ),
+      buildKnowledgeAction(
+        "suggestion.generic.protheus_rules",
+        "Consultar regras de Protheus",
+        "Consulte quando uma admissão pode seguir para exportação.",
+        "Quando posso exportar uma admissão para o Protheus?",
+        "suggestions",
+      ),
+      buildKnowledgeAction(
+        "suggestion.generic.anti_discrimination",
+        "Consultar política antidiscriminatória",
+        "Revise critérios que não podem ser usados em vagas e triagens.",
+        "Quais critérios não podem ser usados em uma vaga?",
+        "suggestions",
+      ),
+    ],
   };
 }

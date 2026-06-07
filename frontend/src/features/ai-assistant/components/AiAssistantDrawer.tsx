@@ -4,9 +4,11 @@ import {
   AlertCircle,
   BrainCircuit,
   ChevronLeft,
+  Compass,
   History,
   LoaderCircle,
   MessageSquare,
+  PanelTop,
   RotateCcw,
   Search,
   Trash2,
@@ -100,6 +102,7 @@ export function AiAssistantDrawer({
 
   const pageContext = deriveAiAssistantPageContext(pathname, search);
   const history = sessionHistory ?? localSessionHistory;
+  const hasContextualActions = pageContext.availableActions.length > 0;
 
   const setHistory = (updater: (current: AiAssistantHistoryItem[]) => AiAssistantHistoryItem[]) => {
     const next = updater(history);
@@ -297,6 +300,31 @@ export function AiAssistantDrawer({
                 />
               </div>
 
+              <div className="space-y-3">
+                <div className="px-1">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                    Sugestões para esta tela
+                  </h3>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Use perguntas e atalhos seguros baseados no contexto atual.
+                  </p>
+                </div>
+                <SuggestionList
+                  actions={pageContext.suggestedActions}
+                  emptyTitle={
+                    hasContextualActions
+                      ? "Nenhuma sugestão adicional disponível."
+                      : pageContext.emptyTitle
+                  }
+                  emptyDescription={
+                    hasContextualActions
+                      ? "Use as ações recomendadas ou a Base de Conhecimento abaixo."
+                      : pageContext.emptyDescription
+                  }
+                  onAction={handleAction}
+                />
+              </div>
+
               <div className="border-t border-border pt-6">
                 <KnowledgeSection onAction={handleKnowledgeAction} />
               </div>
@@ -402,6 +430,97 @@ function ActionList({
       ))}
     </ul>
   );
+}
+
+function SuggestionList({
+  actions,
+  emptyTitle,
+  emptyDescription,
+  onAction,
+}: {
+  actions: AiAssistantContextAction[];
+  emptyTitle: string;
+  emptyDescription: string;
+  onAction: (action: AiAssistantContextAction) => void;
+}) {
+  if (actions.length === 0) {
+    return (
+      <div
+        className="flex flex-col items-center gap-3 py-6 text-center"
+        data-testid="ai-assistant-suggestions-empty"
+      >
+        <Compass className="h-8 w-8 text-text-muted/40" />
+        <p className="text-sm font-medium text-text">{emptyTitle}</p>
+        <p className="max-w-[260px] text-xs text-text-muted">{emptyDescription}</p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-2" data-testid="ai-assistant-suggestions">
+      {actions.map((action) => (
+        <li key={action.id}>
+          <button
+            type="button"
+            onClick={() => onAction(action)}
+            data-testid={`ai-suggestion-${action.id}`}
+            data-action-kind={action.kind}
+            className="w-full rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3 text-left transition-colors hover:border-[hsl(var(--primary))]/30 hover:bg-surface-muted"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-text">{action.label}</p>
+                <p className="mt-0.5 text-xs text-text-muted">{action.description}</p>
+              </div>
+              <PanelTop className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-text-muted">
+              <SuggestionMetaChip label={`Domínio: ${describeSuggestionDomain(action)}`} />
+              <SuggestionMetaChip label={`Intent: ${getActionIntentLabel(action)}`} />
+              <SuggestionMetaChip label={`Payload: ${describeSuggestionPayload(action)}`} />
+            </div>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SuggestionMetaChip({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-border/80 bg-surface px-2 py-0.5">
+      {label}
+    </span>
+  );
+}
+
+function getActionIntentLabel(action: AiAssistantContextAction): string {
+  if (action.kind === "navigation") return "navigation";
+  return action.intent;
+}
+
+function describeSuggestionDomain(action: AiAssistantContextAction): string {
+  if (action.kind === "navigation") return "admin";
+  const intent = action.intent;
+  if (intent.startsWith("job.")) return "job";
+  if (intent.startsWith("candidate.")) return "candidate";
+  if (intent.startsWith("admission.")) return "admission";
+  if (intent.startsWith("pipeline.")) return "pipeline";
+  if (intent.startsWith("protheus.")) return "protheus";
+  if (intent.startsWith("knowledge.")) return "knowledge";
+  return "generic";
+}
+
+function describeSuggestionPayload(action: AiAssistantContextAction): string {
+  if (action.kind === "navigation") return "navegação segura";
+
+  const entries = Object.entries(action.arguments ?? {});
+  if (entries.length === 0) return "sem payload";
+
+  return entries
+    .filter(([, value]) => value !== null && value !== undefined && `${value}`.trim() !== "")
+    .map(([key]) => key)
+    .join(", ");
 }
 
 function KnowledgeSection({

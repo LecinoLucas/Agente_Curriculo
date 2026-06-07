@@ -330,10 +330,9 @@ describe("AiAssistantDrawer", () => {
     renderDrawer("/rh");
     expect(screen.getByTestId("ai-assistant-empty")).toBeInTheDocument();
     expect(
-      screen.getAllByText(
-        /Abra uma vaga, candidato ou caso admissional para ver ações contextuais/i,
-      ).length,
-    ).toBeGreaterThan(0);
+      screen.getByText("Não encontrei uma vaga, candidato ou admissão nesta tela."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Você ainda pode consultar a Base de Conhecimento.")).toBeInTheDocument();
   });
 
   it("shows route-specific empty state for candidates without candidateId", () => {
@@ -359,6 +358,15 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-action-knowledge.job_quality_rules")).toBeInTheDocument();
   });
 
+  it("shows job suggestions on job routes", () => {
+    renderDrawer("/vagas/job-123");
+    expect(screen.getByText("Sugestões para esta tela")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.job.structured_job")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.job.requirements")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.job.pipeline")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.job.anti_discrimination")).toBeInTheDocument();
+  });
+
   it("derives candidate context and keeps candidate actions visible on candidate routes", () => {
     renderDrawer("/candidatos/cand-456");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
@@ -367,6 +375,13 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-action-candidate.summary")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-candidate.active_pipeline")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-knowledge.fair_evaluation_rules")).toBeInTheDocument();
+  });
+
+  it("shows candidate suggestions on candidate routes", () => {
+    renderDrawer("/candidatos/cand-456");
+    expect(screen.getByTestId("ai-suggestion-suggestion.candidate.summary")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.candidate.active_pipeline")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.candidate.bias")).toBeInTheDocument();
   });
 
   it("uses job_id on job routes", async () => {
@@ -379,6 +394,23 @@ describe("AiAssistantDrawer", () => {
     expect(aiAssistantService.query).toHaveBeenCalledWith(
       expect.objectContaining({
         intent: "job.summary",
+        arguments: { job_id: "123" },
+      }),
+    );
+  });
+
+  it("uses job_id on job suggestions with safe payload", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "job.requirements" }),
+    );
+    renderDrawer("/vagas/123");
+
+    await user.click(screen.getByTestId("ai-suggestion-suggestion.job.requirements"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "job.requirements",
         arguments: { job_id: "123" },
       }),
     );
@@ -412,14 +444,35 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-action-knowledge.pre_admission_rules")).toBeInTheDocument();
   });
 
+  it("shows admission suggestions on admission routes", () => {
+    renderDrawer("/admission/cases/case-456");
+    expect(screen.getByTestId("ai-suggestion-suggestion.admission.export_readiness")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.admission.documents")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.admission.pre_admission_rules")).toBeInTheDocument();
+  });
+
   it("hides actions that require a missing ID", () => {
     renderDrawer("/admission/cases/case-456");
     expect(screen.queryByTestId("ai-action-protheus.export_status")).not.toBeInTheDocument();
   });
 
+  it("does not show protheus suggestion without package_id", () => {
+    renderDrawer("/admission/cases/case-456");
+    expect(
+      screen.queryByTestId("ai-suggestion-suggestion.admission.protheus_status"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows protheus action when package_id is available in the route", () => {
     renderDrawer("/admission/cases/case-456?packageId=pkg-9");
     expect(screen.getByTestId("ai-action-protheus.export_status")).toBeInTheDocument();
+  });
+
+  it("shows protheus suggestion when package_id is available in the route", () => {
+    renderDrawer("/admission/cases/case-456?packageId=pkg-9");
+    expect(
+      screen.getByTestId("ai-suggestion-suggestion.admission.protheus_status"),
+    ).toBeInTheDocument();
   });
 
   it("derives admin context and renders safe admin shortcuts", () => {
@@ -430,6 +483,69 @@ describe("AiAssistantDrawer", () => {
     expect(screen.getByTestId("ai-action-nav.admin.ia")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-nav.admin.health")).toBeInTheDocument();
     expect(screen.getByTestId("ai-action-knowledge.assistant_policy")).toBeInTheDocument();
+  });
+
+  it("shows admin governance suggestions on admin routes", () => {
+    renderDrawer("/admin");
+    expect(screen.getByTestId("ai-suggestion-suggestion.admin.assistant_policy")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.admin.safe_ai_rules")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.admin.lab")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.admin.credentials")).toBeInTheDocument();
+  });
+
+  it("shows knowledge suggestions on generic routes", () => {
+    renderDrawer("/rh");
+    expect(screen.getByTestId("ai-suggestion-suggestion.generic.pre_admission_rules")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.generic.protheus_rules")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-suggestion-suggestion.generic.anti_discrimination")).toBeInTheDocument();
+  });
+
+  it("clicking a suggestion calls assistant endpoint with the correct intent", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "candidate.summary" }),
+    );
+    renderDrawer("/candidatos/cand-456");
+
+    await user.click(screen.getByTestId("ai-suggestion-suggestion.candidate.summary"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "candidate.summary",
+        arguments: { candidate_id: "cand-456" },
+      }),
+    );
+  });
+
+  it("uses the predefined query for knowledge suggestions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "knowledge.search", data: { query: "", chunks: [] } }),
+    );
+    renderDrawer("/admin");
+
+    await user.click(screen.getByTestId("ai-suggestion-suggestion.admin.assistant_policy"));
+
+    expect(aiAssistantService.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: "knowledge.search",
+        arguments: {
+          query: "O assistente pode executar ações automaticamente?",
+          limit: 5,
+        },
+      }),
+    );
+  });
+
+  it("does not render prohibited write suggestions", () => {
+    renderDrawer("/vagas/job-123");
+    expect(screen.queryByText("Contratar candidato")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rejeitar candidato")).not.toBeInTheDocument();
+    expect(screen.queryByText("Aprovar documento")).not.toBeInTheDocument();
+    expect(screen.queryByText("Exportar para Protheus")).not.toBeInTheDocument();
+    expect(screen.queryByText("Enviar e-mail")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alterar vaga")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mover no pipeline")).not.toBeInTheDocument();
   });
 
   it("does not use dangerouslySetInnerHTML in the assistant drawer implementation", () => {
@@ -469,6 +585,20 @@ describe("AiAssistantDrawer", () => {
     expect(historyJson).not.toContain("embedding_provider_error");
     expect(historyJson).not.toContain("RuntimeError");
     expect(historyJson).toContain("temporariamente indisponível");
+  });
+
+  it("stores the clicked suggestion label in history", async () => {
+    const user = userEvent.setup();
+    vi.mocked(aiAssistantService.query).mockResolvedValueOnce(
+      makeResponse({ intent: "knowledge.search", data: { query: "", chunks: [] } }),
+    );
+    render(<PersistentHistoryHarness path="/vagas/job-123" />);
+
+    await user.click(screen.getByTestId("ai-suggestion-suggestion.job.structured_job"));
+    await waitFor(() => screen.getByTestId("ai-assistant-result"));
+
+    const historyJson = screen.getByTestId("history-json").textContent ?? "";
+    expect(historyJson).toContain("Essa vaga está bem estruturada?");
   });
 
   it("keeps base de conhecimento available in every context", () => {
