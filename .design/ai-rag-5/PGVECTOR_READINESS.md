@@ -16,18 +16,26 @@ Esta fase foca na preparação do sistema RAG para suportar busca vetorial real 
 - **Health Check:** Retorna o status da extensão e o modo de operação (`pgvector` ou `json_fallback`).
 
 ### 3. Migrations
-- Adicionada migration `23dbb452c78a_enable_pgvector_extension.py` que tenta executar `CREATE EXTENSION IF NOT EXISTS vector`.
-- A migration é resiliente: se falhar (por falta de permissão ou por não ser Postgres), ela apenas registra o aviso e permite que o sistema continue funcionando em modo fallback.
+- Adicionada migration `23dbb452c78a_enable_pgvector_extension.py` como um no-op seguro.
+- **Atenção:** A migration não tenta mais executar `CREATE EXTENSION` automaticamente para evitar falhas de transação em ambientes onde o usuário da aplicação não possui permissões de superuser ou o binário não está instalado.
+- O sistema continua funcional em modo `json_fallback` mesmo sem a extensão.
 
-## Como habilitar pgvector
+## Como habilitar pgvector manualmente
 
-### Ambiente Local (Docker/macOS)
-1. Certifique-se de que a imagem do Postgres possui o binário do pgvector.
-2. Como superuser no DB, execute:
-   ```sql
-   CREATE EXTENSION IF NOT EXISTS vector;
-   ```
-3. O `health_check` do RAG passará a reportar `storage_mode: "pgvector"`.
+### Requisitos
+- O binário da extensão `pgvector` deve estar instalado no servidor PostgreSQL.
+- O comando deve ser executado por um usuário com permissão de superuser (DBA).
+
+### Comando Manual
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+Em instâncias Gerenciadas (Cloud), pode ser necessário habilitar a extensão via painel de controle do provedor ou comando específico do RDS/Cloud SQL.
+
+### Validação
+- O `health_check` do RAG passará a reportar `storage_mode: "pgvector"`.
+- Se não habilitado, o sistema reportará modo `json_fallback`.
 
 ## Próximos Passos
 - **Fase AI-RAG-6:** Implementação da query SQL real usando operadores de distância do pgvector (`<->` para L2, `<#>` para inner product, `<=>` para cosseno).
