@@ -152,4 +152,28 @@ describe("PipelineTransitionBlockedModal — Fase 5 force section", () => {
     expect(screen.getByTestId("pipeline-blocked-force-submit")).toBeDisabled();
     expect(screen.getByTestId("pipeline-blocked-force-submit")).toHaveTextContent(/forçando/i);
   });
+
+  describe("UI Scroll Structure", () => {
+    it("aplica as classes corretas para scroll interno e layout vertical flex", () => {
+      render(
+        <PipelineTransitionBlockedModal
+          open
+          candidateId="c-1"
+          candidateName="Ana"
+          blocked={baseBlocked()}
+          onClose={vi.fn()}
+        />,
+      );
+
+      const dialog = screen.getByTestId("pipeline-transition-blocked-modal");
+      expect(dialog).toHaveClass("max-h-[85vh]", "flex", "flex-col", "overflow-hidden");
+
+      const scrollContainer = screen.getByTestId("pipeline-blocked-scroll-container");
+      expect(scrollContainer).toHaveClass("flex-1", "overflow-y-auto", "min-h-0");
+
+      const closeBtn = screen.getByTestId("pipeline-blocked-close");
+      const footer = closeBtn.closest("div");
+      expect(footer).toHaveClass("shrink-0", "p-6", "pt-4");
+    });
+  });
 });
