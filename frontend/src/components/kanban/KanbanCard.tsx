@@ -282,7 +282,7 @@ export const KanbanCard = memo(function KanbanCard({
       className={[
         "pipeline-candidate-card shrink-0 group relative w-full select-none overflow-hidden rounded-[18px] bg-white/98 p-3 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)] transition-all duration-200 dark:bg-surface",
         "border border-border/50 hover:border-border/80 dark:border-border/60 dark:hover:border-border hover:shadow-[0_18px_34px_-24px_rgba(15,23,42,0.38)]",
-        "border-l-[3px]",
+        "border-l-4",
         borderAccentClass,
         isTopMatch ? "ring-1 ring-emerald-200/60 bg-emerald-50/30 dark:ring-emerald-900/35 dark:bg-emerald-950/10" : "",
         isSaving ? "cursor-wait opacity-50" : draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
