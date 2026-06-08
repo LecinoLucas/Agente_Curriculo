@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/common/PageHeader";
+import { PerformanceHealthPanel } from "../features/admin/components/PerformanceHealthPanel";
 import { AiUsagePanel } from "../features/ai-settings/components/AiUsagePanel";
 import { useAsyncState } from "../hooks/useAsyncState";
 import {
@@ -20,10 +21,11 @@ import {
 import { aiLimitsService, type AILimitsUsage } from "../services/aiLimitsService";
 import { AILimitIncreaseModal } from "../features/admin/AILimitIncreaseModal";
 
-type HealthTab = "overview" | "ai" | "queues" | "database" | "errors";
+type HealthTab = "overview" | "performance" | "ai" | "queues" | "database" | "errors";
 
 const TAB_ITEMS: Array<{ key: HealthTab; label: string }> = [
   { key: "overview", label: "Visão Geral" },
+  { key: "performance", label: "Performance" },
   { key: "ai", label: "IA / Tokens" },
   { key: "queues", label: "Filas" },
   { key: "database", label: "Banco" },
@@ -575,6 +577,18 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                 </CardContent>
             </Card>
           </div>
+        </SectionShell>
+      ) : null}
+
+      {activeTab === "performance" ? (
+        <SectionShell
+          title="Performance"
+          description="Budgets operacionais, cobertura de regressão e sinais leves para telas críticas."
+          loading={overviewLoading}
+          error={overviewError}
+          onRetry={() => void loadOverview()}
+        >
+          <PerformanceHealthPanel overviewStatus={overviewData?.status} onOpenAiTab={() => setActiveTab("ai")} />
         </SectionShell>
       ) : null}
 

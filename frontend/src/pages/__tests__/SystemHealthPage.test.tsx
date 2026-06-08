@@ -118,6 +118,7 @@ describe("SystemHealthPage", () => {
 
     expect(await screen.findByText("Health do Sistema")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Visão Geral" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Performance" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "IA / Tokens" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Filas" })).toBeInTheDocument();
     expect(screen.getByText("Status geral")).toBeInTheDocument();
@@ -166,5 +167,84 @@ describe("SystemHealthPage", () => {
 
     expect(await screen.findByText(/billing oficial/i)).toBeInTheDocument();
     expect(screen.getByText("Métricas IA / Tokens")).toBeInTheDocument();
+  });
+
+  it("renderiza a aba Performance com budgets por módulo", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={routerFuture}>
+        <SystemHealthPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Status geral");
+    await user.click(screen.getByRole("button", { name: "Performance" }));
+
+    expect(await screen.findByText("Performance geral")).toBeInTheDocument();
+    expect(screen.getByText("Pipeline")).toBeInTheDocument();
+    expect(screen.getByText("Vagas")).toBeInTheDocument();
+    expect(screen.getByText("Pré-admissão")).toBeInTheDocument();
+    expect(screen.getByText("RAG / Base de Conhecimento")).toBeInTheDocument();
+    expect(screen.getByText("IA / Usage")).toBeInTheDocument();
+  });
+
+  it("expõe os budgets críticos de performance sem inventar métricas em tempo real", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={routerFuture}>
+        <SystemHealthPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Status geral");
+    await user.click(screen.getByRole("button", { name: "Performance" }));
+
+    expect(await screen.findByText("Ranking de vagas não deve carregar no load inicial.")).toBeInTheDocument();
+    expect(screen.getByText("Movimento simples do Pipeline não deve recarregar board completo.")).toBeInTheDocument();
+    expect(screen.getByText("Warning controlado: rag_vector_search_json_fallback_limited.")).toBeInTheDocument();
+    expect(screen.getByText("Tempo real indisponível")).toBeInTheDocument();
+    expect(screen.getAllByText("Budget definido").length).toBeGreaterThan(0);
+  });
+
+  it("não exibe campos internos sensíveis na aba Performance", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={routerFuture}>
+        <SystemHealthPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Status geral");
+    await user.click(screen.getByRole("button", { name: "Performance" }));
+
+    await screen.findByText("Performance geral");
+
+    expect(screen.queryByText(/prompt bruto/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/query bruta/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/vector_json/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/embedding/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/content_hash/i)).not.toBeInTheDocument();
+  });
+
+  it("permite navegar da aba Performance para IA / Tokens sem quebrar a aba existente", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={routerFuture}>
+        <SystemHealthPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Status geral");
+    await user.click(screen.getByRole("button", { name: "Performance" }));
+    await user.click(await screen.findByRole("button", { name: /Ver detalhes em IA \/ Tokens/i }));
+
+    await waitFor(() => {
+      expect(getAIUsageMock).toHaveBeenCalled();
+    });
+    expect(await screen.findByText("Métricas IA / Tokens")).toBeInTheDocument();
   });
 });
