@@ -1,36 +1,66 @@
-# PRE-ADMISSION-CASE-AUTO-FIX-1 - Decisão de contrato
+# PRE-ADMISSION-CASE-AUTO-FIX-1 — Contract Decision
 
 ## Problema atual
 
-Ao mover um candidato de `hired` para `pre_admission`, o backend tentava criar automaticamente o caso admissional. Quando não existia checklist admissional padrão ativo, a criação falhava com `ValidationException`, mas o serviço capturava a falha e retornava `pre_admission_case_id = null`.
+Na transicao `hired -> pre_admission`, o contrato do pipeline nao pode sugerir abertura da pre-admissao sem um `pre_admission_case_id` valido.
 
-Mesmo assim, a resposta continuava trazendo `required_action = "open_pre_admission"`, criando um contrato ambíguo: a UI recebia uma ação de abrir pré-admissão sem um caso real para abrir.
+O risco concreto era este:
 
-## Opções avaliadas
+```json
+{
+  "stage": "pre_admission",
+  "required_action": "open_pre_admission",
+  "pre_admission_case_id": null
+}
+```
 
-### Bloquear a transição sem checklist padrão
+Isso orienta o RH a abrir um workspace inexistente.
 
-- Mantém o candidato em `hired`.
-- Não cria caso parcial.
-- Retorna ação clara para configurar checklist padrão.
-- Evita estado de `pre_admission` sem caso admissional.
+## Opcoes avaliadas
 
-### Permitir a transição e exigir configuração depois
+### 1. Permitir mover para `pre_admission` mesmo sem caso
 
-- Move o candidato para `pre_admission`.
-- Retorna `required_action = "configure_default_checklist_template"`.
-- Mantém `pre_admission_case_id = null`.
-- Ainda deixa o RH com um candidato em pré-admissão sem caso aberto.
+- Mantem a pipeline andando.
+- Deixa o RH sem workspace valido.
+- Cria contrato ambiguo e UX ruim.
 
-## Decisão escolhida
+Decisao: rejeitada.
 
-Foi escolhida a opção recomendada: bloquear a transição antes de mover o candidato quando não houver checklist admissional padrão ativo.
+### 2. Criar caso vazio sem checklist
 
-Motivo: o stage `pre_admission` representa início operacional da pré-admissão. Sem caso admissional, o estado fica incompleto e a UI não tem recurso válido para abrir.
+- Evita `case_id` nulo.
+- Viola a regra de negocio do proprio fluxo admissional.
+- Gera caso parcial/invalido.
+
+Decisao: rejeitada.
+
+### 3. Bloquear a transicao sem checklist padrao ativo
+
+- Mantem integridade do contrato.
+- Evita caso parcial.
+- Retorna acao clara de configuracao.
+
+Decisao: escolhida.
+
+## Decisao escolhida
+
+Regra obrigatoria:
+
+```text
+open_pre_admission so pode existir quando pre_admission_case_id for valido.
+```
+
+Se nao houver checklist padrao ativo:
+
+- a transicao `hired -> pre_admission` e bloqueada;
+- o candidato permanece em `hired`;
+- nenhum caso admissional e criado;
+- nenhuma acao Protheus e disparada;
+- a API retorna erro controlado.
 
 ## Contrato final
 
-Quando existir checklist padrão ativo e a decisão de contratação estiver válida:
+### Com checklist padrao ativo
 
 ```json
 {
@@ -40,7 +70,7 @@ Quando existir checklist padrão ativo e a decisão de contratação estiver vá
 }
 ```
 
-Quando não existir checklist padrão ativo:
+### Sem checklist padrao ativo
 
 ```json
 {
@@ -52,10 +82,11 @@ Quando não existir checklist padrão ativo:
 }
 ```
 
-## Garantias
+## Observacao de frontend
 
-- `required_action = "open_pre_admission"` só é retornado com `pre_admission_case_id` válido.
-- Sem checklist padrão ativo, o candidato permanece em `hired`.
-- Sem checklist padrão ativo, nenhum caso admissional é criado.
-- O fluxo `final -> offer -> hired` não foi alterado.
-- Nenhuma integração real com Protheus é acionada por esta correção.
+Nenhuma mudanca de frontend foi necessaria nesta fase.
+
+O frontend atual:
+
+- ja nao navega para `/admissao/:id` quando `pre_admission_case_id` e nulo;
+- exibe mensagem amigavel a partir do `message` do erro HTTP 409.

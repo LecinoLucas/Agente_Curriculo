@@ -16,6 +16,7 @@ from src.application.services.pipeline_service import (
     PipelineCandidateNotFoundError,
     PipelineCandidateWithoutActiveJobError,
     PipelineConcurrentModificationError,
+    PipelinePreAdmissionCaseContractError,
     PipelineDecisionGateBlockedError,
     PipelineDuplicateEntryError,
     PipelineEntryNotFoundError,
@@ -308,6 +309,12 @@ async def move_candidate_stage_v2(
     except PipelinePreAdmissionSetupRequiredError as exc:
         await db.rollback()
         return _pre_admission_setup_required_response(exc)
+    except PipelinePreAdmissionCaseContractError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Não foi possível abrir a pré-admissão automaticamente. Recarregue a vaga e tente novamente.",
+        )
     except PipelineForceNotAllowedError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))

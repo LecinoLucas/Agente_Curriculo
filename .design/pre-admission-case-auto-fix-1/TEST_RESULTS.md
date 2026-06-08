@@ -1,93 +1,46 @@
-# PRE-ADMISSION-CASE-AUTO-FIX-1 - Resultados de testes
+# PRE-ADMISSION-CASE-AUTO-FIX-1 — Test Results
 
 ## Backend
 
-Comando:
+### Executado
 
 ```bash
-cd /Users/lecinolucas/Developer/Agente_Curriculo/backend
-source .venv/bin/activate
-APP_SECRET_KEY=test-secret DATABASE_URL=postgresql+asyncpg://LecinoLucas:020219@localhost:5432/resume_ai JWT_SECRET_KEY=test-jwt pytest tests/integration/test_pipeline_endpoints_integration.py -k "hired or pre_admission or offer" -v
+cd backend
+.venv/bin/python -m pytest tests/integration/test_pipeline_endpoints_integration.py -k "hired or pre_admission or offer" -v
+.venv/bin/python -m pytest tests/integration/test_pipeline_stage_gates.py -k "offer or hired or pre_admission" -v
 ```
 
-Resultado:
+### Resultado
 
-- `7 passed, 13 deselected`
+- `test_pipeline_endpoints_integration.py`: 7 selecionados, 7 OK
+- `test_pipeline_stage_gates.py`: 10 selecionados, 10 OK
 
-Comando:
+### Cobertura funcional validada
 
-```bash
-cd /Users/lecinolucas/Developer/Agente_Curriculo/backend
-source .venv/bin/activate
-APP_SECRET_KEY=test-secret DATABASE_URL=postgresql+asyncpg://LecinoLucas:020219@localhost:5432/resume_ai JWT_SECRET_KEY=test-jwt pytest tests/integration/test_pipeline_stage_gates.py -k "offer or hired or pre_admission" -v
-```
-
-Resultado:
-
-- `10 passed, 22 deselected`
-
-Comando:
-
-```bash
-cd /Users/lecinolucas/Developer/Agente_Curriculo/backend
-source .venv/bin/activate
-APP_SECRET_KEY=test-secret DATABASE_URL=postgresql+asyncpg://LecinoLucas:020219@localhost:5432/resume_ai JWT_SECRET_KEY=test-jwt pytest tests/unit -k "pre_admission or pipeline" -v
-```
-
-Resultado:
-
-- `95 passed, 1329 deselected`
+- `hired -> pre_admission` com checklist padrao cria caso e retorna `case_id`
+- sem checklist padrao retorna `DEFAULT_CHECKLIST_TEMPLATE_REQUIRED`
+- sem checklist padrao nao cria caso
+- sem checklist padrao nao gera pacote de admissao
+- sem checklist padrao nao registra evento de `stage_moved` para `pre_admission`
+- `offer -> hired` continua funcionando
+- `final -> offer` continua funcionando
 
 ## Frontend
 
-Comando:
+### Executado
 
 ```bash
-cd /Users/lecinolucas/Developer/Agente_Curriculo/frontend
+cd frontend
 npx tsc --noEmit
-```
-
-Resultado:
-
-- Sem erros TypeScript.
-
-Comando:
-
-```bash
-cd /Users/lecinolucas/Developer/Agente_Curriculo/frontend
-npm run test -- --run PipelinePage
-```
-
-Resultado:
-
-- `43 passed`
-- Avisos existentes de `act(...)`/Tooltip em testes, sem falha.
-
-Comando adicional para arquivos alterados:
-
-```bash
-cd /Users/lecinolucas/Developer/Agente_Curriculo/frontend
-npm run test -- --run usePipelineTransitionBlocked usePipelineGateActionResolver pipelineService.blockedError
-```
-
-Resultado:
-
-- `23 passed`
-- Avisos existentes de React Router future flags, sem falha.
-
-Comando:
-
-```bash
-cd /Users/lecinolucas/Developer/Agente_Curriculo/frontend
 npm run build
 ```
 
-Resultado:
+### Resultado
 
-- Build concluído com sucesso.
+- `npx tsc --noEmit`: OK
+- `npm run build`: OK
 
-## Limitações
+## Limitacoes
 
-- Os testes foram executados com variáveis de ambiente explícitas de teste para permitir import das settings do backend.
-- Nenhum teste aciona Protheus real.
-- Esta fase não valida visualmente a tela de templates/checklists, porque não foi criada UX nova.
+- Nao houve ajuste de frontend porque o cliente atual ja trata `pre_admission_case_id` nulo sem navegar.
+- Permanecem warnings de Pydantic v2 nas suites de backend, fora do escopo desta fase.

@@ -323,6 +323,10 @@ class PipelinePreAdmissionSetupRequiredError(Exception):
     message = "Não há checklist admissional padrão ativo. Configure um checklist padrão antes de iniciar a pré-admissão."
 
 
+class PipelinePreAdmissionCaseContractError(Exception):
+    """Raised when pre-admission stage move cannot produce a valid case contract."""
+
+
 class PipelineForceNotAllowedError(Exception):
     """Raised when a non-admin actor attempts to force-bypass pipeline gates."""
 
@@ -733,7 +737,10 @@ class PipelineService:
             target_stage=body.stage,
             actor_id=moved_by,
         )
-        required_action = "open_pre_admission" if body.stage == "pre_admission" else None
+        required_action = self._resolve_required_action_for_stage(
+            target_stage=body.stage,
+            pre_admission_case_id=pre_admission_case_id,
+        )
 
         return MoveCandidateResponse(
             candidate_id=saved_row["candidate_id"],
@@ -746,6 +753,20 @@ class PipelineService:
             required_action=required_action,
             pre_admission_case_id=pre_admission_case_id,
         )
+
+    @staticmethod
+    def _resolve_required_action_for_stage(
+        *,
+        target_stage: str,
+        pre_admission_case_id: UUID | None,
+    ) -> str | None:
+        if target_stage != "pre_admission":
+            return None
+        if pre_admission_case_id is None:
+            raise PipelinePreAdmissionCaseContractError(
+                "Transição para pré-admissão não pode retornar open_pre_admission sem pre_admission_case_id válido."
+            )
+        return "open_pre_admission"
 
     async def _validate_pre_admission_setup_for_stage(
         self,

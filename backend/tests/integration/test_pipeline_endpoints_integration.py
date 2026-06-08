@@ -27,7 +27,11 @@ from src.infrastructure.database.models.hiring_decision_model import (
     CandidateJobHiringDecisionModel,
 )
 from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineEventModel,
+    CandidateJobPipelineModel,
+)
+from src.infrastructure.database.models.admission_package_model import AdmissionExportPackageModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionChecklistTemplateItemModel,
@@ -372,6 +376,7 @@ async def test_move_to_pre_admission_returns_required_action_and_case_id(
     payload = response.json()
     assert payload["required_action"] == "open_pre_admission"
     assert payload["pre_admission_case_id"] is not None
+    assert UUID(payload["pre_admission_case_id"])
 
     case_row = await db_session.scalar(
         sa.select(PreAdmissionCaseModel).where(
@@ -381,6 +386,7 @@ async def test_move_to_pre_admission_returns_required_action_and_case_id(
     assert case_row is not None
     assert case_row.candidate_id == candidate_id
     assert case_row.job_id == job_id
+    assert case_row.checklist_template_id is not None
 
 
 @pytest.mark.asyncio
@@ -444,6 +450,13 @@ async def test_move_to_pre_admission_without_default_checklist_blocks_without_ca
         )
     )
     assert int(case_count or 0) == 0
+    package_count = await db_session.scalar(
+        sa.select(sa.func.count(AdmissionExportPackageModel.id)).where(
+            AdmissionExportPackageModel.candidate_id == candidate_id,
+            AdmissionExportPackageModel.job_id == job_id,
+        )
+    )
+    assert int(package_count or 0) == 0
 
     pipeline = await db_session.scalar(
         sa.select(CandidateJobPipelineModel).where(
@@ -453,6 +466,15 @@ async def test_move_to_pre_admission_without_default_checklist_blocks_without_ca
     )
     assert pipeline is not None
     assert pipeline.pipeline_stage == "hired"
+    pre_admission_move_events = await db_session.scalar(
+        sa.select(sa.func.count(CandidateJobPipelineEventModel.id)).where(
+            CandidateJobPipelineEventModel.candidate_id == candidate_id,
+            CandidateJobPipelineEventModel.job_id == job_id,
+            CandidateJobPipelineEventModel.event_type == "stage_moved",
+            CandidateJobPipelineEventModel.to_stage == "pre_admission",
+        )
+    )
+    assert int(pre_admission_move_events or 0) == 0
 
 
 @pytest.mark.asyncio

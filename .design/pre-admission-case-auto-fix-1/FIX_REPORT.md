@@ -1,45 +1,48 @@
-# PRE-ADMISSION-CASE-AUTO-FIX-1 - Relatório de correção
+# PRE-ADMISSION-CASE-AUTO-FIX-1 — Fix Report
 
 ## Causa raiz
 
-O serviço de pipeline chamava `_ensure_pre_admission_case_for_stage` depois de persistir a mudança para `pre_admission`. Dentro desse método, a criação automática do caso capturava `ValidationException` gerada pela ausência de checklist padrão ativo e retornava `None`.
+O servico de pipeline montava `required_action` com base apenas no stage alvo:
 
-Na sequência, a resposta era montada com `required_action = "open_pre_admission"` sempre que o destino era `pre_admission`, independentemente de existir `pre_admission_case_id`.
+```text
+target_stage == pre_admission -> open_pre_admission
+```
+
+Isso deixava a garantia de contrato implicita, nao explicita.
+
+Ao mesmo tempo, a criacao automatica do caso admissional dependia da existencia de checklist template padrao ativo.
 
 ## Arquivos alterados
 
 - `backend/src/application/services/pipeline_service.py`
 - `backend/src/interface/api/routers/pipeline.py`
 - `backend/tests/integration/test_pipeline_endpoints_integration.py`
-- `backend/tests/integration/test_pipeline_stage_gates.py`
-- `frontend/src/features/pipeline/usePipelineTransitionBlocked.ts`
-- `frontend/src/features/pipeline/__tests__/usePipelineGateActionResolver.test.tsx`
-- `frontend/src/features/pipeline/__tests__/usePipelineTransitionBlocked.test.tsx`
-- `frontend/src/services/http.ts`
-- `.design/pre-admission-case-auto-fix-1/`
 
 ## Comportamento antes
 
-- `hired -> pre_admission` persistia o stage.
-- A autocriação do caso podia falhar por falta de checklist padrão ativo.
-- A resposta podia retornar `required_action = "open_pre_admission"` com `pre_admission_case_id = null`.
-- O frontend tinha fallback para navegar para a aba de pré-admissão mesmo sem case id.
+- A regra de bloqueio por falta de checklist ja existia no fluxo principal.
+- A garantia `open_pre_admission => pre_admission_case_id valido` nao estava formalizada no ponto de montagem da resposta.
 
 ## Comportamento depois
 
-- Antes de persistir `pre_admission`, o pipeline valida se já existe caso ativo ou checklist padrão ativo capaz de gerar um caso.
-- Sem checklist padrão ativo, a transição é bloqueada com `409`.
-- A resposta orienta `required_action = "configure_default_checklist_template"`.
+- `required_action` passa a ser derivado do `pre_admission_case_id` efetivamente criado/reutilizado.
+- Se o stage alvo for `pre_admission` e nao houver `case_id` valido, o backend interrompe o contrato antes da resposta.
+- Sem checklist padrao ativo, a resposta continua controlada em `409` com `DEFAULT_CHECKLIST_TEMPLATE_REQUIRED`.
 - O candidato permanece em `hired`.
-- Nenhum caso parcial é criado.
-- O frontend não navega mais para pré-admissão quando `open_pre_admission` não traz `case_id`.
+- Nenhum caso parcial e criado.
 
 ## Impacto no RH
 
-O RH passa a receber uma falha operacional clara: configurar o checklist admissional padrão antes de iniciar a pré-admissão. Isso evita cards em pré-admissão sem caso admissional e elimina a tentativa de abrir um recurso inexistente.
+- O RH so recebe CTA para abrir pre-admissao quando o workspace existe.
+- Em ambiente sem checklist padrao, recebe orientacao clara para configurar o template antes de iniciar a pre-admissao.
 
 ## Riscos restantes
 
-- A tela de configuração de checklists já existe, mas esta fase não adiciona um atalho visual novo para ela.
-- Se um checklist padrão for removido entre a validação e a criação do caso, a transação ainda bloqueia a operação com erro controlado.
-- Esta fase não altera Protheus real nem cria migration.
+- O fluxo depende do template padrao ativo continuar sendo a fonte oficial para autocriacao do caso.
+- A excecao `PipelinePreAdmissionCaseContractError` hoje e um guarda de integridade; se ela disparar, existe regressao interna a investigar.
+
+## Mudancas fora do escopo
+
+- Nao houve alteracao em Protheus real.
+- Nao houve alteracao em CandidatePreviewDrawer.
+- Nao houve alteracao visual de PipelinePage nesta fase.
