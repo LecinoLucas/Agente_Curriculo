@@ -28,7 +28,11 @@ from src.infrastructure.database.models.hiring_decision_model import (
 )
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
-from src.infrastructure.database.models.pre_admission_model import PreAdmissionCaseModel
+from src.infrastructure.database.models.pre_admission_model import (
+    PreAdmissionCaseModel,
+    PreAdmissionChecklistTemplateItemModel,
+    PreAdmissionChecklistTemplateModel,
+)
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -172,6 +176,60 @@ async def _submit_hire_decision(
     return decision
 
 
+async def _ensure_default_checklist_template(db_session: AsyncSession) -> PreAdmissionChecklistTemplateModel:
+    existing = await db_session.scalar(
+        sa.select(PreAdmissionChecklistTemplateModel).where(
+            PreAdmissionChecklistTemplateModel.is_default.is_(True),
+            PreAdmissionChecklistTemplateModel.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        return existing
+
+    now = datetime.now(UTC)
+    template = PreAdmissionChecklistTemplateModel(
+        id=uuid4(),
+        name=f"Checklist padrão pipeline {uuid4().hex[:6]}",
+        description="Template padrão para testes de pipeline.",
+        is_active=True,
+        is_default=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(template)
+    await db_session.flush()
+    db_session.add(
+        PreAdmissionChecklistTemplateItemModel(
+            id=uuid4(),
+            template_id=template.id,
+            document_key="cpf",
+            title="CPF",
+            candidate_description="Envie o CPF.",
+            is_required=True,
+            accepted_file_types=["application/pdf", "image/jpeg", "image/png"],
+            max_file_size_mb=10,
+            display_order=0,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+    return template
+
+
+async def _disable_default_checklist_templates(db_session: AsyncSession) -> None:
+    await db_session.execute(
+        sa.update(PreAdmissionChecklistTemplateModel)
+        .where(
+            PreAdmissionChecklistTemplateModel.is_default.is_(True),
+            PreAdmissionChecklistTemplateModel.is_active.is_(True),
+        )
+        .values(is_active=False, is_default=False, updated_at=datetime.now(UTC))
+    )
+    await db_session.commit()
+
+
 def _board_candidate_ids(board_payload: dict) -> list[str]:
     return [
         candidate["candidate_id"]
@@ -303,6 +361,7 @@ async def test_move_to_pre_admission_returns_required_action_and_case_id(
         job_id=job_id,
         actor_id=recruiter.id,
     )
+    await _ensure_default_checklist_template(db_session)
 
     response = await client.patch(
         f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
@@ -322,6 +381,78 @@ async def test_move_to_pre_admission_returns_required_action_and_case_id(
     assert case_row is not None
     assert case_row.candidate_id == candidate_id
     assert case_row.job_id == job_id
+
+
+@pytest.mark.asyncio
+async def test_move_to_pre_admission_without_default_checklist_blocks_without_case(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-pre-adm-no-template-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(client, headers, db_session, title="Pre Admission Missing Template Job")
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        db_session,
+        "Missing Template Candidate",
+        f"missing-template-{uuid4().hex[:6]}@test.com",
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="hired")
+    )
+    await db_session.commit()
+    await _submit_hire_decision(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        actor_id=recruiter.id,
+    )
+    await _disable_default_checklist_templates(db_session)
+
+    response = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": "Iniciar pré-admissão."},
+        headers=headers,
+    )
+
+    assert response.status_code == 409, response.text
+    payload = response.json()
+    assert payload == {
+        "ok": False,
+        "code": "DEFAULT_CHECKLIST_TEMPLATE_REQUIRED",
+        "message": "Não há checklist admissional padrão ativo. Configure um checklist padrão antes de iniciar a pré-admissão.",
+        "required_action": "configure_default_checklist_template",
+        "pre_admission_case_id": None,
+    }
+
+    case_count = await db_session.scalar(
+        sa.select(sa.func.count(PreAdmissionCaseModel.id)).where(
+            PreAdmissionCaseModel.candidate_id == candidate_id,
+            PreAdmissionCaseModel.job_id == job_id,
+        )
+    )
+    assert int(case_count or 0) == 0
+
+    pipeline = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    assert pipeline is not None
+    assert pipeline.pipeline_stage == "hired"
 
 
 @pytest.mark.asyncio
@@ -385,6 +516,7 @@ async def test_move_to_pre_admission_reuses_existing_case_idempotently(
         job_id=job_id,
         actor_id=recruiter.id,
     )
+    await _ensure_default_checklist_template(db_session)
 
     first_response = await client.patch(
         f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
@@ -586,7 +718,7 @@ async def test_hired_candidate_stays_on_pipeline_and_can_advance_to_pre_admissio
         db_session,
         f"recruiter-post-hire-{uuid4().hex[:6]}@test.com",
         "password123",
-        UserRole.RECRUITER,
+        UserRole.ADMIN,
     )
     headers = await _auth_headers(client, recruiter.email, "password123")
     job_id = await _create_job(
@@ -642,14 +774,6 @@ async def test_hired_candidate_stays_on_pipeline_and_can_advance_to_pre_admissio
     hired_column = next(column for column in board.json()["columns"] if column["stage"] == "hired")
     assert str(candidate_id) in {candidate["candidate_id"] for candidate in hired_column["candidates"]}
 
-    pre_admission = await client.patch(
-        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
-        json={"stage": "pre_admission", "notes": "", "reason": "Iniciar pré-admissão."},
-        headers=headers,
-    )
-    assert pre_admission.status_code == 200, pre_admission.text
-    assert pre_admission.json()["stage"] == "pre_admission"
-
     decision = await client.post(
         f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/hiring-decision",
         json={
@@ -662,38 +786,42 @@ async def test_hired_candidate_stays_on_pipeline_and_can_advance_to_pre_admissio
         headers=headers,
     )
     assert decision.status_code == 201, decision.text
+    await _ensure_default_checklist_template(db_session)
 
-    pre_admission_case = await client.post(
+    pre_admission = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": "Iniciar pré-admissão."},
+        headers=headers,
+    )
+    assert pre_admission.status_code == 200, pre_admission.text
+    pre_admission_payload = pre_admission.json()
+    assert pre_admission_payload["stage"] == "pre_admission"
+    assert pre_admission_payload["required_action"] == "open_pre_admission"
+    case_id = pre_admission_payload["pre_admission_case_id"]
+    assert case_id is not None
+
+    case_envelope = await client.get(
         f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
-        json={
-            "salary_offer": "8500.00",
-            "start_date": "2026-06-15",
-            "work_model": "Remoto",
-            "notes": "Fluxo criado para liberação Protheus.",
-        },
         headers=headers,
     )
-    assert pre_admission_case.status_code == 201, pre_admission_case.text
-    case_id = pre_admission_case.json()["id"]
+    assert case_envelope.status_code == 200, case_envelope.text
+    checklist_items = case_envelope.json()["case"]["checklist_items"]
+    assert checklist_items
 
-    checklist_item = await client.post(
-        f"/api/v1/pre-admission/{case_id}/checklist-items",
-        json={
-            "item_type": "cpf",
-            "title": "CPF",
-            "required": True,
-        },
-        headers=headers,
-    )
-    assert checklist_item.status_code == 201, checklist_item.text
-    item_id = checklist_item.json()["id"]
+    for item in checklist_items:
+        received_item = await client.patch(
+            f"/api/v1/pre-admission/{case_id}/checklist-items/{item['id']}",
+            json={"status": "received"},
+            headers=headers,
+        )
+        assert received_item.status_code == 200, received_item.text
 
-    updated_item = await client.patch(
-        f"/api/v1/pre-admission/{case_id}/checklist-items/{item_id}",
-        json={"status": "approved"},
-        headers=headers,
-    )
-    assert updated_item.status_code == 200, updated_item.text
+        updated_item = await client.patch(
+            f"/api/v1/pre-admission/{case_id}/checklist-items/{item['id']}",
+            json={"status": "approved"},
+            headers=headers,
+        )
+        assert updated_item.status_code == 200, updated_item.text
 
     ready_case = await client.patch(
         f"/api/v1/pre-admission/{case_id}",

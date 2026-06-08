@@ -175,6 +175,11 @@ function resolveError(response: Response, payload: unknown): HttpError {
         retryAfterSeconds,
       );
     }
+
+    if (typeof payloadRecord.message === "string" && payloadRecord.message.trim()) {
+      const code = typeof payloadRecord.code === "string" ? payloadRecord.code : undefined;
+      return new HttpError(status, payloadRecord.message, code, payload, undefined, retryAfterSeconds);
+    }
   }
 
   return new HttpError(status, statusFallback(status), undefined, payload, undefined, retryAfterSeconds);

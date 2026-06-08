@@ -1,6 +1,7 @@
 import { RefreshCw, Search, Users, Clock, Calendar, CheckCircle2, Plus, BarChart3, Home, MapPin, Sparkles, Inbox, Activity, Filter, ToggleRight, ToggleLeft, AlertTriangle, X, ChevronDown, Briefcase } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { createPortal } from "react-dom";
 
 import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
 import { JobCombobox } from "../features/pipeline/JobCombobox";
@@ -55,6 +56,11 @@ export function PipelinePage() {
   const { user } = useAuth();
 
   const [showNewCandidate, setShowNewCandidate] = useState(false);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalTarget(document.getElementById("header-actions-portal"));
+  }, []);
   const [showSourceCandidates, setShowSourceCandidates] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showRanking, setShowRanking] = useState(resolveInitialShowRanking);
@@ -912,7 +918,7 @@ export function PipelinePage() {
           </div>
 
           {/* Action Controls */}
-          <div className="flex flex-wrap gap-2 rounded-[14px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:flex-nowrap sm:items-center">
+          <div className={`flex flex-wrap gap-2 rounded-[14px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:flex-nowrap sm:items-center ${portalTarget ? "lg:hidden" : ""}`}>
             {canMutate && (
               <button
                 type="button"
@@ -953,6 +959,50 @@ export function PipelinePage() {
               </button>
             )}
           </div>
+          {portalTarget && createPortal(
+            <>
+              {canMutate && (
+                <button
+                  type="button"
+                  onClick={handleOpenSourceCandidates}
+                  disabled={!canUse}
+                  className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border px-3 text-[11px] font-bold transition-all ${
+                    canUse
+                      ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e] dark:border-[hsl(var(--primary))]/35 dark:bg-[hsl(var(--primary))]/16 dark:text-[hsl(var(--text))] dark:shadow-none dark:hover:bg-[hsl(var(--primary))]/24"
+                      : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
+                  }`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Vincular candidato
+                </button>
+              )}
+              
+              {activeJobId && (
+                <button
+                  type="button"
+                  onClick={() => setShowRanking((current) => !current)}
+                  className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
+                >
+                  <BarChart3 className="h-3.5 w-3.5 text-slate-400 dark:text-text-muted" />
+                  Ver Ranking IA
+                </button>
+              )}
+
+              {activeJobId && (
+                <button
+                  type="button"
+                  aria-label="Atualizar board"
+                  onClick={() => void handleManualRefresh()}
+                  disabled={boardLoading}
+                  className="pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
+                  Atualizar
+                </button>
+              )}
+            </>,
+            portalTarget
+          )}
         </div>
       </div>
       

@@ -40,6 +40,10 @@ from src.infrastructure.database.models.interview_scorecard_model import (
     InterviewScorecardModel,
 )
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.pre_admission_model import (
+    PreAdmissionChecklistTemplateItemModel,
+    PreAdmissionChecklistTemplateModel,
+)
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -72,6 +76,48 @@ async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[
     resp = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert resp.status_code == 200
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+async def _ensure_default_checklist_template(db_session: AsyncSession) -> PreAdmissionChecklistTemplateModel:
+    existing = await db_session.scalar(
+        sa.select(PreAdmissionChecklistTemplateModel).where(
+            PreAdmissionChecklistTemplateModel.is_default.is_(True),
+            PreAdmissionChecklistTemplateModel.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        return existing
+
+    now = datetime.now(UTC)
+    template = PreAdmissionChecklistTemplateModel(
+        id=uuid4(),
+        name=f"Checklist padrão gates {uuid4().hex[:6]}",
+        description="Template padrão para testes de gates.",
+        is_active=True,
+        is_default=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(template)
+    await db_session.flush()
+    db_session.add(
+        PreAdmissionChecklistTemplateItemModel(
+            id=uuid4(),
+            template_id=template.id,
+            document_key="cpf",
+            title="CPF",
+            candidate_description="Envie o CPF.",
+            is_required=True,
+            accepted_file_types=["application/pdf", "image/jpeg", "image/png"],
+            max_file_size_mb=10,
+            display_order=0,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+    return template
 
 
 def _job_payload(**overrides) -> dict:
@@ -1221,6 +1267,7 @@ async def test_allows_move_to_pre_admission_with_hire_decision(
         decision_status="submitted",
         decision_outcome="hire",
     )
+    await _ensure_default_checklist_template(db_session)
 
     resp = await client.patch(
         f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",

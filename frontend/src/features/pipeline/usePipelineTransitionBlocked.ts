@@ -57,14 +57,7 @@ export function resolvePreAdmissionNavigationPath(
   if (response.pre_admission_case_id) {
     return `/admissao/${response.pre_admission_case_id}`;
   }
-  // No case yet — send the user to the candidate profile pre-admission tab so
-  // they can create the case from there. /admissao/novo is not a registered
-  // route and would result in a silent 404 redirect.
-  const params = new URLSearchParams({
-    tab: "pre_admission",
-    jobId: response.job_id,
-  });
-  return `/candidatos/${response.candidate_id}?${params.toString()}`;
+  return null;
 }
 
 /**
@@ -203,15 +196,7 @@ export function usePipelineGateActionResolver(
           onAfterNavigate?.();
           return true;
         }
-
-        const jobId = readPayloadString(action.payload, ["job_id", "jobId"]);
-        if (!jobId) return false;
-        // No case yet — route to the candidate profile pre-admission tab.
-        // /admissao/novo is not a registered route and would 404.
-        const params = new URLSearchParams({ tab: "pre_admission", jobId });
-        navigate(`/candidatos/${action.candidateId}?${params.toString()}`);
-        onAfterNavigate?.();
-        return true;
+        return false;
       }
 
       const tabByAction: Record<string, string> = {

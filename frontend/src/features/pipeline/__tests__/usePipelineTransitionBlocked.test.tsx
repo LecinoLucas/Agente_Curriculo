@@ -224,7 +224,7 @@ describe("resolvePreAdmissionNavigationPath", () => {
     expect(path).toBe("/admissao/case-1");
   });
 
-  it("retorna fallback para perfil do candidato quando case_id não existe", () => {
+  it("retorna null quando open_pre_admission não traz case_id", () => {
     const path = resolvePreAdmissionNavigationPath({
       candidate_id: "cand-1",
       job_id: "job-1",
@@ -237,7 +237,7 @@ describe("resolvePreAdmissionNavigationPath", () => {
       pre_admission_case_id: null,
       analysis: null,
     });
-    expect(path).toBe("/candidatos/cand-1?tab=pre_admission&jobId=job-1");
+    expect(path).toBeNull();
   });
 
   it("retorna null para respostas sem required_action de pré-admissão", () => {

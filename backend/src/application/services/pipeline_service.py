@@ -11,6 +11,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.domain_events import CandidateStageChangedEvent, dispatch_event
+from src.application.services.pre_admission_checklist_template_service import (
+    PreAdmissionChecklistTemplateService,
+)
 from src.application.services.pipeline_gate_evaluator import (
     MissingGate,
     PipelineGateEvaluator,
@@ -312,6 +315,14 @@ class PipelineTransitionBlockedError(Exception):
         )
 
 
+class PipelinePreAdmissionSetupRequiredError(Exception):
+    """Raised when pre-admission cannot start because setup is incomplete."""
+
+    code = "DEFAULT_CHECKLIST_TEMPLATE_REQUIRED"
+    required_action = "configure_default_checklist_template"
+    message = "Não há checklist admissional padrão ativo. Configure um checklist padrão antes de iniciar a pré-admissão."
+
+
 class PipelineForceNotAllowedError(Exception):
     """Raised when a non-admin actor attempts to force-bypass pipeline gates."""
 
@@ -611,6 +622,12 @@ class PipelineService:
                     "Force não se aplica: nenhuma pendência está bloqueando esta transição."
                 )
 
+        await self._validate_pre_admission_setup_for_stage(
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            target_stage=body.stage,
+        )
+
         now = datetime.now(UTC)
         new_status = to_cfg.terminal_status or "active"
 
@@ -730,6 +747,33 @@ class PipelineService:
             pre_admission_case_id=pre_admission_case_id,
         )
 
+    async def _validate_pre_admission_setup_for_stage(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        target_stage: str,
+    ) -> None:
+        if target_stage != "pre_admission":
+            return
+
+        db_session = self._session or self._repository._session
+        repository = SQLAlchemyPreAdmissionRepository(db_session)
+        active_case = await repository.get_active_case(candidate_id=candidate_id, job_id=job_id)
+        if active_case is not None:
+            return
+
+        try:
+            await PreAdmissionChecklistTemplateService(repository).resolve_template_for_case(template_id=None)
+        except ValidationException as exc:
+            logger.info(
+                "pipeline.pre_admission_case.setup_required",
+                candidate_id=str(candidate_id),
+                job_id=str(job_id),
+                reason=exc.message,
+            )
+            raise PipelinePreAdmissionSetupRequiredError from exc
+
     async def _sync_pre_admission_case_for_stage(
         self,
         *,
@@ -781,13 +825,15 @@ class PipelineService:
                 )
             return created.id
         except ValidationException as exc:
-            logger.info(
-                "pipeline.pre_admission_case.autocreate_skipped",
+            logger.warning(
+                "pipeline.pre_admission_case.autocreate_failed",
                 candidate_id=str(candidate_id),
                 job_id=str(job_id),
                 reason=exc.message,
             )
-            return None
+            if "checklist" in exc.message.lower():
+                raise PipelinePreAdmissionSetupRequiredError from exc
+            raise
         except IntegrityError:
             # Concurrency-safe idempotency: another request likely created the
             # case first. Re-read and return it.

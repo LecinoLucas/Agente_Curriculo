@@ -24,6 +24,7 @@ from src.application.services.pipeline_service import (
     PipelineForceReasonInvalidError,
     PipelineInvalidTransitionError,
     PipelineJobNotFoundError,
+    PipelinePreAdmissionSetupRequiredError,
     PipelineSameStageError,
     PipelineService,
     PipelineTerminalStageError,
@@ -84,6 +85,19 @@ def _blocked_response(exc: PipelineTransitionBlockedError) -> JSONResponse:
             "missing_gates": [gate.as_dict() for gate in exc.missing_gates],
             "can_force": exc.can_force,
             "force_requires_reason": True,
+        },
+    )
+
+
+def _pre_admission_setup_required_response(exc: PipelinePreAdmissionSetupRequiredError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "ok": False,
+            "code": exc.code,
+            "message": exc.message,
+            "required_action": exc.required_action,
+            "pre_admission_case_id": None,
         },
     )
 
@@ -291,6 +305,9 @@ async def move_candidate_stage_v2(
     except PipelineTransitionBlockedError as exc:
         await db.rollback()
         return _blocked_response(exc)
+    except PipelinePreAdmissionSetupRequiredError as exc:
+        await db.rollback()
+        return _pre_admission_setup_required_response(exc)
     except PipelineForceNotAllowedError as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))

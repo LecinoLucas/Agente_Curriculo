@@ -43,7 +43,7 @@ describe("usePipelineGateActionResolver", () => {
     expect(onAfterNavigate).toHaveBeenCalledTimes(1);
   });
 
-  it("faz fallback para perfil do candidato com tab=pre_admission quando case_id não existe", () => {
+  it("retorna false quando open_pre_admission não traz case_id", () => {
     const onAfterNavigate = vi.fn();
     const { result } = renderHook(() => usePipelineGateActionResolver(onAfterNavigate), { wrapper });
 
@@ -57,9 +57,9 @@ describe("usePipelineGateActionResolver", () => {
       });
     });
 
-    expect(handled).toBe(true);
-    expect(navigateMock).toHaveBeenCalledWith("/candidatos/cand-1?tab=pre_admission&jobId=job-1");
-    expect(onAfterNavigate).toHaveBeenCalledTimes(1);
+    expect(handled).toBe(false);
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(onAfterNavigate).not.toHaveBeenCalled();
   });
 
   it("retorna false quando open_pre_admission não traz jobId nem caseId", () => {
