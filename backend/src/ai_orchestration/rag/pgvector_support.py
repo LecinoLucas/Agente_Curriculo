@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+JSON_FALLBACK_CANDIDATE_LIMIT = 1000
+
 
 async def is_pgvector_available(session: AsyncSession) -> bool:
     """Verifica se a extensão 'vector' está instalada e disponível no banco de dados.
@@ -39,11 +41,13 @@ async def get_vector_extension_status(session: AsyncSession) -> dict[str, Any]:
     status = {
         "pgvector_available": available,
         "storage_mode": "pgvector" if available else "json_fallback",
+        "json_fallback_candidate_limit": JSON_FALLBACK_CANDIDATE_LIMIT,
         "warnings": []
     }
     
     if not available:
         status["warnings"].append("pgvector_not_available")
+        status["warnings"].append(build_json_fallback_limited_warning())
         
     return status
 
@@ -54,3 +58,8 @@ def build_pgvector_unavailable_warning() -> str:
         "Busca vetorial desativada: extensão 'pgvector' não detectada no Postgres. "
         "O sistema está operando em modo de compatibilidade (JSON fallback)."
     )
+
+
+def build_json_fallback_limited_warning() -> str:
+    """Código de aviso padrão quando a busca opera em fallback JSON com teto defensivo."""
+    return "rag_vector_search_json_fallback_limited"

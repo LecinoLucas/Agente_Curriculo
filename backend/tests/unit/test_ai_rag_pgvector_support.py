@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from src.ai_orchestration.rag.pgvector_support import (
+    JSON_FALLBACK_CANDIDATE_LIMIT,
     get_vector_extension_status,
     is_pgvector_available,
 )
@@ -52,6 +53,8 @@ class TestPgvectorSupport:
         assert status["pgvector_available"] is False
         assert status["storage_mode"] == "json_fallback"
         assert "pgvector_not_available" in status["warnings"]
+        assert "rag_vector_search_json_fallback_limited" in status["warnings"]
+        assert status["json_fallback_candidate_limit"] == JSON_FALLBACK_CANDIDATE_LIMIT
 
     async def test_get_status_reports_pgvector_when_available(self) -> None:
         session = AsyncMock()
@@ -62,4 +65,5 @@ class TestPgvectorSupport:
         status = await get_vector_extension_status(session)
         assert status["pgvector_available"] is True
         assert status["storage_mode"] == "pgvector"
+        assert status["json_fallback_candidate_limit"] == JSON_FALLBACK_CANDIDATE_LIMIT
         assert len(status["warnings"]) == 0

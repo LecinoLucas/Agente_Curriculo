@@ -4,11 +4,10 @@ Postgres Vector Store: Implementação definitiva para busca vetorial RAG.
 Gerencia a persistência de embeddings e a busca por similaridade (cosine distance).
 Inclui fallback controlado quando pgvector não está disponível.
 
-Nota AI-RAG-6 (bridge): A tabela ai_knowledge_embeddings armazena vetores em
-vector_json (JSONB), pois ainda não há coluna vector(N) nativa do pgvector.
-A similarity_search computa cosine similarity em Python sobre os vetores JSON.
-Quando uma migração adicionar a coluna vector real (AI-RAG-7+), a query SQL
-será reescrita para usar o operador <=> do pgvector.
+Enquanto a tabela ainda persiste vetores em `vector_json`, o modo pgvector usa
+cast em SQL para empurrar ORDER BY/LIMIT ao banco. O fallback JSON permanece
+compatível, mas agora com teto defensivo de candidatos para evitar varredura
+linear sem controle.
 """
 from __future__ import annotations
 
@@ -18,6 +17,8 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai_orchestration.rag.pgvector_support import (
+    JSON_FALLBACK_CANDIDATE_LIMIT,
+    build_json_fallback_limited_warning,
     get_vector_extension_status,
     is_pgvector_available,
     build_pgvector_unavailable_warning,
@@ -41,6 +42,7 @@ from src.infrastructure.database.models.ai_knowledge_models import (
 
 # Only these filter keys are accepted in similarity_search to prevent injection
 _ALLOWED_SEARCH_FILTERS: frozenset[str] = frozenset({"source_type"})
+_JSON_FALLBACK_OVERSAMPLE_MULTIPLIER = 20
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -110,9 +112,8 @@ class PostgresVectorStore(VectorStoreContract):
     ) -> RetrievalResult:
         """Busca chunks semanticamente similares via cosine similarity.
 
-        Bridge AI-RAG-6: computa cosine similarity em Python sobre vector_json (JSONB).
-        Quando pgvector não estiver disponível retorna resultado controlado com aviso.
-        Quando pgvector estiver disponível executa JOIN e rankeia em Python.
+        Quando pgvector estiver disponível, aplica similaridade/ORDER BY/LIMIT em SQL.
+        Quando pgvector não estiver disponível, usa fallback JSON com teto defensivo.
 
         Filtros aceitos (whitelist): source_type.
         Não retorna embedding bruto — apenas chunk content + metadata + score.
@@ -129,6 +130,129 @@ class PostgresVectorStore(VectorStoreContract):
                 chunks=[],
                 warnings=["empty_query_embedding"],
             )
+
+        if is_available:
+            return await self._similarity_search_with_pgvector(
+                query=query,
+                query_vector=query_vector,
+                warnings=warnings,
+            )
+
+        return await self._similarity_search_with_json_fallback(
+            query=query,
+            query_vector=query_vector,
+            warnings=warnings,
+        )
+
+    async def _similarity_search_with_pgvector(
+        self,
+        *,
+        query: RetrievalQuery,
+        query_vector: list[float],
+        warnings: list[str],
+    ) -> RetrievalResult:
+        vector_literal = self._format_pgvector_literal(query_vector)
+        params: dict[str, object] = {
+            "query_vector": vector_literal,
+            "query_dimensions": len(query_vector),
+            "limit": max(1, query.limit),
+            "min_score": query.min_score,
+        }
+
+        sql_parts = [
+            """
+            SELECT
+                c.id AS chunk_id,
+                c.document_id AS document_id,
+                c.chunk_index AS chunk_index,
+                c.content AS content,
+                c.metadata_json AS metadata_json,
+                c.source_title AS source_title,
+                d.title AS doc_title,
+                d.source_type AS doc_source_type,
+                GREATEST(
+                    0.0,
+                    1 - (
+                        CAST(e.vector_json::text AS vector)
+                        <=> CAST(:query_vector AS vector)
+                    )
+                ) AS score
+            FROM ai_knowledge_embeddings e
+            JOIN ai_knowledge_chunks c
+              ON e.chunk_id = c.id
+            JOIN ai_knowledge_documents d
+              ON c.document_id = d.id
+            WHERE d.archived_at IS NULL
+              AND d.status IN ('active', 'published')
+              AND jsonb_array_length(e.vector_json) = :query_dimensions
+            """
+        ]
+
+        if query.filters and "source_type" in query.filters:
+            sql_parts.append("AND d.source_type = :source_type")
+            params["source_type"] = query.filters["source_type"]
+
+        if query.min_score > 0.0:
+            sql_parts.append(
+                """
+                AND GREATEST(
+                    0.0,
+                    1 - (
+                        CAST(e.vector_json::text AS vector)
+                        <=> CAST(:query_vector AS vector)
+                    )
+                ) >= :min_score
+                """
+            )
+
+        sql_parts.append(
+            """
+            ORDER BY CAST(e.vector_json::text AS vector) <=> CAST(:query_vector AS vector) ASC
+            LIMIT :limit
+            """
+        )
+
+        result = await self._session.execute(sa.text("\n".join(sql_parts)), params)
+        rows = result.mappings().all()
+
+        chunks = [
+            RetrievedChunk(
+                chunk=KnowledgeChunk(
+                    id=str(row["chunk_id"]),
+                    document_id=str(row["document_id"]),
+                    chunk_index=row["chunk_index"],
+                    content=row["content"],
+                    metadata=dict(row["metadata_json"] or {}),
+                    source_title=row["doc_title"],
+                ),
+                score=round(max(0.0, float(row["score"])), 4),
+                match_reason="vector_similarity",
+            )
+            for row in rows
+        ]
+
+        return RetrievalResult(
+            query=query.query,
+            chunks=chunks,
+            total=len(chunks),
+            warnings=warnings,
+        )
+
+    async def _similarity_search_with_json_fallback(
+        self,
+        *,
+        query: RetrievalQuery,
+        query_vector: list[float],
+        warnings: list[str],
+    ) -> RetrievalResult:
+        candidate_limit = min(
+            JSON_FALLBACK_CANDIDATE_LIMIT,
+            max(
+                max(1, query.limit) * _JSON_FALLBACK_OVERSAMPLE_MULTIPLIER,
+                max(1, query.limit),
+            ),
+        )
+        fetch_limit = candidate_limit + 1
 
         # JOIN: embeddings → chunks → documents (exclude archived docs)
         stmt = (
@@ -157,6 +281,8 @@ class PostgresVectorStore(VectorStoreContract):
                 AIKnowledgeDocumentModel.archived_at.is_(None),
                 AIKnowledgeDocumentModel.status.in_(("active", "published")),
             )
+            .order_by(AIKnowledgeEmbeddingModel.created_at.desc())
+            .limit(fetch_limit)
         )
 
         # Apply whitelisted filters only — unknown keys are silently ignored
@@ -167,6 +293,9 @@ class PostgresVectorStore(VectorStoreContract):
                 )
 
         rows = (await self._session.execute(stmt)).all()
+        if len(rows) > candidate_limit:
+            warnings.append(build_json_fallback_limited_warning())
+            rows = rows[:candidate_limit]
 
         # Compute cosine similarity in Python (bridge: no native vector column yet)
         scored: list[tuple[float, object]] = []
@@ -213,6 +342,11 @@ class PostgresVectorStore(VectorStoreContract):
             total=len(chunks),
             warnings=warnings,
         )
+
+    @staticmethod
+    def _format_pgvector_literal(vector: list[float]) -> str:
+        """Serializa um vetor no formato textual aceito pelo cast para pgvector."""
+        return "[" + ",".join(f"{float(value):.12g}" for value in vector) + "]"
 
     async def delete_embeddings_by_document(self, document_id: str) -> int:
         """Remove todos os embeddings vinculados a um documento."""
