@@ -20,6 +20,7 @@ import type {
   AdmissionCaseWorkspace,
   AdmissionWorkspaceBlocker,
   AdmissionWorkspaceDocument,
+  PreAdmissionDocument,
 } from "../../types/domain";
 import { AdmissionCaseHeader } from "./components/AdmissionCaseHeader";
 import { AdmissionChecklistCard } from "./components/AdmissionChecklistCard";
@@ -124,6 +125,25 @@ function buildWorkspace(
     summary: overview.summary,
     recent_events: eventsPage?.items ?? [],
   };
+}
+
+function hasWorkspaceDocumentsPayload(
+  payload: Partial<AdmissionCaseWorkspace> | null | undefined,
+): payload is Pick<AdmissionCaseWorkspace, "checklist" | "documents"> {
+  return Boolean(payload && Array.isArray(payload.documents) && payload.checklist);
+}
+
+function mapDocumentStatusToChecklistStatus(status: PreAdmissionDocument["status"]) {
+  switch (status) {
+    case "approved":
+      return "approved";
+    case "rejected":
+      return "rejected";
+    case "uploaded":
+      return "received";
+    default:
+      return "pending";
+  }
 }
 
 export function AdmissionCaseWorkspacePanel({
@@ -234,12 +254,86 @@ export function AdmissionCaseWorkspacePanel({
     });
   }, []);
 
+  const replaceDocumentsPayload = useCallback((payload: Pick<AdmissionCaseWorkspace, "checklist" | "documents">) => {
+    setDocumentsPayload({
+      checklist: payload.checklist,
+      documents: payload.documents,
+    });
+    setDocumentsError(null);
+  }, []);
+
+  const updateDocumentLocally = useCallback(
+    (updatedDocument: PreAdmissionDocument) => {
+      let applied = false;
+
+      setDocumentsPayload((current) => {
+        if (!current) return current;
+
+        const documentIndex = current.documents.findIndex((item) => item.id === updatedDocument.id);
+        if (documentIndex < 0) return current;
+
+        const nextDocuments = [...current.documents];
+        const previousDocument = nextDocuments[documentIndex];
+        nextDocuments[documentIndex] = {
+          ...previousDocument,
+          checklist_item_id: updatedDocument.checklist_item_id,
+          filename: updatedDocument.original_filename || previousDocument.filename,
+          mime_type: updatedDocument.mime_type,
+          size_bytes: updatedDocument.size_bytes,
+          status: updatedDocument.status,
+          uploaded_at: updatedDocument.uploaded_at,
+          reviewed_at: updatedDocument.reviewed_at,
+          review_notes: updatedDocument.review_notes,
+          rejection_reason_public: updatedDocument.rejection_reason_public,
+          approved_at: updatedDocument.status === "approved" ? updatedDocument.reviewed_at : null,
+        };
+
+        const nextItems = current.checklist.items.map((item) =>
+          item.id === updatedDocument.checklist_item_id
+            ? {
+                ...item,
+                status: mapDocumentStatusToChecklistStatus(updatedDocument.status),
+                updated_at: updatedDocument.updated_at,
+                document_id: updatedDocument.id,
+              }
+            : item,
+        );
+
+        applied = true;
+        return {
+          checklist: {
+            ...current.checklist,
+            items: nextItems,
+          },
+          documents: nextDocuments,
+        };
+      });
+
+      if (applied) {
+        setDocumentsError(null);
+      }
+
+      return applied;
+    },
+    [],
+  );
+
+  const reloadOverviewAndDocuments = useCallback(async () => {
+    await Promise.all([loadOverview(), loadDocuments()]);
+  }, [loadDocuments, loadOverview]);
+
   const handleMarkNotRequired = useCallback(
     async (itemId: string) => {
       setLoadingActionKey(`${itemId}:mark-not-required`);
       setSummaryMessage(null);
       try {
-        await admissionWorkspaceService.markChecklistItemNotRequired(itemId);
+        const payload = await admissionWorkspaceService.markChecklistItemNotRequired(itemId);
+        if (hasWorkspaceDocumentsPayload(payload)) {
+          replaceDocumentsPayload(payload);
+          await loadOverview();
+        } else {
+          await reloadOverviewAndDocuments();
+        }
         toast.success("Item marcado como não obrigatório.");
       } catch (requestError) {
         toast.error(
@@ -251,11 +345,9 @@ export function AdmissionCaseWorkspacePanel({
         );
       } finally {
         setLoadingActionKey(null);
-        // Events are not actionable on checklist-item changes; reload manually if needed.
-        await Promise.all([loadOverview(), loadDocuments()]);
       }
     },
-    [loadDocuments, loadOverview],
+    [loadOverview, reloadOverviewAndDocuments, replaceDocumentsPayload],
   );
 
   const handleApproveDocument = useCallback(
@@ -263,7 +355,13 @@ export function AdmissionCaseWorkspacePanel({
       setLoadingActionKey(`document:${documentData.id}:approve`);
       setSummaryMessage(null);
       try {
-        await approvePreAdmissionDocument(documentData.id);
+        const updatedDocument = await approvePreAdmissionDocument(documentData.id);
+        const applied = updateDocumentLocally(updatedDocument);
+        if (applied) {
+          await loadOverview();
+        } else {
+          await reloadOverviewAndDocuments();
+        }
         toast.success("Documento aprovado.");
       } catch (requestError) {
         toast.error(
@@ -275,11 +373,9 @@ export function AdmissionCaseWorkspacePanel({
         );
       } finally {
         setLoadingActionKey(null);
-        // Events are informational; reload overview+docs to reflect status changes.
-        await Promise.all([loadOverview(), loadDocuments()]);
       }
     },
-    [loadDocuments, loadOverview],
+    [loadOverview, reloadOverviewAndDocuments, updateDocumentLocally],
   );
 
   const handleRejectDocument = useCallback(
@@ -291,7 +387,13 @@ export function AdmissionCaseWorkspacePanel({
       setLoadingActionKey(`document:${documentData.id}:${mode}`);
       setSummaryMessage(null);
       try {
-        await rejectPreAdmissionDocument(documentData.id, payload);
+        const updatedDocument = await rejectPreAdmissionDocument(documentData.id, payload);
+        const applied = updateDocumentLocally(updatedDocument);
+        if (applied) {
+          await loadOverview();
+        } else {
+          await reloadOverviewAndDocuments();
+        }
         toast.success(mode === "request-correction" ? "Correção solicitada." : "Documento rejeitado.");
       } catch (requestError) {
         toast.error(
@@ -304,11 +406,9 @@ export function AdmissionCaseWorkspacePanel({
         throw requestError;
       } finally {
         setLoadingActionKey(null);
-        // Events are informational; reload overview+docs to reflect status changes.
-        await Promise.all([loadOverview(), loadDocuments()]);
       }
     },
-    [loadDocuments, loadOverview],
+    [loadOverview, reloadOverviewAndDocuments, updateDocumentLocally],
   );
 
   const handleDownloadDocument = useCallback(

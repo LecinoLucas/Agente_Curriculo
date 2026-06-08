@@ -16,6 +16,7 @@ import type {
   AdmissionCaseEventsPage,
   AdmissionCaseOverview,
   AdmissionCaseWorkspace,
+  PreAdmissionDocument,
 } from "../../types/domain";
 
 vi.mock("../../services/admissionWorkspaceService", () => ({
@@ -223,6 +224,29 @@ const mockEventsPage: AdmissionCaseEventsPage = {
   has_next: false,
 };
 
+function buildMutationDocument(
+  overrides: Partial<PreAdmissionDocument> = {},
+): PreAdmissionDocument {
+  return {
+    id: "doc-1",
+    case_id: "case-42",
+    checklist_item_id: "item-1",
+    candidate_id: "cand-1",
+    original_filename: "RG_Larissa.pdf",
+    mime_type: "application/pdf",
+    size_bytes: 204800,
+    status: "approved",
+    uploaded_at: "2025-05-23T14:02:00Z",
+    reviewed_at: "2025-05-23T14:10:00Z",
+    reviewed_by: "user-1",
+    review_notes: null,
+    rejection_reason_public: null,
+    created_at: "2025-05-23T14:02:00Z",
+    updated_at: "2025-05-23T14:10:00Z",
+    ...overrides,
+  };
+}
+
 function mockWorkspaceSlices(workspace: AdmissionCaseWorkspace) {
   vi.mocked(admissionWorkspaceService.getOverview).mockResolvedValue({
     case: workspace.case,
@@ -411,8 +435,13 @@ describe("AdmissionCasePage", () => {
       updated_at: "2026-05-25T15:22:00Z",
       completed_at: "2026-05-25T15:22:03Z",
     });
-    vi.mocked(approvePreAdmissionDocument).mockResolvedValue({} as any);
-    vi.mocked(rejectPreAdmissionDocument).mockResolvedValue({} as any);
+    vi.mocked(approvePreAdmissionDocument).mockResolvedValue(buildMutationDocument());
+    vi.mocked(rejectPreAdmissionDocument).mockResolvedValue(
+      buildMutationDocument({
+        status: "rejected",
+        rejection_reason_public: "Documento ilegível.",
+      }),
+    );
     vi.mocked(downloadPreAdmissionDocument).mockResolvedValue(new Blob(["pdf"]));
     vi.spyOn(window, "confirm").mockReturnValue(true);
   });
@@ -462,8 +491,8 @@ describe("AdmissionCasePage", () => {
     renderPage();
 
     expect(await screen.findByText("Exportação ERP")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Enviar para ERP/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Baixar JSON \(conferência\)/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Enviar para ERP/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Baixar JSON \(conferência\)/i })).toBeInTheDocument();
   });
 
   it("mostra progresso correto: '{aprovados} de {total} documentos aprovados'", async () => {
@@ -883,14 +912,29 @@ describe("AdmissionCasePage", () => {
 
   // ── PA-FIX-2: redução de reloads redundantes ─────────────────────────────────
 
-  it("PA-FIX-2: aprovar documento não chama getEvents", async () => {
+  it("PA-FIX-2: abrir workspace chama overview, documents e events uma vez", async () => {
+    renderPage();
+
+    await screen.findByText("Checklist admissional");
+
+    expect(admissionWorkspaceService.getOverview).toHaveBeenCalledTimes(1);
+    expect(admissionWorkspaceService.getDocuments).toHaveBeenCalledTimes(1);
+    expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it("PA-FIX-2: aprovar documento atualiza localmente sem recarregar documents nem events", async () => {
     const user = userEvent.setup();
     mockWorkspaceSlices({
       ...mockWorkspace,
       documents: [{ ...mockWorkspace.documents[0], status: "uploaded", reviewed_at: null, reviewed_by_name: null, approved_at: null }],
+      checklist: {
+        ...mockWorkspace.checklist,
+        items: [{ ...mockWorkspace.checklist.items[0], status: "received" }, ...mockWorkspace.checklist.items.slice(1)],
+      },
     });
     renderPage();
 
+    await screen.findByText("Checklist admissional");
     await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
 
     await waitFor(() => {
@@ -898,24 +942,41 @@ describe("AdmissionCasePage", () => {
     });
 
     await waitFor(() => {
-      // overview and documents reload
-      expect(admissionWorkspaceService.getOverview).toHaveBeenCalled();
-      expect(admissionWorkspaceService.getDocuments).toHaveBeenCalled();
+      expect(screen.getByTestId("admission-document-approve-doc-1")).toBeDisabled();
     });
 
-    // Events must NOT reload after approve — only on full reloadSections or markReady
-    const overviewCallCount = vi.mocked(admissionWorkspaceService.getOverview).mock.calls.length;
-    const eventsCallCount = vi.mocked(admissionWorkspaceService.getEvents).mock.calls.length;
-    // getEvents was called on initial load (1 time), but must not be called again after approve
-    expect(eventsCallCount).toBe(1);
-    // getOverview fired at least 2 times (initial + post-approve reload)
-    expect(overviewCallCount).toBeGreaterThanOrEqual(2);
+    expect(admissionWorkspaceService.getOverview).toHaveBeenCalledTimes(2);
+    expect(admissionWorkspaceService.getDocuments).toHaveBeenCalledTimes(1);
+    expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(1);
   });
 
-  it("PA-FIX-2: rejeitar documento não chama getEvents", async () => {
+  it("PA-FIX-2: aprovar documento faz fallback para documents quando resposta da ação é incompleta", async () => {
+    const user = userEvent.setup();
+    vi.mocked(approvePreAdmissionDocument).mockResolvedValue({} as PreAdmissionDocument);
+
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [{ ...mockWorkspace.documents[0], status: "uploaded", reviewed_at: null, reviewed_by_name: null, approved_at: null }],
+    });
+    renderPage();
+
+    await screen.findByText("Checklist admissional");
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+
+    await waitFor(() => {
+      expect(approvePreAdmissionDocument).toHaveBeenCalled();
+    });
+
+    expect(admissionWorkspaceService.getOverview).toHaveBeenCalledTimes(2);
+    expect(admissionWorkspaceService.getDocuments).toHaveBeenCalledTimes(2);
+    expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it("PA-FIX-2: rejeitar documento segue atualização local e não chama getEvents", async () => {
     const user = userEvent.setup();
     renderPage();
 
+    await screen.findByText("Checklist admissional");
     await user.click(await screen.findByTestId("admission-document-request-correction-doc-1"));
     const dialog = await screen.findByRole("dialog", { name: /Solicitar correção/i });
     await user.type(within(dialog).getByTestId("admission-public-reason"), "Documento ilegível.");
@@ -925,13 +986,57 @@ describe("AdmissionCasePage", () => {
       expect(rejectPreAdmissionDocument).toHaveBeenCalled();
     });
 
-    await waitFor(() => {
-      expect(admissionWorkspaceService.getOverview).toHaveBeenCalled();
-      expect(admissionWorkspaceService.getDocuments).toHaveBeenCalled();
+    expect(admissionWorkspaceService.getOverview).toHaveBeenCalledTimes(2);
+    expect(admissionWorkspaceService.getDocuments).toHaveBeenCalledTimes(1);
+    expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it("PA-FIX-2: erro ao aprovar mantém call-count estável e não altera estado incorretamente", async () => {
+    const user = userEvent.setup();
+    vi.mocked(approvePreAdmissionDocument).mockRejectedValue(new Error("approve failed"));
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [{ ...mockWorkspace.documents[0], status: "uploaded", reviewed_at: null, reviewed_by_name: null, approved_at: null }],
     });
 
-    const eventsCallCount = vi.mocked(admissionWorkspaceService.getEvents).mock.calls.length;
-    expect(eventsCallCount).toBe(1);
+    renderPage();
+
+    await screen.findByText("Checklist admissional");
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+
+    await waitFor(() => {
+      expect(approvePreAdmissionDocument).toHaveBeenCalled();
+    });
+
+    expect(admissionWorkspaceService.getOverview).toHaveBeenCalledTimes(1);
+    expect(admissionWorkspaceService.getDocuments).toHaveBeenCalledTimes(1);
+    expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: /aprovar/i })).toBeInTheDocument();
+  });
+
+  it("PA-FIX-2: aprovar documento não recarrega pacote Protheus", async () => {
+    const user = userEvent.setup();
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      summary: { ...mockWorkspace.summary, ready_for_export: true },
+      documents: [{ ...mockWorkspace.documents[0], status: "uploaded", reviewed_at: null, reviewed_by_name: null, approved_at: null }],
+    });
+
+    renderPage();
+
+    await screen.findByText("Exportação ERP");
+
+    expect(admissionPackageService.getPackageByCaseId).toHaveBeenCalledTimes(1);
+    expect(admissionPackageService.listErpAttempts).toHaveBeenCalledTimes(1);
+
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+
+    await waitFor(() => {
+      expect(approvePreAdmissionDocument).toHaveBeenCalled();
+    });
+
+    expect(admissionPackageService.getPackageByCaseId).toHaveBeenCalledTimes(1);
+    expect(admissionPackageService.listErpAttempts).toHaveBeenCalledTimes(1);
   });
 
   it("PA-FIX-2: marcar pronto chama getEvents (mudança de estado do caso)", async () => {
