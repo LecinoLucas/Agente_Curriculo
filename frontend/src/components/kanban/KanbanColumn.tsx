@@ -236,16 +236,26 @@ export const KanbanColumn = memo(function KanbanColumn({
         })}
 
         {column.candidates.length === 0 && (
-          <div className="pipeline-kanban-column__empty mt-5 mb-auto flex flex-col items-center justify-center px-2 pb-2 text-center animate-in fade-in duration-200">
-            <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-xl border shadow-sm ${theme.bgEmpty}`}>
-              {theme.emptyIcon && <theme.emptyIcon className="h-3.5 w-3.5" />}
+          <div className="pipeline-kanban-column__empty my-auto mx-auto flex flex-col items-center justify-center w-full px-2.5">
+            <div className="flex flex-col items-center justify-center bg-white dark:bg-surface border border-slate-200/50 dark:border-border/50 rounded-[20px] p-5 shadow-[0_8px_20px_rgba(15,23,42,0.02)] w-full transition-all duration-300 hover:shadow-[0_12px_28px_rgba(15,23,42,0.04)] animate-in fade-in zoom-in-95 duration-300">
+              <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-full ${
+                columnVisualKey === "entrevista"
+                  ? "bg-cyan-50 text-cyan-500 dark:bg-cyan-950/30 dark:text-cyan-400"
+                  : columnVisualKey === "avaliacao"
+                  ? "bg-rose-50 text-rose-500 dark:bg-rose-950/30 dark:text-rose-400"
+                  : columnVisualKey === "decisao"
+                  ? "bg-violet-50 text-violet-500 dark:bg-violet-950/30 dark:text-violet-400"
+                  : theme.bgEmpty
+              }`}>
+                {theme.emptyIcon && <theme.emptyIcon className="h-4.5 w-4.5" />}
+              </div>
+              <h3 className="text-[12px] font-black text-slate-800 dark:text-text">
+                Nenhum candidato
+              </h3>
+              <p className="mt-1 max-w-[155px] text-[10px] font-bold leading-normal text-slate-400 dark:text-text-muted">
+                {theme.emptySub}
+              </p>
             </div>
-            <h3 className={`text-[11px] font-bold ${theme.textEmpty}`}>
-              Nenhum candidato
-            </h3>
-            <p className="mt-1 max-w-[150px] text-[10px] font-medium leading-snug text-slate-400 dark:text-text-muted">
-              {theme.emptySub}
-            </p>
           </div>
         )}
 
