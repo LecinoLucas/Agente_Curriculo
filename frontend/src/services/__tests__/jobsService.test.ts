@@ -8,7 +8,7 @@ vi.mock("../http", () => ({
   httpRequest: httpRequestMock,
 }));
 
-import { getJobPipeline } from "../jobsService";
+import { getJobPipeline, listJobCandidates } from "../jobsService";
 
 describe("getJobPipeline", () => {
   beforeEach(() => {
@@ -95,5 +95,64 @@ describe("getJobPipeline", () => {
     expect(url.searchParams.get("entered_to")).toMatch(/^2026-05-31T23:59:59\.999[+-]\d{2}:\d{2}$/);
     expect(url.searchParams.get("updated_from")).toMatch(/^2026-06-01T00:00:00\.000[+-]\d{2}:\d{2}$/);
     expect(url.searchParams.get("updated_to")).toMatch(/^2026-06-30T23:59:59\.999[+-]\d{2}:\d{2}$/);
+  });
+});
+
+describe("listJobCandidates", () => {
+  beforeEach(() => {
+    httpRequestMock.mockReset();
+  });
+
+  it("usa a paginacao do ranking em vez de buscar tudo e fatiar localmente", async () => {
+    httpRequestMock.mockResolvedValue({
+      job_id: "job-1",
+      total_candidates: 12,
+      threshold_high: 70,
+      threshold_low: 40,
+      score_version: "v1",
+      page: 2,
+      page_size: 5,
+      total_pages: 3,
+      candidates: [
+        {
+          rank: 6,
+          candidate_id: "candidate-6",
+          candidate_name: "Ana Souza",
+          stage: "screening",
+          pipeline_status: "Triagem",
+          score_breakdown: {
+            skill_match_score: 80,
+            experience_match_score: 70,
+            seniority_match_score: 75,
+            education_score: 60,
+            confidence_score: 90,
+            penalty_score: 0,
+            job_fit_score: 78,
+          },
+          job_fit_score: 78,
+          decision_suggestion: "good_match",
+          reason_tags: [],
+          score_factors: null,
+          ranking_summary_text: "",
+          computed_at: "2026-06-01T10:00:00Z",
+          ranking_freshness_status: "fresh",
+          version: "v1",
+        },
+      ],
+    });
+
+    const response = await listJobCandidates("job-1", 2, 5);
+
+    const [requestUrl] = httpRequestMock.mock.calls[0];
+    const url = new URL(requestUrl, "http://localhost");
+
+    expect(url.pathname).toBe("/api/v1/jobs/job-1/ranking");
+    expect(url.searchParams.get("page")).toBe("2");
+    expect(url.searchParams.get("page_size")).toBe("5");
+    expect(response.total).toBe(12);
+    expect(response.page).toBe(2);
+    expect(response.page_size).toBe(5);
+    expect(response.total_pages).toBe(3);
+    expect(response.data).toHaveLength(1);
   });
 });

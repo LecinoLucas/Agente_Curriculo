@@ -5,7 +5,6 @@ import {
   archiveJob,
   closeJob,
   deleteJob,
-  listJobCandidates,
   listJobs,
   pauseJob,
   restoreJob,
@@ -96,34 +95,22 @@ export function useJobsList() {
 
     void (async () => {
       try {
-        const [pipelineJobs, candidateResults] = await Promise.all([
-          pipelineService.listPipelineJobs(true),
-          Promise.allSettled(jobs.map((job) => listJobCandidates(job.id, 1, 25))),
-        ]);
+        const pipelineJobs = await pipelineService.listPipelineJobs(true);
 
         if (operationalRequestRef.current !== requestId) return;
 
         const pipelineJobsById = Object.fromEntries(pipelineJobs.map((job) => [job.id, job]));
         const nextOperationalData: Record<string, JobOperationalData> = {};
 
-        jobs.forEach((job, index) => {
+        jobs.forEach((job) => {
           const pipelineJob = pipelineJobsById[job.id];
-          const candidateResult = candidateResults[index];
-          const candidates =
-            candidateResult?.status === "fulfilled" ? (candidateResult.value.data ?? []) : [];
-          const scoredCandidates = candidates
-            .map((candidate) => Number(candidate.job_fit_score ?? 0))
-            .filter((score) => Number.isFinite(score));
 
           nextOperationalData[job.id] = {
-            totalCandidates: pipelineJob?.total_candidates ?? candidates.length,
+            totalCandidates: pipelineJob?.total_candidates ?? 0,
             stageCounts: pipelineJob?.stage_counts ?? {},
             latestActivity: pipelineJob?.latest_activity ?? null,
-            strongCandidates: candidates.filter((candidate) => {
-              const score = Number(candidate.job_fit_score ?? 0);
-              return candidate.recommendation === "good_match" || score >= 70;
-            }).length,
-            topScore: scoredCandidates.length > 0 ? Math.max(...scoredCandidates) : null,
+            strongCandidates: 0,
+            topScore: null,
           };
         });
 

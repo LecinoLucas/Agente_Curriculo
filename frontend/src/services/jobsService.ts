@@ -216,7 +216,7 @@ export async function listJobCandidates(
   min_score?: number,
   seniority?: string,
 ): Promise<Paginated<JobCandidate>> {
-  const response = await getJobRanking(jobId);
+  const response = await getJobRanking(jobId, { page, pageSize: page_size });
   const candidates: JobCandidate[] = response.candidates.map((entry) => ({
     candidate_id: entry.candidate_id,
     candidate_name: entry.candidate_name,
@@ -237,12 +237,20 @@ export async function listJobCandidates(
     filtered = filtered.filter((c) => (c.seniority_level ?? "").toLowerCase() === seniority.toLowerCase());
   }
 
-  const total = filtered.length;
-  const total_pages = Math.max(1, Math.ceil(total / page_size));
-  const start = (page - 1) * page_size;
-  const data = filtered.slice(start, start + page_size);
+  const hasClientSideFilters = min_score != null || Boolean(seniority);
+  const total = hasClientSideFilters ? filtered.length : response.total_candidates;
+  const total_pages = hasClientSideFilters
+    ? Math.max(1, Math.ceil(total / page_size))
+    : response.total_pages ?? Math.max(1, Math.ceil(total / page_size));
+  const data = filtered;
 
-  return { data, total, page, page_size, total_pages };
+  return {
+    data,
+    total,
+    page: response.page ?? page,
+    page_size: response.page_size ?? page_size,
+    total_pages,
+  };
 }
 
 function appendDateFilter(
@@ -281,6 +289,7 @@ export async function getJobPipeline(
   const columns = Array.isArray(response?.columns) ? response.columns : [];
   return {
     job_id: response?.job_id ?? jobId,
+    truncated: Boolean(response?.truncated),
     columns: columns.map((column) => ({
       stage: column.stage,
       label: column.label,
