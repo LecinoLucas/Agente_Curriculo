@@ -6,6 +6,7 @@ const {
   archiveJobMock,
   closeJobMock,
   deleteJobMock,
+  getJobRankingMock,
   listJobCandidatesMock,
   listJobsMock,
   listPipelineJobsMock,
@@ -15,6 +16,7 @@ const {
   archiveJobMock: vi.fn(),
   closeJobMock: vi.fn(),
   deleteJobMock: vi.fn(),
+  getJobRankingMock: vi.fn(),
   listJobCandidatesMock: vi.fn(),
   listJobsMock: vi.fn(),
   listPipelineJobsMock: vi.fn(),
@@ -26,6 +28,7 @@ vi.mock("../../../../services/jobsService", () => ({
   archiveJob: archiveJobMock,
   closeJob: closeJobMock,
   deleteJob: deleteJobMock,
+  getJobRanking: getJobRankingMock,
   listJobCandidates: listJobCandidatesMock,
   listJobs: listJobsMock,
   pauseJob: pauseJobMock,
@@ -143,6 +146,7 @@ describe("useJobsList", () => {
 
     expect(listJobsMock).toHaveBeenCalledTimes(1);
     expect(listJobCandidatesMock).not.toHaveBeenCalled();
+    expect(getJobRankingMock).not.toHaveBeenCalled();
     expect(result.current.jobOperationalData["job-1"]).toMatchObject({
       totalCandidates: 7,
       stageCounts: { entry: 3, screening: 2, offer: 1, hired: 1 },
@@ -164,6 +168,7 @@ describe("useJobsList", () => {
     expect(result.current.filteredJobs).toHaveLength(2);
     expect(result.current.jobOperationalData).toEqual({});
     expect(listJobCandidatesMock).not.toHaveBeenCalled();
+    expect(getJobRankingMock).not.toHaveBeenCalled();
   });
 
   it("preserva paginacao sem buscar todas as vagas para calculos locais", async () => {
@@ -186,5 +191,6 @@ describe("useJobsList", () => {
       }),
     );
     expect(listJobCandidatesMock).not.toHaveBeenCalled();
+    expect(getJobRankingMock).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,8 @@ Usamos can_use_assistant por consistência com o stub original, mas preparamos p
 """
 from __future__ import annotations
 
+import logging
+from time import perf_counter
 from typing import Any
 
 from src.ai_orchestration.core.agent_context import AgentContext
@@ -20,6 +22,7 @@ from src.ai_orchestration.rag.schemas import RetrievalQuery
 
 _REQUIRED_PERMISSION = "can_use_assistant"
 _LIMIT_MAX = 20
+logger = logging.getLogger(__name__)
 
 
 async def search_knowledge(
@@ -53,6 +56,9 @@ async def search_knowledge(
 
     # 3. Execução
     capped_limit = max(1, min(limit, _LIMIT_MAX))
+    started_at = perf_counter()
+    retrieval_total = 0
+    retrieval_warnings: list[str] = []
     
     try:
         retrieval_query = RetrievalQuery(
@@ -62,6 +68,8 @@ async def search_knowledge(
         )
         
         result = await retriever.retrieve(retrieval_query)
+        retrieval_total = result.total
+        retrieval_warnings = list(result.warnings)
         
         # 4. Formatação da saída segura (ToolResult.data)
         safe_chunks = _format_safe_chunks(result.chunks)
@@ -79,6 +87,17 @@ async def search_knowledge(
         return ToolResult.error(
             "INTERNAL_ERROR", 
             f"Erro ao consultar base de conhecimento: {type(exc).__name__}"
+        )
+    finally:
+        logger.info(
+            "knowledge.search.timing",
+            extra={
+                "event": "knowledge.search.timing",
+                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                "limit": capped_limit,
+                "rows": retrieval_total,
+                "warning_code": retrieval_warnings,
+            },
         )
 
 
@@ -116,6 +135,10 @@ async def answer_knowledge(
 
     # 3. Recuperação (Search)
     capped_limit = max(1, min(limit, _LIMIT_MAX))
+    started_at = perf_counter()
+    retrieval_total = 0
+    retrieval_warnings: list[str] = []
+    source_total = 0
     try:
         retrieval_query = RetrievalQuery(
             query=clean_query,
@@ -123,6 +146,8 @@ async def answer_knowledge(
             filters=filters or {},
         )
         retrieval_result = await retriever.retrieve(retrieval_query)
+        retrieval_total = retrieval_result.total
+        retrieval_warnings = list(retrieval_result.warnings)
         
         # 4. Síntese (Answer)
         answer_request = RagAnswerRequest(
@@ -138,6 +163,7 @@ async def answer_knowledge(
                 answer_result.error_code or "SYNTHESIS_ERROR",
                 answer_result.message or "Falha ao sintetizar resposta."
             )
+        source_total = len(answer_result.sources)
 
         # 5. Saída Segura
         return ToolResult.success(
@@ -170,6 +196,18 @@ async def answer_knowledge(
         return ToolResult.error(
             "INTERNAL_ERROR", 
             f"Erro ao processar resposta de conhecimento: {type(exc).__name__}"
+        )
+    finally:
+        logger.info(
+            "knowledge.answer.timing",
+            extra={
+                "event": "knowledge.answer.timing",
+                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                "limit": capped_limit,
+                "rows": retrieval_total,
+                "source_count": source_total,
+                "warning_code": retrieval_warnings,
+            },
         )
 
 

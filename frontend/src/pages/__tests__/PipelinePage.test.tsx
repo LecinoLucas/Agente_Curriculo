@@ -1128,6 +1128,50 @@ describe("PipelinePage", () => {
     expect(mockRefreshBoard).not.toHaveBeenCalled();
   });
 
+  it("21b. Mover etapa com board truncado faz reload de segurança uma vez", async () => {
+    mockRefreshBoard.mockResolvedValue(undefined);
+    const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+
+    (usePipeline as any).mockReturnValue({
+      activeJobId: "job-1",
+      board: {
+        ...mockBoard,
+        truncated: true,
+      },
+      boardFilters: {},
+      boardLoading: false,
+      boardError: null,
+      rankingSyncTick: 0,
+      setActiveJob: mockSetActiveJob,
+      setBoardFilters: mockSetBoardFilters,
+      moveCandidateStage: mockMoveCandidateStage,
+      refreshBoard: mockRefreshBoard,
+      openCandidate: mockOpenCandidate,
+      closeCandidate: mockCloseCandidate,
+      syncCandidateOverview: mockSyncCandidateOverview,
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+
+    await waitFor(() => {
+      expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
+    });
+    await waitFor(() => {
+      expect(mockRefreshBoard).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ── Filtros locais (busca + Pendências) ────────────────────────────────────
   describe("Filtros locais de Pipeline", () => {
     it("digitar no input de busca filtra candidatos pelo nome", async () => {

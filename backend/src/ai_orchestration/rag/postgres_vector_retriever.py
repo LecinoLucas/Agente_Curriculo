@@ -18,6 +18,9 @@ Fallback controlado:
 """
 from __future__ import annotations
 
+import logging
+from time import perf_counter
+
 from src.ai_orchestration.rag.document_repository_contract import (
     KnowledgeDocumentRepositoryContract,
 )
@@ -29,6 +32,8 @@ from src.ai_orchestration.rag.schemas import (
     RetrievalResult,
 )
 from src.ai_orchestration.rag.vector_store_contract import VectorStoreContract
+
+logger = logging.getLogger(__name__)
 
 
 class PostgresVectorRetriever(RetrieverContract):
@@ -56,6 +61,7 @@ class PostgresVectorRetriever(RetrieverContract):
         Nunca propaga exceção — retorna warnings em caso de degradação.
         Não retorna embeddings brutos em nenhum campo do resultado.
         """
+        started_at = perf_counter()
         if not query.query.strip():
             return RetrievalResult(
                 query=query.query,
@@ -91,6 +97,15 @@ class PostgresVectorRetriever(RetrieverContract):
         try:
             result = await self._vector_store.similarity_search(query, query_vector)
         except Exception as exc:
+            logger.warning(
+                "rag.retrieval.error",
+                extra={
+                    "event": "rag.retrieval.error",
+                    "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                    "limit": query.limit,
+                    "error_type": type(exc).__name__,
+                },
+            )
             return RetrievalResult(
                 query=query.query,
                 chunks=[],
@@ -98,6 +113,17 @@ class PostgresVectorRetriever(RetrieverContract):
                 warnings=[f"vector_store_error: {type(exc).__name__}"],
             )
 
+        logger.info(
+            "rag.retrieval.timing",
+            extra={
+                "event": "rag.retrieval.timing",
+                "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                "limit": query.limit,
+                "rows": result.total,
+                "storage_mode": _infer_storage_mode(result.warnings),
+                "warning_code": list(result.warnings),
+            },
+        )
         return result
 
     async def get_document(self, document_id: str) -> KnowledgeDocument | None:
@@ -109,3 +135,12 @@ class PostgresVectorRetriever(RetrieverContract):
             return await self._document_repository.get_document(document_id)
         except Exception:
             return None
+
+
+def _infer_storage_mode(warnings: list[str]) -> str:
+    if any(
+        warning == "rag_vector_search_json_fallback_limited" or "pgvector" in warning.lower()
+        for warning in warnings
+    ):
+        return "json_fallback"
+    return "pgvector"
