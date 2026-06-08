@@ -166,8 +166,11 @@ function DrawerPanel({
 
   const syncAfterPipelineChange = async () => {
     try {
+      if (onPipelineChanged) {
+        await onPipelineChanged();
+        return;
+      }
       await reload();
-      await onPipelineChanged?.();
     } catch (err: unknown) {
       toast.error(
         formatContextError(

@@ -227,6 +227,7 @@ describe("PipelineContext", () => {
       await result.current.moveCandidateStage("candidate-1", "screening");
     });
 
+    expect(getJobPipelineMock).toHaveBeenCalledTimes(1);
     const nextBoard = result.current.board!;
     expect(nextBoard.columns[0].candidates).toHaveLength(0);
     expect(nextBoard.columns[1].candidates.map((candidate) => candidate.candidate_id)).toEqual([

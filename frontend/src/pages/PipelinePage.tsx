@@ -618,9 +618,14 @@ export function PipelinePage() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const syncAfterStageMutation = useCallback(async (affectedCandidateId?: string) => {
+  const syncAfterStageMutation = useCallback(async (
+    affectedCandidateId?: string,
+    options: { reloadBoard?: boolean } = {},
+  ) => {
     try {
-      await refreshBoard();
+      if (options.reloadBoard || board?.truncated) {
+        await refreshBoard();
+      }
       if (affectedCandidateId && affectedCandidateId === previewCandidateIdRef.current) {
         void syncCandidateOverview(affectedCandidateId);
       }
@@ -628,7 +633,7 @@ export function PipelinePage() {
     } catch {
       // The board already receives an optimistic update; keep the UI usable.
     }
-  }, [refreshBoard, syncCandidateOverview]);
+  }, [board?.truncated, refreshBoard, syncCandidateOverview]);
 
   const moveCandidateOnBoard = useCallback(
     async (candidateId: string, toStage: PipelineStage, candidateName?: string | null) => {
@@ -651,8 +656,9 @@ export function PipelinePage() {
           // already restored the card to its original column; force a server
           // refetch to be safe.
           toast.dismissKey(MOVE_CANDIDATE_TOAST_KEY);
-          await syncAfterStageMutation(candidateId);
+          await syncAfterStageMutation(candidateId, { reloadBoard: true });
         } else {
+          await syncAfterStageMutation(candidateId, { reloadBoard: true });
           feedback.moveCandidate.error(err);
         }
       } finally {
@@ -760,7 +766,7 @@ export function PipelinePage() {
           interview_type: interviewTypeForStage(interviewCandidate.targetStage),
         });
         setInterviewCandidate(null);
-        await syncAfterStageMutation(affectedId);
+        await syncAfterStageMutation(affectedId, { reloadBoard: true });
         feedback.moveCandidate.success();
       } catch (err: unknown) {
         const handled = handleBlockedError(err, {
@@ -770,7 +776,7 @@ export function PipelinePage() {
         if (handled) {
           toast.dismissKey(MOVE_CANDIDATE_TOAST_KEY);
           setInterviewCandidate(null);
-          await syncAfterStageMutation(affectedId);
+          await syncAfterStageMutation(affectedId, { reloadBoard: true });
         } else {
           feedback.moveCandidate.error(err);
         }
@@ -807,7 +813,7 @@ export function PipelinePage() {
           reason,
         });
         setRejectionCandidate(null);
-        await syncAfterStageMutation(affectedId);
+        await syncAfterStageMutation(affectedId, { reloadBoard: true });
         feedback.moveCandidate.success();
       } catch (err: unknown) {
         feedback.moveCandidate.error(err);
@@ -1419,7 +1425,10 @@ export function PipelinePage() {
         candidateId={previewCandidateId}
         onClose={handleCloseDrawer}
         onPipelineChanged={async () => {
-          await triggerRefresh();
+          if (previewCandidateIdRef.current) {
+            await syncCandidateOverview(previewCandidateIdRef.current);
+          }
+          setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
         }}
       />
 
@@ -1442,7 +1451,7 @@ export function PipelinePage() {
             forceReason,
           });
           if (result) {
-            await syncAfterStageMutation(candidateId);
+            await syncAfterStageMutation(candidateId, { reloadBoard: true });
             feedback.moveCandidate.success();
           }
         }}

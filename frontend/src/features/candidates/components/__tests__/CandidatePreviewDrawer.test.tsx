@@ -400,6 +400,7 @@ describe("CandidatePreviewDrawer", () => {
     await waitFor(() => {
       expect(onPipelineChanged).toHaveBeenCalledTimes(1);
     });
+    expect(mockRefreshCandidateOverview).not.toHaveBeenCalled();
   });
 
   it("agenda entrevista pelo preview e sincroniza a pipeline", async () => {
@@ -425,6 +426,7 @@ describe("CandidatePreviewDrawer", () => {
     await waitFor(() => {
       expect(onPipelineChanged).toHaveBeenCalledTimes(1);
     });
+    expect(mockRefreshCandidateOverview).not.toHaveBeenCalled();
   });
 
   it("abre PipelineTransitionBlockedModal e não mostra toast genérico quando backend retorna 409 estruturado", async () => {
@@ -505,6 +507,48 @@ describe("CandidatePreviewDrawer", () => {
       stage: "final",
       notes: null,
       reason: "Avanço pelo preview da pipeline.",
+    });
+  });
+
+  it("ao avançar com callback do pai não recarrega overview local em duplicidade", async () => {
+    const user = userEvent.setup();
+    const onPipelineChanged = vi.fn().mockResolvedValue(undefined);
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "technical_interview",
+          candidate_status: "Entrevista Técnica",
+        },
+      ],
+    });
+    renderDrawer(vi.fn(), onPipelineChanged);
+
+    await user.click(await screen.findByRole("button", { name: /Avançar para decisão/i }));
+
+    await waitFor(() => {
+      expect(onPipelineChanged).toHaveBeenCalledTimes(1);
+    });
+    expect(mockRefreshCandidateOverview).not.toHaveBeenCalled();
+  });
+
+  it("ao avançar sem callback do pai recarrega apenas o overview local", async () => {
+    const user = userEvent.setup();
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "technical_interview",
+          candidate_status: "Entrevista Técnica",
+        },
+      ],
+    });
+    renderDrawer();
+
+    await user.click(await screen.findByRole("button", { name: /Avançar para decisão/i }));
+
+    await waitFor(() => {
+      expect(mockRefreshCandidateOverview).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -814,7 +814,7 @@ describe("PipelinePage", () => {
     const entryColumn = screen.getByTestId("kanban-column-entrada");
     expect(entryColumn).toContainElement(screen.getByTestId("kanban-card-c-1"));
 
-    // Board was refetched after the blocked response.
+    // Board is refetched after the blocked response as a safety fallback.
     expect(mockRefreshBoard).toHaveBeenCalled();
 
     // Generic move-error toast was NOT issued.
@@ -946,10 +946,11 @@ describe("PipelinePage", () => {
     await waitFor(() => {
       expect(feedback.moveCandidate.error).toHaveBeenCalled();
     });
+    expect(mockRefreshBoard).toHaveBeenCalled();
     expect(screen.queryByTestId("pipeline-transition-blocked-modal")).not.toBeInTheDocument();
   });
 
-  it("13. Mover candidato aberto no drawer chama syncCandidateOverview uma vez", async () => {
+  it("13. Mover candidato aberto no drawer sincroniza overview sem recarregar board", async () => {
     const dataTransfer = {
       effectAllowed: "move",
       setData: vi.fn(),
@@ -975,12 +976,12 @@ describe("PipelinePage", () => {
     fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     await waitFor(() => {
-      expect(mockRefreshBoard).toHaveBeenCalled();
       expect(mockSyncCandidateOverview).toHaveBeenCalledWith("c-1");
     });
+    expect(mockRefreshBoard).not.toHaveBeenCalled();
   });
 
-  it("13b. Mover candidato diferente do aberto no drawer não chama syncCandidateOverview", async () => {
+  it("13b. Mover candidato diferente do aberto no drawer não chama overview nem reload", async () => {
     const dataTransfer = {
       effectAllowed: "move",
       setData: vi.fn(),
@@ -1007,13 +1008,13 @@ describe("PipelinePage", () => {
     fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     await waitFor(() => {
-      expect(mockRefreshBoard).toHaveBeenCalled();
+      expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-2", "screening");
     });
-    // c-2 was moved but c-1 is open — syncCandidateOverview should NOT be called
+    expect(mockRefreshBoard).not.toHaveBeenCalled();
     expect(mockSyncCandidateOverview).not.toHaveBeenCalled();
   });
 
-  it("13c. Mover candidato com drawer fechado não chama syncCandidateOverview", async () => {
+  it("13c. Mover candidato com drawer fechado não chama overview nem reload", async () => {
     const dataTransfer = {
       effectAllowed: "move",
       setData: vi.fn(),
@@ -1037,8 +1038,9 @@ describe("PipelinePage", () => {
     fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     await waitFor(() => {
-      expect(mockRefreshBoard).toHaveBeenCalled();
+      expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
     });
+    expect(mockRefreshBoard).not.toHaveBeenCalled();
     expect(mockSyncCandidateOverview).not.toHaveBeenCalled();
   });
 
@@ -1103,7 +1105,7 @@ describe("PipelinePage", () => {
     vi.useRealTimers();
   });
 
-  it("21. Mover etapa ainda chama refreshBoard após mutação bem-sucedida", async () => {
+  it("21. Mover etapa com sucesso não chama refreshBoard após mutação otimista", async () => {
     mockRefreshBoard.mockResolvedValue(undefined);
     const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
 
@@ -1122,8 +1124,8 @@ describe("PipelinePage", () => {
 
     await waitFor(() => {
       expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
-      expect(mockRefreshBoard).toHaveBeenCalled();
     });
+    expect(mockRefreshBoard).not.toHaveBeenCalled();
   });
 
   // ── Filtros locais (busca + Pendências) ────────────────────────────────────
