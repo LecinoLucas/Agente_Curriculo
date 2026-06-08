@@ -30,7 +30,16 @@ export function TopNavbar({
         </button>
       </div>
 
+      <div className="pointer-events-none absolute inset-x-0 flex items-center justify-center">
+        <div className="flex items-center gap-1.5 opacity-60 select-none">
+          <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+            Marajó RH <span className="text-emerald-600/70 dark:text-emerald-500/70">IA</span>
+          </span>
+        </div>
+      </div>
+
       <div className="flex shrink-0 items-center gap-1.5 pointer-events-auto pr-2">
+        <div id="header-actions-portal" className="hidden lg:flex items-center gap-2 empty:hidden mr-1" />
         <button
           type="button"
           onClick={onOpenAssistant}
