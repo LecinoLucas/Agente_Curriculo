@@ -128,12 +128,13 @@ async def parse_draft_node(state: JobAiDraftState, config: RunnableConfig) -> di
             await persist_ai_usage_log(
                 session,
                 AIUsageLogPayload(
-                    provider=usage.provider,
-                    model=usage.model,
+                    provider=settings.AI_PROVIDER,
+                    model=settings.AI_MODEL_ID,
                     operation=_OPERATION,
-                    status="failed",
+                    status="error",
                     input_tokens=usage.input_tokens,
                     output_tokens=usage.output_tokens,
+                    latency_ms=0,
                     error_message="json_parse_error",
                 ),
             )
