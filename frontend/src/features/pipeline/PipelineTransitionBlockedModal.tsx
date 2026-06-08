@@ -217,10 +217,10 @@ export function PipelineTransitionBlockedModal({
   return (
     <Dialog open={isOpen} onOpenChange={(next) => (!next ? onClose() : undefined)}>
       <DialogContent
-        className="max-w-xl"
+        className="max-w-xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden"
         data-testid="pipeline-transition-blocked-modal"
       >
-        <DialogHeader>
+        <DialogHeader className="p-6 pb-4 border-b border-slate-100 dark:border-border/40 shrink-0">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
               <AlertTriangle className="h-5 w-5" aria-hidden />
@@ -237,7 +237,10 @@ export function PipelineTransitionBlockedModal({
         </DialogHeader>
 
         {blocked ? (
-          <div className="flex flex-col gap-4 text-sm">
+          <div
+            data-testid="pipeline-blocked-scroll-container"
+            className="flex-1 overflow-y-auto p-6 min-h-0 flex flex-col gap-4 text-sm"
+          >
             <p
               className="text-slate-700 dark:text-text"
               data-testid="pipeline-blocked-message"
@@ -328,7 +331,7 @@ export function PipelineTransitionBlockedModal({
           </div>
         ) : null}
 
-        <DialogFooter>
+        <DialogFooter className="p-6 pt-4 border-t border-slate-100 dark:border-border/40 shrink-0 bg-slate-50/50 dark:bg-surface-muted/20">
           <button
             type="button"
             onClick={onClose}

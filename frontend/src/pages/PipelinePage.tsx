@@ -472,10 +472,12 @@ export function PipelinePage() {
   // Macro grouping is visual only. Each card keeps its real candidate.stage from the API.
   const mainCols = useMemo(
     () =>
-      groupCandidatesByMacroColumn(filteredBoardColumns).map((col) => ({
-        ...col,
-        candidates: sortCandidatesByScore(col.candidates, sortOrder),
-      })),
+      groupCandidatesByMacroColumn(filteredBoardColumns)
+        .filter((col) => col.macroId !== "finalizado")
+        .map((col) => ({
+          ...col,
+          candidates: sortCandidatesByScore(col.candidates, sortOrder),
+        })),
     [filteredBoardColumns, sortOrder],
   );
 
@@ -851,10 +853,10 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-1 text-slate-800 bg-[#F4F7FB] dark:bg-background dark:text-text sm:px-2 sm:pt-2 lg:px-3">
+    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-12 text-slate-800 bg-[#F4F7FB] dark:bg-background dark:text-text sm:px-2 sm:pt-12 lg:px-3">
       
       {/* ── Header Area ── */}
-      <div className="mb-1 mt-0 flex flex-col gap-2">
+      <div className="mb-2 mt-0 flex flex-col gap-2">
         {/* Top Row: Breadcrumb */}
         <nav aria-label="breadcrumb" className="sr-only">
           <span>Recrutamento</span>
@@ -862,16 +864,26 @@ export function PipelinePage() {
           <span className="font-bold text-slate-800 dark:text-text">Pipeline</span>
         </nav>
 
-        {/* Second Row: Title, Combobox, Actions */}
-        <div className="relative z-30 flex flex-col gap-3 pr-14 xl:flex-row xl:items-start xl:justify-between">
-          <div className="relative z-10 min-w-0 flex-1 rounded-2xl border border-slate-200/80 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-              <h1 className="shrink-0 text-2xl font-black tracking-tight text-[#0f172a] dark:text-text">Pipeline</h1>
-
+        {/* Two-Column Grid: Vacancy details + Marajó RH IA Co-pilot */}
+        <div className="relative z-30 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.2fr)_1fr] xl:grid-cols-[minmax(0,1.4fr)_1fr] mb-2 pr-14">
+          
+          {/* Column 1: Vacancy Card */}
+          <div className="relative z-10 flex flex-col justify-between rounded-[22px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_rgb(0,0,0,0.015)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none min-h-[135px]">
+            <div className="flex flex-col lg:flex-row lg:items-center">
+              {/* Pipeline label with Folder/Kanban icon */}
+              <div className="flex items-center gap-2 shrink-0">
+                <Briefcase className="h-5 w-5 text-slate-400" />
+                <h1 className="text-base font-black tracking-tight text-[#0f172a] dark:text-text">Pipeline</h1>
+              </div>
+              
+              {/* Vertical line divider */}
+              <div className="hidden lg:block h-9 w-[1px] bg-slate-200 dark:bg-border/60 mx-4 shrink-0" />
+              
+              {/* Job Combobox */}
               {pipelineJobsError ? (
                 <span className="text-xs font-bold text-rose-500">{pipelineJobsError}</span>
               ) : (
-                <div className="relative z-20 min-w-[300px] max-w-full flex-1 rounded-xl border border-slate-200/80 bg-slate-50/85 px-2 py-1.5 shadow-inner shadow-white/80 dark:border-border dark:bg-surface-muted dark:shadow-none">
+                <div className="relative z-20 flex-1 min-w-0">
                   <JobCombobox
                     jobs={pipelineJobs}
                     loading={pipelineJobsLoading}
@@ -883,39 +895,39 @@ export function PipelinePage() {
             </div>
 
             {selectedJob && (selectedJob.seniority_level || selectedJob.work_model || selectedJob.location) && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-3.5 flex flex-wrap items-center gap-2">
                 {selectedJob.seniority_level && (
-                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30 dark:border-border dark:bg-surface-muted dark:shadow-none">
+                  <div className="flex h-8 items-center gap-2 rounded-[10px] border border-slate-200/80 bg-white/80 px-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)] dark:border-border dark:bg-surface-muted dark:shadow-none">
                     <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
                       <Briefcase className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted">Senioridade</span>
-                      <span className="text-[10px] font-bold text-slate-700 dark:text-text">{selectedJob.seniority_level}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Senioridade</span>
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-text mt-0.5 leading-none">{selectedJob.seniority_level}</span>
                     </div>
                   </div>
                 )}
 
                 {selectedJob.work_model && (
-                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30 dark:border-border dark:bg-surface-muted dark:shadow-none">
+                  <div className="flex h-8 items-center gap-2 rounded-[10px] border border-slate-200/80 bg-white/80 px-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)] dark:border-border dark:bg-surface-muted dark:shadow-none">
                     <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
                       <Home className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted">Modalidade</span>
-                      <span className="text-[10px] font-bold text-slate-700 dark:text-text">{formatWorkModel(selectedJob.work_model)}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Modalidade</span>
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-text mt-0.5 leading-none">{formatWorkModel(selectedJob.work_model)}</span>
                     </div>
                   </div>
                 )}
 
                 {selectedJob.location && (
-                  <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/90 px-2.5 shadow-sm shadow-slate-200/30 dark:border-border dark:bg-surface-muted dark:shadow-none">
+                  <div className="flex h-8 items-center gap-2 rounded-[10px] border border-slate-200/80 bg-white/80 px-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)] dark:border-border dark:bg-surface-muted dark:shadow-none">
                     <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
                       <MapPin className="h-2.5 w-2.5" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted">Localização</span>
-                      <span className="text-[10px] font-bold text-slate-700 dark:text-text">{selectedJob.location}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Localização</span>
+                      <span className="text-[10px] font-bold text-slate-700 dark:text-text mt-0.5 leading-none">{selectedJob.location}</span>
                     </div>
                   </div>
                 )}
@@ -923,14 +935,84 @@ export function PipelinePage() {
             )}
           </div>
 
-          {/* Action Controls */}
-          <div className={`flex flex-wrap gap-2 rounded-[14px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:flex-nowrap sm:items-center ${portalTarget ? "lg:hidden" : ""}`}>
+          {/* Column 2: Co-pilot Info Card */}
+          <div className="relative z-10 flex justify-between items-center rounded-[22px] border border-slate-200/80 bg-white/95 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.015)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none overflow-hidden min-h-[135px]">
+            <div className="flex flex-col justify-center max-w-[65%] z-10">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Sparkles className="h-4.5 w-4.5 text-teal-500 animate-pulse" />
+                <h2 className="text-[15px] font-black tracking-tight text-slate-800 dark:text-slate-100">Marajó RH IA</h2>
+              </div>
+              <p className="text-xs font-bold text-slate-500 dark:text-text-muted mb-1 leading-snug">
+                Seu copiloto de recrutamento inteligente
+              </p>
+              <p className="text-[10px] font-medium text-slate-400 dark:text-text-muted leading-snug">
+                Dados, IA e pessoas trabalhando juntas
+              </p>
+            </div>
+            
+            {/* 3D Glass Sphere asset */}
+            <div className="absolute right-0 top-0 bottom-0 w-[42%] flex items-center justify-end z-0">
+              <img
+                src="/images/copilot_glass_sphere.png"
+                alt="Copilot 3D sphere"
+                className="h-full object-contain pointer-events-none scale-[1.08] translate-x-2"
+              />
+            </div>
+          </div>
+
+        </div>
+
+        {/* Action Controls hidden on desktop since portal renders them */}
+        <div className={`flex flex-wrap gap-2 rounded-[14px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:flex-nowrap sm:items-center ${portalTarget ? "lg:hidden" : ""}`}>
+          {canMutate && (
+            <button
+              type="button"
+              onClick={handleOpenSourceCandidates}
+              disabled={!canUse}
+              className={`pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border px-4 text-xs font-bold transition-all ${
+                canUse
+                  ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e] dark:border-[hsl(var(--primary))]/35 dark:bg-[hsl(var(--primary))]/16 dark:text-[hsl(var(--text))] dark:shadow-none dark:hover:bg-[hsl(var(--primary))]/24"
+                  : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
+              }`}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Vincular candidato
+            </button>
+          )}
+          
+          {activeJobId && (
+            <button
+              type="button"
+              onClick={() => setShowRanking((current) => !current)}
+              className={`pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
+            >
+              <BarChart3 className="h-3.5 w-3.5 text-slate-400 dark:text-text-muted" />
+              Ver Ranking IA
+            </button>
+          )}
+
+          {activeJobId && (
+            <button
+              type="button"
+              aria-label="Atualizar board"
+              onClick={() => void handleManualRefresh()}
+              disabled={boardLoading}
+              className="pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
+              Atualizar
+            </button>
+          )}
+        </div>
+
+        {portalTarget && createPortal(
+          <>
             {canMutate && (
               <button
                 type="button"
                 onClick={handleOpenSourceCandidates}
                 disabled={!canUse}
-                className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border px-3 text-[11px] font-bold transition-all ${
+                className={`pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border px-4 text-xs font-bold transition-all ${
                   canUse
                     ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e] dark:border-[hsl(var(--primary))]/35 dark:bg-[hsl(var(--primary))]/16 dark:text-[hsl(var(--text))] dark:shadow-none dark:hover:bg-[hsl(var(--primary))]/24"
                     : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
@@ -945,7 +1027,7 @@ export function PipelinePage() {
               <button
                 type="button"
                 onClick={() => setShowRanking((current) => !current)}
-                className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
+                className={`pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
               >
                 <BarChart3 className="h-3.5 w-3.5 text-slate-400 dark:text-text-muted" />
                 Ver Ranking IA
@@ -958,58 +1040,15 @@ export function PipelinePage() {
                 aria-label="Atualizar board"
                 onClick={() => void handleManualRefresh()}
                 disabled={boardLoading}
-                className="pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
+                className="pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
               >
                 <RefreshCw className={`h-3.5 w-3.5 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
                 Atualizar
               </button>
             )}
-          </div>
-          {portalTarget && createPortal(
-            <>
-              {canMutate && (
-                <button
-                  type="button"
-                  onClick={handleOpenSourceCandidates}
-                  disabled={!canUse}
-                  className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border px-3 text-[11px] font-bold transition-all ${
-                    canUse
-                      ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e] dark:border-[hsl(var(--primary))]/35 dark:bg-[hsl(var(--primary))]/16 dark:text-[hsl(var(--text))] dark:shadow-none dark:hover:bg-[hsl(var(--primary))]/24"
-                      : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
-                  }`}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Vincular candidato
-                </button>
-              )}
-              
-              {activeJobId && (
-                <button
-                  type="button"
-                  onClick={() => setShowRanking((current) => !current)}
-                  className={`pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
-                >
-                  <BarChart3 className="h-3.5 w-3.5 text-slate-400 dark:text-text-muted" />
-                  Ver Ranking IA
-                </button>
-              )}
-
-              {activeJobId && (
-                <button
-                  type="button"
-                  aria-label="Atualizar board"
-                  onClick={() => void handleManualRefresh()}
-                  disabled={boardLoading}
-                  className="pipeline-action-button inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
-                  Atualizar
-                </button>
-              )}
-            </>,
-            portalTarget
-          )}
-        </div>
+          </>,
+          portalTarget
+        )}
       </div>
       
       {/* ── KPIs (Métricas) ── */}
