@@ -105,6 +105,8 @@ function DrawerPanel({
     candidateLoading: loading,
     candidateError: error,
     refreshCandidateOverview,
+    moveCandidateStage,
+    scheduleCandidateInterview,
   } = usePipeline();
   const reload = refreshCandidateOverview;
   const [stageSaving, setStageSaving] = useState(false);
@@ -186,8 +188,7 @@ function DrawerPanel({
     if (!activeEntry || stageSaving) return false;
     setStageSaving(true);
     try {
-      const moveResult = await pipelineService.moveCandidateStage(activeEntry.job_id, candidateId, {
-        stage: targetStage,
+      const moveResult = await moveCandidateStage(candidateId, targetStage, {
         notes: null,
         reason: reason ?? "Avanço pelo preview da pipeline.",
       });
@@ -254,7 +255,7 @@ function DrawerPanel({
 
     setStageSaving(true);
     try {
-      await pipelineService.schedulePipelineInterview(activeEntry.job_id, candidateId, {
+      await scheduleCandidateInterview(candidateId, interviewStageToSchedule, {
         ...payload,
         timezone: SCHEDULE_TIMEZONE,
         title: "Entrevista com candidato",

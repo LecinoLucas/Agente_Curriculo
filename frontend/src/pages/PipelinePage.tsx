@@ -130,6 +130,7 @@ export function PipelinePage() {
     setActiveJob,
     setBoardFilters,
     moveCandidateStage,
+    scheduleCandidateInterview,
     refreshBoard,
     openCandidate,
     closeCandidate,
@@ -759,14 +760,14 @@ export function PipelinePage() {
       feedback.moveCandidate.processing();
       setIsStageMoveSaving(true);
       try {
-        await pipelineService.schedulePipelineInterview(activeJobId, affectedId, {
+        await scheduleCandidateInterview(affectedId, interviewCandidate.targetStage, {
           ...payload,
           timezone: SCHEDULE_TIMEZONE,
           title: "Entrevista com candidato",
           interview_type: interviewTypeForStage(interviewCandidate.targetStage),
         });
         setInterviewCandidate(null);
-        await syncAfterStageMutation(affectedId, { reloadBoard: true });
+        await syncAfterStageMutation(affectedId);
         feedback.moveCandidate.success();
       } catch (err: unknown) {
         const handled = handleBlockedError(err, {

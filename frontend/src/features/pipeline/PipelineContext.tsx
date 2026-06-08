@@ -94,7 +94,26 @@ export interface PipelineContextValue extends PipelineState {
   ) => void;
 
   // Kanban drag
-  moveCandidateStage: (candidateId: string, toStage: PipelineStage) => Promise<MovePipelineCandidateResponse>;
+  moveCandidateStage: (
+    candidateId: string,
+    toStage: PipelineStage,
+    options?: { reason?: string; notes?: string | null },
+  ) => Promise<MovePipelineCandidateResponse>;
+  scheduleCandidateInterview: (
+    candidateId: string,
+    targetStage: PipelineStage,
+    payload: {
+      scheduled_start: string;
+      scheduled_end: string;
+      interview_format: "online" | "presencial" | "telefone";
+      location: string | null;
+      meeting_url: string | null;
+      public_notes: string | null;
+      timezone: string;
+      title: string;
+      interview_type: "hr" | "technical";
+    },
+  ) => Promise<void>;
   setCandidateAiStatus: (candidateId: string, status: AIAnalysisStatus | null) => void;
   syncAnalysisStart: (input: {
     candidateId: string;
@@ -1047,7 +1066,11 @@ export function PipelineProvider({ children }: PropsWithChildren) {
   // ── Stage movement ─────────────────────────────────────────────────────────
 
   const moveCandidateStage = useCallback(
-    async (candidateId: string, toStage: PipelineStage) => {
+    async (
+      candidateId: string,
+      toStage: PipelineStage,
+      options?: { reason?: string; notes?: string | null },
+    ) => {
       const jobId =
         activeJobIdRef.current ??
         candidateCacheRef.current.get(candidateId)?.active_job_id ??
@@ -1078,7 +1101,11 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       });
 
       try {
-        const moveResult = await pipelineService.moveCandidateStage(jobId, candidateId, { stage: toStage });
+        const moveResult = await pipelineService.moveCandidateStage(jobId, candidateId, {
+          stage: toStage,
+          reason: options?.reason,
+          notes: options?.notes,
+        });
         invalidateRanking();
         notifyCandidatesChanged();
         return moveResult;
