@@ -13,6 +13,44 @@ import {
 
 export { ANALYSIS_STATUS_LABEL, STAGE_LABEL };
 
+const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
+  entry: "screening",
+  screening: "hr_interview",
+  hr_interview: "technical_interview",
+  technical_interview: "final",
+  final: "offer",
+  offer: "hired",
+  hired: "pre_admission",
+  pre_admission: "protheus",
+  protheus: "admitted",
+};
+
+const PIPELINE_ADVANCE_ACTION_LABELS: Partial<Record<PipelineStage, string>> = {
+  entry: "Avançar para triagem",
+  screening: "Avançar para entrevista RH",
+  hr_interview: "Avançar para entrevista técnica",
+  technical_interview: "Avançar para decisão",
+  final: "Avançar para oferta",
+  offer: "Marcar como contratado",
+  hired: "Avançar para pré-admissão",
+  pre_admission: "Avançar para integração ERP",
+  protheus: "Mover para admitido",
+};
+
+export function getNextPipelineStage(
+  stage: PipelineStage | null | undefined,
+): PipelineStage | null {
+  if (!stage) return null;
+  return NEXT_PIPELINE_STAGE[stage] ?? null;
+}
+
+export function getPipelineAdvanceActionLabel(
+  stage: PipelineStage | null | undefined,
+): string | null {
+  if (!stage) return null;
+  return PIPELINE_ADVANCE_ACTION_LABELS[stage] ?? null;
+}
+
 export function isPostHiringActiveStage(stage: string | null | undefined): stage is PipelineStage {
   return typeof stage === "string" && POST_HIRING_ACTIVE_STAGE_SET.has(stage as PipelineStage);
 }

@@ -385,7 +385,7 @@ describe("CandidatePreviewDrawer", () => {
     mockOverview();
     renderDrawer(vi.fn(), onPipelineChanged);
 
-    await user.click(await screen.findByRole("button", { name: /Avançar para fase Entrevista RH/i }));
+    await user.click(await screen.findByRole("button", { name: /Avançar para entrevista RH/i }));
 
     expect(await screen.findByRole("dialog", { name: /Agendar entrevista/i })).toBeInTheDocument();
     expect(pipelineService.moveCandidateStage).not.toHaveBeenCalled();
@@ -408,7 +408,7 @@ describe("CandidatePreviewDrawer", () => {
     mockOverview();
     renderDrawer(vi.fn(), onPipelineChanged);
 
-    await user.click(await screen.findByRole("button", { name: /Avançar para fase Entrevista RH/i }));
+    await user.click(await screen.findByRole("button", { name: /Avançar para entrevista RH/i }));
     await user.clear(await screen.findByLabelText("Data"));
     await user.type(screen.getByLabelText("Data"), "2099-01-01");
     await user.click(screen.getByRole("button", { name: /^Agendar entrevista$/i }));
@@ -472,7 +472,7 @@ describe("CandidatePreviewDrawer", () => {
     });
     renderDrawer();
 
-    await user.click(await screen.findByRole("button", { name: /Avançar para fase Decisão/i }));
+    await user.click(await screen.findByRole("button", { name: /Avançar para decisão/i }));
 
     const modal = await screen.findByTestId("pipeline-transition-blocked-modal");
     expect(modal).toBeInTheDocument();
@@ -499,10 +499,106 @@ describe("CandidatePreviewDrawer", () => {
     });
     renderDrawer();
 
-    await user.click(await screen.findByRole("button", { name: /Avançar para fase Decisão/i }));
+    await user.click(await screen.findByRole("button", { name: /Avançar para decisão/i }));
 
     expect(pipelineService.moveCandidateStage).toHaveBeenCalledWith("job-1", "candidate-1", {
       stage: "final",
+      notes: null,
+      reason: "Avanço pelo preview da pipeline.",
+    });
+  });
+
+  it("em final calcula próximo estágio como offer e mostra CTA de oferta", async () => {
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "final",
+          candidate_status: "Decisão",
+        },
+      ],
+    });
+    renderDrawer();
+
+    expect(
+      await screen.findByRole("button", { name: /Avançar para oferta/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("em final move o candidato para offer", async () => {
+    const user = userEvent.setup();
+    vi.mocked(pipelineService.moveCandidateStage).mockResolvedValueOnce({
+      candidate_id: "candidate-1",
+      job_id: "job-1",
+      stage: "offer",
+      candidate_status: "Aprovado",
+      status: "active",
+      transition_id: "transition-offer",
+      updated_at: "2026-05-16T10:00:00Z",
+    });
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "final",
+          candidate_status: "Decisão",
+        },
+      ],
+    });
+    renderDrawer();
+
+    await user.click(await screen.findByRole("button", { name: /Avançar para oferta/i }));
+
+    expect(pipelineService.moveCandidateStage).toHaveBeenCalledWith("job-1", "candidate-1", {
+      stage: "offer",
+      notes: null,
+      reason: "Avanço pelo preview da pipeline.",
+    });
+  });
+
+  it("em offer calcula próximo estágio como hired e mostra CTA de contratação", async () => {
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "offer",
+          candidate_status: "Oferta",
+        },
+      ],
+    });
+    renderDrawer();
+
+    expect(
+      await screen.findByRole("button", { name: /Marcar como contratado/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("em offer move o candidato para hired", async () => {
+    const user = userEvent.setup();
+    vi.mocked(pipelineService.moveCandidateStage).mockResolvedValueOnce({
+      candidate_id: "candidate-1",
+      job_id: "job-1",
+      stage: "hired",
+      candidate_status: "Contratado",
+      status: "active",
+      transition_id: "transition-hired",
+      updated_at: "2026-05-16T10:00:00Z",
+    });
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "offer",
+          candidate_status: "Oferta",
+        },
+      ],
+    });
+    renderDrawer();
+
+    await user.click(await screen.findByRole("button", { name: /Marcar como contratado/i }));
+
+    expect(pipelineService.moveCandidateStage).toHaveBeenCalledWith("job-1", "candidate-1", {
+      stage: "hired",
       notes: null,
       reason: "Avanço pelo preview da pipeline.",
     });

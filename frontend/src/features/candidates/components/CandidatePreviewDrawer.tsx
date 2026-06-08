@@ -26,6 +26,8 @@ import {
   getActiveJobScore,
   getActivePipelineEntry,
   getInitials,
+  getNextPipelineStage,
+  getPipelineAdvanceActionLabel,
   getPrimaryResume,
 } from "../utils/profile";
 
@@ -45,18 +47,6 @@ export function CandidatePreviewDrawer({ candidateId, onClose, onPipelineChanged
     />
   );
 }
-
-const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
-  entry: "screening",
-  screening: "hr_interview",
-  hr_interview: "technical_interview",
-  technical_interview: "final",
-  final: "hired",
-  offer: "hired",
-  hired: "pre_admission",
-  pre_admission: "protheus",
-  protheus: "admitted",
-};
 
 const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
 const SCHEDULE_TIMEZONE = "America/Sao_Paulo";
@@ -147,7 +137,8 @@ function DrawerPanel({
   const location = [candidate?.location_city, candidate?.location_state]
     .filter(Boolean)
     .join(", ");
-  const nextStage = activeEntry ? NEXT_PIPELINE_STAGE[activeEntry.stage] ?? null : null;
+  const nextStage = getNextPipelineStage(activeEntry?.stage);
+  const nextStageLabel = getPipelineAdvanceActionLabel(activeEntry?.stage);
   const hasBehavioralPendency = pendencies.some((pendency) => pendency.id.startsWith("behavioral"));
   const hasPreAdmissionPendency = pendencies.some((pendency) => pendency.action === "open_pre_admission");
   const hasAdmissionAccess =
@@ -394,13 +385,13 @@ function DrawerPanel({
                         type="button"
                         onClick={() => void advanceStage()}
                         disabled={stageSaving}
-                        title={`Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}
-                        aria-label={`Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}
+                        title={nextStageLabel ?? `Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}
+                        aria-label={nextStageLabel ?? `Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}
                         data-testid="preview-advance-stage"
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-muted/50 px-3 py-2 text-xs font-semibold text-text transition hover:bg-surface-muted disabled:opacity-50"
                       >
                         {stageSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
-                        <span>Avançar para fase {STAGE_LABEL[nextStage] ?? nextStage}</span>
+                        <span>{nextStageLabel ?? `Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}</span>
                       </button>
                     ) : null}
                   </div>
