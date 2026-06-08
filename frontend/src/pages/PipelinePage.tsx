@@ -472,12 +472,10 @@ export function PipelinePage() {
   // Macro grouping is visual only. Each card keeps its real candidate.stage from the API.
   const mainCols = useMemo(
     () =>
-      groupCandidatesByMacroColumn(filteredBoardColumns)
-        .filter((col) => col.macroId !== "finalizado")
-        .map((col) => ({
-          ...col,
-          candidates: sortCandidatesByScore(col.candidates, sortOrder),
-        })),
+      groupCandidatesByMacroColumn(filteredBoardColumns).map((col) => ({
+        ...col,
+        candidates: sortCandidatesByScore(col.candidates, sortOrder),
+      })),
     [filteredBoardColumns, sortOrder],
   );
 

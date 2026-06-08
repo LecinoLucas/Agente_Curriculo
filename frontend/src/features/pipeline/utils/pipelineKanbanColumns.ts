@@ -64,7 +64,7 @@ export const PIPELINE_MACRO_COLUMNS: readonly PipelineMacroColumnConfig[] = [
   {
     id: "admissao",
     label: "Admissão",
-    description: "Contratação, pré-admissão e integração ERP",
+    description: "Contratação, prazos e onboarding",
     stages: ["hired", "pre_admission", "protheus"],
     dropTargetStage: null,
   },
