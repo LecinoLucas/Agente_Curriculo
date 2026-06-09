@@ -26,8 +26,6 @@ import { formatContextError } from "../services/errorMessages";
 import { feedback } from "../services/feedback";
 import { toast } from "../shared/utils/toast";
 import { canMutatePipeline } from "../shared/auth/roles";
-
-const MOVE_CANDIDATE_TOAST_KEY = "feedback-move-candidate";
 import { getJobRanking } from "../services/jobsService";
 import { pipelineService, type PipelineJobSummary } from "../services/pipelineService";
 import type { JobCandidate, JobRanking, PipelineBoardFilters, PipelineStage } from "../types/domain";
@@ -47,6 +45,8 @@ import {
   hasAnyPipelineDateFilter,
   readPipelineBoardFilters,
 } from "../features/pipeline/pipelinePageUtils";
+
+const MOVE_CANDIDATE_TOAST_KEY = "feedback-move-candidate";
 
 // ── PipelinePage ───────────────────────────────────────────────────────────────
 
