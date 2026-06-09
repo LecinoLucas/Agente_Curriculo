@@ -354,7 +354,7 @@ class JobService:
         return saved_job
 
     async def _invalidate_job_scores_and_matches(self, job_id: UUID) -> None:
-        """Hard-delete persisted ranking/matching data for this job after structural updates."""
+        """Soft-invalidate ranking data by marking rows stale; worker restores fresh after recompute."""
         if not hasattr(self._repository, "_session"):
             return
         import sqlalchemy as sa
@@ -366,10 +366,14 @@ class JobService:
         from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
 
         await self._repository._session.execute(
-            sa.delete(CandidateJobScoreModel).where(CandidateJobScoreModel.job_id == job_id)
+            sa.update(CandidateJobScoreModel)
+            .where(CandidateJobScoreModel.job_id == job_id)
+            .values(freshness_status="stale")
         )
         await self._repository._session.execute(
-            sa.delete(CandidateJobMatchModel).where(CandidateJobMatchModel.job_id == job_id)
+            sa.update(CandidateJobMatchModel)
+            .where(CandidateJobMatchModel.job_id == job_id)
+            .values(freshness_status="stale")
         )
         await self._repository._session.execute(
             sa.update(JobProfileAnalysisModel)
