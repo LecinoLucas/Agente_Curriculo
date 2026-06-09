@@ -14,7 +14,6 @@ Reuses completed evaluations by default.
 IA failures are non-blocking.
 """
 
-import json
 import re
 import time
 from dataclasses import dataclass
@@ -28,8 +27,25 @@ import structlog
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.ports.ai_service import AIAnalysisRequest, AIService
+from src.application.ports.ai_service import AIService
 from src.application.services.ai_usage_log_service import AIUsageLogPayload, persist_ai_usage_log
+from src.ai_orchestration.behavioral.behavioral_contracts import (
+    BehavioralEvaluationInput,
+    BehavioralQAItem,
+)
+from src.ai_orchestration.behavioral.engine import BehavioralEngineResult, run_behavioral_evaluation
+from src.ai_orchestration.behavioral.failure_classifier import (
+    classify_provider_error as _classify_provider_error,
+    classify_unexpected_failure as _classify_unexpected_failure_fn,
+    get_provider_status_code as _get_provider_status_code,
+    get_retry_after_seconds as _get_retry_after_seconds,
+    is_retryable_provider_error as _is_retryable_provider_error_fn,
+)
+from src.ai_orchestration.behavioral.response_parser import (
+    BehavioralAIProviderResponseInvalidError,
+    contains_prohibited_language as _contains_prohibited_language_fn,
+    parse_evaluation_response as _parse_evaluation_response_fn,
+)
 from src.application.services.ai_provider_credential_service import (
     AIProviderCredentialService,
     InvalidAIProviderCredentialError,
@@ -57,7 +73,6 @@ logger = structlog.get_logger(__name__)
 
 _BEHAVIORAL_AI_PROCESSING_STUCK_AFTER = timedelta(minutes=30)
 _BEHAVIORAL_AI_PENDING_STALE_AFTER = timedelta(hours=2)
-_BEHAVIORAL_AI_RETRY_BACKOFF_SECONDS = {1: 15, 2: 45, 3: 120}
 _BEHAVIORAL_AI_MAX_RETRIES = 3
 _BEHAVIORAL_AI_RETRY_MESSAGE = "Alta demanda no provedor IA. Nova tentativa automática agendada."
 _BEHAVIORAL_AI_RATE_LIMIT_MESSAGE = "Limite temporário do provedor IA. Nova tentativa automática agendada."
@@ -91,23 +106,6 @@ SAFE_BEHAVIORAL_AI_ERROR_MESSAGES = {
     "unexpected_error": "Erro inesperado ao solicitar IA comportamental.",
 }
 
-# Prohibited clinical/diagnostic language
-PROHIBITED_TERMS = {
-    "ansioso",
-    "ansiedade",
-    "instável",
-    "depressivo",
-    "depressão",
-    "narcisista",
-    "narcisismo",
-    "dominante",
-    "perfil psicológico",
-    "diagnóstico",
-    "transtorno",
-    "distúrbio",
-    "psicopatia",
-    "psicose",
-}
 
 
 def behavioral_ai_safe_message(code: str, fallback: str | None = None) -> str:
@@ -1074,34 +1072,24 @@ class BehavioralAIEvaluationService:
             competencies = await self._fetch_competencies(assignment.template_id)
             questions_and_answers = await self._fetch_questions_with_answers(assignment.id)
 
-            # Build prompt with all context
-            prompt_text = self._build_evaluation_prompt(
-                assignment=assignment,
-                competencies=competencies,
-                questions_and_answers=questions_and_answers,
+            # Delegate to isolated behavioral engine (no DB, no bot, no Celery)
+            engine_input = BehavioralEvaluationInput(
+                competency_names=[c.name for c in competencies],
+                questions_and_answers=[
+                    BehavioralQAItem(
+                        competency=qa["competency"],
+                        question=qa["question"],
+                        answer_type=qa["answer_type"],
+                        answer=qa["answer"],
+                    )
+                    for qa in questions_and_answers
+                ],
             )
-
-            # Call Gemini API via AIService
-            ai_request = AIAnalysisRequest(
-                resume_text="",  # Not used for behavioral analysis
-                prompt_template=prompt_text,
-                system_prompt="Você é um especialista em análise comportamental assistida por IA para recrutamento. Forneça análise baseada em evidências, sem fazer julgamentos, diagnósticos ou decisões de contratação.",
-                max_tokens=2000,
-                temperature=0.7,
-                job_description=None,
+            engine_result: BehavioralEngineResult = await run_behavioral_evaluation(
+                evaluation_input=engine_input,
+                ai_service=self.ai_service,
             )
-
-            _t0 = int(time.monotonic() * 1000)
-            ai_response = await self.ai_service.analyze(ai_request)
-            _latency_ms = int(time.monotonic() * 1000) - _t0
-            response_text = ai_response.content
-
-            # Check for prohibited language before parsing
-            if self._contains_prohibited_language(response_text):
-                raise BehavioralAIProviderResponseInvalidError("provider_response_invalid")
-
-            # Parse and validate response
-            evaluation_data = self._parse_evaluation_response(response_text)
+            evaluation_data = engine_result.data
 
             # Save completed evaluation
             await self._save_completed_evaluation(
@@ -1120,9 +1108,9 @@ class BehavioralAIEvaluationService:
                         model=settings.AI_MODEL_ID,
                         operation="behavioral_analysis",
                         status="success",
-                        input_tokens=ai_response.input_tokens,
-                        output_tokens=ai_response.output_tokens,
-                        latency_ms=_latency_ms,
+                        input_tokens=engine_result.input_tokens,
+                        output_tokens=engine_result.output_tokens,
+                        latency_ms=engine_result.processing_time_ms,
                         candidate_id=assignment.candidate_id,
                         job_id=assignment.job_id,
                     ),
@@ -1283,13 +1271,8 @@ class BehavioralAIEvaluationService:
         return qa_list
 
     def _contains_prohibited_language(self, text: str) -> bool:
-        """Check if text contains prohibited clinical/diagnostic terms."""
-        text_lower = text.lower()
-        for term in PROHIBITED_TERMS:
-            if term in text_lower:
-                logger.warning(f"Prohibited term detected: {term}")
-                return True
-        return False
+        """Delegates to response_parser.contains_prohibited_language."""
+        return _contains_prohibited_language_fn(text)
 
     def _build_evaluation_prompt(
         self,
@@ -1297,83 +1280,25 @@ class BehavioralAIEvaluationService:
         competencies,
         questions_and_answers,
     ) -> str:
-        """Build prompt for Gemini with strict guardrails."""
-        qa_text = "\n".join([
-            f"- **{qa['competency']} ({qa['answer_type']})**: {qa['question']}\n"
-            f"  Answer: {qa['answer']}"
-            for qa in questions_and_answers
-        ])
-
-        competencies_text = ", ".join([c.name for c in competencies])
-
-        prompt = f"""Você é um especialista em análise comportamental assistida por IA para processos de recrutamento.
-
-Sua tarefa é ANÁLISE ASSISTIDA, não tomada de decisão. A análise deve ajudar o recrutador a entender o candidato melhor.
-
-RESPOSTAS COMPORTAMENTAIS DO CANDIDATO:
-{qa_text}
-
-COMPETÊNCIAS DO TEMPLATE: {competencies_text}
-
-INSTRUÇÕES CRÍTICAS:
-1. Proibido: aprovar, reprovar, fazer diagnósticos, usar linguagem clínica
-2. Obrigatório: usar linguagem baseada em evidências ("há sinal de...", "não há evidência suficiente...")
-3. Forneça sinais por competência, não notas
-4. Identifique pontos a validar na entrevista
-5. Marque respostas insuficientes
-6. Não calcule score eliminatório
-
-Responda com JSON válido neste formato exato:
-{{
-  "confidence": "low|medium|high",
-  "summary": "Resumo operacional curto do perfil comportamental",
-  "competency_signals": [
-    {{
-      "competency": "Nome da Competência",
-      "signal": "weak|moderate|strong",
-      "evidence": "Descrição baseada nas respostas fornecidas",
-      "concerns": ["Ponto a validar", "Outro ponto"]
-    }}
-  ],
-  "strengths": ["Força identificada", "Outra força"],
-  "concerns": ["Ponto de atenção", "Outro ponto"],
-  "suggested_interview_questions": ["Pergunta 1", "Pergunta 2"],
-  "risk_flags": [
-    {{
-      "code": "insufficient_evidence|unexpected_pattern",
-      "message": "Descrição do risco ou limitação da análise"
-    }}
-  ]
-}}
-"""
-        return prompt
+        """Delegates to prompt_builder.build_evaluation_prompt (backward compat shim)."""
+        from src.ai_orchestration.behavioral.prompt_builder import build_evaluation_prompt
+        engine_input = BehavioralEvaluationInput(
+            competency_names=[c.name for c in competencies],
+            questions_and_answers=[
+                BehavioralQAItem(
+                    competency=qa["competency"],
+                    question=qa["question"],
+                    answer_type=qa["answer_type"],
+                    answer=qa["answer"],
+                )
+                for qa in questions_and_answers
+            ],
+        )
+        return build_evaluation_prompt(engine_input)
 
     def _parse_evaluation_response(self, response_text: str) -> dict:
-        """Parse and validate IA response."""
-        try:
-            # Extract JSON from response
-            json_str = response_text
-            if "```json" in response_text:
-                json_str = response_text.split("```json")[1].split("```")[0]
-            elif "```" in response_text:
-                json_str = response_text.split("```")[1].split("```")[0]
-
-            data = json.loads(json_str.strip())
-
-            # Validate required fields
-            if not isinstance(data.get("confidence"), str) or data["confidence"] not in ["low", "medium", "high"]:
-                raise BehavioralAIProviderResponseInvalidError("Invalid confidence level")
-
-            if not isinstance(data.get("summary"), str):
-                raise BehavioralAIProviderResponseInvalidError("Summary is required")
-
-            if not isinstance(data.get("competency_signals"), list):
-                raise BehavioralAIProviderResponseInvalidError("competency_signals must be a list")
-
-            return data
-
-        except json.JSONDecodeError as e:
-            raise BehavioralAIProviderResponseInvalidError("Invalid JSON in IA response") from e
+        """Delegates to response_parser.parse_evaluation_response (backward compat shim)."""
+        return _parse_evaluation_response_fn(response_text)
 
     async def _save_completed_evaluation(
         self,
@@ -1477,45 +1402,15 @@ Responda com JSON válido neste formato exato:
 
     @staticmethod
     def _provider_error_type(exc: Exception) -> str:
-        if isinstance(exc, AIProviderRateLimitedError):
-            return exc.provider_error_type or "rate_limited"
-        if isinstance(exc, httpx.HTTPStatusError):
-            status_code = int(exc.response.status_code)
-            if status_code == 429:
-                return "rate_limited"
-            if status_code in {400, 401, 403}:
-                return "ai_credential_invalid"
-            if status_code in {500, 502, 503, 504}:
-                return "provider_unavailable"
-            return "provider_http_error"
-        if isinstance(exc, httpx.TimeoutException):
-            return "provider_timeout"
-        if isinstance(exc, httpx.ConnectError):
-            return "connection_error"
-        return "temporary_error"
+        return _classify_provider_error(exc)
 
     @staticmethod
     def _is_retryable_provider_error(provider_error_type: str) -> bool:
-        return provider_error_type in {
-            "rate_limited",
-            "provider_unavailable",
-            "provider_timeout",
-            "connection_error",
-            "temporary_error",
-        }
+        return _is_retryable_provider_error_fn(provider_error_type)
 
     @staticmethod
     def _classify_unexpected_failure(exc: Exception) -> str:
-        if isinstance(exc, BehavioralAIProviderResponseInvalidError):
-            return "provider_response_invalid"
-        message = str(exc).lower()
-        if "no gemini credentials configured" in message or "no ai credentials configured" in message:
-            return "no_ai_credential_available"
-        if "timeout" in message or "timed out" in message:
-            return "provider_timeout"
-        if "api key" in message or "credential" in message or "credentials" in message:
-            return "ai_credential_invalid"
-        return "unexpected_error"
+        return _classify_unexpected_failure_fn(exc)
 
     @staticmethod
     def _safe_failure_message(provider_error_type: str) -> str:
@@ -1533,21 +1428,8 @@ Responda com JSON válido neste formato exato:
 
     @staticmethod
     def _provider_status_code(exc: Exception) -> int | None:
-        if isinstance(exc, AIProviderRateLimitedError):
-            return exc.status_code
-        if isinstance(exc, httpx.HTTPStatusError):
-            return int(exc.response.status_code)
-        return None
+        return _get_provider_status_code(exc)
 
     @staticmethod
     def _retry_after_seconds(exc: Exception, *, retry_count: int) -> int:
-        if isinstance(exc, AIProviderRateLimitedError):
-            return max(1, int(exc.retry_after_seconds or 0))
-        if isinstance(exc, httpx.HTTPStatusError):
-            retry_after = exc.response.headers.get("retry-after")
-            if retry_after:
-                try:
-                    return max(1, int(float(retry_after)))
-                except ValueError:
-                    pass
-        return _BEHAVIORAL_AI_RETRY_BACKOFF_SECONDS.get(retry_count, 300)
+        return _get_retry_after_seconds(exc, retry_count=retry_count)
