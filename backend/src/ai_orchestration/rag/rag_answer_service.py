@@ -6,6 +6,7 @@ Valida flags, filtra fontes, constrói prompts e invoca o provedor de síntese.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,12 +69,15 @@ class RagAnswerService:
             prompt = RagPrompting.build_synthesis_prompt(request.query, limited_chunks)
 
             # 5. Chamada ao Provider
+            _t0 = int(time.monotonic() * 1000)
             result = await self._provider.generate_response(prompt)
-            
+            _latency_ms = int(time.monotonic() * 1000) - _t0
+
             await self._record_usage(
                 status="success",
                 input_tokens=result.input_tokens,
                 output_tokens=result.output_tokens,
+                latency_ms=_latency_ms,
                 usage_available=result.usage_available
             )
 
@@ -162,6 +166,7 @@ class RagAnswerService:
         error_message: str | None = None,
         input_tokens: int = 0,
         output_tokens: int = 0,
+        latency_ms: int | None = None,
         usage_available: bool = False,
     ) -> None:
         """Registra a chamada RAG sem armazenar prompt, resposta ou chunks."""
@@ -177,6 +182,7 @@ class RagAnswerService:
                     operation="rag_synthesis",
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    latency_ms=latency_ms,
                     status=status,
                     error_message=error_message,
                 ),
