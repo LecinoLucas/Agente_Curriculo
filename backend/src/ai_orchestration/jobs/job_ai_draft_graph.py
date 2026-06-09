@@ -77,19 +77,22 @@ async def generate_draft_node(state: JobAiDraftState, config: RunnableConfig) ->
             error_type=type(exc).__name__,
             elapsed_ms=elapsed,
         )
-        await persist_ai_usage_log(
-            session,
-            AIUsageLogPayload(
-                provider=settings.AI_PROVIDER,
-                model=settings.AI_MODEL_ID,
-                operation=_OPERATION,
-                status="error",
-                input_tokens=0,
-                output_tokens=0,
-                latency_ms=elapsed,
-                error_message="usage_unavailable",
-            ),
-        )
+        try:
+            await persist_ai_usage_log(
+                session,
+                AIUsageLogPayload(
+                    provider=settings.AI_PROVIDER,
+                    model=settings.AI_MODEL_ID,
+                    operation=_OPERATION,
+                    status="error",
+                    input_tokens=0,
+                    output_tokens=0,
+                    latency_ms=elapsed,
+                    error_message="usage_unavailable",
+                ),
+            )
+        except Exception:
+            logger.warning("job_ai_draft.usage_log_failed", node="generate_draft")
         raise AiDraftAIError("Provedor de IA indisponível. Tente novamente.") from exc
 
     elapsed_ms = int(time.monotonic() * 1000) - t0
@@ -125,19 +128,22 @@ async def parse_draft_node(state: JobAiDraftState, config: RunnableConfig) -> di
         usage = state.get("usage")
         session = config.get("configurable", {}).get("session")
         if usage and session:
-            await persist_ai_usage_log(
-                session,
-                AIUsageLogPayload(
-                    provider=settings.AI_PROVIDER,
-                    model=settings.AI_MODEL_ID,
-                    operation=_OPERATION,
-                    status="error",
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    latency_ms=0,
-                    error_message="json_parse_error",
-                ),
-            )
+            try:
+                await persist_ai_usage_log(
+                    session,
+                    AIUsageLogPayload(
+                        provider=settings.AI_PROVIDER,
+                        model=settings.AI_MODEL_ID,
+                        operation=_OPERATION,
+                        status="error",
+                        input_tokens=usage.input_tokens,
+                        output_tokens=usage.output_tokens,
+                        latency_ms=0,
+                        error_message="json_parse_error",
+                    ),
+                )
+            except Exception:
+                logger.warning("job_ai_draft.usage_log_failed", node="parse_draft")
         raise AiDraftParseError("Resposta da IA não pôde ser interpretada") from exc
 
     return {"draft": draft}
@@ -154,17 +160,20 @@ async def post_validate_node(state: JobAiDraftState, config: RunnableConfig) -> 
     usage = state.get("usage")
     session = config.get("configurable", {}).get("session")
     if usage and session:
-        await persist_ai_usage_log(
-            session,
-            AIUsageLogPayload(
-                provider=usage.provider,
-                model=usage.model,
-                operation=_OPERATION,
-                status="success",
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-            ),
-        )
+        try:
+            await persist_ai_usage_log(
+                session,
+                AIUsageLogPayload(
+                    provider=usage.provider,
+                    model=usage.model,
+                    operation=_OPERATION,
+                    status="success",
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                ),
+            )
+        except Exception:
+            logger.warning("job_ai_draft.usage_log_failed", node="post_validate")
 
     return {
         "draft": draft,

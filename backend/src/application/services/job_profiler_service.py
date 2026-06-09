@@ -33,6 +33,7 @@ from src.domain.value_objects.job_profile import (
     JobProfile,
     JobRequirement,
 )
+from src.core.log_sanitizer import sanitize_log_text
 from src.infrastructure.ai.prompts import job_profiler as _prompt
 from src.infrastructure.ai.response_parser import extract_json
 
@@ -301,7 +302,7 @@ class JobProfilerService:
                         "input_tokens": int(getattr(exc, "input_tokens", 0) or 0),
                         "output_tokens": int(getattr(exc, "output_tokens", 0) or 0),
                         "latency_ms": getattr(exc, "processing_time_ms", None),
-                        "error_message": str(exc),
+                        "error_message": sanitize_log_text(str(exc))[:500],
                     }
                 )
             raise

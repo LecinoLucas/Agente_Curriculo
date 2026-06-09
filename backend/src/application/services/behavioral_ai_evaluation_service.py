@@ -16,6 +16,7 @@ IA failures are non-blocking.
 
 import json
 import re
+import time
 from dataclasses import dataclass
 from datetime import timedelta
 from datetime import UTC, datetime
@@ -28,6 +29,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIService
+from src.application.services.ai_usage_log_service import AIUsageLogPayload, persist_ai_usage_log
 from src.application.services.ai_provider_credential_service import (
     AIProviderCredentialService,
     InvalidAIProviderCredentialError,
@@ -1089,7 +1091,9 @@ class BehavioralAIEvaluationService:
                 job_description=None,
             )
 
+            _t0 = int(time.monotonic() * 1000)
             ai_response = await self.ai_service.analyze(ai_request)
+            _latency_ms = int(time.monotonic() * 1000) - _t0
             response_text = ai_response.content
 
             # Check for prohibited language before parsing
@@ -1107,10 +1111,46 @@ class BehavioralAIEvaluationService:
                 model=settings.AI_MODEL_ID,
             )
 
+            # Best-effort usage log — never blocks the main flow
+            try:
+                await persist_ai_usage_log(
+                    self.session,
+                    AIUsageLogPayload(
+                        provider=settings.AI_PROVIDER,
+                        model=settings.AI_MODEL_ID,
+                        operation="behavioral_analysis",
+                        status="success",
+                        input_tokens=ai_response.input_tokens,
+                        output_tokens=ai_response.output_tokens,
+                        latency_ms=_latency_ms,
+                        candidate_id=assignment.candidate_id,
+                        job_id=assignment.job_id,
+                    ),
+                )
+            except Exception:
+                logger.warning("behavioral_ai.usage_log_failed", evaluation_id=str(evaluation.id))
+
         except (AIProviderRateLimitedError, httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as e:
             retry_count = int(evaluation.retry_count or 0) + 1
             provider_error_type = self._provider_error_type(e)
             if self._is_retryable_provider_error(provider_error_type) and retry_count <= _BEHAVIORAL_AI_MAX_RETRIES:
+                try:
+                    await persist_ai_usage_log(
+                        self.session,
+                        AIUsageLogPayload(
+                            provider=settings.AI_PROVIDER,
+                            model=settings.AI_MODEL_ID,
+                            operation="behavioral_analysis",
+                            status="error",
+                            input_tokens=0,
+                            output_tokens=0,
+                            error_message=provider_error_type,
+                            candidate_id=assignment.candidate_id,
+                            job_id=assignment.job_id,
+                        ),
+                    )
+                except Exception:
+                    pass
                 await self._save_retry_scheduled_evaluation(
                     evaluation,
                     e,
@@ -1119,6 +1159,23 @@ class BehavioralAIEvaluationService:
                 )
                 raise
 
+            try:
+                await persist_ai_usage_log(
+                    self.session,
+                    AIUsageLogPayload(
+                        provider=settings.AI_PROVIDER,
+                        model=settings.AI_MODEL_ID,
+                        operation="behavioral_analysis",
+                        status="error",
+                        input_tokens=0,
+                        output_tokens=0,
+                        error_message=provider_error_type,
+                        candidate_id=assignment.candidate_id,
+                        job_id=assignment.job_id,
+                    ),
+                )
+            except Exception:
+                pass
             await self._save_failed_evaluation(
                 evaluation,
                 self._safe_failure_message(provider_error_type),
@@ -1136,6 +1193,23 @@ class BehavioralAIEvaluationService:
                 error_type=type(e).__name__,
                 provider_error_type=provider_error_type,
             )
+            try:
+                await persist_ai_usage_log(
+                    self.session,
+                    AIUsageLogPayload(
+                        provider=settings.AI_PROVIDER,
+                        model=settings.AI_MODEL_ID,
+                        operation="behavioral_analysis",
+                        status="error",
+                        input_tokens=0,
+                        output_tokens=0,
+                        error_message=sanitize_log_text(type(e).__name__)[:200],
+                        candidate_id=assignment.candidate_id,
+                        job_id=assignment.job_id,
+                    ),
+                )
+            except Exception:
+                pass
             await self._save_failed_evaluation(
                 evaluation,
                 error_msg,
