@@ -146,3 +146,10 @@ class ScoringComputeResponse(BaseModel):
     score_version: str
     computed_at: datetime
     score_deltas: list[ScoreDeltaEntry]
+
+
+class RankingRecalculateResponse(BaseModel):
+    job_id: UUID
+    queued: bool
+    provider_calls: int
+    message: str

@@ -138,6 +138,7 @@ from src.interface.api.schemas.pipeline_schemas import (
 from src.interface.api.schemas.ranking_schemas import (
     CandidateRankingEntry,
     JobRankingResponse,
+    RankingRecalculateResponse,
     ScoringComputeResponse,
     SingleCandidateScoringResponse,
 )
@@ -1535,6 +1536,48 @@ async def get_candidate_ranking_entry(
     except Exception as exc:
         _handle_job_service_error(exc)
         raise
+
+
+@router.post(
+    "/{job_id}/recalculate-ranking",
+    response_model=RankingRecalculateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def recalculate_job_ranking(
+    job_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> RankingRecalculateResponse:
+    """Enqueue match+score recomputation for all pipeline candidates. Never calls LLM or AI provider.
+
+    Uses persisted analysis data (AnalysisResultModel, CandidateProfileAnalysisModel,
+    ResumeVersionModel) to rebuild CandidateJobMatchModel rows and recompute
+    CandidateJobScoreModel — zero provider tokens consumed.
+    """
+    from src.infrastructure.database.models.job_model import JobModel
+    from src.interface.workers.matching_dispatcher import enqueue_job_match_recompute
+
+    job = await db.scalar(sa.select(JobModel).where(JobModel.id == job_id))
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vaga não encontrada.",
+        )
+    if not job.job_profile_hash:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "job_profile_not_ready",
+                "message": "Vaga sem perfil semântico gerado. Salve a vaga e aguarde o perfil ser gerado antes de recalcular.",
+            },
+        )
+    await enqueue_job_match_recompute(job_id)
+    return RankingRecalculateResponse(
+        job_id=job_id,
+        queued=True,
+        provider_calls=0,
+        message="Recálculo de ranking enfileirado sem nova chamada de IA.",
+    )
 
 
 @router.get(
