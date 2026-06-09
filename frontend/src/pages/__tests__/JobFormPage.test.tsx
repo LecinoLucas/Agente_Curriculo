@@ -120,22 +120,57 @@ const { mockUpdateForm, mockFormState } = vi.hoisted(() => ({
   mockFormState: { form: undefined as unknown },
 }));
 
-vi.mock("../../features/jobs/hooks/useJobFormState", () => ({
-  useJobFormState: () => ({
-    form: mockFormState.form ?? EMPTY_FORM,
-    setForm: vi.fn(),
-    updateForm: mockUpdateForm,
-    dealBreakerDraft: {},
-    setDealBreakerDraft: vi.fn(),
-    updateDealBreakerDraft: vi.fn(),
-    addBehavioralRequirement: vi.fn(),
-    addDealBreaker: vi.fn(),
-    resetFormState: vi.fn(),
-  }),
-}));
+vi.mock("../../features/jobs/hooks/useJobFormState", () => {
+  const React = require("react");
+  return {
+    useJobFormState: () => {
+      const [form, setForm] = React.useState(mockFormState.form ?? EMPTY_FORM);
 
-const { mockHandleAddSkill } = vi.hoisted(() => ({
+      React.useEffect(() => {
+        if (mockFormState.form) {
+          setForm(mockFormState.form);
+        }
+      }, [mockFormState.form]);
+
+      const handleFormUpdate = (updates: any) => {
+        mockUpdateForm(updates);
+        setForm((c: any) => {
+          const next = { ...c, ...updates };
+          mockFormState.form = next;
+          return next;
+        });
+      };
+
+      return {
+        form,
+        setForm: (newFormOrFn: any) => {
+          if (typeof newFormOrFn === "function") {
+            setForm((c: any) => {
+              const next = newFormOrFn(c);
+              mockFormState.form = next;
+              return next;
+            });
+          } else {
+            mockFormState.form = newFormOrFn;
+            setForm(newFormOrFn);
+          }
+        },
+        updateForm: handleFormUpdate,
+        dealBreakerDraft: {},
+        setDealBreakerDraft: vi.fn(),
+        updateDealBreakerDraft: vi.fn(),
+        addBehavioralRequirement: vi.fn(),
+        addDealBreaker: vi.fn(),
+        resetFormState: vi.fn(),
+      };
+    }
+  };
+});
+
+const { mockHandleAddSkill, mockHandleUpdateSkill, mockHandleRemoveSkill } = vi.hoisted(() => ({
   mockHandleAddSkill: vi.fn().mockResolvedValue(undefined),
+  mockHandleUpdateSkill: vi.fn().mockResolvedValue(undefined),
+  mockHandleRemoveSkill: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../features/jobs/hooks/useJobSkills", () => ({
@@ -161,8 +196,8 @@ vi.mock("../../features/jobs/hooks/useJobSkills", () => ({
     eliminatorySkills: [],
     availableSkills: [],
     handleAddSkill: mockHandleAddSkill,
-    handleUpdateSkill: vi.fn(),
-    handleRemoveSkill: vi.fn(),
+    handleUpdateSkill: mockHandleUpdateSkill,
+    handleRemoveSkill: mockHandleRemoveSkill,
     syncPendingSkills: vi.fn().mockResolvedValue(undefined),
     onSkillCreated: vi.fn(),
   }),
@@ -195,10 +230,22 @@ vi.mock("../../features/jobs/sections/JobFormRequirementsStep", () => ({
   JobFormRequirementsStep: () => <div data-testid="step-requirements" />,
 }));
 vi.mock("../../features/jobs/sections/JobFormMandatorySkillsStep", () => ({
-  JobFormMandatorySkillsStep: () => <div data-testid="step-mandatory-skills" />,
+  JobFormMandatorySkillsStep: (props: any) => (
+    <div data-testid="step-mandatory-skills">
+      <button onClick={() => props.onAddSkill?.("React", "priority")}>Add Essential Mock</button>
+      <button onClick={() => props.onUpdateSkill?.({ id: "1" }, { priority_level: "complementary" })}>Move Essential Mock</button>
+      <button onClick={() => props.onRemoveSkill?.({ id: "1" })}>Remove Essential Mock</button>
+    </div>
+  ),
 }));
 vi.mock("../../features/jobs/sections/JobFormDifferentialsStep", () => ({
-  JobFormDifferentialsStep: () => <div data-testid="step-differentials" />,
+  JobFormDifferentialsStep: (props: any) => (
+    <div data-testid="step-differentials">
+      <button onClick={() => props.onAddSkill?.("Vue", "complementary")}>Add Differential Mock</button>
+      <button onClick={() => props.onUpdateSkill?.({ id: "2" }, { priority_level: "priority" })}>Move Differential Mock</button>
+      <button onClick={() => props.onRemoveSkill?.({ id: "2" })}>Remove Differential Mock</button>
+    </div>
+  ),
 }));
 vi.mock("../../features/jobs/sections/JobFormDealBreakersStep", () => ({
   JobFormDealBreakersStep: () => <div data-testid="step-deal-breakers" />,
@@ -516,6 +563,173 @@ describe("JobFormPage", () => {
       expect(
         screen.queryByRole("button", { name: /Ver qualidade da vaga/i }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Sub-abas de Skills (Etapa 3 de 5)", () => {
+    function navigateToSkillsStep() {
+      renderForm();
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i })); // basic -> requirements
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i })); // requirements -> skills
+    }
+
+    it("etapa Skills renderiza as sub-abas horizontais", () => {
+      navigateToSkillsStep();
+      const nav = screen.getByTestId("skills-subtabs-nav");
+      expect(within(nav).getByRole("button", { name: /Essenciais/i })).toBeInTheDocument();
+      expect(within(nav).getByRole("button", { name: /Diferenciais/i })).toBeInTheDocument();
+      expect(within(nav).getByRole("button", { name: /Competências livres/i })).toBeInTheDocument();
+      expect(within(nav).getByRole("button", { name: /Revisão/i })).toBeInTheDocument();
+    });
+
+    it("sub-aba Essenciais mostra skills essenciais e não mostra diferenciais", () => {
+      navigateToSkillsStep();
+      expect(screen.getByTestId("step-mandatory-skills")).toBeInTheDocument();
+      expect(screen.queryByTestId("step-differentials")).not.toBeInTheDocument();
+    });
+
+    it("sub-aba Diferenciais mostra diferenciais e não mostra essenciais", () => {
+      navigateToSkillsStep();
+      const nav = screen.getByTestId("skills-subtabs-nav");
+      fireEvent.click(within(nav).getByRole("button", { name: /Diferenciais/i }));
+      expect(screen.getByTestId("step-differentials")).toBeInTheDocument();
+      expect(screen.queryByTestId("step-mandatory-skills")).not.toBeInTheDocument();
+    });
+
+    it("sub-aba Competências livres mostra campos de texto livre", () => {
+      navigateToSkillsStep();
+      const nav = screen.getByTestId("skills-subtabs-nav");
+      fireEvent.click(within(nav).getByRole("button", { name: /Competências livres/i }));
+      expect(screen.getByTestId("form-mandatory-skills")).toBeInTheDocument();
+      expect(screen.getByTestId("form-nice-to-have-skills")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/Ex: Comunicação com áreas de negócio/i)).toBeInTheDocument();
+    });
+
+    it("sub-aba Revisão mostra resumo e alertas de qualidade", () => {
+      navigateToSkillsStep();
+      const nav = screen.getByTestId("skills-subtabs-nav");
+      fireEvent.click(within(nav).getByRole("button", { name: /Revisão/i }));
+      expect(screen.getByText("Resumo das Competências")).toBeInTheDocument();
+      expect(screen.getByText("Skills Essenciais (Catálogo)")).toBeInTheDocument();
+      expect(screen.getByText("Skills Diferenciais (Catálogo)")).toBeInTheDocument();
+      expect(screen.getByText("Alertas de Qualidade")).toBeInTheDocument();
+    });
+
+    it("adicionar skill essencial continua funcionando", () => {
+      navigateToSkillsStep();
+      fireEvent.click(screen.getByRole("button", { name: /^Add Essential Mock$/i }));
+      expect(mockHandleAddSkill).toHaveBeenCalledWith("React", "priority");
+    });
+
+    it("mover essencial para diferencial e remover skill continuam funcionando", () => {
+      navigateToSkillsStep();
+      fireEvent.click(screen.getByRole("button", { name: /^Move Essential Mock$/i }));
+      expect(mockHandleUpdateSkill).toHaveBeenCalledWith({ id: "1" }, { priority_level: "complementary" });
+
+      fireEvent.click(screen.getByRole("button", { name: /^Remove Essential Mock$/i }));
+      expect(mockHandleRemoveSkill).toHaveBeenCalledWith({ id: "1" });
+    });
+
+    it("dados não somem ao trocar sub-abas", async () => {
+      navigateToSkillsStep();
+      const nav = screen.getByTestId("skills-subtabs-nav");
+      fireEvent.click(within(nav).getByRole("button", { name: /Competências livres/i }));
+      
+      const input = screen.getByTestId("form-mandatory-skills-input");
+      fireEvent.change(input, { target: { value: "Inglês Fluente" } });
+      expect(input).toHaveValue("Inglês Fluente");
+
+      const addBtn = screen.getByTestId("form-mandatory-skills-add-btn");
+      fireEvent.click(addBtn);
+      expect(screen.getByTestId("form-mandatory-skills-item")).toHaveTextContent("Inglês Fluente");
+
+      fireEvent.click(within(nav).getByRole("button", { name: /Essenciais/i }));
+      expect(screen.getByTestId("step-mandatory-skills")).toBeInTheDocument();
+      
+      fireEvent.click(within(nav).getByRole("button", { name: /Competências livres/i }));
+      expect(screen.getByTestId("form-mandatory-skills-item")).toHaveTextContent("Inglês Fluente");
+    });
+
+    it("botão Próxima etapa continua funcionando", () => {
+      navigateToSkillsStep();
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i })); // skills -> screening
+      expect(screen.getByTestId("step-deal-breakers")).toBeInTheDocument();
+    });
+  });
+
+  describe("Sub-abas de Triagem (Etapa 4 de 5)", () => {
+    function navigateToScreeningStep() {
+      renderForm();
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i })); // basic -> requirements
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i })); // requirements -> skills
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i })); // skills -> screening
+    }
+
+    it("etapa Triagem renderiza as sub-abas horizontais", () => {
+      navigateToScreeningStep();
+      const nav = screen.getByTestId("screening-subtabs-nav");
+      expect(within(nav).getByRole("button", { name: /Eliminatórios/i })).toBeInTheDocument();
+      expect(within(nav).getByRole("button", { name: /Etapas de avaliação/i })).toBeInTheDocument();
+      expect(within(nav).getByRole("button", { name: /Comportamental/i })).toBeInTheDocument();
+      expect(within(nav).getByRole("button", { name: /Revisão/i })).toBeInTheDocument();
+    });
+
+    it("sub-aba Eliminatórios mostra perguntas de triagem e deal breakers", () => {
+      navigateToScreeningStep();
+      expect(screen.getByTestId("form-screening-questions")).toBeInTheDocument();
+      expect(screen.getByTestId("step-deal-breakers")).toBeInTheDocument();
+      expect(screen.queryByTestId("step-assessment-policy")).not.toBeInTheDocument();
+    });
+
+    it("sub-aba Etapas de avaliação mostra fluxo de avaliação e oculta eliminatórios", () => {
+      navigateToScreeningStep();
+      const nav = screen.getByTestId("screening-subtabs-nav");
+      fireEvent.click(within(nav).getByRole("button", { name: /Etapas de avaliação/i }));
+      expect(screen.getByTestId("step-assessment-policy")).toBeInTheDocument();
+      expect(screen.queryByTestId("form-screening-questions")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("step-deal-breakers")).not.toBeInTheDocument();
+    });
+
+    it("sub-aba Comportamental mostra seletor de template comportamental", () => {
+      navigateToScreeningStep();
+      const nav = screen.getByTestId("screening-subtabs-nav");
+      fireEvent.click(within(nav).getByRole("button", { name: /Comportamental/i }));
+      expect(screen.getByTestId("step-behavioral")).toBeInTheDocument();
+      expect(screen.queryByTestId("step-assessment-policy")).not.toBeInTheDocument();
+    });
+
+    it("sub-aba Revisão mostra resumo e alertas de triagem", () => {
+      navigateToScreeningStep();
+      const nav = screen.getByTestId("screening-subtabs-nav");
+      fireEvent.click(within(nav).getByRole("button", { name: /Revisão/i }));
+      expect(screen.getByText("Resumo da Triagem")).toBeInTheDocument();
+      expect(screen.getByText("Perguntas de Triagem")).toBeInTheDocument();
+      expect(screen.getByText("Alertas de Triagem")).toBeInTheDocument();
+    });
+
+    it("dados não somem ao trocar sub-abas na triagem", async () => {
+      navigateToScreeningStep();
+      
+      const input = screen.getByTestId("form-screening-questions-input");
+      fireEvent.change(input, { target: { value: "Possui CNH B?" } });
+      expect(input).toHaveValue("Possui CNH B?");
+
+      const addBtn = screen.getByTestId("form-screening-questions-add-btn");
+      fireEvent.click(addBtn);
+      expect(screen.getByTestId("form-screening-questions-item")).toHaveTextContent("Possui CNH B?");
+
+      const nav = screen.getByTestId("screening-subtabs-nav");
+      fireEvent.click(within(nav).getByRole("button", { name: /Etapas de avaliação/i }));
+      expect(screen.getByTestId("step-assessment-policy")).toBeInTheDocument();
+      
+      fireEvent.click(within(nav).getByRole("button", { name: /Eliminatórios/i }));
+      expect(screen.getByTestId("form-screening-questions-item")).toHaveTextContent("Possui CNH B?");
+    });
+
+    it("botão Próxima etapa continua funcionando na triagem", () => {
+      navigateToScreeningStep();
+      fireEvent.click(screen.getByRole("button", { name: /Próxima etapa/i })); // screening -> review
+      expect(screen.getByTestId("step-review")).toBeInTheDocument();
     });
   });
 

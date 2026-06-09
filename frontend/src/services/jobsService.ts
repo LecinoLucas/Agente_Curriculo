@@ -4,6 +4,7 @@ import {
   JobPipelineBoard,
   JobQualityResult,
   JobRanking,
+  JobRankingEntry,
   PipelineBoardFilters,
   PipelineStage,
 } from "../types/domain";

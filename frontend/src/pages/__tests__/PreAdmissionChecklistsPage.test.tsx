@@ -195,6 +195,9 @@ describe("PreAdmissionChecklistsPage", () => {
 
     await screen.findByTestId("checklists-table");
     
+    // Selecionar o checklist
+    await user.click(await screen.findByText("Checklist CLT"));
+    
     // Abrir drawer de edição
     await user.click(await screen.findByTestId("edit-template-btn"));
     
@@ -232,6 +235,9 @@ describe("PreAdmissionChecklistsPage", () => {
     const user = userEvent.setup();
 
     await screen.findByTestId("checklists-table");
+    
+    // Selecionar o checklist
+    await user.click(await screen.findByText("Checklist CLT"));
     
     // Abrir drawer de edição
     await user.click(await screen.findByTestId("edit-template-btn"));

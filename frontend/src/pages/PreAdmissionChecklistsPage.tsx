@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "../shared/utils/toast";
 import { preAdmissionChecklistTemplatesService } from "../services/preAdmissionChecklistTemplatesService";
 import type {
@@ -321,7 +322,7 @@ export function PreAdmissionChecklistsPage() {
       }
       const candidate = preferredId && data.some((template) => template.id === preferredId)
         ? preferredId
-        : data[0].id;
+        : null;
       setSelectedTemplateId(candidate);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao carregar checklists");
@@ -421,11 +422,12 @@ export function PreAdmissionChecklistsPage() {
     }
   }
 
-  async function handleDuplicateTemplate() {
-    if (!selectedTemplate) return;
+  async function handleDuplicateTemplate(templateId?: string) {
+    const idToDuplicate = templateId ?? selectedTemplate?.id;
+    if (!idToDuplicate) return;
     try {
       setSaving(true);
-      const duplicated = await preAdmissionChecklistTemplatesService.duplicateTemplate(selectedTemplate.id);
+      const duplicated = await preAdmissionChecklistTemplatesService.duplicateTemplate(idToDuplicate);
       toast.success("Checklist duplicado.");
       await loadTemplates(duplicated.id);
       await loadTemplateDetail(duplicated.id);
@@ -601,7 +603,8 @@ export function PreAdmissionChecklistsPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
+    <TooltipProvider>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
       <header className="flex flex-col gap-3 rounded-[24px] border border-border bg-[linear-gradient(135deg,rgba(4,120,87,0.08),rgba(15,23,42,0.02))] p-5 md:flex-row md:items-center md:justify-between">
         <div className="max-w-2xl">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">Pré-admissão</p>
@@ -731,12 +734,11 @@ export function PreAdmissionChecklistsPage() {
                     return (
                       <tr
                         key={template.id}
-                        className={`transition-colors hover:bg-surface/30 ${isSelected ? "bg-emerald-50/50" : ""}`}
+                        onClick={() => setSelectedTemplateId(template.id)}
+                        className={`cursor-pointer transition-colors hover:bg-surface/30 ${isSelected ? "bg-emerald-50/50" : ""}`}
                       >
                         <td className="px-4 py-3 min-w-[220px]">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedTemplateId(template.id)}
+                          <div
                             className="text-left"
                             data-testid={`checklist-card-${template.id}`}
                           >
@@ -744,7 +746,7 @@ export function PreAdmissionChecklistsPage() {
                             <p className="mt-0.5 text-[11px] text-text-muted">
                               {template.description || "Sem descrição"}
                             </p>
-                          </button>
+                          </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex flex-col gap-1.5">
@@ -778,25 +780,60 @@ export function PreAdmissionChecklistsPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedTemplateId(template.id)}
-                              className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-emerald-600"
-                              title="Ver documentos"
-                            >
-                              <FilePlus2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedTemplateId(template.id);
-                                void loadTemplateDetail(template.id).then(() => openTemplateEdit());
-                              }}
-                              className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-emerald-600"
-                              title="Editar checklist"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedTemplateId(template.id);
+                                  }}
+                                  className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-emerald-600"
+                                >
+                                  <FilePlus2 className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Ver documentos</p>
+                              </TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleDuplicateTemplate(template.id);
+                                  }}
+                                  className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-emerald-600"
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Duplicar checklist</p>
+                              </TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedTemplateId(template.id);
+                                    void loadTemplateDetail(template.id).then(() => openTemplateEdit());
+                                  }}
+                                  className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-emerald-600"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Editar checklist</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </td>
                       </tr>
@@ -1057,44 +1094,72 @@ export function PreAdmissionChecklistsPage() {
                                     </td>
                                     <td className="px-4 py-2 text-right whitespace-nowrap">
                                       <div className="flex items-center justify-end">
-                                        <button
-                                          type="button"
-                                          disabled={saving || isFirst}
-                                          onClick={() => handleReorderItem(item, "up")}
-                                          className="p-1.5 text-text-muted hover:text-text disabled:opacity-30 disabled:hover:text-text-muted rounded-md hover:bg-surface-muted transition-colors"
-                                          title="Subir"
-                                        >
-                                          <ArrowUp className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={saving || isLast}
-                                          onClick={() => handleReorderItem(item, "down")}
-                                          className="p-1.5 text-text-muted hover:text-text disabled:opacity-30 disabled:hover:text-text-muted rounded-md hover:bg-surface-muted transition-colors"
-                                          title="Descer"
-                                        >
-                                          <ArrowDown className="h-3.5 w-3.5" />
-                                        </button>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              disabled={saving || isFirst}
+                                              onClick={() => handleReorderItem(item, "up")}
+                                              className="p-1.5 text-text-muted hover:text-text disabled:opacity-30 disabled:hover:text-text-muted rounded-md hover:bg-surface-muted transition-colors"
+                                            >
+                                              <ArrowUp className="h-3.5 w-3.5" />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Mover para cima</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              disabled={saving || isLast}
+                                              onClick={() => handleReorderItem(item, "down")}
+                                              className="p-1.5 text-text-muted hover:text-text disabled:opacity-30 disabled:hover:text-text-muted rounded-md hover:bg-surface-muted transition-colors"
+                                            >
+                                              <ArrowDown className="h-3.5 w-3.5" />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Mover para baixo</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+
                                         <div className="w-px h-3 bg-border/80 mx-1" />
-                                        <button
-                                          type="button"
-                                          onClick={() => openDocumentEdit(item)}
-                                          className="p-1.5 text-text-muted hover:text-emerald-700 rounded-md hover:bg-surface-muted transition-colors"
-                                          title="Editar"
-                                          data-testid={`edit-item-${item.id}`}
-                                        >
-                                          <Pencil className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={saving}
-                                          onClick={() => handleRemoveItem(item.id)}
-                                          className="p-1.5 text-text-muted hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
-                                          title="Remover"
-                                          data-testid={`remove-item-${item.id}`}
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
+
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              onClick={() => openDocumentEdit(item)}
+                                              className="p-1.5 text-text-muted hover:text-emerald-700 rounded-md hover:bg-surface-muted transition-colors"
+                                              data-testid={`edit-item-${item.id}`}
+                                            >
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Editar documento</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              disabled={saving}
+                                              onClick={() => handleRemoveItem(item.id)}
+                                              className="p-1.5 text-text-muted hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                                              data-testid={`remove-item-${item.id}`}
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Remover documento</p>
+                                          </TooltipContent>
+                                        </Tooltip>
                                       </div>
                                     </td>
                                   </tr>
@@ -1290,5 +1355,6 @@ export function PreAdmissionChecklistsPage() {
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }

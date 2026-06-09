@@ -7,6 +7,7 @@ import {
   Loader2,
   Save,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -123,6 +124,8 @@ export function JobFormPage() {
   } = useJobFormState();
 
   const [activeMacroStep, setActiveMacroStep] = useState<MacroStepId>("context");
+  const [skillsSubTab, setSkillsSubTab] = useState<"essentials" | "differentials" | "free-text" | "review">("essentials");
+  const [screeningSubTab, setScreeningSubTab] = useState<"eliminatories" | "stages" | "behavioral" | "review">("eliminatories");
   const [showQualityDrawer, setShowQualityDrawer] = useState(false);
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [aiSkillSuggestions, setAiSkillSuggestions] = useState<AiSkillSuggestionsState | null>(null);
@@ -433,14 +436,105 @@ export function JobFormPage() {
           </div>
         );
 
-      case "skills":
+      case "skills": {
+        const hasEssentialsError = mandatorySkills.length < 2;
+        const totalFreeTextCount = 
+          (form.mandatory_skills?.length ?? 0) + 
+          (form.nice_to_have_skills?.length ?? 0) + 
+          (form.behavioral_requirements?.length ?? 0);
+          
+        const hasCatalogSkillsWarning = mandatorySkills.length === 0 && optionalSkills.length === 0;
+
         return (
           <div className="space-y-6">
-            <div className="rounded-2xl border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.04)] px-4 py-3 text-sm text-[hsl(var(--primary))]">
-              Skills do catálogo ajudam no matching. Textos livres enriquecem a descrição da vaga.
+            {/* Horizontal Sub-tabs bar */}
+            <div data-testid="skills-subtabs-nav" className="flex border-b border-border bg-surface rounded-2xl p-1 shadow-sm overflow-x-auto gap-1">
+              <button
+                type="button"
+                onClick={() => setSkillsSubTab("essentials")}
+                className={`relative flex-1 min-w-[120px] px-3 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  skillsSubTab === "essentials"
+                    ? "bg-[hsl(var(--primary))] text-white shadow"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text"
+                }`}
+              >
+                <span>Essenciais</span>
+                <span className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                  skillsSubTab === "essentials"
+                    ? "bg-white/20 text-white"
+                    : hasEssentialsError
+                      ? "bg-danger-soft text-danger border border-danger/10"
+                      : "bg-surface-muted text-text-muted border border-border"
+                }`}>
+                  {mandatorySkills.length}
+                </span>
+                {hasEssentialsError && (
+                  <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSkillsSubTab("differentials")}
+                className={`flex-1 min-w-[120px] px-3 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  skillsSubTab === "differentials"
+                    ? "bg-[hsl(var(--primary))] text-white shadow"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text"
+                }`}
+              >
+                <span>Diferenciais</span>
+                <span className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                  skillsSubTab === "differentials"
+                    ? "bg-white/20 text-white"
+                    : "bg-surface-muted text-text-muted border border-border"
+                }`}>
+                  {optionalSkills.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSkillsSubTab("free-text")}
+                className={`flex-1 min-w-[140px] px-3 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  skillsSubTab === "free-text"
+                    ? "bg-[hsl(var(--primary))] text-white shadow"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text"
+                }`}
+              >
+                <span>Competências livres</span>
+                <span className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                  skillsSubTab === "free-text"
+                    ? "bg-white/20 text-white"
+                    : "bg-surface-muted text-text-muted border border-border"
+                }`}>
+                  {totalFreeTextCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSkillsSubTab("review")}
+                className={`relative flex-1 min-w-[120px] px-3 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  skillsSubTab === "review"
+                    ? "bg-[hsl(var(--primary))] text-white shadow"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text"
+                }`}
+              >
+                <span>Revisão</span>
+                {(hasEssentialsError || hasCatalogSkillsWarning) && (
+                  <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-warning"></span>
+                  </span>
+                )}
+              </button>
             </div>
 
-            {aiSkillSuggestions && (
+            {/* AI suggestions block */}
+            {aiSkillSuggestions && (skillsSubTab === "essentials" || skillsSubTab === "differentials") && (
               <AiSkillSuggestionsBlock
                 mandatory={aiSkillSuggestions.mandatory}
                 optional={aiSkillSuggestions.optional}
@@ -450,154 +544,440 @@ export function JobFormPage() {
               />
             )}
 
-            <SectionCard
-              title="Competências obrigatórias (Texto Livre)"
-              description="Itens que aparecerão apenas na descrição da vaga e não no matching de IA."
-            >
-              <Field label="Competências obrigatórias">
-                <StringListField
-                  values={form.mandatory_skills}
-                  onChange={(next) => setForm((c) => ({ ...c, mandatory_skills: next }))}
-                  placeholder="Ex: Atendimento ao cliente"
-                  addLabel="Adicionar"
-                  emptyLabel="Nenhuma competência obrigatória adicionada."
-                  inputLabel="Nova competência obrigatória"
-                  testId="form-mandatory-skills"
+            {/* Sub-tab 1: Essenciais */}
+            {skillsSubTab === "essentials" && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.04)] px-4 py-3 text-sm text-[hsl(var(--primary))]">
+                  Use para as 3–5 competências centrais da vaga. Essas skills impactam o matching IA.
+                </div>
+
+                {hasEssentialsError && (
+                  <div className="rounded-2xl border border-[hsl(var(--danger)/0.3)] bg-danger-soft px-4 py-3 text-sm text-danger">
+                    A vaga precisa ter no mínimo 2 skills essenciais cadastradas para permitir a publicação.
+                  </div>
+                )}
+
+                <JobFormMandatorySkillsStep
+                  mandatorySkills={mandatorySkills}
+                  availableSkills={availableSkills}
+                  skillSearch={skillSearch}
+                  onSearchChange={setSkillSearch}
+                  skillCategoryFilter={skillCategoryFilter}
+                  onSkillCategoryFilterChange={setSkillCategoryFilter}
+                  skillCategoryOptions={skillCategoryOptions}
+                  skillTypeFilter={skillTypeFilter}
+                  onSkillTypeFilterChange={setSkillTypeFilter}
+                  skillTypeOptions={skillTypeOptions}
+                  savingSkillId={savingSkillId}
+                  onAddSkill={handleAddSkill}
+                  onUpdateSkill={handleUpdateSkill}
+                  onRemoveSkill={handleRemoveSkill}
+                  onSkillCreated={onSkillCreated}
+                  jobContext={{ title: form.title, jobArea: form.job_area }}
                 />
-              </Field>
-            </SectionCard>
+              </div>
+            )}
 
-            <JobFormMandatorySkillsStep
-              mandatorySkills={mandatorySkills}
-              availableSkills={availableSkills}
-              skillSearch={skillSearch}
-              onSearchChange={setSkillSearch}
-              skillCategoryFilter={skillCategoryFilter}
-              onSkillCategoryFilterChange={setSkillCategoryFilter}
-              skillCategoryOptions={skillCategoryOptions}
-              skillTypeFilter={skillTypeFilter}
-              onSkillTypeFilterChange={setSkillTypeFilter}
-              skillTypeOptions={skillTypeOptions}
-              savingSkillId={savingSkillId}
-              onAddSkill={handleAddSkill}
-              onUpdateSkill={handleUpdateSkill}
-              onRemoveSkill={handleRemoveSkill}
-              onSkillCreated={onSkillCreated}
-              jobContext={{ title: form.title, jobArea: form.job_area }}
-            />
+            {/* Sub-tab 2: Diferenciais */}
+            {skillsSubTab === "differentials" && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.04)] px-4 py-3 text-sm text-[hsl(var(--primary))]">
+                  Use para competências desejáveis. Elas ajudam o ranking, mas não devem bloquear bons candidatos.
+                </div>
 
-            <SectionCard
-              title="Diferenciais (Texto Livre)"
-              description="Diferenciais em texto que aparecerão na descrição da vaga."
-            >
-              <Field label="Diferenciais (desejáveis)">
-                <StringListField
-                  values={form.nice_to_have_skills}
-                  onChange={(next) => setForm((c) => ({ ...c, nice_to_have_skills: next }))}
-                  placeholder="Ex: Experiência anterior com caixa"
-                  addLabel="Adicionar"
-                  emptyLabel="Nenhum diferencial adicionado."
-                  inputLabel="Novo diferencial"
-                  testId="form-nice-to-have-skills"
+                <JobFormDifferentialsStep
+                  form={{
+                    behavioral_requirements: form.behavioral_requirements,
+                    newBehavioralRequirement: form.newBehavioralRequirement,
+                  }}
+                  optionalSkills={optionalSkills}
+                  availableSkills={availableSkills}
+                  skillSearch={skillSearch}
+                  onSearchChange={setSkillSearch}
+                  skillCategoryFilter={skillCategoryFilter}
+                  onSkillCategoryFilterChange={setSkillCategoryFilter}
+                  skillCategoryOptions={skillCategoryOptions}
+                  skillTypeFilter={skillTypeFilter}
+                  onSkillTypeFilterChange={setSkillTypeFilter}
+                  skillTypeOptions={skillTypeOptions}
+                  onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
+                  savingSkillId={savingSkillId}
+                  onAddSkill={handleAddSkill}
+                  onUpdateSkill={handleUpdateSkill}
+                  onRemoveSkill={handleRemoveSkill}
+                  onAddBehavioralRequirement={addBehavioralRequirement}
+                  onSkillCreated={onSkillCreated}
+                  jobContext={{ title: form.title, jobArea: form.job_area }}
+                  hideBehavioral={true}
                 />
-              </Field>
-            </SectionCard>
+              </div>
+            )}
 
-            <JobFormDifferentialsStep
-              form={{
-                behavioral_requirements: form.behavioral_requirements,
-                newBehavioralRequirement: form.newBehavioralRequirement,
-              }}
-              optionalSkills={optionalSkills}
-              availableSkills={availableSkills}
-              skillSearch={skillSearch}
-              onSearchChange={setSkillSearch}
-              skillCategoryFilter={skillCategoryFilter}
-              onSkillCategoryFilterChange={setSkillCategoryFilter}
-              skillCategoryOptions={skillCategoryOptions}
-              skillTypeFilter={skillTypeFilter}
-              onSkillTypeFilterChange={setSkillTypeFilter}
-              skillTypeOptions={skillTypeOptions}
-              onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
-              savingSkillId={savingSkillId}
-              onAddSkill={handleAddSkill}
-              onUpdateSkill={handleUpdateSkill}
-              onRemoveSkill={handleRemoveSkill}
-              onAddBehavioralRequirement={addBehavioralRequirement}
-              onSkillCreated={onSkillCreated}
-              jobContext={{ title: form.title, jobArea: form.job_area }}
-            />
+            {/* Sub-tab 3: Competências livres */}
+            {skillsSubTab === "free-text" && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-[hsl(var(--warning)/0.3)] bg-warning-soft px-4 py-3 text-sm text-warning">
+                  Textos livres aparecem na descrição da vaga, mas não entram diretamente no matching IA. Para matching, use skills do catálogo nas abas Essenciais e Diferenciais.
+                </div>
+
+                <SectionCard
+                  title="Competências obrigatórias (Texto Livre)"
+                  description="Itens que aparecerão apenas na descrição da vaga e não no matching de IA."
+                >
+                  <Field label="Competências obrigatórias">
+                    <StringListField
+                      values={form.mandatory_skills}
+                      onChange={(next) => setForm((c) => ({ ...c, mandatory_skills: next }))}
+                      placeholder="Ex: Atendimento ao cliente"
+                      addLabel="Adicionar"
+                      emptyLabel="Nenhuma competência obrigatória adicionada."
+                      inputLabel="Nova competência obrigatória"
+                      testId="form-mandatory-skills"
+                    />
+                  </Field>
+                </SectionCard>
+
+                <SectionCard
+                  title="Diferenciais (Texto Livre)"
+                  description="Diferenciais em texto que aparecerão na descrição da vaga."
+                >
+                  <Field label="Diferenciais (desejáveis)">
+                    <StringListField
+                      values={form.nice_to_have_skills}
+                      onChange={(next) => setForm((c) => ({ ...c, nice_to_have_skills: next }))}
+                      placeholder="Ex: Experiência anterior com caixa"
+                      addLabel="Adicionar"
+                      emptyLabel="Nenhum diferencial adicionado."
+                      inputLabel="Novo diferencial"
+                      testId="form-nice-to-have-skills"
+                    />
+                  </Field>
+                </SectionCard>
+
+                <SectionCard
+                  title="Requisitos comportamentais"
+                  description="Esses itens ajudam a orientar a leitura da vaga e a futura avaliação."
+                >
+                  <div className="flex flex-col gap-3 md:flex-row">
+                    <input
+                      value={form.newBehavioralRequirement}
+                      onChange={(event) =>
+                        setForm((c) => ({
+                          ...c,
+                          newBehavioralRequirement: event.target.value,
+                        }))
+                      }
+                      className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 flex-1 rounded-xl px-3 text-sm"
+                      placeholder="Ex: Comunicação com áreas de negócio"
+                    />
+                    <Button type="button" onClick={addBehavioralRequirement}>
+                      Adicionar
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {form.behavioral_requirements.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() =>
+                          setForm((c) => ({
+                            ...c,
+                            behavioral_requirements: form.behavioral_requirements.filter(
+                              (value) => value !== item,
+                            ),
+                          }))
+                        }
+                        className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-2 text-xs text-text"
+                      >
+                        {item}
+                        <Trash2 className="h-3.5 w-3.5 text-text-muted" />
+                      </button>
+                    ))}
+                    {form.behavioral_requirements.length === 0 ? (
+                      <p className="text-sm text-text-muted">
+                        Nenhum requisito comportamental adicionado.
+                      </p>
+                    ) : null}
+                  </div>
+                </SectionCard>
+              </div>
+            )}
+
+            {/* Sub-tab 4: Revisão */}
+            {skillsSubTab === "review" && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+                  <h3 className="text-base font-semibold text-text mb-4">Resumo das Competências</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-border p-4 bg-surface-muted text-center shadow-sm">
+                      <p className="text-sm font-medium text-text-muted">Skills Essenciais (Catálogo)</p>
+                      <p className="text-4xl font-bold text-[hsl(var(--primary))] mt-2">{mandatorySkills.length}</p>
+                    </div>
+                    <div className="rounded-xl border border-border p-4 bg-surface-muted text-center shadow-sm">
+                      <p className="text-sm font-medium text-text-muted">Skills Diferenciais (Catálogo)</p>
+                      <p className="text-4xl font-bold text-[hsl(var(--primary))] mt-2">{optionalSkills.length}</p>
+                    </div>
+                    <div className="rounded-xl border border-border p-4 bg-surface-muted text-center shadow-sm">
+                      <p className="text-sm font-medium text-text-muted">Competências Livres (Texto)</p>
+                      <p className="text-4xl font-bold text-[hsl(var(--primary))] mt-2">{totalFreeTextCount}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-surface p-6 space-y-4 shadow-sm">
+                  <h3 className="text-base font-semibold text-text mb-2">Alertas de Qualidade</h3>
+                  
+                  {/* Warning if < 3 essentials */}
+                  {mandatorySkills.length < 3 && (
+                    <div className="flex items-start gap-2 rounded-xl border border-[hsl(var(--warning))]/20 bg-warning-soft px-4 py-3 text-sm text-warning">
+                      <span>⚠️ <strong>Aviso:</strong> É recomendável adicionar de 3 a 5 skills essenciais do catálogo para que a IA consiga mapear corretamente o perfil técnico ideal da vaga. (Atual: {mandatorySkills.length})</span>
+                    </div>
+                  )}
+
+                  {/* Warning if no catalog skills */}
+                  {mandatorySkills.length === 0 && optionalSkills.length === 0 && (
+                    <div className="flex items-start gap-2 rounded-xl border border-[hsl(var(--danger))]/20 bg-danger-soft px-4 py-3 text-sm text-danger">
+                      <span>❌ <strong>Crítico:</strong> Nenhuma skill do catálogo foi adicionada. Sem skills estruturadas, o matching de IA e o ranking de candidatos não funcionarão de forma robusta.</span>
+                    </div>
+                  )}
+
+                  {/* Warning if only free text exists */}
+                  {mandatorySkills.length === 0 && optionalSkills.length === 0 && totalFreeTextCount > 0 && (
+                    <div className="flex items-start gap-2 rounded-xl border border-[hsl(var(--warning))]/20 bg-warning-soft px-4 py-3 text-sm text-warning">
+                      <span>⚠️ <strong>Aviso:</strong> A vaga possui apenas competências em texto livre. Textos livres aparecem na descrição da vaga para o candidato, mas não impactam diretamente o matching de IA. Adicione skills do catálogo nas abas <strong>Essenciais</strong> ou <strong>Diferenciais</strong>.</span>
+                    </div>
+                  )}
+
+                  {/* If all is good */}
+                  {mandatorySkills.length >= 3 && (
+                    <div className="flex items-start gap-2 rounded-xl border border-[hsl(var(--success))]/20 bg-success-soft px-4 py-3 text-sm text-success">
+                      <span>✅ <strong>Tudo certo:</strong> A vaga possui um bom número de competências estruturadas cadastradas.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         );
+      }
 
-      case "screening":
+      case "screening": {
+        const totalEliminatoriesCount =
+          (form.screening_questions?.length ?? 0) +
+          eliminatorySkills.length +
+          (form.deal_breakers ?? []).filter((db) => db.is_active).length;
+
+        const hasBehavioralTemplateError =
+          form.requires_behavioral_assessment && !form.behavioral_template_id;
+
         return (
           <div className="space-y-6">
-            <SectionCard
-              title="Perguntas de triagem"
-              description="Perguntas obrigatórias que o candidato deve responder ao se aplicar."
-            >
-              <Field label="Perguntas de triagem">
-                <StringListField
-                  values={form.screening_questions}
-                  onChange={(next) => setForm((c) => ({ ...c, screening_questions: next }))}
-                  placeholder="Ex: Tem disponibilidade para turno integral?"
-                  addLabel="Adicionar"
-                  emptyLabel="Nenhuma pergunta de triagem adicionada."
-                  inputLabel="Nova pergunta de triagem"
-                  testId="form-screening-questions"
+            {/* Horizontal Sub-tabs bar */}
+            <div data-testid="screening-subtabs-nav" className="flex border-b border-border bg-surface rounded-2xl p-1 shadow-sm overflow-x-auto gap-1">
+              <button
+                type="button"
+                onClick={() => setScreeningSubTab("eliminatories")}
+                className={`relative flex-1 min-w-[125px] px-3 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  screeningSubTab === "eliminatories"
+                    ? "bg-[hsl(var(--primary))] text-white shadow"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text"
+                }`}
+              >
+                <span>Eliminatórios</span>
+                <span className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                  screeningSubTab === "eliminatories"
+                    ? "bg-white/20 text-white"
+                    : "bg-surface-muted text-text-muted border border-border"
+                }`}>
+                  {totalEliminatoriesCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setScreeningSubTab("stages")}
+                className={`flex-1 min-w-[125px] px-3 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  screeningSubTab === "stages"
+                    ? "bg-[hsl(var(--primary))] text-white shadow"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text"
+                }`}
+              >
+                <span>Etapas de avaliação</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setScreeningSubTab("behavioral")}
+                className={`relative flex-1 min-w-[125px] px-3 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  screeningSubTab === "behavioral"
+                    ? "bg-[hsl(var(--primary))] text-white shadow"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text"
+                }`}
+              >
+                <span>Comportamental</span>
+                {hasBehavioralTemplateError && (
+                  <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setScreeningSubTab("review")}
+                className={`relative flex-1 min-w-[120px] px-3 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  screeningSubTab === "review"
+                    ? "bg-[hsl(var(--primary))] text-white shadow"
+                    : "text-text-muted hover:bg-surface-muted hover:text-text"
+                }`}
+              >
+                <span>Revisão</span>
+                {hasBehavioralTemplateError && (
+                  <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-warning"></span>
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Sub-tab 1: Eliminatórios */}
+            {screeningSubTab === "eliminatories" && (
+              <div className="space-y-6">
+                <SectionCard
+                  title="Perguntas de triagem"
+                  description="Perguntas obrigatórias que o candidato deve responder ao se aplicar."
+                >
+                  <Field label="Perguntas de triagem">
+                    <StringListField
+                      values={form.screening_questions}
+                      onChange={(next) => setForm((c) => ({ ...c, screening_questions: next }))}
+                      placeholder="Ex: Tem disponibilidade para turno integral?"
+                      addLabel="Adicionar"
+                      emptyLabel="Nenhuma pergunta de triagem adicionada."
+                      inputLabel="Nova pergunta de triagem"
+                      testId="form-screening-questions"
+                    />
+                  </Field>
+                </SectionCard>
+
+                <JobFormDealBreakersStep
+                  form={form}
+                  eliminatorySkills={eliminatorySkills}
+                  availableSkills={availableSkills}
+                  skillSearch={skillSearch}
+                  onSearchChange={setSkillSearch}
+                  skillCategoryFilter={skillCategoryFilter}
+                  onSkillCategoryFilterChange={setSkillCategoryFilter}
+                  skillCategoryOptions={skillCategoryOptions}
+                  skillTypeFilter={skillTypeFilter}
+                  onSkillTypeFilterChange={setSkillTypeFilter}
+                  skillTypeOptions={skillTypeOptions}
+                  savingSkillId={savingSkillId}
+                  onAddSkill={handleAddSkill}
+                  onUpdateSkill={handleUpdateSkill}
+                  onRemoveSkill={handleRemoveSkill}
+                  dealBreakerDraft={dealBreakerDraft}
+                  onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
+                  onDealBreakerDraftChange={(updates) =>
+                    setDealBreakerDraft((c) => ({ ...c, ...updates }))
+                  }
+                  onAddDealBreaker={addDealBreaker}
+                  onSkillCreated={onSkillCreated}
                 />
-              </Field>
-            </SectionCard>
+              </div>
+            )}
 
-            <JobFormDealBreakersStep
-              form={form}
-              eliminatorySkills={eliminatorySkills}
-              availableSkills={availableSkills}
-              skillSearch={skillSearch}
-              onSearchChange={setSkillSearch}
-              skillCategoryFilter={skillCategoryFilter}
-              onSkillCategoryFilterChange={setSkillCategoryFilter}
-              skillCategoryOptions={skillCategoryOptions}
-              skillTypeFilter={skillTypeFilter}
-              onSkillTypeFilterChange={setSkillTypeFilter}
-              skillTypeOptions={skillTypeOptions}
-              savingSkillId={savingSkillId}
-              onAddSkill={handleAddSkill}
-              onUpdateSkill={handleUpdateSkill}
-              onRemoveSkill={handleRemoveSkill}
-              dealBreakerDraft={dealBreakerDraft}
-              onFormChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
-              onDealBreakerDraftChange={(updates) =>
-                setDealBreakerDraft((c) => ({ ...c, ...updates }))
-              }
-              onAddDealBreaker={addDealBreaker}
-              onSkillCreated={onSkillCreated}
-            />
+            {/* Sub-tab 2: Etapas de avaliação */}
+            {screeningSubTab === "stages" && (
+              <div className="space-y-6">
+                <JobAssessmentPolicyStep
+                  form={form}
+                  onChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
+                />
+              </div>
+            )}
 
-            <JobAssessmentPolicyStep
-              form={form}
-              onChange={(updates) => setForm((c) => ({ ...c, ...updates }))}
-            />
-            <BehavioralTemplateSelector
-              value={form.behavioral_template_id}
-              onChange={(id) =>
-                setForm((c) => ({ ...c, behavioral_template_id: id }))
-              }
-              requiresAssessment={form.requires_behavioral_assessment}
-              onTemplateStatusChange={setSelectedTemplateStatus}
-              onPopulateBehavioralRequirements={(requirements) =>
-                setForm((c) => ({
-                  ...c,
-                  behavioral_requirements: [
-                    ...c.behavioral_requirements.filter((r) => !requirements.includes(r)),
-                    ...requirements,
-                  ],
-                }))
-              }
-            />
+            {/* Sub-tab 3: Comportamental */}
+            {screeningSubTab === "behavioral" && (
+              <div className="space-y-6">
+                {hasBehavioralTemplateError && (
+                  <div className="rounded-2xl border border-[hsl(var(--danger)/0.3)] bg-danger-soft px-4 py-3 text-sm text-danger">
+                    A avaliação comportamental está ativada, mas nenhum template oficial foi selecionado.
+                  </div>
+                )}
+                <BehavioralTemplateSelector
+                  value={form.behavioral_template_id}
+                  onChange={(id) =>
+                    setForm((c) => ({ ...c, behavioral_template_id: id }))
+                  }
+                  requiresAssessment={form.requires_behavioral_assessment}
+                  onTemplateStatusChange={setSelectedTemplateStatus}
+                  onPopulateBehavioralRequirements={(requirements) =>
+                    setForm((c) => ({
+                      ...c,
+                      behavioral_requirements: [
+                        ...c.behavioral_requirements.filter((r) => !requirements.includes(r)),
+                        ...requirements,
+                      ],
+                    }))
+                  }
+                />
+              </div>
+            )}
+
+            {/* Sub-tab 4: Revisão */}
+            {screeningSubTab === "review" && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+                  <h3 className="text-base font-semibold text-text mb-4">Resumo da Triagem</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-border p-4 bg-surface-muted text-center shadow-sm">
+                      <p className="text-sm font-medium text-text-muted">Perguntas de Triagem</p>
+                      <p className="text-4xl font-bold text-[hsl(var(--primary))] mt-2">{form.screening_questions?.length ?? 0}</p>
+                    </div>
+                    <div className="rounded-xl border border-border p-4 bg-surface-muted text-center shadow-sm">
+                      <p className="text-sm font-medium text-text-muted">Critérios Eliminatórios (Catálogo)</p>
+                      <p className="text-4xl font-bold text-[hsl(var(--primary))] mt-2">{eliminatorySkills.length}</p>
+                    </div>
+                    <div className="rounded-xl border border-border p-4 bg-surface-muted text-center shadow-sm">
+                      <p className="text-sm font-medium text-text-muted">Deal Breakers Customizados</p>
+                      <p className="text-4xl font-bold text-[hsl(var(--primary))] mt-2">{(form.deal_breakers ?? []).filter((db) => db.is_active).length}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-surface p-6 space-y-4 shadow-sm">
+                  <h3 className="text-base font-semibold text-text mb-2">Alertas de Triagem</h3>
+                  
+                  {/* Warning if no template selected when required */}
+                  {hasBehavioralTemplateError && (
+                    <div className="flex items-start gap-2 rounded-xl border border-[hsl(var(--danger))]/20 bg-danger-soft px-4 py-3 text-sm text-danger">
+                      <span>❌ <strong>Crítico:</strong> A avaliação comportamental está marcada como obrigatória, mas nenhum template comportamental oficial foi selecionado. Isso bloqueará a publicação da vaga.</span>
+                    </div>
+                  )}
+
+                  {/* Warning if no screening questions nor deal-breakers are set */}
+                  {totalEliminatoriesCount === 0 && (
+                    <div className="flex items-start gap-2 rounded-xl border border-[hsl(var(--warning))]/20 bg-warning-soft px-4 py-3 text-sm text-warning">
+                      <span>⚠️ <strong>Aviso:</strong> Nenhum critério eliminatório nem pergunta de triagem foi cadastrada. É altamente recomendável adicionar perguntas de triagem ou deal breakers para filtrar candidatos fora do perfil.</span>
+                    </div>
+                  )}
+
+                  {/* If all is good */}
+                  {!hasBehavioralTemplateError && totalEliminatoriesCount > 0 && (
+                    <div className="flex items-start gap-2 rounded-xl border border-[hsl(var(--success))]/20 bg-success-soft px-4 py-3 text-sm text-success">
+                      <span>✅ <strong>Tudo certo:</strong> Os critérios eliminatórios e as configurações de fluxo de avaliação estão consistentes.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         );
+      }
 
       case "review":
         return (

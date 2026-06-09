@@ -32,6 +32,7 @@ type JobFormDifferentialsStepProps = {
   onAddBehavioralRequirement: () => void;
   onSkillCreated: (skill: SkillCatalog) => void;
   jobContext?: { title?: string; jobArea?: string };
+  hideBehavioral?: boolean;
 };
 
 export function JobFormDifferentialsStep({
@@ -54,6 +55,7 @@ export function JobFormDifferentialsStep({
   onAddBehavioralRequirement,
   onSkillCreated,
   jobContext,
+  hideBehavioral = false,
 }: JobFormDifferentialsStepProps) {
   return (
     <div className="space-y-6">
@@ -85,51 +87,53 @@ export function JobFormDifferentialsStep({
         jobContext={jobContext}
       />
 
-      <SectionCard
-        title="Requisitos comportamentais"
-        description="Esses itens ajudam a orientar a leitura da vaga e a futura avaliação."
-      >
-        <div className="flex flex-col gap-3 md:flex-row">
-          <input
-            value={form.newBehavioralRequirement}
-            onChange={(event) =>
-              onFormChange({
-                newBehavioralRequirement: event.target.value,
-              })
-            }
-            className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 flex-1 rounded-xl px-3 text-sm"
-            placeholder="Ex: Comunicação com áreas de negócio"
-          />
-          <Button type="button" onClick={onAddBehavioralRequirement}>
-            Adicionar
-          </Button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {form.behavioral_requirements.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() =>
+      {!hideBehavioral && (
+        <SectionCard
+          title="Requisitos comportamentais"
+          description="Esses itens ajudam a orientar a leitura da vaga e a futura avaliação."
+        >
+          <div className="flex flex-col gap-3 md:flex-row">
+            <input
+              value={form.newBehavioralRequirement}
+              onChange={(event) =>
                 onFormChange({
-                  behavioral_requirements: form.behavioral_requirements.filter(
-                    (value) => value !== item,
-                  ),
+                  newBehavioralRequirement: event.target.value,
                 })
               }
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-2 text-xs text-text"
-            >
-              {item}
-              <Trash2 className="h-3.5 w-3.5 text-text-muted" />
-            </button>
-          ))}
-          {form.behavioral_requirements.length === 0 ? (
-            <p className="text-sm text-text-muted">
-              Nenhum requisito comportamental adicionado.
-            </p>
-          ) : null}
-        </div>
-      </SectionCard>
+              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-11 flex-1 rounded-xl px-3 text-sm"
+              placeholder="Ex: Comunicação com áreas de negócio"
+            />
+            <Button type="button" onClick={onAddBehavioralRequirement}>
+              Adicionar
+            </Button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {form.behavioral_requirements.map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() =>
+                  onFormChange({
+                    behavioral_requirements: form.behavioral_requirements.filter(
+                      (value) => value !== item,
+                    ),
+                  })
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-2 text-xs text-text"
+              >
+                {item}
+                <Trash2 className="h-3.5 w-3.5 text-text-muted" />
+              </button>
+            ))}
+            {form.behavioral_requirements.length === 0 ? (
+              <p className="text-sm text-text-muted">
+                Nenhum requisito comportamental adicionado.
+              </p>
+            ) : null}
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }
