@@ -22,7 +22,8 @@ import {
   FlaskConical,
   PanelTop,
   UserRound,
-  ClipboardList
+  ClipboardList,
+  LayoutGrid
 } from "lucide-react";
 
 import { useAuth } from "../../features/auth/useAuth";
@@ -186,7 +187,7 @@ function buildNavigationConfig(): NavGroup[] {
 }
 
 const ICON_MAP: Record<string, any> = {
-  "/rh": ClipboardList,
+  "/rh": LayoutGrid,
   "/pipeline": Kanban,
   "/vagas": Briefcase,
   "/candidaturas": FileSpreadsheet,
@@ -214,7 +215,7 @@ const ICON_MAP: Record<string, any> = {
   "Protótipo do portal": ExternalLink,
   "/demo-rh": FlaskConical,
   "/demo-2": Sparkles,
-  "Central RH": ClipboardList,
+  "Central RH": LayoutGrid,
   "Recrutamento": Briefcase,
   "Avaliações": GraduationCap,
   "Gestores": UserRound,
