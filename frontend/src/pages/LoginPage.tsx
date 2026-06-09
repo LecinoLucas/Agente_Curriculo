@@ -100,10 +100,10 @@ export function LoginPage() {
     <div className="min-h-screen w-full relative overflow-x-hidden font-sans text-foreground selection:bg-[#8a1c31]/10 selection:text-[#8a1c31] flex flex-col bg-[#FDFBF7]">
       
       {/* Main Container - Locked height on desktop to prevent scrollbars */}
-      <main className="w-full max-w-[1440px] xl:max-w-[1600px] 2xl:max-w-[1800px] mx-auto flex-1 flex flex-col lg:flex-row relative z-10">
+      <main className="w-full max-w-[1440px] xl:max-w-[1600px] 2xl:max-w-[1800px] mx-auto flex-1 flex flex-col lg:flex-row relative z-10 self-center">
         
         {/* Left Column - Hero */}
-        <div className="hidden lg:flex w-full lg:w-[50%] flex-col justify-between py-8 px-10 xl:pl-16 xl:pr-8 relative h-full shrink-0 z-10 overflow-hidden">
+        <div className="hidden lg:flex w-full lg:w-[50%] flex-col justify-between py-8 px-10 xl:pl-16 xl:pr-8 relative min-h-full shrink-0 z-10">
           
           {/* Institutional corner detail - Simple, clean corner curve */}
           <div className="absolute left-0 top-0 z-0 h-[60px] w-[120px] overflow-hidden pointer-events-none">
