@@ -30,9 +30,6 @@ _PLACEHOLDER_RESUME = (
 )
 
 ANALYSIS_QUEUE = "analysis"
-MAX_RESUME_PROMPT_CHARS = 2500
-MAX_JOB_PROMPT_CHARS = 700
-MAX_PROMPT_TOTAL_CHARS = 4500
 CLAIM_STALE_AFTER = timedelta(minutes=20)
 PROMPT_INSTRUCTION = (
     "Analise o candidato e retorne JSON válido. Avalie somente critérios "
@@ -52,6 +49,15 @@ PROMPT_SUSPICIOUS_PATTERNS = (
     r"(?i)system\s*prompt",
     r"(?i)<script",
 )
+
+class AnalysisPromptTooLargeError(Exception):
+    def __init__(self, reasons: list[str], prompt_chars: int, resume_chars: int, job_chars: int):
+        super().__init__(f"Prompt blocked before AI call: {','.join(reasons)}")
+        self.reasons = reasons
+        self.prompt_chars = prompt_chars
+        self.resume_chars = resume_chars
+        self.job_chars = job_chars
+
 DEFAULT_ANALYSIS_MAX_RETRIES = 3
 MAX_ANALYSIS_RETRIES = max(
     0,
@@ -156,6 +162,12 @@ def _extract_retry_after_from_http_error(error: httpx.HTTPStatusError) -> float 
 
 
 def _classify_analysis_exception(exc: Exception) -> AnalysisErrorClassification:
+    if isinstance(exc, AnalysisPromptTooLargeError):
+        return AnalysisErrorClassification(
+            provider_error_type="prompt_too_large",
+            is_temporary=False,
+        )
+
     if isinstance(exc, AnalysisExecutionError) and exc.is_non_retryable:
         return AnalysisErrorClassification(
             provider_error_type="payload_invalid",
@@ -520,7 +532,7 @@ def _compact_resume_for_prompt(resume_text: str) -> str:
     normalized = _normalize_multiline_text(resume_text)
     sanitized = _remove_sensitive_resume_data(normalized)
     relevant = _extract_relevant_resume_lines(sanitized)
-    return _truncate_with_notice(relevant, MAX_RESUME_PROMPT_CHARS)
+    return _truncate_with_notice(relevant, int(settings.AI_ANALYSIS_MAX_RESUME_CHARS))
 
 
 def _compact_job_for_prompt(job) -> str:
@@ -543,7 +555,7 @@ def _compact_job_for_prompt(job) -> str:
     if not chunks:
         return ""
 
-    max_chars = MAX_JOB_PROMPT_CHARS
+    max_chars = int(settings.AI_ANALYSIS_MAX_JOB_CHARS)
     merged = "\n\n".join(chunks)
     return _truncate_with_notice(merged, max_chars)
 
@@ -586,11 +598,11 @@ def _validate_prompt_before_ai(*, prompt: str, resume_chars: int, job_chars: int
     reasons: list[str] = []
     total_chars = len(prompt)
 
-    if resume_chars > MAX_RESUME_PROMPT_CHARS:
+    if resume_chars > int(settings.AI_ANALYSIS_MAX_RESUME_CHARS):
         reasons.append("resume_chars_exceeded")
-    if job_chars > MAX_JOB_PROMPT_CHARS:
+    if job_chars > int(settings.AI_ANALYSIS_MAX_JOB_CHARS):
         reasons.append("job_chars_exceeded")
-    if total_chars > MAX_PROMPT_TOTAL_CHARS:
+    if total_chars > int(settings.AI_ANALYSIS_MAX_PROMPT_CHARS):
         reasons.append("prompt_chars_exceeded")
     if "```" in prompt:
         reasons.append("markdown_detected")
@@ -615,7 +627,12 @@ def _validate_prompt_before_ai(*, prompt: str, resume_chars: int, job_chars: int
             resume_chars=resume_chars,
             job_chars=job_chars,
         )
-        raise RuntimeError(f"Prompt blocked before AI call: {','.join(reasons)}")
+        raise AnalysisPromptTooLargeError(
+            reasons=reasons,
+            prompt_chars=total_chars,
+            resume_chars=resume_chars,
+            job_chars=job_chars,
+        )
 
 
 def _extract_rate_limit_retry_after_seconds(error: str) -> float | None:

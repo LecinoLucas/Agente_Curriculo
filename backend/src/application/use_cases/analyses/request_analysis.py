@@ -336,7 +336,8 @@ class RequestAnalysisUseCase:
             requested_by=command.requested_by,
         )
         # [TECNICO: FEATURE_FLAG]
-        if command.force_reanalyze:
+        latest_by_key = await self._analysis_repo.find_by_idempotency_key(idempotency_key)
+        if command.force_reanalyze or (latest_by_key and str(latest_by_key.status) in ("failed", "cancelled", "discarded")):
             import time
             # O sufixo de timestamp quebra a chave de idempotência intencionalmente
             # para forçar a criação de um novo registro e um novo processamento na IA.

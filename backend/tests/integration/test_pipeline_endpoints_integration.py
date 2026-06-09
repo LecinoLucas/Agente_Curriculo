@@ -32,6 +32,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.admission_package_model import AdmissionExportPackageModel
+from src.infrastructure.database.models.erp_integration_attempt_model import ErpIntegrationAttemptModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionChecklistTemplateItemModel,
@@ -387,6 +388,161 @@ async def test_move_to_pre_admission_returns_required_action_and_case_id(
     assert case_row.candidate_id == candidate_id
     assert case_row.job_id == job_id
     assert case_row.checklist_template_id is not None
+
+
+@pytest.mark.asyncio
+async def test_pipeline_flow_final_offer_hired_pre_admission_creates_openable_workspace(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await _create_active_user(
+        db_session,
+        f"admin-pre-adm-flow-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.ADMIN,
+    )
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-pre-adm-flow-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    admin_headers = await _auth_headers(client, admin.email, "password123")
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(client, headers, db_session, title="Integrated Pre Admission Flow Job")
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        db_session,
+        "Integrated Flow Candidate",
+        f"integrated-flow-{uuid4().hex[:6]}@test.com",
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+    await db_session.execute(
+        sa.update(JobModel)
+        .where(JobModel.id == job_id)
+        .values(
+            requires_interview=False,
+            requires_scorecard=False,
+            requires_behavioral_assessment=False,
+            requires_behavioral_ai_evaluation=False,
+            requires_manager_review=False,
+            behavioral_template_id=None,
+        )
+    )
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="final")
+    )
+    await db_session.commit()
+
+    advance_decision = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/hiring-decision",
+        json={
+            "decision_outcome": "advance",
+            "reason_code": "other",
+            "notes": "Validar avanço para oferta.",
+            "submit": True,
+            "pipeline_action": {"enabled": False},
+        },
+        headers=headers,
+    )
+    assert advance_decision.status_code == 201, advance_decision.text
+
+    move_to_offer = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "offer", "notes": "", "reason": "Validar ida para oferta."},
+        headers=headers,
+    )
+    assert move_to_offer.status_code == 200, move_to_offer.text
+    offer_payload = move_to_offer.json()
+    assert offer_payload["stage"] == "offer"
+    assert offer_payload["required_action"] is None
+    assert offer_payload["pre_admission_case_id"] is None
+
+    hire_decision = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/hiring-decision",
+        json={
+            "decision_outcome": "hire",
+            "reason_code": "strong_fit",
+            "notes": "Validar avanço para contratado.",
+            "submit": True,
+            "pipeline_action": {"enabled": False},
+        },
+        headers=headers,
+    )
+    assert hire_decision.status_code == 201, hire_decision.text
+
+    move_to_hired = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "hired", "notes": "", "reason": "Validar ida para contratado."},
+        headers=headers,
+    )
+    assert move_to_hired.status_code == 200, move_to_hired.text
+    hired_payload = move_to_hired.json()
+    assert hired_payload["stage"] == "hired"
+    assert hired_payload["required_action"] is None
+    assert hired_payload["pre_admission_case_id"] is None
+
+    await _ensure_default_checklist_template(db_session)
+
+    move_to_pre_admission = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": "Validar abertura da pré-admissão."},
+        headers=headers,
+    )
+    assert move_to_pre_admission.status_code == 200, move_to_pre_admission.text
+    pre_admission_payload = move_to_pre_admission.json()
+    case_id = pre_admission_payload["pre_admission_case_id"]
+    assert pre_admission_payload["stage"] == "pre_admission"
+    assert pre_admission_payload["required_action"] == "open_pre_admission"
+    assert case_id is not None
+    assert UUID(case_id)
+
+    pipeline = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    assert pipeline is not None
+    assert pipeline.pipeline_stage == "pre_admission"
+
+    workspace = await client.get(
+        f"/api/v1/admission/cases/{case_id}/workspace",
+        headers=admin_headers,
+    )
+    assert workspace.status_code == 200, workspace.text
+    workspace_payload = workspace.json()
+    assert workspace_payload["case"]["id"] == case_id
+    assert workspace_payload["candidate"]["id"] == str(candidate_id)
+    assert workspace_payload["job"]["id"] == str(job_id)
+    assert workspace_payload["checklist"]["total"] >= 1
+
+    case_row = await db_session.scalar(
+        sa.select(PreAdmissionCaseModel).where(PreAdmissionCaseModel.id == UUID(case_id))
+    )
+    assert case_row is not None
+    assert case_row.candidate_id == candidate_id
+    assert case_row.job_id == job_id
+    assert case_row.checklist_template_id is not None
+
+    package = await db_session.scalar(
+        sa.select(AdmissionExportPackageModel).where(AdmissionExportPackageModel.case_id == UUID(case_id))
+    )
+    if package is not None:
+        assert package.exported_at is None
+
+    erp_attempt_count = await db_session.scalar(
+        sa.select(sa.func.count(ErpIntegrationAttemptModel.id)).where(
+            ErpIntegrationAttemptModel.case_id == UUID(case_id)
+        )
+    )
+    assert int(erp_attempt_count or 0) == 0
 
 
 @pytest.mark.asyncio

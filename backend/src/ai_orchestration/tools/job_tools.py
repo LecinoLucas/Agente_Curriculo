@@ -43,6 +43,25 @@ async def get_job_summary(
 
     try:
         job = await job_service.get(uuid)
+        
+        # Calculate total openings from active units
+        vacancies = sum(u.openings_count or 0 for u in job.job_units if u.is_active)
+        
+        # Merge raw skills with structured requirements
+        mandatory = list(job.mandatory_skills or [])
+        nice_to_have = list(job.nice_to_have_skills or [])
+        
+        if job.skill_requirements:
+            reqs = job.skill_requirements
+            # Add unique items from priority and eliminatory to mandatory
+            for skill in (reqs.get("priority", []) + reqs.get("eliminatory", [])):
+                if skill not in mandatory:
+                    mandatory.append(skill)
+            # Add unique items from complementary to nice_to_have
+            for skill in reqs.get("complementary", []):
+                if skill not in nice_to_have:
+                    nice_to_have.append(skill)
+
         return ToolResult.success(
             data={
                 "id": str(job.id),
@@ -52,8 +71,13 @@ async def get_job_summary(
                 "seniority": job.seniority_level,
                 "location": job.location,
                 "work_model": job.work_model,
-                "mandatory_skills": list(job.mandatory_skills or []),
-                "nice_to_have_skills": list(job.nice_to_have_skills or []),
+                "mandatory_skills": mandatory,
+                "nice_to_have_skills": nice_to_have,
+                "priority": job.priority,
+                "working_hours": job.working_hours,
+                "vacancies_count": vacancies,
+                "quality_score": job.quality_score,
+                "quality_status": job.quality_status,
                 "created_at": job.created_at.isoformat() if job.created_at else None,
                 "updated_at": job.updated_at.isoformat() if job.updated_at else None,
             }
@@ -136,7 +160,7 @@ async def get_job_requirements(
     Returns:
         ToolResult com mandatory_skills, nice_to_have_skills, behavioral_requirements,
         screening_questions, deal_breakers, requirements, minimum_education_level,
-        minimum_years_experience.
+        minimum_years_experience, responsibilities, experience_context.
     """
     if denied := ToolPermissionGuard.enforce(context, _REQUIRED_PERMISSION):
         return denied
@@ -148,19 +172,37 @@ async def get_job_requirements(
 
     try:
         job = await job_service.get(uuid)
+        
+        # Merge raw skills with structured requirements
+        mandatory = list(job.mandatory_skills or [])
+        nice_to_have = list(job.nice_to_have_skills or [])
+        
+        if job.skill_requirements:
+            reqs = job.skill_requirements
+            # Add unique items from priority and eliminatory to mandatory
+            for skill in (reqs.get("priority", []) + reqs.get("eliminatory", [])):
+                if skill not in mandatory:
+                    mandatory.append(skill)
+            # Add unique items from complementary to nice_to_have
+            for skill in reqs.get("complementary", []):
+                if skill not in nice_to_have:
+                    nice_to_have.append(skill)
+
         min_exp = job.minimum_years_experience
         return ToolResult.success(
             data={
                 "job_id": str(job.id),
                 "title": job.title,
-                "mandatory_skills": list(job.mandatory_skills or []),
-                "nice_to_have_skills": list(job.nice_to_have_skills or []),
+                "mandatory_skills": mandatory,
+                "nice_to_have_skills": nice_to_have,
                 "behavioral_requirements": list(job.behavioral_requirements or []),
                 "screening_questions": list(job.screening_questions or []),
                 "deal_breakers": list(job.deal_breakers or []),
                 "requirements": job.requirements,
                 "minimum_education_level": job.minimum_education_level,
                 "minimum_years_experience": str(min_exp) if min_exp is not None else None,
+                "responsibilities": job.responsibilities,
+                "experience_context": job.experience_context,
             }
         )
     except JobNotFoundError:

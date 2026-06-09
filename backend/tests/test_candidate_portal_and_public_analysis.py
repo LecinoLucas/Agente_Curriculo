@@ -1670,6 +1670,8 @@ async def test_resume_extraction_enqueues_pending_analysis_only_once(
                 id=UUID(payload["resume_version_id"]),
                 resume_id=UUID(payload["resume_id"]),
                 s3_key="resumes/test.pdf",
+                mime_type="application/pdf",
+                original_file_name="resume.pdf",
                 extracted_text=None,
                 extraction_status="processing",
                 extraction_error=None,
@@ -1719,6 +1721,7 @@ async def test_resume_extraction_enqueues_pending_analysis_only_once(
             page_count=1,
             word_count=3,
             used_ocr=False,
+            empty_pages=0,
         ),
     )
     monkeypatch.setattr(
@@ -1820,6 +1823,8 @@ async def test_resume_extraction_failure_marks_waiting_analysis_failed(
                 id=UUID(payload["resume_version_id"]),
                 resume_id=UUID(payload["resume_id"]),
                 s3_key="resumes/test.pdf",
+                mime_type="application/pdf",
+                original_file_name="resume.pdf",
                 extracted_text=None,
                 extraction_status="processing",
                 extraction_error=None,
