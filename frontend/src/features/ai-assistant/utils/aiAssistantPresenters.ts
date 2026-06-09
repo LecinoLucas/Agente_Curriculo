@@ -21,6 +21,7 @@ export type PresentedResult = {
   limitations?: string[];
   metrics?: PresentedMetric[];
   warningCodes: string[];
+  source?: string;
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -100,15 +101,67 @@ function readNumber(value: unknown): number | null {
 }
 
 function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined || value === "") return "Não informado";
   if (typeof value === "boolean") return value ? "Sim" : "Não";
   if (typeof value === "number") return String(value);
   if (typeof value === "string") return value;
   if (Array.isArray(value)) {
     const primitives = value.filter((item) => typeof item !== "object" || item === null);
-    if (primitives.length === value.length) return primitives.map(String).join(", ");
+    if (primitives.length === value.length) return primitives.length > 0 ? primitives.map(String).join(", ") : "Não informado";
   }
   return sanitizeText(JSON.stringify(value));
+}
+
+const ENUM_MAPS: Record<string, Record<string, string>> = {
+  status: {
+    draft: "Rascunho",
+    published: "Publicada",
+    paused: "Pausada",
+    closed: "Encerrada",
+    cancelled: "Cancelada",
+  },
+  seniority: {
+    junior: "Júnior",
+    mid: "Pleno",
+    pleno: "Pleno",
+    senior: "Sênior",
+    lead: "Liderança",
+    specialist: "Especialista",
+  },
+  work_model: {
+    onsite: "Presencial",
+    presencial: "Presencial",
+    hybrid: "Híbrido",
+    remote: "Remoto",
+    remoto: "Remoto",
+  },
+  priority: {
+    low: "Baixa",
+    normal: "Normal",
+    high: "Alta",
+    urgent: "Urgente",
+  },
+  area: {
+    data: "Dados",
+    administrative: "Administrativa",
+    administrativa: "Administrativa",
+    finance: "Financeiro",
+    financial: "Financeiro",
+    it: "Tecnologia",
+    hr: "RH",
+    commercial: "Comercial",
+    sales: "Comercial",
+  },
+};
+
+function translateEnum(category: string, value: unknown): string {
+  const str = readString(value)?.toLowerCase();
+  if (!str) return "Não informado";
+  const map = ENUM_MAPS[category];
+  if (map && map[str]) return map[str];
+  
+  // Fallback: capitalize
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 function formatRelevance(value: unknown): string | undefined {
@@ -243,55 +296,134 @@ function buildMetrics(record: Record<string, unknown>, keys: Array<[string, stri
     .filter((item): item is PresentedMetric => item !== null);
 }
 
+function buildJobSearchPresenter(response: AiAssistantResponse): PresentedResult {
+  const record = asRecord(response.data) ?? {};
+  const jobs = asArray(record.jobs);
+  
+  if (jobs.length === 0) {
+    return {
+      title: "Busca de Vagas",
+      summary: ["Nenhuma vaga encontrada para os critérios informados."],
+      nextStep: "Tente buscar com termos mais genéricos ou verifique se o status da vaga é o esperado.",
+      warningCodes: response.warnings,
+    };
+  }
+
+  const evidence = jobs.slice(0, 5).map((job) => {
+    const item = asRecord(job);
+    if (!item) return null;
+    const title = readString(item.title) ?? "Vaga sem título";
+    const status = translateEnum("status", item.status);
+    const area = translateEnum("area", item.area || item.job_area);
+    const seniority = translateEnum("seniority", item.seniority || item.seniority_level);
+    
+    return {
+      title,
+      description: `Status: ${status} | Área: ${area} | Nível: ${seniority}`,
+    } satisfies PresentedListItem;
+  }).filter((item): item is PresentedListItem => item !== null);
+
+  return {
+    title: "Vagas encontradas",
+    summary: [`Encontrei ${record.total ?? jobs.length} vaga(s) correspondente(s).`],
+    evidence,
+    metrics: [
+      { label: "Total na base", value: formatValue(record.total) },
+      { label: "Resultados exibidos", value: formatValue(jobs.length) },
+    ],
+    nextStep: "Clique em uma das vagas para ver o resumo completo ou use o ID para consultas específicas.",
+    warningCodes: response.warnings,
+    source: "Fonte: dados atuais da vaga",
+  };
+}
+
 function buildJobPresenter(response: AiAssistantResponse): PresentedResult {
   const record = asRecord(response.data) ?? {};
-  const summary = [
-    readString(record.title) ? `Vaga: ${record.title}` : null,
-    readString(record.status) ? `Status atual: ${record.status}` : null,
-    readString(record.area) ? `Área responsável: ${record.area}` : null,
-  ].filter((item): item is string => item !== null);
+  
+  const title = readString(record.title) ?? "Vaga sem título";
+  const status = translateEnum("status", record.status);
+  const area = translateEnum("area", record.area || record.job_area);
+  
+  const summary: string[] = [];
+  if (response.intent === "job.requirements") {
+    summary.push(`Requisitos da Vaga: ${title}`);
+  } else {
+    summary.push(`Vaga: ${title}`);
+    if (record.status) summary.push(`Status atual: ${status}`);
+    if (record.area || record.job_area) summary.push(`Área responsável: ${area}`);
+    if (record.vacancies_count !== undefined && record.vacancies_count !== null) {
+      summary.push(`Quantidade de vagas: ${record.vacancies_count}`);
+    }
+  }
 
   const evidence: PresentedListItem[] = [];
   const mandatorySkills = asArray(record.mandatory_skills);
   if (mandatorySkills.length > 0) {
     evidence.push({
-      title: "Skills obrigatórias",
+      title: "Skills essenciais",
       description: mandatorySkills.map(String).join(", "),
     });
   }
   const niceToHaveSkills = asArray(record.nice_to_have_skills);
   if (niceToHaveSkills.length > 0) {
     evidence.push({
-      title: "Skills desejáveis",
+      title: "Skills diferenciais",
       description: niceToHaveSkills.map(String).join(", "),
+    });
+  }
+
+  const behavioral = asArray(record.behavioral_requirements);
+  if (behavioral.length > 0) {
+    evidence.push({
+      title: "Requisitos comportamentais",
+      description: behavioral.map(String).join(", "),
+    });
+  }
+
+  const requirements = readString(record.requirements);
+  if (requirements) {
+    evidence.push({
+      title: "Descrição dos requisitos",
+      description: requirements,
     });
   }
 
   const pending: string[] = [];
   if (mandatorySkills.length === 0) {
-    pending.push("A vaga ainda não informa skills obrigatórias.");
+    pending.push("Skills essenciais não informadas. Impacto: o ranking IA e o matching ficam menos confiáveis. Ação sugerida: cadastre as skills essenciais da vaga para melhorar a triagem.");
   }
   if (!readString(record.requirements) && !record.minimum_education_level) {
-    pending.push("Os requisitos detalhados ainda parecem incompletos.");
+    pending.push("Requisitos detalhados incompletos. Ação sugerida: complete os requisitos mínimos para melhorar a triagem.");
+  }
+  if (record.work_model && !readString(record.location) && readString(record.work_model) !== "remote") {
+    pending.push("Localidade não informada para vaga presencial/híbrida.");
+  }
+
+  const metrics: PresentedMetric[] = [
+    { label: "Senioridade", value: translateEnum("seniority", record.seniority || record.seniority_level) },
+    { label: "Localidade", value: formatValue(record.location) },
+    { label: "Modelo de trabalho", value: translateEnum("work_model", record.work_model) },
+    { label: "Prioridade", value: translateEnum("priority", record.priority) },
+    { label: "Jornada", value: formatValue(record.working_hours) },
+    { label: "Score de qualidade", value: formatValue(record.quality_score) },
+  ];
+
+  if (record.minimum_years_experience !== undefined && record.minimum_years_experience !== null) {
+    metrics.push({ label: "Exp. mínima", value: `${record.minimum_years_experience} ano(s)` });
   }
 
   return {
-    title: "Resumo",
+    title: response.intent === "job.requirements" ? "Requisitos Detalhados" : "Resumo da Vaga",
     summary,
     evidence: evidence.length > 0 ? evidence : undefined,
     pending: pending.length > 0 ? pending : undefined,
-    metrics: buildMetrics(record, [
-      ["seniority", "Senioridade"],
-      ["location", "Localidade"],
-      ["work_model", "Modelo de trabalho"],
-      ["quality_score", "Score de qualidade"],
-      ["quality_status", "Status de qualidade"],
-    ]),
+    metrics: metrics.length > 0 ? metrics : undefined,
     nextStep:
       pending.length > 0
-        ? "Revise os requisitos e as pendências principais antes de publicar ou ajustar a vaga."
-        : "Use esta visão para validar se a vaga está coerente com o pipeline e com os critérios de triagem.",
+        ? "Revise as pendências acima para garantir que a IA tenha dados suficientes para triagem e ranking."
+        : "Dados consistentes. Use esta visão para validar o alinhamento com os critérios de triagem.",
     warningCodes: response.warnings,
+    source: "Fonte: dados atuais da vaga",
   };
 }
 
@@ -508,6 +640,7 @@ function buildGenericPresenter(response: AiAssistantResponse): PresentedResult {
 export function presentResult(response: AiAssistantResponse): PresentedResult {
   if (response.intent === "knowledge.search") return buildKnowledgeSearchPresenter(response);
   if (response.intent === "knowledge.answer") return buildKnowledgeAnswerPresenter(response);
+  if (response.intent === "job.search") return buildJobSearchPresenter(response);
   if (response.intent.startsWith("job.")) return buildJobPresenter(response);
   if (response.intent.startsWith("candidate.")) return buildCandidatePresenter(response);
   if (response.intent.startsWith("pipeline.")) return buildPipelinePresenter(response);

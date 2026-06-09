@@ -58,10 +58,15 @@ export function AiAssistantResultRenderer({ result }: { result: AiAssistantRespo
         ) : (
           <EmptySection text="Sem dados para exibir." />
         )}
+        {presented.source && (
+          <p className="mt-2 text-right text-[10px] font-medium uppercase tracking-widest text-text-muted/60">
+            {presented.source}
+          </p>
+        )}
       </Section>
 
       {presented.metrics && presented.metrics.length > 0 && (
-        <Section title="Evidências">
+        <Section title={result.intent.startsWith("job.") ? "Dados cadastrados" : "Evidências"}>
           <dl className="grid gap-2 sm:grid-cols-2">
             {presented.metrics.map((metric) => (
               <div key={metric.label} className="rounded-lg border border-border/70 bg-surface p-2">
@@ -74,7 +79,7 @@ export function AiAssistantResultRenderer({ result }: { result: AiAssistantRespo
       )}
 
       {presented.evidence && presented.evidence.length > 0 && (
-        <Section title={result.intent === "knowledge.search" ? "Fontes encontradas" : "Evidências"}>
+        <Section title={result.intent === "knowledge.search" ? "Fontes encontradas" : result.intent.startsWith("job.") ? "Informações detalhadas" : "Evidências"}>
           <div className="space-y-3">
             {presented.evidence.map((item) => (
               <article key={`${item.title}-${item.description ?? ""}`} className="rounded-lg border border-border/60 bg-surface p-3">

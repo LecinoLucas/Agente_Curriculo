@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
+  SlidersHorizontal,
   TimerReset,
   XCircle,
   Zap,
@@ -305,6 +306,7 @@ function CompactEvaluationCard({
 
 export function AnalisesIaComportamentalPage() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<BehavioralAIEvaluationListItem[]>([]);
@@ -395,6 +397,17 @@ export function AnalisesIaComportamentalPage() {
     () => Object.entries(filters).some(([key, value]) => key !== "search" ? Boolean(value && value !== "all") : Boolean(value.trim())),
     [filters],
   );
+
+  const activeAdvancedCount = useMemo(() => {
+    let count = 0;
+    if (filters.operational_status !== "all") count++;
+    if (filters.provider) count++;
+    if (filters.model) count++;
+    if (filters.provider_error_type) count++;
+    if (filters.date_from) count++;
+    if (filters.date_to) count++;
+    return count;
+  }, [filters]);
 
   const providerOptions = useMemo(
     () => Array.from(new Set(items.map((item) => item.provider).filter(Boolean))).sort(),
@@ -493,119 +506,173 @@ export function AnalisesIaComportamentalPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
         {kpis.map(({ label, value, icon: Icon, tone }) => (
-          <div key={label} className="rounded-lg border border-border bg-surface p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase text-text-muted">{label}</p>
-              <Icon className={cn("h-4 w-4", tone)} aria-hidden="true" />
+          <div key={label} className="rounded-xl border border-border/80 bg-surface p-3 flex flex-col justify-between min-h-[80px] shadow-xs hover:shadow-sm transition">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-text-muted truncate">{label}</span>
+              <Icon className={cn("h-3.5 w-3.5 shrink-0", tone)} aria-hidden="true" />
             </div>
-            <p className="mt-2 text-2xl font-semibold text-text">{value}</p>
+            <span className="text-lg font-bold text-text mt-1">{value}</span>
           </div>
         ))}
       </section>
 
       <section className="rounded-xl border border-border bg-surface">
         <div className="border-b border-border p-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.4fr)_repeat(6,minmax(150px,1fr))_auto]">
-            <label className="relative block">
-              <span className="sr-only">Busca</span>
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-              <input
-                value={filters.search}
-                onChange={(event) => updateFilter("search", event.target.value)}
-                placeholder="Buscar candidato ou vaga"
-                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg pl-9 text-sm"
-              />
-            </label>
-            <select
-              aria-label="Status"
-              value={filters.status}
-              onChange={(event) => updateFilter("status", event.target.value as FilterState["status"])}
-              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg text-sm"
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            <select
-              aria-label="Status operacional"
-              value={filters.operational_status}
-              onChange={(event) => updateFilter("operational_status", event.target.value as FilterState["operational_status"])}
-              className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg text-sm"
-            >
-              {operationalStatusOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            <label className="block">
-              <span className="sr-only">Provider</span>
-              <input
-                list="behavioral-ai-providers"
-                value={filters.provider}
-                onChange={(event) => updateFilter("provider", event.target.value)}
-                placeholder="Provider"
-                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm"
-              />
-            </label>
-            <datalist id="behavioral-ai-providers">
-              {providerOptions.map((value) => <option key={value} value={value} />)}
-            </datalist>
-            <label className="block">
-              <span className="sr-only">Modelo</span>
-              <input
-                list="behavioral-ai-models"
-                value={filters.model}
-                onChange={(event) => updateFilter("model", event.target.value)}
-                placeholder="Modelo"
-                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm"
-              />
-            </label>
-            <datalist id="behavioral-ai-models">
-              {modelOptions.map((value) => <option key={value} value={value} />)}
-            </datalist>
-            <label className="block">
-              <span className="sr-only">Tipo de erro</span>
-              <input
-                list="behavioral-ai-error-types"
-                value={filters.provider_error_type}
-                onChange={(event) => updateFilter("provider_error_type", event.target.value)}
-                placeholder="Tipo de erro"
-                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm"
-              />
-            </label>
-            <datalist id="behavioral-ai-error-types">
-              {errorTypeOptions.map((value) => <option key={value} value={value} />)}
-            </datalist>
-            <button
-              type="button"
-              onClick={clearFilters}
-              disabled={!hasActiveFilters}
-              className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold disabled:opacity-40"
-            >
-              <FilterX className="h-4 w-4" aria-hidden="true" />
-              Limpar
-            </button>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center justify-between">
+            <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+              <label className="relative block flex-1 max-w-md w-full">
+                <span className="sr-only">Busca</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                <input
+                  value={filters.search}
+                  onChange={(event) => updateFilter("search", event.target.value)}
+                  placeholder="Buscar candidato ou vaga"
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg pl-9 text-sm"
+                />
+              </label>
+              
+              <div className="w-full sm:w-48">
+                <select
+                  aria-label="Status"
+                  value={filters.status}
+                  onChange={(event) => updateFilter("status", event.target.value as FilterState["status"])}
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm"
+                >
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 mt-3 md:mt-0">
+              <button
+                type="button"
+                onClick={() => setIsAdvancedFiltersOpen((prev) => !prev)}
+                className={cn(
+                  "border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-semibold",
+                  isAdvancedFiltersOpen && "bg-surface-muted border-border/80"
+                )}
+              >
+                <SlidersHorizontal className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                Filtros Avançados
+                {activeAdvancedCount > 0 && (
+                  <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[hsl(var(--primary))] px-1.5 text-[10px] font-bold text-white">
+                    {activeAdvancedCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={clearFilters}
+                disabled={!hasActiveFilters}
+                className="border border-border bg-surface text-text hover:bg-surface-muted transition shadow-sm inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-semibold disabled:opacity-40"
+              >
+                <FilterX className="h-4 w-4" aria-hidden="true" />
+                Limpar
+              </button>
+            </div>
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:max-w-lg">
-            <label className="text-xs font-semibold text-text-muted">
-              Período inicial
-              <input
-                type="date"
-                value={filters.date_from}
-                onChange={(event) => updateFilter("date_from", event.target.value)}
-                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1 h-10 w-full rounded-lg text-sm"
-              />
-            </label>
-            <label className="text-xs font-semibold text-text-muted">
-              Período final
-              <input
-                type="date"
-                value={filters.date_to}
-                onChange={(event) => updateFilter("date_to", event.target.value)}
-                className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1 h-10 w-full rounded-lg text-sm"
-              />
-            </label>
+
+          <div
+            className={cn(
+              "transition-all duration-250 ease-in-out overflow-hidden",
+              isAdvancedFiltersOpen ? "max-h-[350px] opacity-100 mt-4" : "max-h-0 opacity-0 pointer-events-none"
+            )}
+          >
+            <div className="grid gap-4 p-4 rounded-xl border border-border/60 bg-[hsl(var(--bg))]/30 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-text-muted">Status operacional</span>
+                <select
+                  aria-label="Status operacional"
+                  value={filters.operational_status}
+                  onChange={(event) => updateFilter("operational_status", event.target.value as FilterState["operational_status"])}
+                  className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 rounded-lg text-sm w-full"
+                >
+                  {operationalStatusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-text-muted">Provider</span>
+                <label className="block">
+                  <span className="sr-only">Provider</span>
+                  <input
+                    list="behavioral-ai-providers"
+                    value={filters.provider}
+                    onChange={(event) => updateFilter("provider", event.target.value)}
+                    placeholder="Provider"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm px-3"
+                  />
+                </label>
+                <datalist id="behavioral-ai-providers">
+                  {providerOptions.map((value) => <option key={value} value={value} />)}
+                </datalist>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-text-muted">Modelo</span>
+                <label className="block">
+                  <span className="sr-only">Modelo</span>
+                  <input
+                    list="behavioral-ai-models"
+                    value={filters.model}
+                    onChange={(event) => updateFilter("model", event.target.value)}
+                    placeholder="Modelo"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm px-3"
+                  />
+                </label>
+                <datalist id="behavioral-ai-models">
+                  {modelOptions.map((value) => <option key={value} value={value} />)}
+                </datalist>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-text-muted">Tipo de erro</span>
+                <label className="block">
+                  <span className="sr-only">Tipo de erro</span>
+                  <input
+                    list="behavioral-ai-error-types"
+                    value={filters.provider_error_type}
+                    onChange={(event) => updateFilter("provider_error_type", event.target.value)}
+                    placeholder="Tipo de erro"
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 w-full rounded-lg text-sm px-3"
+                  />
+                </label>
+                <datalist id="behavioral-ai-error-types">
+                  {errorTypeOptions.map((value) => <option key={value} value={value} />)}
+                </datalist>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-text-muted">
+                  Período inicial
+                  <input
+                    type="date"
+                    value={filters.date_from}
+                    onChange={(event) => updateFilter("date_from", event.target.value)}
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1 h-10 w-full rounded-lg text-sm px-3"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-text-muted">
+                  Período final
+                  <input
+                    type="date"
+                    value={filters.date_to}
+                    onChange={(event) => updateFilter("date_to", event.target.value)}
+                    className="bg-surface border border-border text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1 h-10 w-full rounded-lg text-sm px-3"
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -657,48 +724,41 @@ export function AnalisesIaComportamentalPage() {
               </div>
 
               <div className="hidden overflow-x-auto lg:block">
-                <table className="min-w-[1320px] w-full divide-y divide-[hsl(var(--border))] text-sm">
+                <table className="min-w-[1000px] w-full divide-y divide-[hsl(var(--border))] text-sm">
                   <thead className="bg-[hsl(var(--bg))]/70">
                     <tr className="text-left text-xs font-semibold uppercase text-text-muted">
-                      <th className="px-4 py-3">Candidato</th>
-                      <th className="px-4 py-3">Vaga</th>
-                      <th className="px-4 py-3">Status operacional</th>
-                      <th className="px-4 py-3">Provider/modelo</th>
-                      <th className="px-4 py-3">Tentativas</th>
-                      <th className="px-4 py-3">Solicitado</th>
-                      <th className="px-4 py-3">Enfileirado</th>
-                      <th className="px-4 py-3">Iniciado</th>
-                      <th className="px-4 py-3">Concluído/falhou</th>
-                      <th className="px-4 py-3">Próxima tentativa</th>
-                      <th className="px-4 py-3">Erro seguro</th>
-                      <th className="sticky right-0 border-l border-border bg-[hsl(var(--bg))] px-4 py-3 text-right">
+                      <th className="px-4 py-3.5">Candidato</th>
+                      <th className="px-4 py-3.5">Vaga</th>
+                      <th className="px-4 py-3.5">Status operacional</th>
+                      <th className="px-4 py-3.5">Provider/modelo</th>
+                      <th className="px-4 py-3.5">Tentativas</th>
+                      <th className="px-4 py-3.5">Solicitado</th>
+                      <th className="sticky right-0 border-l border-border bg-[hsl(var(--bg))]/90 px-4 py-3.5 text-right z-10">
                         Ações
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[hsl(var(--border))]">
                     {items.map((item) => (
-                      <tr key={item.evaluation_id} className="group align-top hover:bg-[hsl(var(--bg))]/50">
-                        <td className="px-4 py-3">
+                      <tr key={item.evaluation_id} className="group align-top hover:bg-[hsl(var(--bg))]/50 transition-colors">
+                        <td className="px-4 py-3.5">
                           <div className="font-semibold text-text">{item.candidate_name}</div>
-                          <div className="text-xs text-text-muted">{item.candidate_email || "-"}</div>
+                          <div className="text-xs text-text-muted mt-0.5">{item.candidate_email || "-"}</div>
+                          {item.safe_error_message && (
+                            <div className="mt-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-1.5 rounded-lg border border-rose-100 dark:border-rose-900/30 max-w-md">
+                              <span className="font-semibold">Erro:</span> {item.safe_error_message}
+                            </div>
+                          )}
                         </td>
-                        <td className="px-4 py-3 text-text">{item.job_title}</td>
-                        <td className="px-4 py-3"><StatusBadge status={item.operational_status} /></td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3.5 text-text">{item.job_title}</td>
+                        <td className="px-4 py-3.5"><StatusBadge status={item.operational_status} /></td>
+                        <td className="px-4 py-3.5">
                           <div className="font-medium text-text">{item.provider}</div>
-                          <div className="text-xs text-text-muted">{item.model}</div>
+                          <div className="text-xs text-text-muted mt-0.5">{item.model}</div>
                         </td>
-                        <td className="px-4 py-3 text-text">{item.retry_count}</td>
-                        <td className="px-4 py-3 text-text-muted">{formatDateTime(item.requested_at)}</td>
-                        <td className="px-4 py-3 text-text-muted">{formatDateTime(item.queued_at)}</td>
-                        <td className="px-4 py-3 text-text-muted">{formatDateTime(item.started_at)}</td>
-                        <td className="px-4 py-3 text-text-muted">{finalTimestamp(item)}</td>
-                        <td className="px-4 py-3 text-text-muted">{formatDateTime(item.next_retry_at)}</td>
-                        <td className="max-w-[220px] px-4 py-3 text-xs text-text-muted">
-                          <span className="line-clamp-3">{item.safe_error_message || "-"}</span>
-                        </td>
-                        <td className="sticky right-0 border-l border-border bg-surface px-4 py-3 group-hover:bg-[hsl(var(--bg))]">
+                        <td className="px-4 py-3.5 text-text">{item.retry_count}</td>
+                        <td className="px-4 py-3.5 text-text-muted">{formatDateTime(item.requested_at)}</td>
+                        <td className="sticky right-0 border-l border-border bg-surface px-4 py-3.5 group-hover:bg-[hsl(var(--bg))] transition-colors">
                           <RowActions
                             item={item}
                             retryingId={retryingId}
