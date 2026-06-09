@@ -1,7 +1,8 @@
-import { RefreshCw, Search, Users, Clock, Calendar, CheckCircle2, Plus, BarChart3, Home, MapPin, Sparkles, Inbox, Activity, Filter, ToggleRight, ToggleLeft, AlertTriangle, X, ChevronDown, Briefcase } from "lucide-react";
+import { RefreshCw, Search, Users, Clock, Calendar, CheckCircle2, Plus, BarChart3, Home, MapPin, Sparkles, Inbox, Activity, Target, Filter, ToggleRight, ToggleLeft, AlertTriangle, X, ChevronDown, Briefcase, Info } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 
 import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
 import { JobCombobox } from "../features/pipeline/JobCombobox";
@@ -515,6 +516,53 @@ export function PipelinePage() {
       .reduce((sum, col) => sum + col.candidates.length, 0);
   }, [board]);
 
+  const melhorMatchScore = useMemo(() => {
+    if (!board) return 0;
+    let maxScore = 0;
+    for (const col of board.columns) {
+      for (const c of col.candidates) {
+        if (c.job_fit_score && c.job_fit_score > maxScore) {
+          maxScore = c.job_fit_score;
+        }
+      }
+    }
+    return maxScore;
+  }, [board]);
+
+  const totalPendencias = useMemo(() => {
+    if (!board) return 0;
+    let count = 0;
+    for (const col of board.columns) {
+      for (const c of col.candidates) {
+        const isBehavioralPending =
+          Boolean(c.requires_behavioral_assessment) &&
+          c.behavioral_assessment_status !== "submitted" &&
+          c.behavioral_assessment_status !== "evaluated";
+        const isBehavioralAiPending =
+          Boolean(c.requires_behavioral_ai_evaluation) &&
+          c.behavioral_ai_evaluation_status !== "completed" &&
+          c.behavioral_ai_evaluation_status !== "submitted";
+        const isInterviewPending =
+          Boolean(c.requires_interview) &&
+          c.interview_status !== "completed" &&
+          c.interview_status !== "submitted";
+        const isScorecardPending =
+          Boolean(c.requires_scorecard) &&
+          c.interview_scorecard_status !== "submitted" &&
+          c.interview_scorecard_status !== "completed";
+        if (
+          isBehavioralPending ||
+          isBehavioralAiPending ||
+          isInterviewPending ||
+          isScorecardPending
+        ) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }, [board]);
+
   const isBoardRefreshing = boardLoading && board !== null;
   const showInitialBoardLoading = boardLoading && board === null;
   const isRankingRefreshing = rankingLoading && ranking !== null;
@@ -852,7 +900,7 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-12 text-slate-800 bg-[#F4F7FB] dark:bg-background dark:text-text sm:px-2 sm:pt-12 lg:px-3">
+    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-4 text-slate-800 bg-[#F4F7FB] dark:bg-background dark:text-text sm:px-2 sm:pt-4 lg:px-3">
       
       {/* ── Header Area ── */}
       <div className="mb-2 mt-0 flex flex-col gap-2">
@@ -862,6 +910,8 @@ export function PipelinePage() {
           <span className="text-slate-300 dark:text-text-muted">›</span>
           <span className="font-bold text-slate-800 dark:text-text">Pipeline</span>
         </nav>
+        {/* sr-only heading for accessibility and tests */}
+        <h1 className="sr-only">Pipeline</h1>
 
         {/* Two-Column Grid: Vacancy details + Marajó RH IA Co-pilot */}
         <div className="relative z-30 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.2fr)_1fr] xl:grid-cols-[minmax(0,1.4fr)_1fr] mb-2 pr-14">
@@ -869,15 +919,6 @@ export function PipelinePage() {
           {/* Column 1: Vacancy Card */}
           <div className="relative z-10 flex flex-col justify-between rounded-[22px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_rgb(0,0,0,0.015)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none min-h-[135px]">
             <div className="flex flex-col lg:flex-row lg:items-center">
-              {/* Pipeline label with Folder/Kanban icon */}
-              <div className="flex items-center gap-2 shrink-0">
-                <Briefcase className="h-5 w-5 text-slate-400" />
-                <h1 className="text-base font-black tracking-tight text-[#0f172a] dark:text-text">Pipeline</h1>
-              </div>
-              
-              {/* Vertical line divider */}
-              <div className="hidden lg:block h-9 w-[1px] bg-slate-200 dark:bg-border/60 mx-4 shrink-0" />
-              
               {/* Job Combobox */}
               {pipelineJobsError ? (
                 <span className="text-xs font-bold text-rose-500">{pipelineJobsError}</span>
@@ -894,57 +935,62 @@ export function PipelinePage() {
             </div>
 
             {selectedJob && (selectedJob.seniority_level || selectedJob.work_model || selectedJob.location) && (
-              <div className="mt-3.5 flex flex-wrap items-center gap-2">
-                {selectedJob.seniority_level && (
-                  <div className="flex h-8 items-center gap-2 rounded-[10px] border border-slate-200/80 bg-white/80 px-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)] dark:border-border dark:bg-surface-muted dark:shadow-none">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
-                      <Briefcase className="h-2.5 w-2.5" />
+              <>
+                <div className="my-3 border-t border-dashed border-slate-200 dark:border-border/60" />
+                <div className="flex flex-wrap items-center gap-y-2 gap-x-8">
+                  {selectedJob.seniority_level && (
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-100 bg-slate-50 text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
+                        <Users className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Senioridade</span>
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-text mt-1 leading-none">{selectedJob.seniority_level}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Senioridade</span>
-                      <span className="text-[10px] font-bold text-slate-700 dark:text-text mt-0.5 leading-none">{selectedJob.seniority_level}</span>
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {selectedJob.work_model && (
-                  <div className="flex h-8 items-center gap-2 rounded-[10px] border border-slate-200/80 bg-white/80 px-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)] dark:border-border dark:bg-surface-muted dark:shadow-none">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
-                      <Home className="h-2.5 w-2.5" />
+                  {selectedJob.work_model && (
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-100 bg-slate-50 text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
+                        <Home className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Modalidade</span>
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-text mt-1 leading-none">{formatWorkModel(selectedJob.work_model)}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Modalidade</span>
-                      <span className="text-[10px] font-bold text-slate-700 dark:text-text mt-0.5 leading-none">{formatWorkModel(selectedJob.work_model)}</span>
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {selectedJob.location && (
-                  <div className="flex h-8 items-center gap-2 rounded-[10px] border border-slate-200/80 bg-white/80 px-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)] dark:border-border dark:bg-surface-muted dark:shadow-none">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-slate-200/80 bg-white text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
-                      <MapPin className="h-2.5 w-2.5" />
+                  {selectedJob.location && (
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-100 bg-slate-50 text-slate-400 dark:border-border dark:bg-surface dark:text-text-muted">
+                        <MapPin className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Localização</span>
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-text mt-1 leading-none">{selectedJob.location}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col justify-center">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-text-muted leading-none">Localização</span>
-                      <span className="text-[10px] font-bold text-slate-700 dark:text-text mt-0.5 leading-none">{selectedJob.location}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
 
           {/* Column 2: Co-pilot Info Card */}
-          <div className="relative z-10 flex justify-between items-center rounded-[22px] border border-slate-200/80 bg-white/95 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.015)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none overflow-hidden min-h-[135px]">
+          <div className="relative z-10 flex justify-between items-center rounded-[22px] border border-slate-200/60 bg-gradient-to-br from-[#E6F3FF]/45 via-[#E6FDF9]/45 to-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.01)] dark:border-border dark:bg-surface dark:shadow-none overflow-hidden min-h-[135px]">
             <div className="flex flex-col justify-center max-w-[65%] z-10">
               <div className="flex items-center gap-1.5 mb-1.5">
                 <Sparkles className="h-4.5 w-4.5 text-teal-500 animate-pulse" />
-                <h2 className="text-[15px] font-black tracking-tight text-slate-800 dark:text-slate-100">Marajó RH IA</h2>
+                <h2 className="text-[15px] font-black tracking-tight text-slate-800 dark:text-slate-100">
+                  Marajó <span className="text-[#14B8A6]">RH IA</span>
+                </h2>
               </div>
-              <p className="text-xs font-bold text-slate-500 dark:text-text-muted mb-1 leading-snug">
+              <p className="text-xs font-bold text-slate-600 dark:text-text-muted mb-1 leading-snug">
                 Seu copiloto de recrutamento inteligente
               </p>
-              <p className="text-[10px] font-medium text-slate-400 dark:text-text-muted leading-snug">
+              <p className="text-[10px] font-semibold text-slate-400 dark:text-text-muted leading-snug">
                 Dados, IA e pessoas trabalhando juntas
               </p>
             </div>
@@ -962,19 +1008,19 @@ export function PipelinePage() {
         </div>
 
         {/* Action Controls hidden on desktop since portal renders them */}
-        <div className={`flex flex-wrap gap-2 rounded-[14px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:flex-nowrap sm:items-center ${portalTarget ? "lg:hidden" : ""}`}>
+        <div className={`flex flex-wrap gap-2 rounded-[18px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:flex-nowrap sm:items-center ${portalTarget ? "lg:hidden" : ""}`}>
           {canMutate && (
             <button
               type="button"
               onClick={handleOpenSourceCandidates}
               disabled={!canUse}
-              className={`pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border px-4 text-xs font-bold transition-all ${
+              className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold transition-all shadow-sm ${
                 canUse
-                  ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e] dark:border-[hsl(var(--primary))]/35 dark:bg-[hsl(var(--primary))]/16 dark:text-[hsl(var(--text))] dark:shadow-none dark:hover:bg-[hsl(var(--primary))]/24"
+                  ? "bg-[#7B1829] text-white hover:bg-[#60121E]"
                   : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
               }`}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-4 w-4" />
               Vincular candidato
             </button>
           )}
@@ -983,9 +1029,9 @@ export function PipelinePage() {
             <button
               type="button"
               onClick={() => setShowRanking((current) => !current)}
-              className={`pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
+              className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
             >
-              <BarChart3 className="h-3.5 w-3.5 text-slate-400 dark:text-text-muted" />
+              <BarChart3 className="h-4 w-4 text-slate-400 dark:text-text-muted" />
               Ver Ranking IA
             </button>
           )}
@@ -996,9 +1042,9 @@ export function PipelinePage() {
               aria-label="Atualizar board"
               onClick={() => void handleManualRefresh()}
               disabled={boardLoading}
-              className="pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
+              className="pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
             >
-              <RefreshCw className={`h-3.5 w-3.5 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
               Atualizar
             </button>
           )}
@@ -1011,13 +1057,13 @@ export function PipelinePage() {
                 type="button"
                 onClick={handleOpenSourceCandidates}
                 disabled={!canUse}
-                className={`pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border px-4 text-xs font-bold transition-all ${
+                className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold transition-all shadow-sm ${
                   canUse
-                    ? "border-[#5a111e] bg-[#6b1e2e] text-white shadow-sm hover:bg-[#5a111e] dark:border-[hsl(var(--primary))]/35 dark:bg-[hsl(var(--primary))]/16 dark:text-[hsl(var(--text))] dark:shadow-none dark:hover:bg-[hsl(var(--primary))]/24"
+                    ? "bg-[#7B1829] text-white hover:bg-[#60121E]"
                     : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
                 }`}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
                 Vincular candidato
               </button>
             )}
@@ -1026,9 +1072,9 @@ export function PipelinePage() {
               <button
                 type="button"
                 onClick={() => setShowRanking((current) => !current)}
-                className={`pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
+                className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
               >
-                <BarChart3 className="h-3.5 w-3.5 text-slate-400 dark:text-text-muted" />
+                <BarChart3 className="h-4 w-4 text-slate-400 dark:text-text-muted" />
                 Ver Ranking IA
               </button>
             )}
@@ -1039,9 +1085,9 @@ export function PipelinePage() {
                 aria-label="Atualizar board"
                 onClick={() => void handleManualRefresh()}
                 disabled={boardLoading}
-                className="pipeline-action-button inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
+                className="pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
               >
-                <RefreshCw className={`h-3.5 w-3.5 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
+                <RefreshCw className={`h-4 w-4 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
                 Atualizar
               </button>
             )}
@@ -1051,19 +1097,61 @@ export function PipelinePage() {
       </div>
       
       {/* ── KPIs (Métricas) ── */}
-      {/* 
       {activeJobId && !pipelineJobsLoading && selectedJob && board && !boardError && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 px-1 -mt-1 hidden">
-          <span><strong className="text-slate-700 dark:text-slate-300">{totalCandidatos}</strong> candidato{totalCandidatos === 1 ? "" : "s"}</span>
-          <span className="text-slate-300 dark:text-slate-600">·</span>
-          <span><strong className="text-slate-700 dark:text-slate-300">{emAndamento}</strong> em andamento</span>
-          <span className="text-slate-300 dark:text-slate-600">·</span>
-          <span><strong className="text-slate-700 dark:text-slate-300">{entrevistas}</strong> entrevista{entrevistas === 1 ? "" : "s"}</span>
-          <span className="text-slate-300 dark:text-slate-600">·</span>
-          <span><strong className="text-slate-700 dark:text-slate-300">{contratacoes}</strong> contrataç{contratacoes === 1 ? "ão" : "ões"}</span>
+        <div className="mb-3 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.01)] dark:divide-slate-800 dark:border-border dark:bg-surface">
+          {/* Segment 1: Total de candidatos */}
+          <div className="flex items-center gap-3.5 pb-3 md:pb-0 md:pr-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
+              <Users className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xl font-black text-slate-800 dark:text-text leading-none">{totalCandidatos}</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-text-muted leading-none">Total de candidatos</span>
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-slate-350 cursor-pointer shrink-0 hover:text-slate-500" />
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-white text-slate-700 border border-slate-200 shadow-md dark:bg-popover dark:border-border dark:text-popover-foreground text-xs p-2 rounded-lg z-[100]">
+                      Total de currículos vinculados a este processo seletivo
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-text-muted mt-1 leading-none">Candidatos na pipeline</span>
+            </div>
+          </div>
+
+          {/* Segment 2: Melhor match IA */}
+          <div className="flex items-center gap-3.5 py-3 md:py-0 md:px-6">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-teal-50 text-[#14B8A6] dark:bg-teal-950/30 dark:text-teal-400">
+              <Target className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xl font-black text-slate-800 dark:text-text leading-none">{melhorMatchScore}%</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-text-muted leading-none">Melhor match IA</span>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-text-muted mt-1 leading-none">Pontuação máxima</span>
+            </div>
+          </div>
+
+          {/* Segment 3: Pendências */}
+          <div className="flex items-center gap-3.5 pt-3 md:pt-0 md:pl-6">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-500 dark:bg-orange-950/30 dark:text-orange-400">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xl font-black text-slate-800 dark:text-text leading-none">{totalPendencias}</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-text-muted leading-none">Pendências</span>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-405 dark:text-text-muted mt-1 leading-none">Itens que precisam de atenção</span>
+            </div>
+          </div>
         </div>
       )}
-      */}
 
       {/* ── Empty: no jobs at all ── */}
       {!pipelineJobsLoading && pipelineJobs.length === 0 && !pipelineJobsError && (

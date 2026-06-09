@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type DragEvent } from "react";
 import type { JobCandidate, PipelineColumn, PipelineStage } from "../../types/domain";
 import { KanbanCard } from "./KanbanCard";
-import { Plus, Search, CalendarDays, ClipboardList, CheckCircle, Info, Handshake } from "lucide-react";
+import { Plus, Search, CalendarDays, ClipboardList, CheckCircle, Info, Handshake, UserPlus } from "lucide-react";
 import type { PipelineMacroColumnId } from "../../features/pipeline/utils/pipelineKanbanColumns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
@@ -88,6 +88,47 @@ const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, any>> = 
   },
 };
 
+const getEmptyStateConfig = (visualKey: string) => {
+  const configs: Record<string, { icon: any; bg: string; subtitle: string }> = {
+    entrada: {
+      icon: Plus,
+      bg: "bg-[#E6F9F0] text-[#10B981] dark:bg-emerald-950/30 dark:text-[#10B981]",
+      subtitle: "Aguardando novos perfis.",
+    },
+    analise: {
+      icon: Search,
+      bg: "bg-[#FFF9E6] text-[#F59E0B] dark:bg-amber-950/30 dark:text-[#F59E0B]",
+      subtitle: "Os candidatos avançam após a triagem inicial.",
+    },
+    entrevista: {
+      icon: CalendarDays,
+      bg: "bg-[#E6F7FF] text-[#0ea5e9] dark:bg-cyan-950/30 dark:text-[#0ea5e9]",
+      subtitle: "Agende entrevistas para avançar no processo.",
+    },
+    avaliacao: {
+      icon: ClipboardList,
+      bg: "bg-[#FFF1F2] text-[#F43F5E] dark:bg-rose-950/30 dark:text-[#F43F5E]",
+      subtitle: "Avaliações em andamento.",
+    },
+    decisao: {
+      icon: Handshake,
+      bg: "bg-[#F3E8FF] text-[#8B5CF6] dark:bg-violet-950/30 dark:text-[#8B5CF6]",
+      subtitle: "Avaliação final.",
+    },
+    admissao: {
+      icon: UserPlus,
+      bg: "bg-[#E6FDF9] text-[#14B8A6] dark:bg-teal-950/30 dark:text-[#14B8A6]",
+      subtitle: "Aguardando contratação.",
+    },
+    finalizado: {
+      icon: CheckCircle,
+      bg: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+      subtitle: "Processos concluídos.",
+    },
+  };
+  return configs[visualKey] || { icon: ClipboardList, bg: "bg-slate-100 text-slate-500", subtitle: "Aguardando candidatos." };
+};
+
 interface KanbanColumnProps {
   column: KanbanColumnData;
   colIndex: number;
@@ -155,7 +196,7 @@ export const KanbanColumn = memo(function KanbanColumn({
         "pipeline-kanban-column",
         `pipeline-kanban-column--${columnVisualKey}`,
         "kanban-column-enter",
-        "relative border border-slate-200/80 bg-white/95 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.45)] dark:border-border dark:bg-surface-muted dark:shadow-none",
+        "relative border border-slate-200/80 bg-white dark:bg-slate-900 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.3)] dark:border-border dark:shadow-none",
         isDropTarget && !dropDisabled ? "ring-2 ring-emerald-400/50 dark:ring-emerald-900/55 scale-[1.01]" : "",
         disabledCls,
       ]
@@ -169,7 +210,7 @@ export const KanbanColumn = memo(function KanbanColumn({
       onDrop={handleDrop}
       data-drop-target={isDropTarget ? "true" : "false"}
     >
-      <div className={`h-1 w-full ${theme.accentBar}`} />
+      <div className={`h-1.5 w-full shrink-0 ${theme.accentBar}`} />
 
       {/* Column Header */}
       <div className={`pipeline-kanban-column__header relative flex items-center justify-between border-b border-slate-100/90 bg-gradient-to-r px-3.5 pb-2.5 pt-3 dark:border-border/70 ${theme.headerGlow}`}>
@@ -178,7 +219,7 @@ export const KanbanColumn = memo(function KanbanColumn({
             {column.label}
           </span>
           {column.description ? (
-            <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-400 dark:text-text-muted">
+            <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-400 dark:text-text-muted">
               {column.description}
             </span>
           ) : null}
@@ -207,11 +248,11 @@ export const KanbanColumn = memo(function KanbanColumn({
       </div>
 
       {/* Candidate Cards list / Drop Zone */}
-      <div className={`pipeline-kanban-column__body flex min-h-[40px] flex-1 flex-col gap-2.5 bg-slate-50/65 px-2.5 pb-2.5 pt-2.5 overflow-y-auto transition-all duration-200 border dark:bg-background/35 ${
+      <div className={`pipeline-kanban-column__body flex min-h-[40px] flex-1 flex-col gap-2.5 bg-slate-50/40 px-2.5 pb-2.5 pt-2.5 overflow-y-auto transition-all duration-200 border border-transparent dark:bg-background/20 ${
         isDropTarget && !dropDisabled
           ? 'mx-2 rounded-xl border-dashed border-emerald-300 bg-emerald-50/70 dark:border-emerald-900/55 dark:bg-emerald-950/24'
-          : 'border-transparent'
-      } [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full`}>
+          : ''
+      } [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-250 dark:[&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full`}>
         {column.candidates.map((c, cardIndex) => {
           const isTopMatch =
             showTopMatchHighlight &&
@@ -235,29 +276,25 @@ export const KanbanColumn = memo(function KanbanColumn({
           );
         })}
 
-        {column.candidates.length === 0 && (
-          <div className="pipeline-kanban-column__empty my-auto mx-auto flex flex-col items-center justify-center w-full px-2.5">
-            <div className="flex flex-col items-center justify-center bg-white dark:bg-surface border border-slate-200/50 dark:border-border/50 rounded-[20px] p-5 shadow-[0_8px_20px_rgba(15,23,42,0.02)] w-full transition-all duration-300 hover:shadow-[0_12px_28px_rgba(15,23,42,0.04)] animate-in fade-in zoom-in-95 duration-300">
-              <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-full ${
-                columnVisualKey === "entrevista"
-                  ? "bg-cyan-50 text-cyan-500 dark:bg-cyan-950/30 dark:text-cyan-400"
-                  : columnVisualKey === "avaliacao"
-                  ? "bg-rose-50 text-rose-500 dark:bg-rose-950/30 dark:text-rose-400"
-                  : columnVisualKey === "decisao"
-                  ? "bg-violet-50 text-violet-500 dark:bg-violet-950/30 dark:text-violet-400"
-                  : theme.bgEmpty
-              }`}>
-                {theme.emptyIcon && <theme.emptyIcon className="h-4.5 w-4.5" />}
+        {column.candidates.length === 0 && (() => {
+          const emptyConfig = getEmptyStateConfig(columnVisualKey);
+          const EmptyIcon = emptyConfig.icon;
+          return (
+            <div className="pipeline-kanban-column__empty my-auto mx-auto flex flex-col items-center justify-center w-full px-2.5">
+              <div className="flex flex-col items-center justify-center bg-white dark:bg-surface border border-slate-200/50 dark:border-border/50 rounded-[20px] p-5 shadow-[0_8px_20px_rgba(15,23,42,0.02)] w-full transition-all duration-300 hover:shadow-[0_12px_28px_rgba(15,23,42,0.04)] animate-in fade-in zoom-in-95 duration-300">
+                <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full ${emptyConfig.bg}`}>
+                  <EmptyIcon className="h-5 w-5" />
+                </div>
+                <h3 className="text-[12px] font-black text-slate-800 dark:text-text">
+                  Nenhum candidato
+                </h3>
+                <p className="mt-1 max-w-[155px] text-[10px] font-bold leading-normal text-slate-400 dark:text-text-muted text-center">
+                  {emptyConfig.subtitle}
+                </p>
               </div>
-              <h3 className="text-[12px] font-black text-slate-800 dark:text-text">
-                Nenhum candidato
-              </h3>
-              <p className="mt-1 max-w-[155px] text-[10px] font-bold leading-normal text-slate-400 dark:text-text-muted">
-                {theme.emptySub}
-              </p>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
       </div>
     </div>

@@ -105,22 +105,22 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
         className="flex w-full items-center gap-4 text-left focus:outline-none"
       >
         {/* Briefcase Icon Area */}
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-[#8a1c31] text-white dark:border dark:border-[hsl(var(--primary))]/30 dark:bg-[hsl(var(--primary))]/14 dark:text-[hsl(var(--text))]">
-          <Briefcase className="h-5 w-5" />
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] bg-[#7B1829] text-white shadow-sm dark:border dark:border-[hsl(var(--primary))]/30 dark:bg-[hsl(var(--primary))]/14 dark:text-[hsl(var(--text))]">
+          <Briefcase className="h-6 w-6" />
         </div>
 
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-[9px] font-black tracking-widest text-[#7B1829] uppercase leading-none">
             Vaga da pipeline
           </span>
           
-          <div className="flex items-center gap-2">
-            <span className="truncate text-[15px] font-bold tracking-tight text-slate-800 dark:text-text">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate text-base sm:text-lg font-bold tracking-tight text-slate-800 dark:text-text">
               {loading && jobs.length === 0 ? "Carregando vagas…" : (selectedJob?.title ?? "Selecionar vaga")}
             </span>
             
             <span
-              className={`flex items-center gap-1 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold ${
+              className={`flex items-center gap-1 shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold shadow-sm ${
                 selectedJob ? STATUS_BADGE[selectedTone] : "bg-slate-100 text-slate-600 border border-slate-200"
               }`}
             >
