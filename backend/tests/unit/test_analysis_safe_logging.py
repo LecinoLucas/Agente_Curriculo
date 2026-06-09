@@ -4,14 +4,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.ai_orchestration.analysis import prompt_validator as _prompt_validator_module
 from src.interface.workers import analysis_tasks
 
 
 def test_prompt_validation_logs_metadata_without_prompt_preview(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The logger now lives in prompt_validator (moved from analysis_tasks)
     info = MagicMock()
     warning = MagicMock()
-    monkeypatch.setattr(analysis_tasks.logger, "info", info)
-    monkeypatch.setattr(analysis_tasks.logger, "warning", warning)
+    monkeypatch.setattr(_prompt_validator_module.logger, "info", info)
+    monkeypatch.setattr(_prompt_validator_module.logger, "warning", warning)
 
     prompt = "CURRICULO_RESUMIDO:\nemail@exemplo.com\ntelefone 91999999999"
 
