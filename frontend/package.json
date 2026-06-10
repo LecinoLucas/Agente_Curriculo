@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "node ../scripts/validate-repo-root.js && vite --host 0.0.0.0 --port 5173 --strictPort",
+    "dev:clean": "node ../scripts/validate-repo-root.js && vite --host 0.0.0.0 --port 5173 --strictPort --force",
     "build": "node ../scripts/validate-repo-root.js && tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node ../scripts/validate-repo-root.js && vitest run"
+    "test": "node ../scripts/validate-repo-root.js && vitest run",
+    "validate:repo-root": "node ../scripts/validate-repo-root.js",
+    "validate:pipeline-imports": "node ../scripts/validate-pipeline-imports.js",
+    "validate:vite-module-load": "node ../scripts/validate-vite-module-load.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
