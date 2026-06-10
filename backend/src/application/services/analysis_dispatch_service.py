@@ -109,7 +109,11 @@ class AnalysisRequestPolicy:
                 trigger_source=trigger_source,
             )
 
-        if stage not in _AUTO_ALLOWED_STAGES:
+        # smart_refresh is an explicit user-initiated bulk action (confirmed via modal).
+        # It bypasses the post-screening stage restriction so failed/cancelled analyses
+        # can be retried at any active non-terminal stage. The automatic trigger ("automatic",
+        # "upload", etc.) still respects the stage restriction.
+        if trigger_source != "smart_refresh" and stage not in _AUTO_ALLOWED_STAGES:
             return AnalysisDispatchDecision(
                 analysis_id=None,
                 status=None,

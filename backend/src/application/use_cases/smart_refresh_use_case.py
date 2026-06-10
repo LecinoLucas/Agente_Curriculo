@@ -1,16 +1,18 @@
 """Smart Refresh use case.
 
-Classifies pipeline candidates into three groups without calling any AI provider:
+Classifies pipeline candidates into four groups without calling any AI provider:
   - ranking_recalculation: completed analysis WITH usable extracted_data → recompute ranking only
-  - ai_analysis: no valid analysis OR completed but empty extracted_data → dispatch via worker later
-  - skipped: pending/processing (no-op) or no resume
-
-Candidates with analysis_status=completed but empty extracted_data are classified as
-ai_analysis with reason="legacy_incomplete_analysis" — they are re-dispatched to AI rather
-than silently dropped into ranking recalculation with no usable data.
+  - ai_analysis (reason=no_valid_analysis): no analysis at all → dispatch via worker
+  - ai_analysis (reason=legacy_incomplete_analysis): completed but empty extracted_data → re-dispatch
+  - ai_analysis (reason=failed_analysis_retry): failed/cancelled analysis → retry via worker
+  - skipped_already_processing: in-flight analysis → do nothing (no duplicate)
+  - skipped_no_resume: no resume attached → cannot analyse
 
 The execute() path enqueues tasks; it never calls Gemini or any LLM.
 provider_calls_now is always 0.
+
+Stage bypass: trigger_source="smart_refresh" bypasses the post-screening stage restriction in
+AnalysisRequestPolicy so failed analyses at any active non-terminal stage can be retried.
 """
 from __future__ import annotations
 
@@ -34,6 +36,7 @@ _PROCESSING_STATUSES: frozenset[str] = frozenset(
     {"pending", "processing", "retry_scheduled", "waiting_extraction"}
 )
 _VALID_COMPLETED_STATUS = "completed"
+_FAILED_STATUSES: frozenset[str] = frozenset({"failed", "cancelled"})
 _SAMPLE_LIMIT = 10
 
 
@@ -66,7 +69,8 @@ class SmartRefreshPreviewData:
     total_candidates: int
     ranking_recalculation_count: int
     ai_analysis_count: int
-    ai_analysis_legacy_incomplete_count: int  # subset of ai_analysis: completed but empty data
+    ai_analysis_failed_retry_count: int    # subset: failed/cancelled → retry
+    ai_analysis_legacy_incomplete_count: int  # subset: completed but empty → re-dispatch
     skipped_already_processing_count: int
     skipped_no_resume_count: int
     warnings: list[str] = field(default_factory=list)
@@ -81,6 +85,7 @@ class SmartRefreshExecuteData:
     ranking_recalculation_enqueued: bool
     ranking_candidates: int
     ai_analysis_enqueued: int
+    failed_analysis_retried: int  # subset of ai_analysis_enqueued: failed/cancelled retried
     skipped_already_processing: int
     skipped_no_resume: int
     skipped_legacy_incomplete: int  # completed + empty extracted_data, re-dispatched to ai_analysis
@@ -104,6 +109,9 @@ def _classify(row: _CandidateRow) -> tuple[str, str]:
             # Completed but result missing or extracted_data is empty — re-dispatch via AI
             return "ai_analysis", "legacy_incomplete_analysis"
         return "ranking_recalculation", ""
+    if row.analysis_status in _FAILED_STATUSES:
+        # Failed/cancelled — retry via AI worker (stage bypass handled in dispatcher)
+        return "ai_analysis", "failed_analysis_retry"
     return "ai_analysis", "no_valid_analysis"
 
 
@@ -185,6 +193,7 @@ class SmartRefreshUseCase:
 
         ranking_recalculation = 0
         ai_analysis = 0
+        ai_analysis_failed_retry = 0
         ai_analysis_legacy_incomplete = 0
         skipped_already_processing = 0
         skipped_no_resume = 0
@@ -197,7 +206,9 @@ class SmartRefreshUseCase:
                 ranking_recalculation += 1
             elif category == "ai_analysis":
                 ai_analysis += 1
-                if reason == "legacy_incomplete_analysis":
+                if reason == "failed_analysis_retry":
+                    ai_analysis_failed_retry += 1
+                elif reason == "legacy_incomplete_analysis":
                     ai_analysis_legacy_incomplete += 1
                 if len(samples_ai) < _SAMPLE_LIMIT:
                     samples_ai.append(
@@ -229,6 +240,11 @@ class SmartRefreshUseCase:
                     )
 
         warnings: list[str] = []
+        if ai_analysis_failed_retry > 0:
+            warnings.append(
+                f"{ai_analysis_failed_retry} candidato(s) com análise em erro serão "
+                "reenfileirados para nova tentativa."
+            )
         if ai_analysis_legacy_incomplete > 0:
             warnings.append(
                 f"{ai_analysis_legacy_incomplete} candidato(s) com análise completada mas dados "
@@ -241,6 +257,7 @@ class SmartRefreshUseCase:
             total_candidates=len(rows),
             ranking_recalculation_count=ranking_recalculation,
             ai_analysis_count=ai_analysis,
+            ai_analysis_failed_retry_count=ai_analysis_failed_retry,
             ai_analysis_legacy_incomplete_count=ai_analysis_legacy_incomplete,
             skipped_already_processing_count=skipped_already_processing,
             skipped_no_resume_count=skipped_no_resume,
@@ -259,7 +276,7 @@ class SmartRefreshUseCase:
         rows = await self._fetch_candidate_rows(job_id)
 
         ranking_candidates: list[UUID] = []
-        ai_candidates: list[UUID] = []
+        ai_candidates: list[tuple[UUID, str]] = []  # (candidate_id, reason)
         skipped_already_processing = 0
         skipped_no_resume = 0
         skipped_legacy_incomplete = 0
@@ -269,7 +286,7 @@ class SmartRefreshUseCase:
             if category == "ranking_recalculation":
                 ranking_candidates.append(row.candidate_id)
             elif category == "ai_analysis":
-                ai_candidates.append(row.candidate_id)
+                ai_candidates.append((row.candidate_id, reason))
                 if reason == "legacy_incomplete_analysis":
                     skipped_legacy_incomplete += 1
             elif category == "skipped_already_processing":
@@ -288,8 +305,9 @@ class SmartRefreshUseCase:
             )
 
         ai_analysis_enqueued = 0
+        failed_analysis_retried = 0
         dispatcher = CandidateJobAnalysisDispatcher(self._db)
-        for candidate_id in ai_candidates:
+        for candidate_id, reason in ai_candidates:
             decision = await dispatcher.request_auto_analysis(
                 candidate_id=candidate_id,
                 job_id=job_id,
@@ -298,10 +316,13 @@ class SmartRefreshUseCase:
             )
             if decision.created:
                 ai_analysis_enqueued += 1
+                if reason == "failed_analysis_retry":
+                    failed_analysis_retried += 1
                 logger.info(
                     "smart_refresh.ai_analysis_enqueued",
                     job_id=str(job_id),
                     candidate_id=str(candidate_id),
+                    reason=reason,
                 )
 
         may_use_provider_later = ai_analysis_enqueued > 0
@@ -310,7 +331,10 @@ class SmartRefreshUseCase:
         if ranking_candidates:
             parts.append(f"{len(ranking_candidates)} ranking sem IA")
         if ai_analysis_enqueued > 0:
-            parts.append(f"{ai_analysis_enqueued} análise IA")
+            ai_part = f"{ai_analysis_enqueued} análise IA"
+            if failed_analysis_retried > 0:
+                ai_part += f" ({failed_analysis_retried} retry de erro)"
+            parts.append(ai_part)
         total_skipped = skipped_already_processing + skipped_no_resume
         if total_skipped > 0:
             parts.append(f"{total_skipped} ignorados")
@@ -326,6 +350,7 @@ class SmartRefreshUseCase:
             ranking_recalculation_enqueued=ranking_recalculation_enqueued,
             ranking_candidates=len(ranking_candidates),
             ai_analysis_enqueued=ai_analysis_enqueued,
+            failed_analysis_retried=failed_analysis_retried,
             skipped_already_processing=skipped_already_processing,
             skipped_no_resume=skipped_no_resume,
             skipped_legacy_incomplete=skipped_legacy_incomplete,

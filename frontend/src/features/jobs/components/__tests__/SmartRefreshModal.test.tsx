@@ -145,6 +145,21 @@ describe("SmartRefreshModal", () => {
     });
   });
 
+  it("shows failed retry row when failed_retry_count > 0", () => {
+    renderModal({
+      ai_analysis: { count: 5, may_use_provider: true, description: "", failed_retry_count: 3 },
+    });
+    expect(screen.getByText("Reprocessar análises com erro")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+  });
+
+  it("does not show failed retry row when failed_retry_count is 0 or absent", () => {
+    renderModal({
+      ai_analysis: { count: 2, may_use_provider: true, description: "", failed_retry_count: 0 },
+    });
+    expect(screen.queryByText("Reprocessar análises com erro")).not.toBeInTheDocument();
+  });
+
   it("returns null when not open", () => {
     const { container } = render(
       <SmartRefreshModal

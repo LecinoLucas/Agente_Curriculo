@@ -1691,11 +1691,19 @@ async def smart_refresh_preview(
             )
         )
 
-    ai_description = "Candidatos sem análise válida ou com análise falha — análise IA será enfileirada."
-    if data.ai_analysis_legacy_incomplete_count > 0:
+    ai_description = "Candidatos sem análise válida — análise IA será enfileirada."
+    if data.ai_analysis_failed_retry_count > 0 or data.ai_analysis_legacy_incomplete_count > 0:
+        parts_desc = []
+        if data.ai_analysis_failed_retry_count > 0:
+            parts_desc.append(
+                f"{data.ai_analysis_failed_retry_count} com análise em erro para reprocessamento"
+            )
+        if data.ai_analysis_legacy_incomplete_count > 0:
+            parts_desc.append(
+                f"{data.ai_analysis_legacy_incomplete_count} com análise antiga/incompleta"
+            )
         ai_description = (
-            f"Candidatos sem análise válida, incluindo {data.ai_analysis_legacy_incomplete_count} "
-            "com análise antiga/incompleta — análise IA será enfileirada."
+            f"Candidatos para análise IA ({', '.join(parts_desc)}) — será enfileirada."
         )
 
     samples = _SmartRefreshSamples(
@@ -1729,6 +1737,7 @@ async def smart_refresh_preview(
             "count": data.ai_analysis_count,
             "may_use_provider": True,
             "description": ai_description,
+            "failed_retry_count": data.ai_analysis_failed_retry_count,
         },
         skipped={
             "count": data.skipped_already_processing_count + data.skipped_no_resume_count,
@@ -1773,6 +1782,7 @@ async def smart_refresh_execute(
         ranking_recalculation_enqueued=data.ranking_recalculation_enqueued,
         ranking_candidates=data.ranking_candidates,
         ai_analysis_enqueued=data.ai_analysis_enqueued,
+        failed_analysis_retried=data.failed_analysis_retried,
         skipped_already_processing=data.skipped_already_processing,
         skipped_no_resume=data.skipped_no_resume,
         skipped_legacy_incomplete=data.skipped_legacy_incomplete,

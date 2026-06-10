@@ -518,6 +518,7 @@ export type SmartRefreshPreview = {
     count: number;
     may_use_provider: boolean;
     description: string;
+    failed_retry_count?: number;
   };
   skipped: {
     count: number;
@@ -536,6 +537,7 @@ export type SmartRefreshResult = {
   ranking_recalculation_enqueued: boolean;
   ranking_candidates: number;
   ai_analysis_enqueued: number;
+  failed_analysis_retried?: number;
   skipped_already_processing: number;
   skipped_no_resume: number;
   skipped_legacy_incomplete?: number;

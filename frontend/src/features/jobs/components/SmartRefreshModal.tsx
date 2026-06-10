@@ -68,6 +68,15 @@ export function SmartRefreshModal({
               </span>
             </div>
 
+            {(preview.ai_analysis.failed_retry_count ?? 0) > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-text-muted">Reprocessar análises com erro</span>
+                <span className="font-medium text-[hsl(var(--warning))]">
+                  {preview.ai_analysis.failed_retry_count}
+                </span>
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <span className="text-text-muted">Ignorados</span>
               <span className="font-medium text-text">{preview.skipped.count}</span>

@@ -171,6 +171,7 @@ class _SmartRefreshAiAnalysis(BaseModel):
     count: int
     may_use_provider: bool
     description: str
+    failed_retry_count: int = 0  # subset of count: failed/cancelled analyses to be retried
 
 
 class _SmartRefreshSkipped(BaseModel):
@@ -205,6 +206,7 @@ class SmartRefreshExecuteResponse(BaseModel):
     ranking_recalculation_enqueued: bool
     ranking_candidates: int
     ai_analysis_enqueued: int
+    failed_analysis_retried: int = 0  # subset of ai_analysis_enqueued: failed/cancelled retried
     skipped_already_processing: int
     skipped_no_resume: int
     skipped_legacy_incomplete: int = 0
