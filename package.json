@@ -2,31 +2,32 @@
   "name": "resume-ai-system",
   "private": true,
   "scripts": {
-    "dev": "npm run dev:all",
+    "validate:repo-root": "node scripts/validate-repo-root.js",
+    "dev": "npm run validate:repo-root && npm run dev:all",
 
-    "dev:full": "bash scripts/dev-full.sh",
-    "dev:user": "./scripts/dev-user.sh",
-    "dev:backend": "npm run backend",
-    "dev:staff": "npm run frontend",
-    "dev:candidate": "sh -c 'VITE_API_URL=${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1} VITE_PUBLIC_API_BASE_URL=${VITE_PUBLIC_API_BASE_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1/public} npm --silent --prefix candidate-portal run dev'",
-    "dev:all": "concurrently --names backend,staff,candidate --prefix \"[{name}]\" --prefix-colors \"magenta.bold,cyan.bold,yellow.bold\" \"npm run dev:backend\" \"npm run dev:staff\" \"npm run dev:candidate\"",
-    "dev:ports": "./scripts/dev-ports.sh",
+    "dev:full": "npm run validate:repo-root && bash scripts/dev-full.sh",
+    "dev:user": "npm run validate:repo-root && ./scripts/dev-user.sh",
+    "dev:backend": "npm run validate:repo-root && npm run backend",
+    "dev:staff": "npm run validate:repo-root && npm run frontend",
+    "dev:candidate": "npm run validate:repo-root && sh -c 'VITE_API_URL=${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1} VITE_PUBLIC_API_BASE_URL=${VITE_PUBLIC_API_BASE_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1/public} npm --silent --prefix candidate-portal run dev'",
+    "dev:all": "npm run validate:repo-root && concurrently --names backend,staff,candidate --prefix \"[{name}]\" --prefix-colors \"magenta.bold,cyan.bold,yellow.bold\" \"npm run dev:backend\" \"npm run dev:staff\" \"npm run dev:candidate\"",
+    "dev:ports": "npm run validate:repo-root && ./scripts/dev-ports.sh",
 
-    "frontend": "sh -c 'VITE_API_URL=${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1} VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-8000}} npm --silent --prefix frontend run dev'",
+    "frontend": "npm run validate:repo-root && sh -c 'VITE_API_URL=${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1} VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-8000}} npm --silent --prefix frontend run dev'",
 
-    "backend:bootstrap": "cd backend && .venv/bin/python scripts/bootstrap_dev.py",
-    "backend:seed-admin": "cd backend && .venv/bin/python scripts/seed_dev_admin.py",
-    "backend:seed-jobs": "cd backend && .venv/bin/python scripts/seed_jobs.py",
-    "backend:seed-scoring": "cd backend && .venv/bin/python scripts/seed_scoring_version.py",
+    "backend:bootstrap": "npm run validate:repo-root && cd backend && .venv/bin/python scripts/bootstrap_dev.py",
+    "backend:seed-admin": "npm run validate:repo-root && cd backend && .venv/bin/python scripts/seed_dev_admin.py",
+    "backend:seed-jobs": "npm run validate:repo-root && cd backend && .venv/bin/python scripts/seed_jobs.py",
+    "backend:seed-scoring": "npm run validate:repo-root && cd backend && .venv/bin/python scripts/seed_scoring_version.py",
 
-    "backend": "sh -c 'cd backend && .venv/bin/uvicorn src.interface.api.main:app --reload --reload-dir src --reload-dir scripts --reload-exclude \".venv/*\" --reload-exclude \"tests/*\" --host ${BACKEND_HOST:-0.0.0.0} --port ${BACKEND_PORT:-8000} --no-access-log --log-level warning'",
+    "backend": "npm run validate:repo-root && sh -c 'cd backend && .venv/bin/uvicorn src.interface.api.main:app --reload --reload-dir src --reload-dir scripts --reload-exclude \".venv/*\" --reload-exclude \"tests/*\" --host ${BACKEND_HOST:-0.0.0.0} --port ${BACKEND_PORT:-8000} --no-access-log --log-level warning'",
 
     "backend:health": "sh -c 'printf \"aguardando backend em http://127.0.0.1:%s\\n\" \"${BACKEND_PORT:-8000}\"; until response=$(curl -fsS http://127.0.0.1:${BACKEND_PORT:-8000}/health 2>/dev/null); do sleep 1; done; printf \"backend pronto | %s\\n\" \"$response\"; case \"$response\" in *\"\\\"connected\\\":true\"*) ;; *) exit 1 ;; esac'",
 
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
+    "test:e2e": "npm run validate:repo-root && playwright test",
+    "test:e2e:headed": "npm run validate:repo-root && playwright test --headed",
     "validate:pipeline-imports": "node scripts/validate-pipeline-imports.js",
-    "test": "npm run validate:pipeline-imports"
+    "test": "npm run validate:repo-root && npm run validate:pipeline-imports"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

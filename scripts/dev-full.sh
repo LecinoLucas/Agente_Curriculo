@@ -2,6 +2,9 @@
 
 set -Eeuo pipefail
 
+# Validacao de repo root
+node "$(dirname -- "${BASH_SOURCE[0]}")/validate-repo-root.js"
+
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_DIR="$ROOT_DIR/backend"
