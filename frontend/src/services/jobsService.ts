@@ -497,6 +497,13 @@ export async function recalculateJobRanking(jobId: string): Promise<{
 export type SmartRefreshSkipReason = {
   reason: string;
   count: number;
+  description?: string;
+};
+
+export type SmartRefreshSampleEntry = {
+  candidate_id: string;
+  candidate_name: string;
+  reason: string;
 };
 
 export type SmartRefreshPreview = {
@@ -517,6 +524,10 @@ export type SmartRefreshPreview = {
     reasons: SmartRefreshSkipReason[];
   };
   warnings: string[];
+  samples?: {
+    ai_analysis: SmartRefreshSampleEntry[];
+    skipped: SmartRefreshSampleEntry[];
+  };
 };
 
 export type SmartRefreshResult = {
@@ -527,6 +538,7 @@ export type SmartRefreshResult = {
   ai_analysis_enqueued: number;
   skipped_already_processing: number;
   skipped_no_resume: number;
+  skipped_legacy_incomplete?: number;
   provider_calls_now: number;
   may_use_provider_later: boolean;
   message: string;

@@ -144,6 +144,8 @@ from src.interface.api.schemas.ranking_schemas import (
     SmartRefreshExecuteResponse,
     SmartRefreshPreviewResponse,
     SmartRefreshSkipReason,
+    _SmartRefreshSampleEntry,
+    _SmartRefreshSamples,
 )
 from src.interface.api.schemas.skill_schemas import (
     AddJobSkillRequest,
@@ -1677,6 +1679,7 @@ async def smart_refresh_preview(
             SmartRefreshSkipReason(
                 reason="already_processing",
                 count=data.skipped_already_processing_count,
+                description="Análise em andamento — serão processados automaticamente.",
             )
         )
     if data.skipped_no_resume_count:
@@ -1684,8 +1687,35 @@ async def smart_refresh_preview(
             SmartRefreshSkipReason(
                 reason="no_resume",
                 count=data.skipped_no_resume_count,
+                description="Sem currículo vinculado — adicione um currículo para processar.",
             )
         )
+
+    ai_description = "Candidatos sem análise válida ou com análise falha — análise IA será enfileirada."
+    if data.ai_analysis_legacy_incomplete_count > 0:
+        ai_description = (
+            f"Candidatos sem análise válida, incluindo {data.ai_analysis_legacy_incomplete_count} "
+            "com análise antiga/incompleta — análise IA será enfileirada."
+        )
+
+    samples = _SmartRefreshSamples(
+        ai_analysis=[
+            _SmartRefreshSampleEntry(
+                candidate_id=s.candidate_id,
+                candidate_name=s.candidate_name,
+                reason=s.reason,
+            )
+            for s in data.samples_ai
+        ],
+        skipped=[
+            _SmartRefreshSampleEntry(
+                candidate_id=s.candidate_id,
+                candidate_name=s.candidate_name,
+                reason=s.reason,
+            )
+            for s in data.samples_skipped
+        ],
+    )
 
     return SmartRefreshPreviewResponse(
         job_id=job_id,
@@ -1693,18 +1723,19 @@ async def smart_refresh_preview(
         ranking_recalculation={
             "count": data.ranking_recalculation_count,
             "provider_calls": 0,
-            "description": "Candidatos com análise válida. Apenas ranking será recalculado.",
+            "description": "Candidatos com análise válida e dados completos. Apenas ranking será recalculado.",
         },
         ai_analysis={
             "count": data.ai_analysis_count,
             "may_use_provider": True,
-            "description": "Candidatos sem análise válida ou com análise falha.",
+            "description": ai_description,
         },
         skipped={
             "count": data.skipped_already_processing_count + data.skipped_no_resume_count,
             "reasons": skip_reasons,
         },
         warnings=data.warnings,
+        samples=samples,
     )
 
 
@@ -1744,6 +1775,7 @@ async def smart_refresh_execute(
         ai_analysis_enqueued=data.ai_analysis_enqueued,
         skipped_already_processing=data.skipped_already_processing,
         skipped_no_resume=data.skipped_no_resume,
+        skipped_legacy_incomplete=data.skipped_legacy_incomplete,
         provider_calls_now=data.provider_calls_now,
         may_use_provider_later=data.may_use_provider_later,
         message=data.message,

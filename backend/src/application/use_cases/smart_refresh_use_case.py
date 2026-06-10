@@ -1,9 +1,13 @@
 """Smart Refresh use case.
 
 Classifies pipeline candidates into three groups without calling any AI provider:
-  - ranking_recalculation: completed analysis → recompute ranking only
-  - ai_analysis: no valid analysis → dispatch via worker later
+  - ranking_recalculation: completed analysis WITH usable extracted_data → recompute ranking only
+  - ai_analysis: no valid analysis OR completed but empty extracted_data → dispatch via worker later
   - skipped: pending/processing (no-op) or no resume
+
+Candidates with analysis_status=completed but empty extracted_data are classified as
+ai_analysis with reason="legacy_incomplete_analysis" — they are re-dispatched to AI rather
+than silently dropped into ranking recalculation with no usable data.
 
 The execute() path enqueues tasks; it never calls Gemini or any LLM.
 provider_calls_now is always 0.
@@ -17,10 +21,11 @@ import sqlalchemy as sa
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.database.models.analysis_model import AnalysisModel
+from src.infrastructure.database.models.analysis_model import AnalysisModel, AnalysisResultModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 
 logger = structlog.get_logger(__name__)
@@ -29,6 +34,7 @@ _PROCESSING_STATUSES: frozenset[str] = frozenset(
     {"pending", "processing", "retry_scheduled", "waiting_extraction"}
 )
 _VALID_COMPLETED_STATUS = "completed"
+_SAMPLE_LIMIT = 10
 
 
 class JobNotFoundForSmartRefreshError(Exception):
@@ -40,8 +46,18 @@ class JobNotFoundForSmartRefreshError(Exception):
 @dataclass(frozen=True)
 class _CandidateRow:
     candidate_id: UUID
+    candidate_name: str
     analysis_status: str | None
     has_resume: bool
+    # True only when an analysis_results row exists AND extracted_data != {}
+    has_extracted_data: bool
+
+
+@dataclass(frozen=True)
+class _SampleEntry:
+    candidate_id: UUID
+    candidate_name: str
+    reason: str
 
 
 @dataclass
@@ -50,9 +66,12 @@ class SmartRefreshPreviewData:
     total_candidates: int
     ranking_recalculation_count: int
     ai_analysis_count: int
+    ai_analysis_legacy_incomplete_count: int  # subset of ai_analysis: completed but empty data
     skipped_already_processing_count: int
     skipped_no_resume_count: int
     warnings: list[str] = field(default_factory=list)
+    samples_ai: list[_SampleEntry] = field(default_factory=list)
+    samples_skipped: list[_SampleEntry] = field(default_factory=list)
 
 
 @dataclass
@@ -64,19 +83,28 @@ class SmartRefreshExecuteData:
     ai_analysis_enqueued: int
     skipped_already_processing: int
     skipped_no_resume: int
+    skipped_legacy_incomplete: int  # completed + empty extracted_data, re-dispatched to ai_analysis
     provider_calls_now: int
     may_use_provider_later: bool
     message: str
 
 
-def _classify(row: _CandidateRow) -> str:
+def _classify(row: _CandidateRow) -> tuple[str, str]:
+    """Return (category, reason) for a candidate row.
+
+    category: ranking_recalculation | ai_analysis | skipped_already_processing | skipped_no_resume
+    reason: key explaining classification; empty string for ranking_recalculation
+    """
     if not row.has_resume:
-        return "skipped_no_resume"
+        return "skipped_no_resume", "no_resume"
     if row.analysis_status in _PROCESSING_STATUSES:
-        return "skipped_already_processing"
+        return "skipped_already_processing", "already_processing"
     if row.analysis_status == _VALID_COMPLETED_STATUS:
-        return "ranking_recalculation"
-    return "ai_analysis"
+        if not row.has_extracted_data:
+            # Completed but result missing or extracted_data is empty — re-dispatch via AI
+            return "ai_analysis", "legacy_incomplete_analysis"
+        return "ranking_recalculation", ""
+    return "ai_analysis", "no_valid_analysis"
 
 
 class SmartRefreshUseCase:
@@ -105,12 +133,29 @@ class SmartRefreshUseCase:
             .exists()
         )
 
+        # True when an analysis_results row exists AND extracted_data is not an empty JSONB object.
+        # When AnalysisModel.id is NULL (no analysis), the correlated WHERE evaluates to FALSE,
+        # so EXISTS correctly returns FALSE without a separate NULL check.
+        has_extracted_data_subq = (
+            sa.select(sa.literal(1))
+            .select_from(AnalysisResultModel)
+            .where(
+                AnalysisResultModel.analysis_id == AnalysisModel.id,
+                sa.cast(AnalysisResultModel.extracted_data, sa.Text) != sa.literal("{}"),
+            )
+            .correlate(AnalysisModel)
+            .exists()
+        )
+
         stmt = (
             sa.select(
                 pipeline.candidate_id,
+                CandidateModel.full_name.label("candidate_name"),
                 AnalysisModel.status.label("analysis_status"),
                 has_resume_subq.label("has_resume"),
+                has_extracted_data_subq.label("has_extracted_data"),
             )
+            .join(CandidateModel, CandidateModel.id == pipeline.candidate_id)
             .outerjoin(
                 AnalysisModel,
                 AnalysisModel.id == pipeline.current_analysis_id,
@@ -126,8 +171,10 @@ class SmartRefreshUseCase:
         return [
             _CandidateRow(
                 candidate_id=row.candidate_id,
+                candidate_name=row.candidate_name or "",
                 analysis_status=row.analysis_status,
                 has_resume=bool(row.has_resume),
+                has_extracted_data=bool(row.has_extracted_data),
             )
             for row in result.mappings()
         ]
@@ -138,27 +185,68 @@ class SmartRefreshUseCase:
 
         ranking_recalculation = 0
         ai_analysis = 0
+        ai_analysis_legacy_incomplete = 0
         skipped_already_processing = 0
         skipped_no_resume = 0
+        samples_ai: list[_SampleEntry] = []
+        samples_skipped: list[_SampleEntry] = []
 
         for row in rows:
-            category = _classify(row)
+            category, reason = _classify(row)
             if category == "ranking_recalculation":
                 ranking_recalculation += 1
             elif category == "ai_analysis":
                 ai_analysis += 1
+                if reason == "legacy_incomplete_analysis":
+                    ai_analysis_legacy_incomplete += 1
+                if len(samples_ai) < _SAMPLE_LIMIT:
+                    samples_ai.append(
+                        _SampleEntry(
+                            candidate_id=row.candidate_id,
+                            candidate_name=row.candidate_name,
+                            reason=reason,
+                        )
+                    )
             elif category == "skipped_already_processing":
                 skipped_already_processing += 1
+                if len(samples_skipped) < _SAMPLE_LIMIT:
+                    samples_skipped.append(
+                        _SampleEntry(
+                            candidate_id=row.candidate_id,
+                            candidate_name=row.candidate_name,
+                            reason=reason,
+                        )
+                    )
             else:
                 skipped_no_resume += 1
+                if len(samples_skipped) < _SAMPLE_LIMIT:
+                    samples_skipped.append(
+                        _SampleEntry(
+                            candidate_id=row.candidate_id,
+                            candidate_name=row.candidate_name,
+                            reason=reason,
+                        )
+                    )
+
+        warnings: list[str] = []
+        if ai_analysis_legacy_incomplete > 0:
+            warnings.append(
+                f"{ai_analysis_legacy_incomplete} candidato(s) com análise completada mas dados "
+                "insuficientes serão reenviados para análise IA."
+            )
+        warnings.append("A atualização é enfileirada e pode levar alguns instantes.")
 
         return SmartRefreshPreviewData(
             job_id=job_id,
             total_candidates=len(rows),
             ranking_recalculation_count=ranking_recalculation,
             ai_analysis_count=ai_analysis,
+            ai_analysis_legacy_incomplete_count=ai_analysis_legacy_incomplete,
             skipped_already_processing_count=skipped_already_processing,
             skipped_no_resume_count=skipped_no_resume,
+            warnings=warnings,
+            samples_ai=samples_ai,
+            samples_skipped=samples_skipped,
         )
 
     async def execute(self, job_id: UUID, requested_by: UUID) -> SmartRefreshExecuteData:
@@ -174,13 +262,16 @@ class SmartRefreshUseCase:
         ai_candidates: list[UUID] = []
         skipped_already_processing = 0
         skipped_no_resume = 0
+        skipped_legacy_incomplete = 0
 
         for row in rows:
-            category = _classify(row)
+            category, reason = _classify(row)
             if category == "ranking_recalculation":
                 ranking_candidates.append(row.candidate_id)
             elif category == "ai_analysis":
                 ai_candidates.append(row.candidate_id)
+                if reason == "legacy_incomplete_analysis":
+                    skipped_legacy_incomplete += 1
             elif category == "skipped_already_processing":
                 skipped_already_processing += 1
             else:
@@ -215,6 +306,20 @@ class SmartRefreshUseCase:
 
         may_use_provider_later = ai_analysis_enqueued > 0
 
+        parts: list[str] = []
+        if ranking_candidates:
+            parts.append(f"{len(ranking_candidates)} ranking sem IA")
+        if ai_analysis_enqueued > 0:
+            parts.append(f"{ai_analysis_enqueued} análise IA")
+        total_skipped = skipped_already_processing + skipped_no_resume
+        if total_skipped > 0:
+            parts.append(f"{total_skipped} ignorados")
+        message = (
+            "Atualização enfileirada: " + ", ".join(parts) + "."
+            if parts
+            else "Atualização enfileirada."
+        )
+
         return SmartRefreshExecuteData(
             job_id=job_id,
             queued=ranking_recalculation_enqueued or ai_analysis_enqueued > 0,
@@ -223,7 +328,8 @@ class SmartRefreshUseCase:
             ai_analysis_enqueued=ai_analysis_enqueued,
             skipped_already_processing=skipped_already_processing,
             skipped_no_resume=skipped_no_resume,
+            skipped_legacy_incomplete=skipped_legacy_incomplete,
             provider_calls_now=0,
             may_use_provider_later=may_use_provider_later,
-            message="Atualização enfileirada.",
+            message=message,
         )

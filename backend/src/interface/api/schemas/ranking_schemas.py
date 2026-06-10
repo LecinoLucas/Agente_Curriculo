@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.interface.api.schemas.job_schemas import CandidateScoreExplanationFactorSummaryResponse
 
@@ -158,6 +158,7 @@ class RankingRecalculateResponse(BaseModel):
 class SmartRefreshSkipReason(BaseModel):
     reason: str
     count: int
+    description: str = ""
 
 
 class _SmartRefreshRankingRecalculation(BaseModel):
@@ -177,6 +178,17 @@ class _SmartRefreshSkipped(BaseModel):
     reasons: list[SmartRefreshSkipReason]
 
 
+class _SmartRefreshSampleEntry(BaseModel):
+    candidate_id: UUID
+    candidate_name: str
+    reason: str
+
+
+class _SmartRefreshSamples(BaseModel):
+    ai_analysis: list[_SmartRefreshSampleEntry] = []
+    skipped: list[_SmartRefreshSampleEntry] = []
+
+
 class SmartRefreshPreviewResponse(BaseModel):
     job_id: UUID
     total_candidates: int
@@ -184,6 +196,7 @@ class SmartRefreshPreviewResponse(BaseModel):
     ai_analysis: _SmartRefreshAiAnalysis
     skipped: _SmartRefreshSkipped
     warnings: list[str]
+    samples: _SmartRefreshSamples = Field(default_factory=_SmartRefreshSamples)
 
 
 class SmartRefreshExecuteResponse(BaseModel):
@@ -194,6 +207,7 @@ class SmartRefreshExecuteResponse(BaseModel):
     ai_analysis_enqueued: int
     skipped_already_processing: int
     skipped_no_resume: int
+    skipped_legacy_incomplete: int = 0
     provider_calls_now: int
     may_use_provider_later: bool
     message: str
