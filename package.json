@@ -13,7 +13,7 @@
     "dev:all": "npm run validate:repo-root && concurrently --names backend,staff,candidate --prefix \"[{name}]\" --prefix-colors \"magenta.bold,cyan.bold,yellow.bold\" \"npm run dev:backend\" \"npm run dev:staff\" \"npm run dev:candidate\"",
     "dev:ports": "npm run validate:repo-root && ./scripts/dev-ports.sh",
 
-    "frontend": "npm run validate:repo-root && sh -c 'VITE_API_URL=${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1} VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-8000}} npm --silent --prefix frontend run dev'",
+    "frontend": "npm run validate:repo-root && sh -c 'VITE_API_URL=${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1} VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:${BACKEND_PORT:-8000}} npm --silent --prefix frontend run dev'",
 
     "backend:bootstrap": "npm run validate:repo-root && cd backend && .venv/bin/python scripts/bootstrap_dev.py",
     "backend:seed-admin": "npm run validate:repo-root && cd backend && .venv/bin/python scripts/seed_dev_admin.py",
@@ -27,6 +27,7 @@
     "test:e2e": "npm run validate:repo-root && playwright test",
     "test:e2e:headed": "npm run validate:repo-root && playwright test --headed",
     "validate:pipeline-imports": "node scripts/validate-pipeline-imports.js",
+    "validate:vite-module-load": "node scripts/validate-vite-module-load.js",
     "test": "npm run validate:repo-root && npm run validate:pipeline-imports"
   },
   "devDependencies": {

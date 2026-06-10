@@ -293,6 +293,33 @@ wait_for_http() {
   exit 1
 }
 
+wait_for_vite_module() {
+  local url=$1
+  local label=$2
+  local timeout=${3:-30}
+  local elapsed=0
+  local ct=""
+
+  print_info "Verificando MIME de modulo $label em $url..."
+  while [ "$elapsed" -lt "$timeout" ]; do
+    ct=$(curl -fsS -o /dev/null -w '%{content_type}' "$url" 2>/dev/null || true)
+    case "$ct" in
+      *javascript*)
+        print_ok "Modulo $label MIME correto: $ct"
+        return 0
+        ;;
+    esac
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  print_error "Modulo $label nao retornou text/javascript em ${timeout}s."
+  print_error "Ultimo Content-Type: ${ct:-<sem resposta>}"
+  print_error "Causa provavel: cache Vite corrompido (node_modules/.vite) apos shutdown sujo."
+  print_error "Solucao: cd frontend && npm run dev:clean"
+  exit 1
+}
+
 wait_for_backend_health() {
   local url=$1
   local timeout=${2:-30}
@@ -405,7 +432,12 @@ if [ "$DEV_MODE" = "network" ]; then
   print_ok "IP da LAN: $LAN_HOST"
 fi
 
-PUBLIC_HOST="127.0.0.1"
+# Host canonico local: localhost (nao 127.0.0.1).
+# localhost e 127.0.0.1 sao origens DISTINTAS no browser: localStorage,
+# cookies SameSite=Lax e cache de modulos Vite sao separados por origem.
+# Usar localhost garante consistencia entre VITE_API_BASE_URL injetado aqui
+# e a URL que o usuario abre no browser.
+PUBLIC_HOST="localhost"
 if [ "$DEV_MODE" = "network" ]; then
   PUBLIC_HOST="$LAN_HOST"
 fi
@@ -554,19 +586,22 @@ fi
 print_section "Verificacao"
 wait_for_backend_health "${BACKEND_PUBLIC_URL}/health" 45
 wait_for_http "$FRONTEND_PUBLIC_URL" "Frontend staff/admin" 45
+wait_for_vite_module "${FRONTEND_PUBLIC_URL}/src/pages/PipelinePage.tsx" "PipelinePage.tsx" 30
 if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
   wait_for_http "$PORTAL_PUBLIC_URL" "Candidate portal" 45
 fi
 
 print_section "Pronto"
-printf 'Backend          : %s, %s\n' "$BACKEND_LOCAL_URL" "$BACKEND_LOCAL_ALT"
-printf 'Frontend (Staff) : %s, %s\n' "$FRONTEND_LOCAL_URL" "$FRONTEND_LOCAL_ALT"
-printf 'Candidate Portal : %s, %s\n' "$PORTAL_LOCAL_URL" "$PORTAL_LOCAL_ALT"
-
 if [ "$DEV_MODE" = "network" ]; then
-  printf 'Backend network  : %s\n' "$BACKEND_PUBLIC_URL"
-  printf 'Frontend network : %s\n' "$FRONTEND_PUBLIC_URL"
-  printf 'Portal network   : %s\n' "$PORTAL_PUBLIC_URL"
+  printf 'Frontend (Staff) : %s  [abrir no browser — host de rede]\n' "$FRONTEND_PUBLIC_URL"
+  printf 'Candidate Portal : %s  [abrir no browser — host de rede]\n' "$PORTAL_PUBLIC_URL"
+  printf 'Backend          : %s\n' "$BACKEND_PUBLIC_URL"
+else
+  printf 'Frontend (Staff) : %s  [abrir no browser]\n' "$FRONTEND_LOCAL_ALT"
+  printf 'Candidate Portal : %s  [abrir no browser]\n' "$PORTAL_LOCAL_ALT"
+  printf 'Backend          : %s\n' "$BACKEND_LOCAL_ALT"
+  printf 'AVISO            : nao abrir http://127.0.0.1:%s no browser\n' "$FRONTEND_PORT"
+  printf '                   localhost e 127.0.0.1 sao origens distintas (cache/sessao separados)\n'
 fi
 printf 'API dos frontends: %s\n' "$API_V1_URL"
 
