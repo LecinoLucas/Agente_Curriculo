@@ -27,8 +27,10 @@ interface CandidateProfileScoreTabProps {
   error: string | null;
   scoreNotReady: boolean;
   analysisRequesting: boolean;
+  matchingRecalculating?: boolean;
   manualAnalysisStatus: AnalysisStatus["status"] | null;
   onRequestAnalysis: (options?: { force?: boolean }) => Promise<void>;
+  onRecalculateMatching?: () => Promise<void>;
   compatibilityGuidance: ReturnType<typeof useCandidateDecision>["compatibilityGuidance"];
 }
 
@@ -43,8 +45,10 @@ export function CandidateProfileScoreTab({
   error,
   scoreNotReady,
   analysisRequesting,
+  matchingRecalculating = false,
   manualAnalysisStatus,
   onRequestAnalysis,
+  onRecalculateMatching,
   compatibilityGuidance,
 }: CandidateProfileScoreTabProps) {
   const candidateId = overview.candidate.id;
@@ -152,8 +156,8 @@ export function CandidateProfileScoreTab({
     } else if (currentAnalysisId && status === "completed") {
       title = "Matching pendente";
       subtitle =
-        "A análise IA foi concluída, mas o matching/ranking da vaga ativa ainda não foi atualizado.";
-      actionLabel = analysisRequesting ? "Solicitando..." : "Reprocessar análise";
+        "Esta análise IA já foi concluída. Falta apenas recalcular o matching/ranking desta vaga. Essa ação não usa IA e pode levar alguns instantes.";
+      actionLabel = matchingRecalculating ? "Recalculando..." : "Recalcular matching";
     } else if (currentAnalysisId) {
       title = "Análise interrompida";
       subtitle =
@@ -161,13 +165,23 @@ export function CandidateProfileScoreTab({
       actionLabel = analysisRequesting ? "Solicitando..." : "Reprocessar análise";
     }
 
+    const isMatchingPending = currentAnalysisId != null && status === "completed";
+    const handleAction = isMatchingPending
+      ? onRecalculateMatching
+        ? () => void onRecalculateMatching()
+        : undefined
+      : () => void onRequestAnalysis({ force: true });
+    const isActionDisabled = isMatchingPending
+      ? matchingRecalculating || !activeJobId || !onRecalculateMatching
+      : actionDisabled;
+
     return (
       <EmptyBlock
         title={title}
         description={subtitle}
         actionLabel={actionLabel}
-        onAction={() => void onRequestAnalysis({ force: true })}
-        actionDisabled={actionDisabled}
+        onAction={handleAction}
+        actionDisabled={isActionDisabled}
       />
     );
   }

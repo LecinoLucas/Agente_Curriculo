@@ -96,7 +96,7 @@ import { aiLimitsService, type AILimitsUsage } from "../services/aiLimitsService
 import { candidatesService } from "../services/candidatesService";
 import { HttpError } from "../services/http";
 import { formatContextError } from "../services/errorMessages";
-import { listJobs } from "../services/jobsService";
+import { listJobs, recalculateJobRanking } from "../services/jobsService";
 import { pipelineService } from "../services/pipelineService";
 import { createPreAdmission, getPreAdmission } from "../services/preAdmissionService";
 import { scoreExplanationService, type ScoreExplanationResponse } from "../services/scoreExplanationService";
@@ -129,6 +129,7 @@ export function CandidateProfilePage() {
   const [rankingSyncTick, setRankingSyncTick] = useState(0);
   const [manualAnalysisRequesting, setManualAnalysisRequesting] = useState(false);
   const [manualAnalysisStatus, setManualAnalysisStatus] = useState<AnalysisStatus["status"] | null>(null);
+  const [matchingRecalculating, setMatchingRecalculating] = useState(false);
   const manualAnalysisPollingRef = useRef<number | null>(null);
   const [assessmentFocusTick, setAssessmentFocusTick] = useState(0);
   const [scorecardFocusTick, setScorecardFocusTick] = useState(0);
@@ -539,6 +540,26 @@ export function CandidateProfilePage() {
     ],
   );
 
+  const handleRecalculateMatching = useCallback(async () => {
+    if (!profileJobId || matchingRecalculating) return;
+    setMatchingRecalculating(true);
+    try {
+      await recalculateJobRanking(profileJobId);
+      toast.success("Recálculo de matching enfileirado. Nenhum crédito de IA foi usado.");
+      await reloadWorkspace();
+    } catch (err: unknown) {
+      toast.error(
+        formatContextError(
+          err,
+          "Não foi possível enfileirar o recálculo de matching.",
+          "Tente novamente em alguns instantes.",
+        ),
+      );
+    } finally {
+      setMatchingRecalculating(false);
+    }
+  }, [matchingRecalculating, profileJobId, reloadWorkspace]);
+
   useEffect(() => {
     let cancelled = false;
     void listJobs(1, 100, { statusFilter: "all" })
@@ -834,8 +855,10 @@ export function CandidateProfilePage() {
               error={rankingEntryError}
               scoreNotReady={rankingEntryScoreNotReady}
               analysisRequesting={manualAnalysisRequesting}
+              matchingRecalculating={matchingRecalculating}
               manualAnalysisStatus={manualAnalysisStatus}
               onRequestAnalysis={handleRequestActiveJobAnalysis}
+              onRecalculateMatching={handleRecalculateMatching}
               compatibilityGuidance={compatibilityGuidance}
             />
           ) : null}
