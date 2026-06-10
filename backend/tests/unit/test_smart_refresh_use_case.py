@@ -167,8 +167,15 @@ class TestClassify:
     def test_waiting_extraction_is_skipped_already_processing(self):
         assert _classify(_make_row(has_resume=True, analysis_status="waiting_extraction"))[0] == "skipped_already_processing"
 
-    def test_failed_reason_is_no_valid_analysis(self):
-        assert _classify(_make_row(has_resume=True, analysis_status="failed"))[1] == "no_valid_analysis"
+    def test_failed_reason_is_failed_analysis_retry(self):
+        assert _classify(_make_row(has_resume=True, analysis_status="failed"))[1] == "failed_analysis_retry"
+
+    def test_cancelled_reason_is_failed_analysis_retry(self):
+        assert _classify(_make_row(has_resume=True, analysis_status="cancelled"))[1] == "failed_analysis_retry"
+
+    def test_failed_without_resume_is_skipped_no_resume(self):
+        row = _make_row(has_resume=False, analysis_status="failed")
+        assert _classify(row) == ("skipped_no_resume", "no_resume")
 
     def test_no_resume_reason_is_no_resume(self):
         assert _classify(_make_row(has_resume=False))[1] == "no_resume"
@@ -248,6 +255,25 @@ class TestPreview:
         with _patch_job_model(), _patch_sa_select(), _patch_dispatcher() as mock_instance:
             await SmartRefreshUseCase(db).preview(uuid4())
             mock_instance.request_auto_analysis.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_p3b_failed_retry_count_tracked_in_preview(self):
+        db = _mock_db(rows=[
+            _make_row(analysis_status="failed"),
+            _make_row(analysis_status="cancelled"),
+            _make_row(analysis_status=None),  # regular ai_analysis (no_valid_analysis)
+        ])
+        with _patch_job_model(), _patch_sa_select():
+            data = await SmartRefreshUseCase(db).preview(uuid4())
+        assert data.ai_analysis_count == 3
+        assert data.ai_analysis_failed_retry_count == 2
+
+    @pytest.mark.asyncio
+    async def test_p3c_failed_retry_warning_present_when_count_positive(self):
+        db = _mock_db(rows=[_make_row(analysis_status="failed")])
+        with _patch_job_model(), _patch_sa_select():
+            data = await SmartRefreshUseCase(db).preview(uuid4())
+        assert any("erro" in w for w in data.warnings)
 
     @pytest.mark.asyncio
     async def test_p8_legacy_incomplete_count_tracked_separately(self):
@@ -407,6 +433,70 @@ class TestExecute:
         assert data.skipped_legacy_incomplete == 1
         # Not counted as ranking_recalculation
         assert data.ranking_candidates == 0
+
+    @pytest.mark.asyncio
+    async def test_e9_failed_analysis_dispatched_and_counted_in_failed_retried(self):
+        cid = uuid4()
+        db = _mock_db(rows=[_make_row(analysis_status="failed", candidate_id=cid)])
+        dispatched: list[UUID] = []
+
+        async def _fake_dispatch(*, candidate_id, job_id, requested_by, trigger_source):
+            dispatched.append(candidate_id)
+            d = MagicMock()
+            d.created = True
+            return d
+
+        with _patch_job_model(), _patch_sa_select(), _patch_enqueue(), \
+             patch("src.application.services.analysis_dispatch_service.CandidateJobAnalysisDispatcher") as MockD:
+            MockD.return_value.request_auto_analysis = AsyncMock(side_effect=_fake_dispatch)
+            data = await SmartRefreshUseCase(db).execute(uuid4(), requested_by=uuid4())
+
+        assert cid in dispatched
+        assert data.ai_analysis_enqueued == 1
+        assert data.failed_analysis_retried == 1
+        assert data.provider_calls_now == 0
+
+    @pytest.mark.asyncio
+    async def test_e10_cancelled_analysis_dispatched_and_counted_in_failed_retried(self):
+        cid = uuid4()
+        db = _mock_db(rows=[_make_row(analysis_status="cancelled", candidate_id=cid)])
+        dispatched: list[UUID] = []
+
+        async def _fake_dispatch(*, candidate_id, job_id, requested_by, trigger_source):
+            dispatched.append(candidate_id)
+            d = MagicMock()
+            d.created = True
+            return d
+
+        with _patch_job_model(), _patch_sa_select(), _patch_enqueue(), \
+             patch("src.application.services.analysis_dispatch_service.CandidateJobAnalysisDispatcher") as MockD:
+            MockD.return_value.request_auto_analysis = AsyncMock(side_effect=_fake_dispatch)
+            data = await SmartRefreshUseCase(db).execute(uuid4(), requested_by=uuid4())
+
+        assert cid in dispatched
+        assert data.ai_analysis_enqueued == 1
+        assert data.failed_analysis_retried == 1
+
+    @pytest.mark.asyncio
+    async def test_e11_failed_without_resume_not_dispatched(self):
+        db = _mock_db(rows=[_make_row(has_resume=False, analysis_status="failed")])
+        with _patch_job_model(), _patch_sa_select(), _patch_enqueue(), _patch_dispatcher() as mock_instance:
+            data = await SmartRefreshUseCase(db).execute(uuid4(), requested_by=uuid4())
+            mock_instance.request_auto_analysis.assert_not_called()
+
+        assert data.skipped_no_resume == 1
+        assert data.failed_analysis_retried == 0
+
+    @pytest.mark.asyncio
+    async def test_e12_failed_analysis_retried_zero_when_dispatcher_not_created(self):
+        """Decision.created=False means the dispatcher reused or blocked — not counted."""
+        cid = uuid4()
+        db = _mock_db(rows=[_make_row(analysis_status="failed", candidate_id=cid)])
+        with _patch_job_model(), _patch_sa_select(), _patch_enqueue(), _patch_dispatcher(decision_created=False):
+            data = await SmartRefreshUseCase(db).execute(uuid4(), requested_by=uuid4())
+
+        assert data.ai_analysis_enqueued == 0
+        assert data.failed_analysis_retried == 0
 
     @pytest.mark.asyncio
     async def test_may_use_provider_later_true_when_ai_enqueued(self):

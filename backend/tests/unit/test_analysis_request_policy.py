@@ -86,6 +86,38 @@ def test_auto_analysis_reuses_waiting_pending_and_processing() -> None:
     assert processing.reason == "auto_analysis_skipped_duplicate_processing"
 
 
+def test_smart_refresh_allowed_at_post_screening_stage() -> None:
+    """smart_refresh bypasses the post-screening stage restriction so failed/cancelled
+    analyses can be retried at any active non-terminal stage."""
+    decision = AnalysisRequestPolicy.decide(
+        trigger_source="smart_refresh",
+        stage="hr_interview",
+        pipeline_status="active",
+        link_status="active",
+        requested_by_user_id=uuid4(),
+        existing_active_status=None,
+        has_reusable_completed=False,
+    )
+
+    assert decision.blocked is False
+
+
+def test_smart_refresh_still_blocked_for_terminal_pipeline() -> None:
+    """smart_refresh must not create new analyses for terminal-stage candidates."""
+    decision = AnalysisRequestPolicy.decide(
+        trigger_source="smart_refresh",
+        stage="rejected",
+        pipeline_status="terminal",
+        link_status="rejected",
+        requested_by_user_id=uuid4(),
+        existing_active_status=None,
+        has_reusable_completed=False,
+    )
+
+    assert decision.blocked is True
+    assert decision.reason == "auto_analysis_blocked_terminal_pipeline"
+
+
 def test_manual_reanalysis_requires_user_and_is_allowed_in_advanced_stage() -> None:
     denied = AnalysisRequestPolicy.decide(
         trigger_source="manual",
