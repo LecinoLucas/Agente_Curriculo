@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node ../scripts/validate-repo-root.js && vite --host 0.0.0.0 --port 5173 --strictPort",
-    "dev:clean": "node ../scripts/validate-repo-root.js && vite --host 0.0.0.0 --port 5173 --strictPort --force",
+    "dev": "node ../scripts/validate-repo-root.js && node ../scripts/ensure-dev-port-free.js 5173 frontend && vite --host 0.0.0.0 --port 5173 --strictPort",
+    "dev:clean": "node ../scripts/validate-repo-root.js && node ../scripts/ensure-dev-port-free.js 5173 frontend && vite --host 0.0.0.0 --port 5173 --strictPort --force",
     "build": "node ../scripts/validate-repo-root.js && tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node ../scripts/validate-repo-root.js && vitest run",

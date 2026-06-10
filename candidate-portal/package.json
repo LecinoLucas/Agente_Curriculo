@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5174 --strictPort",
+    "dev": "node ../scripts/ensure-dev-port-free.js 5174 candidate-portal && vite --host 0.0.0.0 --port 5174 --strictPort",
     "build": "tsc && vite build",
     "test": "node scripts/verify-public-contract.mjs && vitest run",
     "smoke:e2e": "node ../node_modules/@playwright/test/cli.js test -c playwright.config.ts",

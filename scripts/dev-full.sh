@@ -490,7 +490,16 @@ print_section "Redis"
 check_redis
 
 print_section "Portas"
+node "$ROOT_DIR/scripts/ensure-dev-port-free.js" "$FRONTEND_PORT" "Frontend staff/admin"
+if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
+  node "$ROOT_DIR/scripts/ensure-dev-port-free.js" "$CANDIDATE_PORTAL_PORT" "Candidate portal"
+fi
 require_port_free "$BACKEND_PORT" "Backend"
+# require_port_free para frontend agora é redundante devido ao ensure-dev-port-free, mas mantemos para segurança se desejar
+# ou podemos remover se quisermos ser limpos. O prompt pede para integrar, não necessariamente remover o antigo.
+# Mas o antigo 'require_port_free' falha se a porta estiver ocupada.
+# O novo 'ensure-dev-port-free' tenta liberar.
+# Então o 'require_port_free' deve rodar DEPOIS para garantir que realmente liberou (ou se for processo externo).
 require_port_free "$FRONTEND_PORT" "Frontend staff/admin"
 if [ "$INCLUDE_CANDIDATE_PORTAL" = "true" ]; then
   require_port_free "$CANDIDATE_PORTAL_PORT" "Candidate portal"
