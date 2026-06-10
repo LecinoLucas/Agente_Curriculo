@@ -153,3 +153,47 @@ class RankingRecalculateResponse(BaseModel):
     queued: bool
     provider_calls: int
     message: str
+
+
+class SmartRefreshSkipReason(BaseModel):
+    reason: str
+    count: int
+
+
+class _SmartRefreshRankingRecalculation(BaseModel):
+    count: int
+    provider_calls: int
+    description: str
+
+
+class _SmartRefreshAiAnalysis(BaseModel):
+    count: int
+    may_use_provider: bool
+    description: str
+
+
+class _SmartRefreshSkipped(BaseModel):
+    count: int
+    reasons: list[SmartRefreshSkipReason]
+
+
+class SmartRefreshPreviewResponse(BaseModel):
+    job_id: UUID
+    total_candidates: int
+    ranking_recalculation: _SmartRefreshRankingRecalculation
+    ai_analysis: _SmartRefreshAiAnalysis
+    skipped: _SmartRefreshSkipped
+    warnings: list[str]
+
+
+class SmartRefreshExecuteResponse(BaseModel):
+    job_id: UUID
+    queued: bool
+    ranking_recalculation_enqueued: bool
+    ranking_candidates: int
+    ai_analysis_enqueued: int
+    skipped_already_processing: int
+    skipped_no_resume: int
+    provider_calls_now: int
+    may_use_provider_later: bool
+    message: str

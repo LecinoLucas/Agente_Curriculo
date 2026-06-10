@@ -141,6 +141,9 @@ from src.interface.api.schemas.ranking_schemas import (
     RankingRecalculateResponse,
     ScoringComputeResponse,
     SingleCandidateScoringResponse,
+    SmartRefreshExecuteResponse,
+    SmartRefreshPreviewResponse,
+    SmartRefreshSkipReason,
 )
 from src.interface.api.schemas.skill_schemas import (
     AddJobSkillRequest,
@@ -1638,6 +1641,113 @@ async def save_job_candidate_matching_feedback(
         await db.rollback()
         _handle_job_service_error(exc)
         raise
+
+
+@router.post(
+    "/{job_id}/candidates/smart-refresh/preview",
+    response_model=SmartRefreshPreviewResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def smart_refresh_preview(
+    job_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> SmartRefreshPreviewResponse:
+    """Classify pipeline candidates without executing anything or calling any provider.
+
+    Returns counts for each group:
+    - ranking_recalculation: candidates with completed analysis (recompute only, no AI)
+    - ai_analysis: candidates without valid analysis (may use provider via worker)
+    - skipped: pending/processing or no resume
+    provider_calls_now is always 0.
+    """
+    from src.application.use_cases.smart_refresh_use_case import (
+        JobNotFoundForSmartRefreshError,
+        SmartRefreshUseCase,
+    )
+
+    try:
+        data = await SmartRefreshUseCase(db).preview(job_id)
+    except JobNotFoundForSmartRefreshError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada.")
+
+    skip_reasons: list[SmartRefreshSkipReason] = []
+    if data.skipped_already_processing_count:
+        skip_reasons.append(
+            SmartRefreshSkipReason(
+                reason="already_processing",
+                count=data.skipped_already_processing_count,
+            )
+        )
+    if data.skipped_no_resume_count:
+        skip_reasons.append(
+            SmartRefreshSkipReason(
+                reason="no_resume",
+                count=data.skipped_no_resume_count,
+            )
+        )
+
+    return SmartRefreshPreviewResponse(
+        job_id=job_id,
+        total_candidates=data.total_candidates,
+        ranking_recalculation={
+            "count": data.ranking_recalculation_count,
+            "provider_calls": 0,
+            "description": "Candidatos com análise válida. Apenas ranking será recalculado.",
+        },
+        ai_analysis={
+            "count": data.ai_analysis_count,
+            "may_use_provider": True,
+            "description": "Candidatos sem análise válida ou com análise falha.",
+        },
+        skipped={
+            "count": data.skipped_already_processing_count + data.skipped_no_resume_count,
+            "reasons": skip_reasons,
+        },
+        warnings=data.warnings,
+    )
+
+
+@router.post(
+    "/{job_id}/candidates/smart-refresh/execute",
+    response_model=SmartRefreshExecuteResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def smart_refresh_execute(
+    job_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> SmartRefreshExecuteResponse:
+    """Execute smart refresh after user confirmation.
+
+    - Candidates with completed analysis: enqueues ranking recomputation (no provider call).
+    - Candidates without valid analysis: dispatches AI analysis via worker (may use provider later).
+    - Pending/processing candidates: skipped to avoid duplication.
+    - Candidates without resume: skipped and counted.
+    provider_calls_now is always 0.
+    """
+    from src.application.use_cases.smart_refresh_use_case import (
+        JobNotFoundForSmartRefreshError,
+        SmartRefreshUseCase,
+    )
+
+    try:
+        data = await SmartRefreshUseCase(db).execute(job_id, requested_by=current_user.id)
+    except JobNotFoundForSmartRefreshError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada.")
+
+    return SmartRefreshExecuteResponse(
+        job_id=data.job_id,
+        queued=data.queued,
+        ranking_recalculation_enqueued=data.ranking_recalculation_enqueued,
+        ranking_candidates=data.ranking_candidates,
+        ai_analysis_enqueued=data.ai_analysis_enqueued,
+        skipped_already_processing=data.skipped_already_processing,
+        skipped_no_resume=data.skipped_no_resume,
+        provider_calls_now=data.provider_calls_now,
+        may_use_provider_later=data.may_use_provider_later,
+        message=data.message,
+    )
 
 
 @router.get("/{job_id}/matches", response_model=list[JobMatchCandidateResponse])
