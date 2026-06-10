@@ -17,7 +17,7 @@ export function TopNavbar({
   onOpenAssistant,
 }: TopNavbarProps) {
   return (
-    <header className="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between bg-white/40 dark:bg-slate-900/40 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 px-3 sm:px-4 shadow-sm">
+    <header className="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between bg-[hsl(var(--surface))]/60 backdrop-blur-md border-b border-[hsl(var(--border))]/60 px-3 sm:px-4 shadow-sm">
       <div className="flex items-center gap-4">
         <button
           type="button"
@@ -33,15 +33,15 @@ export function TopNavbar({
         <div className="flex items-center gap-3 select-none">
           <div className="flex items-center gap-1.5">
             {/* Cyan sparkle star logo */}
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-teal-500/10 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400">
+            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] dark:bg-[hsl(var(--primary))]/20">
               <Sparkles className="h-4 w-4" />
             </div>
-            <span className="text-[15px] font-black tracking-tight text-slate-800 dark:text-slate-100">
-              Marajó <span className="text-teal-600 dark:text-teal-400">RH IA</span>
+            <span className="text-[15px] font-black tracking-tight text-[hsl(var(--text))]">
+              Marajó <span className="text-[hsl(var(--primary))]">RH IA</span>
             </span>
           </div>
-          <div className="hidden md:block h-4 w-[1px] bg-slate-200 dark:bg-border/60 mx-1" />
-          <span className="hidden md:inline text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wide">
+          <div className="hidden md:block h-4 w-[1px] bg-[hsl(var(--border))] mx-1" />
+          <span className="hidden md:inline text-[10px] font-bold text-[hsl(var(--text-muted))] tracking-wide">
             Inteligência que conecta pessoas e resultados ✨
           </span>
         </div>

@@ -67,22 +67,14 @@ export function Sidebar({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          "group/sidebar fixed inset-y-0 left-0 z-[60] flex flex-col bg-[#0f131a] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-slate-800/80",
+          "group/sidebar fixed inset-y-0 left-0 z-[60] flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-xl transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]",
           mobileMenuOpen ? "translate-x-0 w-56" : "-translate-x-full lg:translate-x-0 lg:w-16",
           isHovered && "lg:w-56"
         )}
-        style={{
-          "--nav-bg": "210 26% 8%",
-          "--nav-text": "0 0% 100%",
-          "--nav-border": "215 15% 20%",
-          "--nav-active-bg": "215 15% 22%",
-          "--nav-active-text": "0 0% 100%",
-          "--nav-muted": "215 15% 65%",
-        } as any}
       >
         <div className="flex flex-col flex-1 min-w-0">
           {/* Header / Logo */}
-          <div className={cn("flex h-14 shrink-0 items-center justify-between border-b border-slate-800/60 px-4",
+          <div className={cn("flex h-14 shrink-0 items-center justify-between border-b border-[hsl(var(--nav-border))] px-4",
             "lg:px-0 lg:justify-center",
             (isHovered || mobileMenuOpen) && "lg:px-4 lg:justify-between"
           )}>
@@ -100,7 +92,7 @@ export function Sidebar({
               )}
               title="Ir para Pipeline"
             >
-              <div className="flex h-9 min-w-[36px] w-auto px-1.5 shrink-0 items-center justify-center rounded-lg bg-[#b91c1c] text-[10px] font-bold text-white shadow-md shadow-red-950/20 whitespace-nowrap">
+              <div className="flex h-9 min-w-[36px] w-auto px-1.5 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--sidebar-accent))] text-[10px] font-bold text-[hsl(var(--nav-active-text))] shadow-md shadow-black/20 whitespace-nowrap">
                 RH Ia
               </div>
               <div className={cn("flex flex-col min-w-0 transition-all duration-300 ease-in-out", 
@@ -111,7 +103,7 @@ export function Sidebar({
                 <span className="truncate font-heading text-[13px] font-extrabold leading-tight tracking-tight text-white">
                   ATS Marajó
                 </span>
-                <span className="truncate text-[10px] leading-tight text-slate-400">
+                <span className="truncate text-[10px] leading-tight text-[hsl(var(--nav-muted))]">
                   ATS & Recrutamento IA
                 </span>
               </div>
@@ -119,7 +111,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={onToggleMobileMenu}
-              className="lg:hidden p-1 rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              className="lg:hidden p-1 rounded-lg text-[hsl(var(--nav-muted))] transition-colors hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-active-text))]"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -135,7 +127,7 @@ export function Sidebar({
                   <>
                     {/* Active left indicator */}
                     {active && (
-                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#b91c1c] rounded-r-sm" />
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[hsl(var(--sidebar-accent))] rounded-r-sm" />
                     )}
                     <div className={cn(
                       "flex shrink-0 items-center justify-center w-9 h-9 transition-transform duration-300", 
@@ -215,7 +207,7 @@ export function Sidebar({
                     title={group.label}
                   >
                     {isGroupActive && !isOpen && (
-                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#b91c1c] rounded-r-sm" />
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[hsl(var(--sidebar-accent))] rounded-r-sm" />
                     )}
                     <div className={cn(
                       "flex shrink-0 items-center justify-center w-9 h-9 transition-transform duration-300", 
@@ -253,7 +245,7 @@ export function Sidebar({
                       const content = (
                         <>
                           {active && (
-                            <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#b91c1c] rounded-r-sm" />
+                            <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[hsl(var(--sidebar-accent))] rounded-r-sm" />
                           )}
                           <span className="truncate">{item.label}</span>
                         </>
@@ -304,7 +296,7 @@ export function Sidebar({
           </nav>
 
           {/* Footer — logout always visible; utilities shown when expanded */}
-          <div className="shrink-0 border-t border-slate-800/60 p-2 flex flex-col gap-1">
+          <div className="shrink-0 border-t border-[hsl(var(--nav-border))] p-2 flex flex-col gap-1">
             {/* Expanded-only: theme switcher + profile */}
             <div className={cn(
               "flex items-center justify-between px-1 pb-1",
@@ -317,7 +309,7 @@ export function Sidebar({
                 <button
                   type="button"
                   onClick={onToggleTheme}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800/40 hover:text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-active-text))]"
                   title={theme === "light" ? "Modo escuro" : "Modo claro"}
                 >
                   {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
@@ -328,7 +320,7 @@ export function Sidebar({
                     if (mobileMenuOpen) onToggleMobileMenu();
                     navigate("/perfil");
                   }}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800/40 hover:text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-active-text))]"
                   title="Meu perfil"
                 >
                   <UserRound className="h-4 w-4" />
@@ -336,29 +328,6 @@ export function Sidebar({
               </div>
             </div>
 
-            {/* Help Button */}
-            <button
-              type="button"
-              className={cn(
-                "group/help relative flex items-center transition-all duration-150 outline-none w-full py-1",
-                "justify-start px-4 lg:px-0",
-                (isHovered || mobileMenuOpen) ? "lg:justify-start lg:px-3.5" : "lg:justify-center",
-                "text-slate-400 hover:bg-slate-800/30 hover:text-white"
-              )}
-              title="Ajuda"
-            >
-              <div className="flex shrink-0 items-center justify-center w-9 h-9">
-                <HelpCircle className="h-[1.125rem] w-[1.125rem]" />
-              </div>
-              <span className={cn(
-                "truncate text-[13px] font-semibold transition-all duration-300 ease-in-out whitespace-nowrap inline-block",
-                "lg:max-w-0 lg:opacity-0 lg:overflow-hidden lg:ml-0",
-                (isHovered || mobileMenuOpen) && "lg:max-w-[150px] lg:opacity-100 lg:ml-3",
-                mobileMenuOpen ? "max-w-[150px] opacity-100 ml-3" : ""
-              )}>
-                Ajuda
-              </span>
-            </button>
 
             {/* Always visible: logout */}
             <button
@@ -368,7 +337,7 @@ export function Sidebar({
                 "group/logout relative flex items-center transition-all duration-150 outline-none w-full py-1",
                 "justify-start px-4 lg:px-0",
                 (isHovered || mobileMenuOpen) ? "lg:justify-start lg:px-3.5" : "lg:justify-center",
-                "text-slate-400 hover:bg-red-950/20 hover:text-red-400"
+                "text-[hsl(var(--nav-muted))] hover:bg-red-950/20 hover:text-red-400"
               )}
               title="Sair"
             >

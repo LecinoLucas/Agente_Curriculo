@@ -24,7 +24,9 @@
     "backend:health": "sh -c 'printf \"aguardando backend em http://127.0.0.1:%s\\n\" \"${BACKEND_PORT:-8000}\"; until response=$(curl -fsS http://127.0.0.1:${BACKEND_PORT:-8000}/health 2>/dev/null); do sleep 1; done; printf \"backend pronto | %s\\n\" \"$response\"; case \"$response\" in *\"\\\"connected\\\":true\"*) ;; *) exit 1 ;; esac'",
 
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "validate:pipeline-imports": "node scripts/validate-pipeline-imports.js",
+    "test": "npm run validate:pipeline-imports"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

@@ -464,151 +464,146 @@
 
   :root[data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 — Azul Marfim (Ivory Blue)
+       Visual Theme 2 — Cobre Executivo
        -----------------------------------------------------------------------
        Direção:
-       - Fundo base cremoso (marfim/ivory) super elegante e aconchegante.
-       - Superfícies quentes e claras, sem ser um branco artificial.
-       - Cor da marca e destaques em um Azul Clássico encorpado.
-       - Navbar azul meia-noite rica e profunda.
+       - Visual premium, quente e corporativo, usando grafite, cobre, areia.
+       - Menos "tech azul/verde", mais sofisticado e quente.
        ----------------------------------------------------------------------- */
 
-    /* Cor principal da marca no tema atual (Azul Clássico Encorpado) */
-    --brand:               215 65% 35%;
-    --brand-dark:          215 70% 25%;
-    --brand-soft:          215 40% 92%;
-    --brand-glow:          215 80% 50%;
+    /* Cor principal da marca no tema atual (Cobre) */
+    --brand:               26 90% 37%;     /* #B45309 */
+    --brand-dark:          23 83% 31%;     /* #92400E */
+    --brand-soft:          32 98% 83%;     /* #FED7AA */
+    --brand-glow:          15 75% 28%;     /* #7C2D12 */
 
-    /* Fundos: Tons confortáveis de Marfim / Creme */
-    --bg:                  40 30% 96%;
-    --surface:             40 40% 99%;
-    --surface-muted:       40 25% 92%;
-    --border:              40 20% 86%;
-    --border-strong:       40 15% 75%;
+    /* Fundos: Tons confortáveis de Areia / Branco Quente */
+    --bg:                  33 39% 95%;     /* #F8F4EF */
+    --surface:             0 0% 100%;      /* #FFFFFF */
+    --surface-muted:       31 43% 90%;     /* #F1E7DC */
+    --border:              30 38% 85%;     /* #E7D8C9 */
+    --border-strong:       30 30% 75%;
 
-    --background:          40 30% 96%;
-    --foreground:          215 40% 15%;
-    --card:                40 40% 99%;
-    --card-foreground:     215 40% 15%;
-    --popover:             40 40% 99%;
-    --popover-foreground:  215 40% 15%;
-    --secondary:           40 25% 92%;
-    --secondary-foreground:215 40% 20%;
-    --muted:               40 25% 92%;
-    --muted-foreground:    215 15% 45%;
+    --background:          33 39% 95%;     /* #F8F4EF */
+    --foreground:          23 15% 11%;     /* #1F1A17 */
+    --card:                0 0% 100%;      /* #FFFFFF */
+    --card-foreground:     23 15% 11%;     /* #1F1A17 */
+    --popover:             0 0% 100%;      /* #FFFFFF */
+    --popover-foreground:  23 15% 11%;     /* #1F1A17 */
+    --secondary:           31 43% 90%;     /* #F1E7DC */
+    --secondary-foreground:23 15% 11%;     /* #1F1A17 */
+    --muted:               31 43% 90%;     /* #F1E7DC */
+    --muted-foreground:    25 10% 42%;     /* #75685F */
 
-    --text:                215 40% 15%;
-    --text-muted:          215 15% 45%;
+    --text:                23 15% 11%;     /* #1F1A17 */
+    --text-muted:          25 10% 42%;     /* #75685F */
 
     /* Cor principal de ação */
-    --primary:             215 65% 35%;
-    --primary-hover:       215 70% 28%;
-    --primary-soft:        215 40% 92%;
-    --primary-foreground:  0 0% 100%;
-    --ring:                215 65% 35%;
+    --primary:             26 90% 37%;     /* #B45309 */
+    --primary-hover:       23 83% 31%;     /* #92400E */
+    --primary-soft:        32 98% 83%;     /* #FED7AA */
+    --primary-foreground:  0 0% 100%;      /* White */
+    --ring:                26 90% 37%;     /* #B45309 */
 
-    --accent:              215 40% 92%;
-    --accent-foreground:   215 70% 30%;
-    --accent-soft:         215 40% 92%;
-    --accent-contrast:     215 70% 20%;
+    --accent:              15 75% 28%;     /* #7C2D12 */
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         34 100% 92%;    /* #FFEDD5 */
+    --accent-contrast:     15 75% 28%;     /* #7C2D12 */
 
-    --danger:              344 70% 45%;
-    --danger-soft:         344 60% 95%;
-    --destructive:         344 70% 45%;
+    --danger:              0 74% 42%;      /* #B91C1C */
+    --danger-soft:         0 100% 97%;
+    --destructive:         0 74% 42%;      /* #B91C1C */
     --destructive-foreground: 0 0% 100%;
 
-    --input:               40 20% 84%;
+    --input:               30 38% 85%;     /* #E7D8C9 */
 
-    /* Navbar rica azul profunda para equilibrar o fundo marfim */
-    --nav-bg:              215 50% 12%;
-    --nav-text:            40 30% 96%;
-    --nav-muted:           215 20% 65%;
-    --nav-active-bg:       215 65% 35%;
-    --nav-active-text:     0 0% 100%;
-    --nav-border:          215 50% 8%;
+    /* Sidebar/Navbar dark: Grafite escuro */
+    --nav-bg:              23 17% 9%;      /* #1C1714 */
+    --nav-text:            33 100% 96%;    /* #FFF7ED */
+    --nav-muted:           31 24% 73%;    /* #CBBBAA */
+    --nav-active-bg:       26 90% 37%;     /* #B45309 */
+    --nav-active-text:     0 0% 100%;      /* White */
+    --nav-border:          18 18% 14%;     /* #2A211D */
 
-    --sidebar-accent:      215 65% 35%;
-    --hero-start:          215 65% 35%;
-    --hero-end:            215 70% 20%;
+    --sidebar-accent:      26 90% 37%;     /* #B45309 */
+    --hero-start:          26 90% 37%;     /* #B45309 */
+    --hero-end:            15 75% 28%;     /* #7C2D12 */
 
-    /* Gradientes de fundo cremosos */
-    --page-glow-start:     40 40% 98%;
-    --page-glow-end:       215 30% 95%;
-    --page-gradient-start: 40 30% 96%;
-    --page-gradient-end:   40 25% 93%;
+    /* Gradientes de fundo */
+    --page-glow-start:     34 100% 92%;    /* #FFEDD5 */
+    --page-glow-end:       32 98% 83%;     /* #FED7AA */
+    --page-gradient-start: 33 39% 95%;     /* #F8F4EF */
+    --page-gradient-end:   31 43% 90%;     /* #F1E7DC */
   }
 
   :root[data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 3 — Rosé Elegance (Colorido Suave)
+       Visual Theme 3 — Aurora Corporativa
        -----------------------------------------------------------------------
        Direção:
-       - Feminino elegante, sem rosa neon.
-       - Base em tons pasteis/rosé suaves para fugir do branco puro.
-       - Brand focado em rosa queimado e ameixa profundo para contraste.
-       - Cards com levíssimo toque de cor (rosé) e fontes em ameixa vibrante.
+       - Tema moderno para telas internas de RH e IA.
+       - Aparência premium, limpa e tecnológica.
+       - Azul petróleo, verde/teal e superfícies claras.
        ----------------------------------------------------------------------- */
 
-    --brand:               340 55% 60%;
-    --brand-dark:          335 55% 40%;
-    --brand-soft:          340 40% 90%;
-    --brand-glow:          340 55% 60%;
+    --brand:               175 77% 26%;
+    --brand-dark:          176 69% 22%;
+    --brand-soft:          167 85% 89%;
+    --brand-glow:          175 77% 26%;
 
-    /* Fundo levemente colorido em vez de branco */
-    --bg:                  340 35% 96%;
-    --surface:             340 30% 98%;
-    --surface-muted:       340 35% 94%;
-    --border:              340 25% 86%;
-    --border-strong:       340 30% 75%;
+    --bg:                  210 20% 97%;
+    --surface:             0 0% 100%;
+    --surface-muted:       195 24% 95%;
+    --border:              194 24% 89%;
+    --border-strong:       194 24% 80%;
 
-    --background:          340 35% 96%;
-    /* Fonte primária com mais cor (Ameixa escuro) */
-    --foreground:          330 40% 18%;
-    --card:                340 30% 98%;
-    --card-foreground:     330 40% 18%;
-    --popover:             340 30% 98%;
-    --popover-foreground:  330 40% 18%;
-    --secondary:           340 35% 94%;
-    --secondary-foreground:330 40% 18%;
-    --muted:               340 35% 94%;
-    --muted-foreground:    330 25% 40%;
+    --background:          210 20% 97%;
+    --foreground:          202 46% 12%;
+    --card:                0 0% 100%;
+    --card-foreground:     202 46% 12%;
+    --popover:             0 0% 100%;
+    --popover-foreground:  202 46% 12%;
+    --secondary:           195 24% 95%;
+    --secondary-foreground:202 46% 12%;
+    --muted:               195 24% 95%;
+    --muted-foreground:    207 13% 45%;
 
-    --text:                330 40% 18%;
-    --text-muted:          330 25% 40%;
+    --text:                202 46% 12%;
+    --text-muted:          207 13% 45%;
 
-    --primary:             340 55% 60%;
-    --primary-hover:       340 55% 50%;
-    --primary-soft:        340 40% 90%;
+    --primary:             175 77% 26%;
+    --primary-hover:       176 69% 22%;
+    --primary-soft:        167 85% 89%;
     --primary-foreground:  0 0% 100%;
-    --ring:                340 55% 60%;
+    --ring:                175 77% 26%;
 
-    --accent:              340 40% 90%;
-    --accent-foreground:   330 45% 30%;
-    --accent-soft:         340 40% 90%;
-    --accent-contrast:     330 45% 30%;
+    --accent:              221 83% 53%;
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         214 100% 93%;
+    --accent-contrast:     221 83% 53%;
 
-    --danger:              344 65% 45%;
-    --danger-soft:         344 55% 94%;
-    --destructive:         344 65% 45%;
+    --danger:              0 72% 51%;
+    --danger-soft:         0 80% 95%;
+    --destructive:         0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --input:               340 25% 86%;
+    --input:               194 24% 89%;
 
-    --nav-bg:              335 45% 15%;
-    --nav-text:            340 30% 98%;
-    --nav-muted:           340 25% 75%;
-    --nav-active-bg:       340 55% 60%;
+    --nav-bg:              201 67% 8%;
+    --nav-text:            0 0% 100%;
+    --nav-muted:           207 13% 60%;
+    --nav-active-bg:       175 77% 26%;
     --nav-active-text:     0 0% 100%;
-    --nav-border:          335 45% 10%;
+    --nav-border:          201 67% 12%;
 
-    --sidebar-accent:      340 55% 60%;
-    --hero-start:          340 35% 96%;
-    --hero-end:            340 30% 90%;
+    --sidebar-accent:      175 77% 26%;
+    --hero-start:          210 20% 97%;
+    --hero-end:            195 24% 95%;
 
-    --page-glow-start:     340 35% 96%;
-    --page-glow-end:       340 35% 92%;
-    --page-gradient-start: 340 35% 96%;
-    --page-gradient-end:   340 30% 92%;
+    --page-glow-start:     210 20% 97%;
+    --page-glow-end:       195 24% 95%;
+    --page-gradient-start: 210 20% 97%;
+    --page-gradient-end:   195 24% 95%;
   }
 
   :root[data-visual-theme="theme-4"] {
@@ -863,139 +858,138 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 Dark — Midnight Sapphire Premium
+       Visual Theme 2 Dark — Cobre Executivo
        -----------------------------------------------------------------------
        Direção:
-       - Azul meia-noite profundo e sofisticado.
-       - Superfícies escuras que elevam o Azul Safira brilhante.
+       - Grafite escuro corporativo com cobre destacado e quente.
        ----------------------------------------------------------------------- */
-    --brand:               220 90% 65%;
-    --brand-dark:          220 70% 50%;
-    --brand-soft:          220 90% 12%;
-    --brand-glow:          220 100% 75%;
+    --brand:               27 96% 61%;     /* #FB923C */
+    --brand-dark:          25 95% 53%;     /* #F97316 */
+    --brand-soft:          13 81% 15%;     /* #431407 */
+    --brand-glow:          31 97% 72%;     /* #FDBA74 */
 
-    --bg:                  225 30% 6%;
-    --surface:             225 20% 9%;
-    --surface-muted:       225 20% 12%;
-    --border:              225 15% 18%;
-    --border-strong:       225 20% 25%;
+    --bg:                  24 16% 6%;      /* #120F0D */
+    --surface:             23 17% 9%;      /* #1C1714 */
+    --surface-muted:       18 18% 14%;     /* #2A211D */
+    --border:              20 18% 19%;     /* #3A2E28 */
+    --border-strong:       20 18% 28%;
 
-    --background:          225 30% 6%;
-    --foreground:          210 20% 92%;
-    --card:                225 20% 9%;
-    --card-foreground:     210 20% 92%;
-    --popover:             225 20% 9%;
-    --popover-foreground:  210 20% 92%;
-    --secondary:           225 20% 14%;
-    --secondary-foreground:210 20% 92%;
-    --muted:               225 20% 14%;
-    --muted-foreground:    210 10% 60%;
+    --background:          24 16% 6%;      /* #120F0D */
+    --foreground:          33 100% 96%;    /* #FFF7ED */
+    --card:                23 17% 9%;      /* #1C1714 */
+    --card-foreground:     33 100% 96%;    /* #FFF7ED */
+    --popover:             23 17% 9%;      /* #1C1714 */
+    --popover-foreground:  33 100% 96%;    /* #FFF7ED */
+    --secondary:           18 18% 14%;     /* #2A211D */
+    --secondary-foreground:33 100% 96%;    /* #FFF7ED */
+    --muted:               18 18% 14%;     /* #2A211D */
+    --muted-foreground:    31 24% 73%;    /* #CBBBAA */
 
-    --text:                210 20% 92%;
-    --text-muted:          210 10% 60%;
+    --text:                33 100% 96%;    /* #FFF7ED */
+    --text-muted:          31 24% 73%;    /* #CBBBAA */
 
-    --primary:             220 90% 65%;
-    --primary-hover:       220 80% 55%;
-    --primary-soft:        220 90% 12%;
-    --primary-foreground:  0 0% 100%;
-    --ring:                220 90% 65%;
+    --primary:             27 96% 61%;     /* #FB923C */
+    --primary-hover:       25 95% 53%;     /* #F97316 */
+    --primary-soft:        13 81% 15%;     /* #431407 */
+    --primary-foreground:  20 14% 4%;      /* Dark brown/black text on bright orange */
+    --ring:                27 96% 61%;     /* #FB923C */
 
-    --accent:              220 25% 15%;
-    --accent-foreground:   220 20% 95%;
-    --accent-soft:         220 25% 15%;
-    --accent-contrast:     220 20% 95%;
+    --accent:              31 97% 72%;     /* #FDBA74 */
+    --accent-foreground:   20 14% 4%;
+    --accent-soft:         15 75% 28%;     /* #7C2D12 */
+    --accent-contrast:     31 97% 72%;     /* #FDBA74 */
 
-    --danger:              344 70% 55%;
-    --danger-soft:         344 40% 15%;
-    --destructive:         344 70% 55%;
+    --danger:              0 91% 71%;      /* #F87171 */
+    --danger-soft:         0 80% 15%;
+    --destructive:         0 91% 71%;      /* #F87171 */
     --destructive-foreground: 0 0% 100%;
 
-    --input:               225 15% 18%;
+    --input:               20 18% 19%;     /* #3A2E28 */
 
-    --nav-bg:              225 30% 5%;
-    --nav-text:            0 0% 90%;
-    --nav-muted:           0 0% 60%;
-    --nav-active-bg:       220 40% 15%;
-    --nav-active-text:     220 90% 75%;
-    --nav-border:          225 20% 12%;
+    /* Sidebar/Navbar dark: Grafite escuro */
+    --nav-bg:              20 14% 4%;      /* #0C0A09 */
+    --nav-text:            33 100% 96%;    /* #FFF7ED */
+    --nav-muted:           31 24% 73%;    /* #CBBBAA */
+    --nav-active-bg:       27 96% 61%;     /* #FB923C */
+    --nav-active-text:     20 14% 4%;      /* Dark brown/black text */
+    --nav-border:          18 18% 14%;     /* #2A211D */
 
-    --sidebar-accent:      220 90% 65%;
-    --hero-start:          220 60% 15%;
-    --hero-end:            225 30% 6%;
+    --sidebar-accent:      27 96% 61%;     /* #FB923C */
+    --hero-start:          13 81% 15%;     /* #431407 */
+    --hero-end:            24 16% 6%;      /* #120F0D */
 
-    --page-glow-start:     220 50% 10%;
-    --page-glow-end:       225 30% 6%;
-    --page-gradient-start: 225 30% 6%;
-    --page-gradient-end:   225 20% 8%;
+    --page-glow-start:     13 81% 15%;     /* #431407 */
+    --page-glow-end:       15 75% 28%;     /* #7C2D12 */
+    --page-gradient-start: 24 16% 6%;      /* #120F0D */
+    --page-gradient-end:   18 18% 14%;     /* #2A211D */
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 3 Dark — Rosé Elegance
+       Visual Theme 3 Dark — Aurora Corporativa
        -----------------------------------------------------------------------
        Direção:
-       - Fundo ameixa profundo.
-       - Surface berinjela/ameixa escuro.
-       - Mantém a elegância com ameixa profunda e menor saturação.
+       - Azul petróleo profundo e sofisticado.
+       - Teal/verde luminosos para ação.
        ----------------------------------------------------------------------- */
-    --brand:               338 32% 58%;
-    --brand-dark:          334 34% 40%;
-    --brand-soft:          332 24% 20%;
-    --brand-glow:          338 28% 42%;
+    --brand:               172 66% 50%;
+    --brand-dark:          173 80% 40%;
+    --brand-soft:          175 77% 16%;
+    --brand-glow:          172 66% 50%;
 
-    --bg:                  330 30% 12%;
-    --surface:             330 25% 16%;
-    --surface-muted:       330 25% 20%;
-    --border:              330 25% 25%;
-    --border-strong:       330 25% 35%;
+    --bg:                  200 64% 6%;
+    --surface:             201 58% 10%;
+    --surface-muted:       200 54% 14%;
+    --border:              198 40% 20%;
+    --border-strong:       198 40% 28%;
 
-    --background:          330 30% 12%;
-    --foreground:          335 12% 89%;
-    --card:                330 25% 16%;
-    --card-foreground:     335 12% 89%;
-    --popover:             330 25% 16%;
-    --popover-foreground:  335 12% 89%;
-    --secondary:           330 25% 20%;
-    --secondary-foreground:335 12% 89%;
-    --muted:               330 25% 20%;
-    --muted-foreground:    335 8% 65%;
+    --background:          200 64% 6%;
+    --foreground:          167 36% 93%;
+    --card:                201 58% 10%;
+    --card-foreground:     167 36% 93%;
+    --popover:             201 58% 10%;
+    --popover-foreground:  167 36% 93%;
+    --secondary:           200 54% 14%;
+    --secondary-foreground:167 36% 93%;
+    --muted:               200 54% 14%;
+    --muted-foreground:    167 15% 66%;
 
-    --text:                335 12% 89%;
-    --text-muted:          335 8% 65%;
+    --text:                167 36% 93%;
+    --text-muted:          167 15% 66%;
 
-    --primary:             338 32% 58%;
-    --primary-hover:       338 28% 50%;
-    --primary-soft:        332 24% 20%;
-    --primary-foreground:  0 0% 100%;
-    --ring:                338 32% 58%;
+    --primary:             172 66% 50%;
+    --primary-hover:       173 80% 40%;
+    --primary-soft:        175 77% 16%;
+    --primary-foreground:  200 64% 6%;
+    --ring:                172 66% 50%;
 
-    --accent:              332 24% 20%;
-    --accent-foreground:   335 12% 89%;
-    --accent-soft:         332 24% 20%;
-    --accent-contrast:     335 12% 89%;
+    --accent:              213 94% 68%;
+    --accent-foreground:   200 64% 6%;
+    --accent-soft:         213 60% 20%;
+    --accent-contrast:     213 94% 68%;
 
-    --danger:              344 62% 45%;
-    --danger-soft:         344 50% 20%;
-    --destructive:         344 62% 45%;
-    --destructive-foreground: 0 0% 100%;
+    --danger:              0 72% 51%;
+    --danger-soft:         0 80% 20%;
+    --destructive:         0 72% 51%;
+    --destructive-foreground: 167 36% 93%;
 
-    --input:               330 25% 25%;
+    --input:               198 40% 20%;
 
-    --nav-bg:              330 30% 10%;
-    --nav-text:            335 12% 89%;
-    --nav-muted:           335 8% 61%;
-    --nav-active-bg:       334 26% 24%;
-    --nav-active-text:     335 12% 92%;
-    --nav-border:          330 25% 16%;
+    --nav-bg:              200 64% 6%;
+    --nav-text:            167 36% 93%;
+    --nav-muted:           167 15% 66%;
+    --nav-active-bg:       175 77% 26%;
+    --nav-active-text:     167 36% 93%;
+    --nav-border:          201 58% 10%;
 
-    --sidebar-accent:      338 28% 46%;
-    --hero-start:          334 26% 24%;
-    --hero-end:            330 30% 10%;
+    --sidebar-accent:      172 66% 50%;
+    --hero-start:          201 58% 10%;
+    --hero-end:            200 64% 6%;
 
-    --page-glow-start:     336 26% 18%;
-    --page-glow-end:       334 20% 13%;
-    --page-gradient-start: 330 30% 12%;
-    --page-gradient-end:   330 30% 10%;
+    --page-glow-start:     201 58% 10%;
+    --page-glow-end:       200 64% 6%;
+    --page-gradient-start: 200 64% 6%;
+    --page-gradient-end:   200 64% 4%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-4"] {
@@ -1130,21 +1124,16 @@
   }
   :root[data-visual-theme="theme-2"] body {
     background:
-      url("/assets/floral-bg.png") repeat,
       radial-gradient(circle at 10% 10%, hsl(var(--page-glow-start) / 0.16), transparent 28rem),
       radial-gradient(circle at 88% 14%, hsl(var(--page-glow-end) / 0.14), transparent 30rem),
       linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
-    background-size: 600px, auto, auto, auto;
-    background-blend-mode: multiply, normal, normal, normal;
+    color: hsl(var(--text));
   }
   :root[data-theme="dark"][data-visual-theme="theme-2"] body {
     background:
-      url("/assets/floral-bg.png") repeat,
       radial-gradient(circle at 10% 10%, hsl(var(--page-glow-start) / 0.16), transparent 28rem),
       radial-gradient(circle at 88% 14%, hsl(var(--page-glow-end) / 0.14), transparent 30rem),
       linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
-    background-size: 600px, auto, auto, auto;
-    background-blend-mode: soft-light, normal, normal, normal;
     color: hsl(var(--text));
   }
 
@@ -1783,7 +1772,7 @@
 
   .visual-theme-preview-theme-2 {
     background:
-      linear-gradient(135deg, hsl(215 42% 18%) 0 34%, hsl(207 76% 38%) 34% 68%, hsl(210 24% 96%) 68% 100%);
+      linear-gradient(135deg, hsl(23 17% 9%) 0 34%, hsl(26 90% 37%) 34% 68%, hsl(33 39% 95%) 68% 100%);
   }
 
   .visual-theme-preview-theme-3 {
@@ -2515,18 +2504,18 @@
 }
 
 /* ==========================================================================
-   Theme 2 Specific Overrides (Scandinavian Glass + Sapphire)
+   Theme 2 Specific Overrides (Cobre Executivo)
    ========================================================================== */
 
 :root[data-visual-theme="theme-2"] .ui-card,
 :root[data-visual-theme="theme-2"] .glass {
   border-radius: 1.25rem;
-  /* Soft, elegant shadow for depth without darkening the white surface */
-  box-shadow: 0 16px 40px -12px rgba(0, 30, 80, 0.05), 0 4px 12px -8px rgba(0, 30, 80, 0.03);
+  /* Premium warm shadow using accent color tint */
+  box-shadow: 0 16px 40px -12px rgba(124, 45, 18, 0.05), 0 4px 12px -8px rgba(124, 45, 18, 0.03);
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.8) !important;
-  background-color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(231, 216, 201, 0.85) !important; /* #E7D8C9 */
+  background-color: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
@@ -2534,40 +2523,36 @@
 
 :root[data-visual-theme="theme-2"] .ui-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 20px 48px -12px rgba(0, 30, 80, 0.08), 0 8px 24px -12px rgba(0, 30, 80, 0.04);
+  box-shadow: 0 20px 48px -12px rgba(124, 45, 18, 0.08), 0 8px 24px -12px rgba(124, 45, 18, 0.04);
 }
 
 :root[data-visual-theme="theme-2"][data-theme="dark"] .ui-card,
 :root[data-visual-theme="theme-2"][data-theme="dark"] .glass {
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(251, 146, 60, 0.08) !important; /* #FB923C */
   box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.03);
-  background-color: rgba(20, 25, 35, 0.85);
+  background-color: rgba(28, 23, 20, 0.9); /* #1C1714 */
 }
 
 :root[data-visual-theme="theme-2"] .ui-btn-primary {
-  box-shadow: 0 4px 14px 0 rgba(0, 80, 255, 0.25);
+  box-shadow: 0 4px 14px 0 rgba(180, 83, 9, 0.25); /* #B45309 */
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 :root[data-visual-theme="theme-2"] .ui-btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 80, 255, 0.35);
+  box-shadow: 0 6px 20px rgba(180, 83, 9, 0.35);
 }
 
-:root[data-visual-theme="theme-2"] .navbar,
-:root[data-visual-theme="theme-2"] .sidebar-glass {
-  background-color: rgba(255, 255, 255, 0.75) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-right: 1px solid rgba(0, 30, 80, 0.04) !important;
-  border-bottom: 1px solid rgba(0, 30, 80, 0.04) !important;
+/* Hover/active states override for Sidebar links in Theme 2 */
+:root[data-visual-theme="theme-2"] aside nav a:not(.active):hover,
+:root[data-visual-theme="theme-2"] aside nav button:not([aria-expanded="true"]):hover {
+  background-color: hsl(18 18% 14%) !important; /* #2A211D - marrom/grafite suave */
+  color: hsl(var(--nav-text)) !important;
 }
 
-:root[data-visual-theme="theme-2"][data-theme="dark"] .navbar,
-:root[data-visual-theme="theme-2"][data-theme="dark"] .sidebar-glass {
-  background-color: rgba(10, 15, 25, 0.75) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+:root[data-visual-theme="theme-2"] aside nav a.active {
+  background-color: hsl(var(--nav-active-bg)) !important;
+  color: hsl(var(--nav-active-text)) !important;
 }
 
 /* ==========================================================================

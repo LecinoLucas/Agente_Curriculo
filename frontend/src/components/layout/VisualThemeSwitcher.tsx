@@ -17,13 +17,13 @@ const THEMES: Array<{
   },
   {
     value: "theme-2",
-    label: "Tema 2",
-    description: "Botânico Floral",
+    label: "Cobre Executivo",
+    description: "Premium, quente e corporativo",
   },
   {
     value: "theme-3",
-    label: "Tema 3",
-    description: "Rosé Elegance",
+    label: "Aurora Corporativa",
+    description: "Moderno e Tecnológico",
   },
   {
     value: "theme-4",
