@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "../features/auth/useAuth";
 import { ArchiveJobModal } from "../features/jobs/components/ArchiveJobModal";
 import { JobContextPanel } from "../features/jobs/components/JobContextPanel";
+import { SmartRefreshModal } from "../features/jobs/components/SmartRefreshModal";
 import { canManageJobs } from "../shared/auth/roles";
 import {
   useJobsList,
@@ -93,6 +94,13 @@ export function VagasPage() {
     handleArchive,
     handleRestore,
     handleRecalculateRanking,
+    handleSmartRefreshOpen,
+    handleSmartRefreshClose,
+    handleSmartRefreshConfirm,
+    smartRefreshJobId,
+    smartRefreshPreviewData,
+    smartRefreshPreviewLoading,
+    smartRefreshExecuting,
   } = useJobsList();
 
   const statusQuickFilters: Array<{ value: JobStatusFilter; label: string; count: number }> = [
@@ -349,6 +357,7 @@ export function VagasPage() {
             handleDelete,
             handleRecalculateRanking,
             (jobOperationalData[job.id]?.totalCandidates ?? 0) > 0,
+            handleSmartRefreshOpen,
           );
           const isLast = filteredJobs.indexOf(job) === filteredJobs.length - 1;
 
@@ -490,6 +499,14 @@ export function VagasPage() {
         loading={archiveTarget != null && runningAction === `archive:${archiveTarget.id}`}
         onClose={() => setArchiveTarget(null)}
         onConfirm={handleArchive}
+      />
+      <SmartRefreshModal
+        open={smartRefreshJobId != null}
+        preview={smartRefreshPreviewData}
+        previewLoading={smartRefreshPreviewLoading}
+        executing={smartRefreshExecuting}
+        onClose={handleSmartRefreshClose}
+        onConfirm={handleSmartRefreshConfirm}
       />
     </div>
   );

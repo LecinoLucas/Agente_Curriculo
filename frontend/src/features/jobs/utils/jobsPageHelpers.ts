@@ -843,6 +843,7 @@ export function buildJobActionItems(
   onDelete: (job: Job) => void,
   onRecalculate?: (jobId: string) => void,
   hasCandidates?: boolean,
+  onSmartRefresh?: (jobId: string) => void,
 ): ActionMenuItem[] {
   const items: ActionMenuItem[] = [
     {
@@ -861,6 +862,20 @@ export function buildJobActionItems(
       onClick: () => onRecalculate(job.id),
       disabled: runningAction === `recalculate:${job.id}` || hasCandidates === false,
       title: "Usa dados já analisados dos candidatos — sem nova chamada de IA.",
+    });
+  }
+
+  const canSmartRefresh =
+    onSmartRefresh &&
+    hasCandidates &&
+    !["closed", "cancelled", "archived"].includes(job.status);
+
+  if (canSmartRefresh) {
+    items.push({
+      label: "Atualizar candidatos",
+      onClick: () => onSmartRefresh(job.id),
+      disabled: runningAction === `smart-refresh:${job.id}`,
+      title: "Recalcula ranking quando possível e processa análises pendentes quando necessário.",
     });
   }
 

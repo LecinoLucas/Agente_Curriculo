@@ -134,6 +134,13 @@ function mockJobsPageState(overrides: Record<string, unknown> = {}) {
     handleArchive: vi.fn(),
     handleRestore: vi.fn(),
     handleRecalculateRanking: vi.fn(),
+    handleSmartRefreshOpen: vi.fn(),
+    handleSmartRefreshClose: vi.fn(),
+    handleSmartRefreshConfirm: vi.fn(),
+    smartRefreshJobId: null,
+    smartRefreshPreviewData: null,
+    smartRefreshPreviewLoading: false,
+    smartRefreshExecuting: false,
     ...overrides,
   });
 }
@@ -186,8 +193,85 @@ describe("JobsPage", () => {
 
     const recalculateButton = screen.getByRole("button", { name: /Recalcular ranking/i });
     expect(recalculateButton).toBeInTheDocument();
-    
+
     fireEvent.click(recalculateButton);
     expect(handleRecalculateRankingMock).toHaveBeenCalledWith("job-1");
+  });
+
+  it("exibe Atualizar candidatos para vaga published com candidatos", () => {
+    const handleSmartRefreshOpenMock = vi.fn();
+    mockJobsPageState({
+      handleSmartRefreshOpen: handleSmartRefreshOpenMock,
+    });
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <VagasPage />
+      </MemoryRouter>,
+    );
+
+    const actionMenuButton = screen.getByRole("button", { name: /Ações da vaga/i });
+    fireEvent.click(actionMenuButton);
+
+    const smartRefreshButton = screen.getByRole("button", { name: /Atualizar candidatos/i });
+    expect(smartRefreshButton).toBeInTheDocument();
+
+    fireEvent.click(smartRefreshButton);
+    expect(handleSmartRefreshOpenMock).toHaveBeenCalledWith("job-1");
+  });
+
+  it("exibe Atualizar candidatos para vaga paused com candidatos", () => {
+    mockJobsPageState({
+      filteredJobs: [makeJob({ status: "paused" })],
+    });
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <VagasPage />
+      </MemoryRouter>,
+    );
+
+    const actionMenuButton = screen.getByRole("button", { name: /Ações da vaga/i });
+    fireEvent.click(actionMenuButton);
+
+    expect(screen.getByRole("button", { name: /Atualizar candidatos/i })).toBeInTheDocument();
+  });
+
+  it("nao exibe Atualizar candidatos para vaga closed", () => {
+    mockJobsPageState({
+      filteredJobs: [makeJob({ status: "closed" })],
+    });
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <VagasPage />
+      </MemoryRouter>,
+    );
+
+    const actionMenuButton = screen.getByRole("button", { name: /Ações da vaga/i });
+    fireEvent.click(actionMenuButton);
+
+    expect(screen.queryByRole("button", { name: /Atualizar candidatos/i })).not.toBeInTheDocument();
+  });
+
+  it("nao exibe Atualizar candidatos quando nao ha candidatos", () => {
+    mockJobsPageState({
+      jobOperationalData: {
+        "job-1": {
+          totalCandidates: 0,
+          stageCounts: {},
+          latestActivity: null,
+          strongCandidates: 0,
+          topScore: null,
+        },
+      },
+    });
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <VagasPage />
+      </MemoryRouter>,
+    );
+
+    const actionMenuButton = screen.getByRole("button", { name: /Ações da vaga/i });
+    fireEvent.click(actionMenuButton);
+
+    expect(screen.queryByRole("button", { name: /Atualizar candidatos/i })).not.toBeInTheDocument();
   });
 });

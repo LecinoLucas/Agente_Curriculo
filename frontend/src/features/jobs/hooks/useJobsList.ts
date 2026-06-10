@@ -9,6 +9,9 @@ import {
   pauseJob,
   recalculateJobRanking,
   restoreJob,
+  smartRefreshExecute,
+  smartRefreshPreview,
+  type SmartRefreshPreview,
 } from "../../../services/jobsService";
 import { pipelineService } from "../../../services/pipelineService";
 import { toast } from "../../../shared/utils/toast";
@@ -43,6 +46,10 @@ export function useJobsList() {
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Job | null>(null);
   const [jobOperationalData, setJobOperationalData] = useState<Record<string, JobOperationalData>>({});
+  const [smartRefreshJobId, setSmartRefreshJobId] = useState<string | null>(null);
+  const [smartRefreshPreviewData, setSmartRefreshPreviewData] = useState<SmartRefreshPreview | null>(null);
+  const [smartRefreshPreviewLoading, setSmartRefreshPreviewLoading] = useState(false);
+  const [smartRefreshExecuting, setSmartRefreshExecuting] = useState(false);
   const [summary, setSummary] = useState<JobStatusSummary>({
     all: 0,
     published: 0,
@@ -259,6 +266,43 @@ export function useJobsList() {
     }
   }
 
+  async function handleSmartRefreshOpen(jobId: string) {
+    setSmartRefreshJobId(jobId);
+    setSmartRefreshPreviewData(null);
+    setSmartRefreshPreviewLoading(true);
+    try {
+      const preview = await smartRefreshPreview(jobId);
+      setSmartRefreshPreviewData(preview);
+    } catch (actionError: unknown) {
+      toast.error(formatErrorDetails(handleApiError(actionError))[0] ?? "Não foi possível carregar o preview.");
+      setSmartRefreshJobId(null);
+    } finally {
+      setSmartRefreshPreviewLoading(false);
+    }
+  }
+
+  function handleSmartRefreshClose() {
+    setSmartRefreshJobId(null);
+    setSmartRefreshPreviewData(null);
+  }
+
+  async function handleSmartRefreshConfirm() {
+    if (!smartRefreshJobId) return;
+    setSmartRefreshExecuting(true);
+    setRunningAction(`smart-refresh:${smartRefreshJobId}`);
+    try {
+      const result = await smartRefreshExecute(smartRefreshJobId);
+      toast.success(result.message || "Atualização de candidatos iniciada.");
+      setSmartRefreshJobId(null);
+      setSmartRefreshPreviewData(null);
+    } catch (actionError: unknown) {
+      toast.error(formatErrorDetails(handleApiError(actionError))[0] ?? "Não foi possível iniciar a atualização.");
+    } finally {
+      setSmartRefreshExecuting(false);
+      setRunningAction(null);
+    }
+  }
+
   return {
     jobs,
     loading,
@@ -298,5 +342,12 @@ export function useJobsList() {
     handleArchive,
     handleRestore,
     handleRecalculateRanking,
+    handleSmartRefreshOpen,
+    handleSmartRefreshClose,
+    handleSmartRefreshConfirm,
+    smartRefreshJobId,
+    smartRefreshPreviewData,
+    smartRefreshPreviewLoading,
+    smartRefreshExecuting,
   };
 }

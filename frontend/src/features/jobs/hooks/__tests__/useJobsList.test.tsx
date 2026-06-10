@@ -13,6 +13,8 @@ const {
   pauseJobMock,
   recalculateJobRankingMock,
   restoreJobMock,
+  smartRefreshPreviewMock,
+  smartRefreshExecuteMock,
 } = vi.hoisted(() => ({
   archiveJobMock: vi.fn(),
   closeJobMock: vi.fn(),
@@ -24,6 +26,8 @@ const {
   pauseJobMock: vi.fn(),
   recalculateJobRankingMock: vi.fn(),
   restoreJobMock: vi.fn(),
+  smartRefreshPreviewMock: vi.fn(),
+  smartRefreshExecuteMock: vi.fn(),
 }));
 
 vi.mock("../../../../services/jobsService", () => ({
@@ -36,6 +40,8 @@ vi.mock("../../../../services/jobsService", () => ({
   pauseJob: pauseJobMock,
   recalculateJobRanking: recalculateJobRankingMock,
   restoreJob: restoreJobMock,
+  smartRefreshPreview: smartRefreshPreviewMock,
+  smartRefreshExecute: smartRefreshExecuteMock,
 }));
 
 vi.mock("../../../../services/pipelineService", () => ({
@@ -199,9 +205,9 @@ describe("useJobsList", () => {
 
   it("chama recalculateJobRanking ao acionar handleRecalculateRanking e exibe toast", async () => {
     recalculateJobRankingMock.mockResolvedValueOnce({ queued: true });
-    
+
     const { result } = renderHook(() => useJobsList());
-    
+
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     await act(async () => {
@@ -213,5 +219,68 @@ describe("useJobsList", () => {
     expect(toast.success).toHaveBeenCalledWith(
       "Recálculo de ranking enfileirado. Nenhum token de IA foi usado."
     );
+  });
+
+  it("handleSmartRefreshOpen carrega preview e armazena no estado", async () => {
+    const preview = {
+      job_id: "job-1",
+      total_candidates: 5,
+      ranking_recalculation: { count: 3, provider_calls: 0, description: "" },
+      ai_analysis: { count: 2, may_use_provider: true, description: "" },
+      skipped: { count: 0, reasons: [] },
+      warnings: [],
+    };
+    smartRefreshPreviewMock.mockResolvedValueOnce(preview);
+
+    const { result } = renderHook(() => useJobsList());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.handleSmartRefreshOpen("job-1");
+    });
+
+    expect(smartRefreshPreviewMock).toHaveBeenCalledWith("job-1");
+    expect(result.current.smartRefreshJobId).toBe("job-1");
+    expect(result.current.smartRefreshPreviewData).toMatchObject({ total_candidates: 5 });
+    expect(result.current.smartRefreshPreviewLoading).toBe(false);
+  });
+
+  it("handleSmartRefreshConfirm executa e exibe toast de sucesso", async () => {
+    const preview = {
+      job_id: "job-1",
+      total_candidates: 5,
+      ranking_recalculation: { count: 3, provider_calls: 0, description: "" },
+      ai_analysis: { count: 2, may_use_provider: true, description: "" },
+      skipped: { count: 0, reasons: [] },
+      warnings: [],
+    };
+    smartRefreshPreviewMock.mockResolvedValueOnce(preview);
+    smartRefreshExecuteMock.mockResolvedValueOnce({
+      job_id: "job-1",
+      queued: true,
+      ranking_recalculation_enqueued: true,
+      ranking_candidates: 3,
+      ai_analysis_enqueued: 2,
+      skipped_already_processing: 0,
+      skipped_no_resume: 0,
+      provider_calls_now: 0,
+      may_use_provider_later: true,
+      message: "Atualização iniciada.",
+    });
+
+    const { result } = renderHook(() => useJobsList());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.handleSmartRefreshOpen("job-1");
+    });
+    await act(async () => {
+      await result.current.handleSmartRefreshConfirm();
+    });
+
+    expect(smartRefreshExecuteMock).toHaveBeenCalledWith("job-1");
+    const { toast } = await import("../../../../shared/utils/toast");
+    expect(toast.success).toHaveBeenCalledWith("Atualização iniciada.");
+    expect(result.current.smartRefreshJobId).toBeNull();
   });
 });

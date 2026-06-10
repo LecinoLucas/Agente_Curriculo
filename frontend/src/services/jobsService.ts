@@ -494,3 +494,55 @@ export async function recalculateJobRanking(jobId: string): Promise<{
   return httpRequest(`/api/v1/jobs/${jobId}/recalculate-ranking`, { method: "POST" });
 }
 
+export type SmartRefreshSkipReason = {
+  reason: string;
+  count: number;
+};
+
+export type SmartRefreshPreview = {
+  job_id: string;
+  total_candidates: number;
+  ranking_recalculation: {
+    count: number;
+    provider_calls: number;
+    description: string;
+  };
+  ai_analysis: {
+    count: number;
+    may_use_provider: boolean;
+    description: string;
+  };
+  skipped: {
+    count: number;
+    reasons: SmartRefreshSkipReason[];
+  };
+  warnings: string[];
+};
+
+export type SmartRefreshResult = {
+  job_id: string;
+  queued: boolean;
+  ranking_recalculation_enqueued: boolean;
+  ranking_candidates: number;
+  ai_analysis_enqueued: number;
+  skipped_already_processing: number;
+  skipped_no_resume: number;
+  provider_calls_now: number;
+  may_use_provider_later: boolean;
+  message: string;
+};
+
+export async function smartRefreshPreview(jobId: string): Promise<SmartRefreshPreview> {
+  return httpRequest<SmartRefreshPreview>(
+    `/api/v1/jobs/${jobId}/candidates/smart-refresh/preview`,
+    { method: "POST" },
+  );
+}
+
+export async function smartRefreshExecute(jobId: string): Promise<SmartRefreshResult> {
+  return httpRequest<SmartRefreshResult>(
+    `/api/v1/jobs/${jobId}/candidates/smart-refresh/execute`,
+    { method: "POST" },
+  );
+}
+
