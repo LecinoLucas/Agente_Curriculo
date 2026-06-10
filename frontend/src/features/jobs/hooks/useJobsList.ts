@@ -7,6 +7,7 @@ import {
   deleteJob,
   listJobs,
   pauseJob,
+  recalculateJobRanking,
   restoreJob,
 } from "../../../services/jobsService";
 import { pipelineService } from "../../../services/pipelineService";
@@ -246,6 +247,18 @@ export function useJobsList() {
     }
   }
 
+  async function handleRecalculateRanking(jobId: string) {
+    setRunningAction(`recalculate:${jobId}`);
+    try {
+      await recalculateJobRanking(jobId);
+      toast.success("Recálculo de ranking enfileirado. Nenhum token de IA foi usado.");
+    } catch (actionError: unknown) {
+      toast.error(formatErrorDetails(handleApiError(actionError))[0] ?? "Não foi possível enfileirar o recálculo do ranking.");
+    } finally {
+      setRunningAction(null);
+    }
+  }
+
   return {
     jobs,
     loading,
@@ -284,5 +297,6 @@ export function useJobsList() {
     handleDelete,
     handleArchive,
     handleRestore,
+    handleRecalculateRanking,
   };
 }

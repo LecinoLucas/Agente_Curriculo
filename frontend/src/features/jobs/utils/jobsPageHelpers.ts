@@ -841,6 +841,8 @@ export function buildJobActionItems(
   onArchive: (job: Job) => void,
   onRestore: (jobId: string) => void,
   onDelete: (job: Job) => void,
+  onRecalculate?: (jobId: string) => void,
+  hasCandidates?: boolean,
 ): ActionMenuItem[] {
   const items: ActionMenuItem[] = [
     {
@@ -852,6 +854,15 @@ export function buildJobActionItems(
       onClick: () => onPipeline(job.id),
     },
   ];
+
+  if (onRecalculate && job.status !== "draft" && job.status !== "cancelled") {
+    items.push({
+      label: "Recalcular ranking",
+      onClick: () => onRecalculate(job.id),
+      disabled: runningAction === `recalculate:${job.id}` || hasCandidates === false,
+      title: "Usa dados já analisados dos candidatos — sem nova chamada de IA.",
+    });
+  }
 
   if (job.status === "published") {
     items.push(

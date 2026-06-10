@@ -484,3 +484,13 @@ export async function getCandidateRankingEntry(
 export async function getJobQuality(jobId: string): Promise<JobQualityResult> {
   return httpRequest<JobQualityResult>(`/api/v1/jobs/${jobId}/quality`);
 }
+
+export async function recalculateJobRanking(jobId: string): Promise<{
+  job_id: string;
+  queued: boolean;
+  provider_calls: number;
+  message: string;
+}> {
+  return httpRequest(`/api/v1/jobs/${jobId}/recalculate-ranking`, { method: "POST" });
+}
+

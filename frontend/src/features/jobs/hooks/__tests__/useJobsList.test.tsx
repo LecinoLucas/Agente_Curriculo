@@ -11,6 +11,7 @@ const {
   listJobsMock,
   listPipelineJobsMock,
   pauseJobMock,
+  recalculateJobRankingMock,
   restoreJobMock,
 } = vi.hoisted(() => ({
   archiveJobMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
   listJobsMock: vi.fn(),
   listPipelineJobsMock: vi.fn(),
   pauseJobMock: vi.fn(),
+  recalculateJobRankingMock: vi.fn(),
   restoreJobMock: vi.fn(),
 }));
 
@@ -32,6 +34,7 @@ vi.mock("../../../../services/jobsService", () => ({
   listJobCandidates: listJobCandidatesMock,
   listJobs: listJobsMock,
   pauseJob: pauseJobMock,
+  recalculateJobRanking: recalculateJobRankingMock,
   restoreJob: restoreJobMock,
 }));
 
@@ -192,5 +195,23 @@ describe("useJobsList", () => {
     );
     expect(listJobCandidatesMock).not.toHaveBeenCalled();
     expect(getJobRankingMock).not.toHaveBeenCalled();
+  });
+
+  it("chama recalculateJobRanking ao acionar handleRecalculateRanking e exibe toast", async () => {
+    recalculateJobRankingMock.mockResolvedValueOnce({ queued: true });
+    
+    const { result } = renderHook(() => useJobsList());
+    
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.handleRecalculateRanking("job-1");
+    });
+
+    expect(recalculateJobRankingMock).toHaveBeenCalledWith("job-1");
+    const { toast } = await import("../../../../shared/utils/toast");
+    expect(toast.success).toHaveBeenCalledWith(
+      "Recálculo de ranking enfileirado. Nenhum token de IA foi usado."
+    );
   });
 });

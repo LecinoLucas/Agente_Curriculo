@@ -133,6 +133,7 @@ function mockJobsPageState(overrides: Record<string, unknown> = {}) {
     handleDelete: vi.fn(),
     handleArchive: vi.fn(),
     handleRestore: vi.fn(),
+    handleRecalculateRanking: vi.fn(),
     ...overrides,
   });
 }
@@ -167,5 +168,26 @@ describe("JobsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /abrir pipeline/i }));
 
     expect(navigateMock).toHaveBeenCalledWith("/pipeline/job-1");
+  });
+
+  it("exibe a opção Recalcular ranking no menu da vaga e chama a função correta", () => {
+    const handleRecalculateRankingMock = vi.fn();
+    mockJobsPageState({
+      handleRecalculateRanking: handleRecalculateRankingMock,
+    });
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <VagasPage />
+      </MemoryRouter>,
+    );
+
+    const actionMenuButton = screen.getByRole("button", { name: /Ações da vaga/i });
+    fireEvent.click(actionMenuButton);
+
+    const recalculateButton = screen.getByRole("button", { name: /Recalcular ranking/i });
+    expect(recalculateButton).toBeInTheDocument();
+    
+    fireEvent.click(recalculateButton);
+    expect(handleRecalculateRankingMock).toHaveBeenCalledWith("job-1");
   });
 });

@@ -92,6 +92,7 @@ export function VagasPage() {
     handleDelete,
     handleArchive,
     handleRestore,
+    handleRecalculateRanking,
   } = useJobsList();
 
   const statusQuickFilters: Array<{ value: JobStatusFilter; label: string; count: number }> = [
@@ -346,6 +347,8 @@ export function VagasPage() {
             setArchiveTarget,
             handleRestore,
             handleDelete,
+            handleRecalculateRanking,
+            (jobOperationalData[job.id]?.totalCandidates ?? 0) > 0,
           );
           const isLast = filteredJobs.indexOf(job) === filteredJobs.length - 1;
 

@@ -11,6 +11,7 @@ export type ActionMenuItem = {
   to?: string;
   tone?: "default" | "danger";
   disabled?: boolean;
+  title?: string;
 };
 
 type ActionMenuProps = {
@@ -106,6 +107,7 @@ export function ActionMenu({ items, className, buttonClassName, buttonLabel = "A
                     item.onClick?.();
                   }}
                   className={baseClassName}
+                  title={item.title}
                 >
                   {item.label}
                 </button>
