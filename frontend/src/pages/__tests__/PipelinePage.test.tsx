@@ -237,6 +237,7 @@ describe("PipelinePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    window.sessionStorage.clear();
     (useAuth as any).mockReturnValue({
       user: { id: "user-1", role: "admin" },
     });

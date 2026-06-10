@@ -63,3 +63,23 @@ export function readPipelineBoardFilters(searchParams: URLSearchParams): Pipelin
     updated_to: read("updated_to"),
   };
 }
+
+export const PIPELINE_FILTERS_STORAGE_KEY = "pipeline:boardFilters";
+
+export function loadSavedPipelineFilters(): PipelineBoardFilters | null {
+  if (typeof window === "undefined") return null;
+  const saved = window.sessionStorage.getItem(PIPELINE_FILTERS_STORAGE_KEY);
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function savePipelineFilters(filters: PipelineBoardFilters) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(PIPELINE_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+}

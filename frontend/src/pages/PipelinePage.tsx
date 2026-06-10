@@ -44,6 +44,8 @@ import {
   getDefaultPipelineDateRange,
   hasAnyPipelineDateFilter,
   readPipelineBoardFilters,
+  loadSavedPipelineFilters,
+  savePipelineFilters,
 } from "../features/pipeline/pipelinePageUtils";
 
 const MOVE_CANDIDATE_TOAST_KEY = "feedback-move-candidate";
@@ -279,10 +281,38 @@ export function PipelinePage() {
     };
   }, []);
 
+  // Persist current filters whenever they change via URL
+  useEffect(() => {
+    if (!initialDateRangeResolvedRef.current) return;
+    savePipelineFilters(urlBoardFilters);
+  }, [urlBoardFilters]);
+
   useEffect(() => {
     if (initialDateRangeResolvedRef.current) return;
     initialDateRangeResolvedRef.current = true;
-    if (hasAnyPipelineDateFilter(searchParams)) return;
+    
+    // If URL already has any pipeline parameters, respect URL
+    if (hasAnyPipelineDateFilter(searchParams)) {
+      return;
+    }
+
+    // If URL is empty of filters, check saved preference
+    const saved = loadSavedPipelineFilters();
+    if (saved !== null) {
+      if (Object.keys(saved).length > 0) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          if (saved.entered_from) next.set("entered_from", saved.entered_from);
+          if (saved.entered_to) next.set("entered_to", saved.entered_to);
+          if (saved.updated_from) next.set("updated_from", saved.updated_from);
+          if (saved.updated_to) next.set("updated_to", saved.updated_to);
+          return next;
+        }, { replace: true });
+      }
+      return;
+    }
+
+    // No URL filters and no saved preference: apply defaults
     const defaults = getDefaultPipelineDateRange();
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
