@@ -53,6 +53,44 @@ export type ArchiveSkillPayload = {
   note?: string;
 };
 
+export type SkillCatalogGuardrailIssue = {
+  type: string;
+  field: string;
+  value: string;
+  normalized_value: string;
+  message: string;
+  existing_skill_id?: string | null;
+  existing_skill_name?: string | null;
+  existing_alias?: string | null;
+};
+
+export type ValidateSkillSuggestionPayload = {
+  name: string;
+  category?: string;
+  aliases?: string[];
+  description?: string;
+  source?: string;
+};
+
+export type ApproveSkillSuggestionPayload = ValidateSkillSuggestionPayload & {
+  confirm_warnings?: boolean;
+};
+
+export type SkillCatalogSuggestionValidation = {
+  allowed: boolean;
+  conflicts: SkillCatalogGuardrailIssue[];
+  warnings: SkillCatalogGuardrailIssue[];
+  normalized_canonical: string;
+  normalized_aliases: string[];
+  source?: string | null;
+};
+
+export type SkillCatalogSuggestionApproval = {
+  skill: SkillCatalog;
+  warnings: SkillCatalogGuardrailIssue[];
+  validation: SkillCatalogSuggestionValidation;
+};
+
 export const skillsService = {
   async listSkills(params: ListSkillsParams = {}): Promise<PaginatedResponse<SkillCatalog>> {
     const urlParams = new URLSearchParams();
@@ -103,6 +141,20 @@ export const skillsService = {
   async restoreSkill(id: string): Promise<SkillCatalog> {
     return httpRequest<SkillCatalog>(`/api/v1/skills/${id}/restore`, {
       method: "PATCH",
+    });
+  },
+
+  async validateSuggestion(payload: ValidateSkillSuggestionPayload): Promise<SkillCatalogSuggestionValidation> {
+    return httpRequest<SkillCatalogSuggestionValidation>("/api/v1/skills/validate-suggestion", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  async approveSuggestion(payload: ApproveSkillSuggestionPayload): Promise<SkillCatalogSuggestionApproval> {
+    return httpRequest<SkillCatalogSuggestionApproval>("/api/v1/skills/approve-suggestion", {
+      method: "POST",
+      body: payload,
     });
   },
 };

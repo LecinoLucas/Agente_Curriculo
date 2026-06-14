@@ -5,6 +5,11 @@ from uuid import UUID
 import structlog
 
 from src.domain.exceptions import ConflictException, NotFoundException, ValidationException
+from src.application.services.skill_catalog_runtime_service import (
+    SkillCatalogAliasGuardrailService,
+    SkillCatalogGuardrailIssue,
+    SkillCatalogGuardrailResult,
+)
 from src.infrastructure.database.models.skill_catalog_model import SkillAliasModel, SkillCatalogModel
 from src.infrastructure.repositories.sqlalchemy_skill_catalog_repository import SQLAlchemySkillCatalogRepository
 from src.application.services.skill_catalog_normalizer import normalize_skill_name
@@ -20,6 +25,7 @@ class SkillCatalogService:
     ):
         self._repository = repository
         self._audit_service = audit_service
+        self._guardrail_service = SkillCatalogAliasGuardrailService(repository)
 
     async def list_skills(
         self,
@@ -54,6 +60,13 @@ class SkillCatalogService:
             normalized_name=normalized_name,
             aliases=aliases,
         )
+        await self.validate_suggestion(
+            name=name,
+            category=category,
+            description=description,
+            aliases=aliases,
+            source="admin_create",
+        )
 
         skill_model = SkillCatalogModel(
             name=name.strip(),
@@ -73,6 +86,70 @@ class SkillCatalogService:
             next_state=self._state_label(saved),
         )
         return saved
+
+    async def validate_suggestion(
+        self,
+        *,
+        name: str,
+        category: Optional[str] = None,
+        description: Optional[str] = None,
+        aliases: Optional[list[str]] = None,
+        current_skill_id: UUID | None = None,
+        source: str | None = "ai_suggestion",
+    ) -> SkillCatalogGuardrailResult:
+        del category, description
+        return await self._guardrail_service.validate(
+            canonical_name=name,
+            aliases=aliases,
+            current_skill_id=current_skill_id,
+            source=source,
+        )
+
+    async def approve_suggestion(
+        self,
+        *,
+        name: str,
+        category: Optional[str] = None,
+        description: Optional[str] = None,
+        aliases: Optional[list[str]] = None,
+        created_by: UUID | None = None,
+        source: str | None = "ai_suggestion",
+        confirm_warnings: bool = False,
+    ) -> tuple[SkillCatalogModel | None, SkillCatalogGuardrailResult]:
+        validation = await self.validate_suggestion(
+            name=name,
+            category=category,
+            description=description,
+            aliases=aliases,
+            source=source,
+        )
+        if validation.conflicts:
+            return None, validation
+        if validation.warnings and not confirm_warnings:
+            return None, validation
+
+        processed_aliases = self._build_alias_models_from_validation_result(
+            aliases=aliases,
+            validation=validation,
+        )
+        skill_model = SkillCatalogModel(
+            name=name.strip(),
+            normalized_name=validation.normalized_canonical,
+            category=category,
+            description=self._clean_optional_text(description),
+            created_by=created_by,
+            updated_by=created_by,
+        )
+        saved = await self._repository.create_skill_with_aliases(skill_model, processed_aliases)
+        await self._log_audit(
+            action="approve_skill_suggestion",
+            skill=saved,
+            user_id=created_by,
+            previous_state=None,
+            next_state=self._state_label(saved),
+            note=source,
+        )
+        return saved, validation
 
     async def update_skill(
         self,
@@ -302,6 +379,54 @@ class SkillCatalogService:
             )
 
         return processed_aliases
+
+    def _build_alias_models_from_validation_result(
+        self,
+        *,
+        aliases: Optional[list[str]],
+        validation: SkillCatalogGuardrailResult,
+    ) -> list[SkillAliasModel]:
+        alias_by_normalized: dict[str, str] = {}
+        seen: set[str] = set()
+        for alias_name in aliases or []:
+            cleaned_alias = alias_name.strip()
+            normalized_alias = normalize_skill_name(alias_name)
+            if not normalized_alias or normalized_alias in seen:
+                continue
+            if normalized_alias == validation.normalized_canonical:
+                continue
+            seen.add(normalized_alias)
+            alias_by_normalized[normalized_alias] = cleaned_alias
+
+        return [
+            SkillAliasModel(
+                alias=alias_by_normalized[normalized_alias],
+                normalized_alias=normalized_alias,
+            )
+            for normalized_alias in validation.normalized_aliases
+            if normalized_alias in alias_by_normalized
+        ]
+
+    def _raise_for_blocking_guardrails(self, validation: SkillCatalogGuardrailResult) -> None:
+        if not validation.conflicts:
+            return
+        primary_issue = validation.conflicts[0]
+        if primary_issue.type in {"empty_or_invalid_name"}:
+            raise ValidationException(primary_issue.message)
+        raise ConflictException(primary_issue.message)
+
+    @staticmethod
+    def guardrail_issue_to_dict(issue: SkillCatalogGuardrailIssue) -> dict[str, object | None]:
+        return {
+            "type": issue.type,
+            "field": issue.field,
+            "value": issue.value,
+            "normalized_value": issue.normalized_value,
+            "message": issue.message,
+            "existing_skill_id": str(issue.existing_skill_id) if issue.existing_skill_id else None,
+            "existing_skill_name": issue.existing_skill_name,
+            "existing_alias": issue.existing_alias,
+        }
 
     def _clean_optional_text(self, value: Optional[str]) -> Optional[str]:
         if value is None:

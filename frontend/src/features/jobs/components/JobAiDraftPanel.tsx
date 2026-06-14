@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Info, Loader2, Plus, ShieldAlert, Sparkles, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,15 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusPill } from "@/components/ui/status-pill";
-import { skillsService, type SkillCatalog } from "@/services/skillsService";
+import {
+  skillsService,
+  type SkillCatalog,
+  type SkillCatalogGuardrailIssue,
+  type SkillCatalogSuggestionValidation,
+} from "@/services/skillsService";
+import { AuthContext } from "@/features/auth/AuthContext";
+import { canManageJobs } from "@/shared/auth/roles";
+import { formatErrorDetails, getBackendDetail, handleApiError } from "@/shared/utils/errorHandler";
 import type { JobFormValues } from "../jobFormConfig";
 import type { JobSkill } from "@/types/domain";
 import {
@@ -181,6 +189,17 @@ function formatSuggestedSkillImportance(importance: JobAiDraftSuggestedSkill["im
   if (importance === "essential") return "Essencial";
   if (importance === "differential") return "Diferencial";
   return "Competência";
+}
+
+function formatGuardrailIssue(issue: SkillCatalogGuardrailIssue) {
+  const subject =
+    issue.field === "canonical" ? "Nome principal" : "Alias";
+  const collisionTarget = issue.existing_skill_name
+    ? `Skill existente: ${issue.existing_skill_name}`
+    : issue.existing_alias
+      ? `Alias existente: ${issue.existing_alias}`
+      : null;
+  return collisionTarget ? `${subject}: ${issue.message} ${collisionTarget}` : `${subject}: ${issue.message}`;
 }
 
 function formatOptionalText(value: string | null | undefined) {
@@ -352,6 +371,17 @@ export function JobAiDraftPanel({
   const [selectedSuggestedSkillKeys, setSelectedSuggestedSkillKeys] = useState<string[]>([]);
   const [conflictCatalogOptions, setConflictCatalogOptions] = useState<Record<string, SkillCatalog[]>>({});
   const [selectedConflictResolution, setSelectedConflictResolution] = useState<Record<string, string>>({});
+  const [approvedCatalogSkills, setApprovedCatalogSkills] = useState<Record<string, SkillCatalog>>({});
+  const [approvalTarget, setApprovalTarget] = useState<JobAiDraftSuggestedSkill | null>(null);
+  const [approvalValidation, setApprovalValidation] = useState<SkillCatalogSuggestionValidation | null>(null);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [approvalSuccess, setApprovalSuccess] = useState<string | null>(null);
+  const [approvalWarningsConfirmed, setApprovalWarningsConfirmed] = useState(false);
+
+  const auth = useContext(AuthContext);
+  const canApproveSuggestedSkills = canManageJobs(auth?.user?.role);
 
   const isLoading = aiStatus === "loading";
   const hasDraft = draft !== null;
@@ -396,6 +426,14 @@ export function JobAiDraftPanel({
     setSelectedSuggestedSkillKeys(defaults);
     setSelectedConflictResolution({});
     setConflictCatalogOptions({});
+    setApprovedCatalogSkills({});
+    setApprovalTarget(null);
+    setApprovalValidation(null);
+    setApprovalLoading(false);
+    setApprovalSubmitting(false);
+    setApprovalError(null);
+    setApprovalSuccess(null);
+    setApprovalWarningsConfirmed(false);
   }, [draft]);
 
   useEffect(() => {
@@ -440,6 +478,91 @@ export function JobAiDraftPanel({
     };
   }, [draft]);
 
+  async function openApproveSuggestionModal(item: JobAiDraftSuggestedSkill) {
+    setApprovalTarget(item);
+    setApprovalValidation(null);
+    setApprovalLoading(true);
+    setApprovalSubmitting(false);
+    setApprovalError(null);
+    setApprovalSuccess(null);
+    setApprovalWarningsConfirmed(false);
+
+    try {
+      const validation = await skillsService.validateSuggestion({
+        name: item.name,
+        category: item.category,
+        aliases: item.aliases,
+        description: item.description ?? undefined,
+        source: "ai_suggestion",
+      });
+      setApprovalValidation(validation);
+    } catch (error) {
+      const details = formatErrorDetails(handleApiError(error));
+      setApprovalError(details[0] ?? "Não foi possível validar a sugestão no catálogo.");
+    } finally {
+      setApprovalLoading(false);
+    }
+  }
+
+  function closeApproveSuggestionModal() {
+    setApprovalTarget(null);
+    setApprovalValidation(null);
+    setApprovalLoading(false);
+    setApprovalSubmitting(false);
+    setApprovalError(null);
+    setApprovalSuccess(null);
+    setApprovalWarningsConfirmed(false);
+  }
+
+  async function approveSuggestedSkill() {
+    if (!approvalTarget) return;
+
+    setApprovalSubmitting(true);
+    setApprovalError(null);
+    try {
+      const response = await skillsService.approveSuggestion({
+        name: approvalTarget.name,
+        category: approvalTarget.category,
+        aliases: approvalTarget.aliases,
+        description: approvalTarget.description ?? undefined,
+        source: "ai_suggestion",
+        confirm_warnings: approvalWarningsConfirmed,
+      });
+      const itemKey = getSuggestedSkillKey(approvalTarget);
+      setApprovedCatalogSkills((current) => ({ ...current, [itemKey]: response.skill }));
+      setApprovalValidation(response.validation);
+      setApprovalSuccess("Skill criada no catálogo.");
+    } catch (error) {
+      const detail = getBackendDetail(error) as
+        | { error?: { conflicts?: SkillCatalogGuardrailIssue[]; warnings?: SkillCatalogGuardrailIssue[] } }
+        | undefined;
+      const blockedError = detail && typeof detail === "object" && "error" in detail ? detail.error : undefined;
+      if (blockedError) {
+        setApprovalValidation((current) => ({
+          allowed: false,
+          conflicts: blockedError.conflicts ?? current?.conflicts ?? [],
+          warnings: blockedError.warnings ?? current?.warnings ?? [],
+          normalized_canonical: current?.normalized_canonical ?? "",
+          normalized_aliases: current?.normalized_aliases ?? [],
+          source: current?.source ?? "ai_suggestion",
+        }));
+      }
+      const details = formatErrorDetails(handleApiError(error));
+      setApprovalError(details[0] ?? "Não foi possível aprovar a skill sugerida.");
+    } finally {
+      setApprovalSubmitting(false);
+    }
+  }
+
+  function applyApprovedSuggestedSkillToForm() {
+    if (!approvalTarget) return;
+    const itemKey = getSuggestedSkillKey(approvalTarget);
+    setSelectedSuggestedSkillKeys((current) =>
+      current.includes(itemKey) ? current : [...current, itemKey],
+    );
+    setApprovalSuccess("Skill criada no catálogo. Selecionei a skill para aplicação manual no formulário.");
+  }
+
   const selectedSuggestedSkillItems = useMemo(() => {
     if (!draft) return [];
     const selectedKeys = new Set(selectedSuggestedSkillKeys);
@@ -448,7 +571,11 @@ export function JobAiDraftPanel({
 
   const selectedSuggestedSkillSummary = useMemo(() => {
     const existing = selectedSuggestedSkillItems.filter((item) => item.catalog_status === "existing");
+    const approvedNew = selectedSuggestedSkillItems.filter(
+      (item) => item.catalog_status === "new" && approvedCatalogSkills[getSuggestedSkillKey(item)],
+    );
     const existingApplicable: ApplicableSkill[] = [];
+    const approvedNewApplicable: Array<ApplicableSkill & { suggestedName: string }> = [];
     const resolvedConflictApplicable: Array<ApplicableSkill & { suggestedName: string }> = [];
     const seenIds = new Set<string>();
     const seenNames = new Set<string>();
@@ -497,6 +624,28 @@ export function JobAiDraftPanel({
       existingApplicable.push(applicable);
     }
 
+    for (const item of approvedNew) {
+      const approvedSkill = approvedCatalogSkills[getSuggestedSkillKey(item)];
+      if (!approvedSkill) continue;
+      const inferredPriority =
+        item.importance === "differential" ? "complementary" : "priority";
+      const applicable = buildApplicableSkillFromSuggested(item, approvedSkill, inferredPriority);
+      if (!applicable) continue;
+
+      const normalizedName = normalizeSkillName(applicable.name);
+      const alreadyLinked = linkedSkills.some((linked) => {
+        if (linked.skill_id === applicable.skill_id) return true;
+        return normalizeSkillName(linked.skill_name) === normalizedName;
+      });
+      if (alreadyLinked || seenIds.has(applicable.skill_id) || seenNames.has(normalizedName)) {
+        continue;
+      }
+
+      seenIds.add(applicable.skill_id);
+      seenNames.add(normalizedName);
+      approvedNewApplicable.push({ ...applicable, suggestedName: item.name });
+    }
+
     const selectedConflicts = selectedSuggestedSkillItems.filter((item) => item.catalog_status === "conflict");
     let unresolvedConflictSelected = 0;
 
@@ -532,18 +681,27 @@ export function JobAiDraftPanel({
     return {
       existingSelected: existing.length,
       existingApplicable,
+      approvedNewSelected: approvedNew.length,
+      approvedNewApplicable,
       conflictResolvedApplicable: resolvedConflictApplicable,
       newSelected: selectedSuggestedSkillItems.filter((item) => item.catalog_status === "new").length,
       conflictSelected: selectedSuggestedSkillItems.filter((item) => item.catalog_status === "conflict").length,
       unresolvedConflictSelected,
       duplicatesSkipped:
         Math.max(existing.length - existingApplicable.length, 0) +
+        Math.max(approvedNew.length - approvedNewApplicable.length, 0) +
         Math.max(
           selectedConflicts.length - unresolvedConflictSelected - resolvedConflictApplicable.length,
           0,
         ),
     };
-  }, [conflictCatalogOptions, linkedSkills, selectedConflictResolution, selectedSuggestedSkillItems]);
+  }, [
+    approvedCatalogSkills,
+    conflictCatalogOptions,
+    linkedSkills,
+    selectedConflictResolution,
+    selectedSuggestedSkillItems,
+  ]);
 
   const confirmSummary = useMemo(() => {
     if (!draft) return null;
@@ -838,6 +996,7 @@ export function JobAiDraftPanel({
     const skills = extractSkillSuggestions(draft);
     onApply(updates, skills, [
       ...selectedSuggestedSkillSummary.existingApplicable,
+      ...selectedSuggestedSkillSummary.approvedNewApplicable,
       ...selectedSuggestedSkillSummary.conflictResolvedApplicable,
     ]);
     setShowConfirm(false);
@@ -1425,6 +1584,7 @@ export function JobAiDraftPanel({
                         {items.map((item) => {
                           const itemKey = getSuggestedSkillKey(item);
                           const isSelected = selectedSuggestedSkillKeys.includes(itemKey);
+                          const approvedSkill = approvedCatalogSkills[itemKey];
 
                           return (
                           <div
@@ -1521,10 +1681,36 @@ export function JobAiDraftPanel({
                                   </div>
                                 )}
 
-                                {item.catalog_status === "new" && isSelected && (
-                                  <p className="text-xs text-warning">
-                                    Nova sugestão selecionada. A criação no catálogo exige etapa futura.
-                                  </p>
+                                {item.catalog_status === "new" && (
+                                  <div className="space-y-2">
+                                    {approvedSkill ? (
+                                      <div className="rounded-lg border border-success/20 bg-success-soft/50 px-3 py-3 text-xs text-success">
+                                        <p className="font-medium">Skill criada no catálogo: {approvedSkill.name}</p>
+                                        <p className="mt-1">
+                                          A aplicação ao formulário continua manual e depende da sua seleção.
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-warning">
+                                        Nova sugestão selecionada. A criação no catálogo exige aprovação explícita.
+                                      </p>
+                                    )}
+                                    {canApproveSuggestedSkills ? (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void openApproveSuggestionModal(item)}
+                                        data-testid={`approve-suggested-skill-${item.name}`}
+                                      >
+                                        {approvedSkill ? "Revisar aprovação" : "Aprovar no catálogo"}
+                                      </Button>
+                                    ) : (
+                                      <p className="text-xs text-text-muted">
+                                        Apenas usuários com permissão de gestão podem aprovar novas skills no catálogo.
+                                      </p>
+                                    )}
+                                  </div>
                                 )}
 
                                 {item.catalog_status === "conflict" && isSelected && (
@@ -1588,6 +1774,167 @@ export function JobAiDraftPanel({
           </div>
         )}
       </section>
+
+      <Dialog open={approvalTarget !== null} onOpenChange={(open) => !open && closeApproveSuggestionModal()}>
+        <DialogContent
+          className="max-h-[90vh] max-w-2xl overflow-y-auto"
+          data-testid="job-ai-skill-approval-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Aprovar nova skill no catálogo</DialogTitle>
+            <DialogDescription>
+              A skill só será criada após validação do guardrail e sua confirmação explícita.
+            </DialogDescription>
+          </DialogHeader>
+
+          {approvalTarget ? (
+            <div className="space-y-4">
+              <section className="rounded-xl border border-border bg-surface p-4">
+                <SectionTitle>Resumo da sugestão</SectionTitle>
+                <ul className="mt-3 space-y-3">
+                  <SummaryRow label="Nome sugerido" value={approvalTarget.name} />
+                  <SummaryRow label="Categoria" value={approvalTarget.category || "Não informado"} />
+                  <SummaryRow
+                    label="Importância"
+                    value={formatSuggestedSkillImportance(approvalTarget.importance)}
+                  />
+                  <SummaryRow
+                    label="Descrição"
+                    value={approvalTarget.description?.trim() || "Não informada"}
+                  />
+                </ul>
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-medium text-text-muted">Aliases sugeridos</p>
+                  {approvalTarget.aliases.length > 0 ? (
+                    <ChipList items={approvalTarget.aliases} testId="approval-skill-aliases" />
+                  ) : (
+                    <p className="text-sm text-text-muted">Nenhum alias sugerido.</p>
+                  )}
+                </div>
+              </section>
+
+              {approvalLoading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Validando sugestão no catálogo...
+                </div>
+              ) : null}
+
+              {approvalValidation ? (
+                <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
+                  <SectionTitle>Validação do catálogo</SectionTitle>
+                  <div className="space-y-2 text-sm">
+                    <p className="text-text">
+                      Nome normalizado:{" "}
+                      <span className="font-medium">{approvalValidation.normalized_canonical || "inválido"}</span>
+                    </p>
+                    <p className="text-text">
+                      Aliases normalizados:{" "}
+                      <span className="font-medium">
+                        {approvalValidation.normalized_aliases.length > 0
+                          ? approvalValidation.normalized_aliases.join(", ")
+                          : "nenhum"}
+                      </span>
+                    </p>
+                  </div>
+
+                  {approvalValidation.conflicts.length > 0 ? (
+                    <div
+                      className="rounded-xl border border-danger/20 bg-danger-soft/50 px-4 py-3"
+                      data-testid="approval-skill-conflicts"
+                    >
+                      <p className="text-sm font-medium text-danger">
+                        A aprovação foi bloqueada por conflitos no catálogo.
+                      </p>
+                      <ul className="mt-2 space-y-2 text-sm text-danger">
+                        {approvalValidation.conflicts.map((issue, index) => (
+                          <li key={`${issue.type}-${index}`}>{formatGuardrailIssue(issue)}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {approvalValidation.warnings.length > 0 ? (
+                    <div
+                      className="rounded-xl border border-warning/20 bg-warning-soft/50 px-4 py-3"
+                      data-testid="approval-skill-warnings"
+                    >
+                      <p className="text-sm font-medium text-warning">
+                        A skill pode ser criada, mas exige confirmação explícita.
+                      </p>
+                      <ul className="mt-2 space-y-2 text-sm text-warning">
+                        {approvalValidation.warnings.map((issue, index) => (
+                          <li key={`${issue.type}-${index}`}>{formatGuardrailIssue(issue)}</li>
+                        ))}
+                      </ul>
+                      <label className="mt-3 flex items-start gap-2 text-sm text-text">
+                        <input
+                          type="checkbox"
+                          checked={approvalWarningsConfirmed}
+                          onChange={(event) => setApprovalWarningsConfirmed(event.target.checked)}
+                          data-testid="approval-skill-confirm-warnings"
+                        />
+                        <span>Confirmo que revisei os warnings e desejo criar esta skill no catálogo.</span>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {approvalValidation.allowed && approvalValidation.conflicts.length === 0 ? (
+                    <div className="rounded-xl border border-success/20 bg-success-soft/50 px-4 py-3 text-sm text-success">
+                      Guardrail liberou a criação da skill.
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {approvalError ? (
+                <div className="rounded-xl border border-danger/20 bg-danger-soft/50 px-4 py-3 text-sm text-danger">
+                  {approvalError}
+                </div>
+              ) : null}
+
+              {approvalSuccess ? (
+                <div
+                  className="rounded-xl border border-success/20 bg-success-soft/50 px-4 py-3 text-sm text-success"
+                  data-testid="approval-skill-success"
+                >
+                  {approvalSuccess}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeApproveSuggestionModal}>
+              Fechar
+            </Button>
+            {approvalTarget && approvedCatalogSkills[getSuggestedSkillKey(approvalTarget)] ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={applyApprovedSuggestedSkillToForm}
+                data-testid="approval-skill-apply-to-form"
+              >
+                Usar skill criada no formulário
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              onClick={() => void approveSuggestedSkill()}
+              disabled={
+                approvalLoading ||
+                approvalSubmitting ||
+                !approvalValidation ||
+                approvalValidation.conflicts.length > 0 ||
+                (approvalValidation.warnings.length > 0 && !approvalWarningsConfirmed)
+              }
+              data-testid="approval-skill-confirm"
+            >
+              {approvalSubmitting ? "Aprovando..." : "Confirmar criação no catálogo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
         <DialogContent
@@ -1721,6 +2068,10 @@ export function JobAiDraftPanel({
                   <p className="text-text">
                     {confirmSummary.selectedSuggestedSkillsSummary.existingApplicable.length} skills existentes
                     serão aplicadas.
+                  </p>
+                  <p className="text-text-muted">
+                    {confirmSummary.selectedSuggestedSkillsSummary.approvedNewApplicable.length} novas skills
+                    aprovadas manualmente no catálogo serão aplicadas.
                   </p>
                   <p className="text-text-muted">
                     {confirmSummary.selectedSuggestedSkillsSummary.newSelected} novas sugestões não serão criadas

@@ -17,6 +17,22 @@ async def _get_admin_headers(client: AsyncClient, db_session: AsyncSession) -> d
     )
     return await _auth_headers(client, "admin-skill@test.com", "password123")
 
+
+async def _get_headers_for_role(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    *,
+    email: str,
+    role: UserRole,
+) -> dict[str, str]:
+    await _create_active_user(
+        db_session,
+        email,
+        "password123",
+        role,
+    )
+    return await _auth_headers(client, email, "password123")
+
 async def test_create_skill_success(client: AsyncClient, db_session: AsyncSession):
     headers = await _get_admin_headers(client, db_session)
     response = await client.post(
@@ -429,3 +445,235 @@ async def test_list_skills_defaults_to_non_archived_and_can_filter_inactive(clie
     inactive_ids = {item["id"] for item in inactive_list.json()["data"]}
     assert inactive_id in inactive_ids
     assert active_id not in inactive_ids
+
+
+async def test_validate_skill_suggestion_allowed_returns_normalized_payload(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_admin_headers(client, db_session)
+
+    response = await client.post(
+        "/api/v1/skills/validate-suggestion",
+        json={
+            "name": "Análise_de-Dados",
+            "aliases": ["Business-Analysis"],
+            "category": "technical",
+            "description": "Leitura de indicadores",
+            "source": "ai_suggestion",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["allowed"] is True
+    assert payload["conflicts"] == []
+    assert payload["normalized_canonical"] == "analise de dados"
+    assert payload["normalized_aliases"] == ["business analysis"]
+    assert payload["source"] == "ai_suggestion"
+
+
+async def test_validate_skill_suggestion_blocks_duplicate_canonical_and_alias_conflicts(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_admin_headers(client, db_session)
+    await client.post(
+        "/api/v1/skills",
+        json={"name": "Python", "aliases": ["Py"]},
+        headers=headers,
+    )
+
+    response = await client.post(
+        "/api/v1/skills/validate-suggestion",
+        json={"name": "Py", "aliases": ["Python"], "source": "ai_suggestion"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["allowed"] is False
+    assert {item["type"] for item in payload["conflicts"]} == {
+        "canonical_matches_existing_alias",
+        "alias_matches_existing_canonical",
+    }
+
+
+async def test_validate_skill_suggestion_returns_macro_warning(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_admin_headers(client, db_session)
+
+    response = await client.post(
+        "/api/v1/skills/validate-suggestion",
+        json={"name": "Backend", "aliases": ["APIs internas"], "source": "ai_suggestion"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["allowed"] is True
+    assert any(item["type"] == "ambiguous_macro_skill" for item in payload["warnings"])
+
+
+async def test_validate_skill_suggestion_requires_authorization(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(db_session, "noauth@test.com", "password123", UserRole.ADMIN)
+    response = await client.post(
+        "/api/v1/skills/validate-suggestion",
+        json={"name": "FastAPI", "aliases": [], "source": "ai_suggestion"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_validate_skill_suggestion_rejects_viewer_role(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_headers_for_role(
+        client,
+        db_session,
+        email="viewer-skill@test.com",
+        role=UserRole.VIEWER,
+    )
+
+    response = await client.post(
+        "/api/v1/skills/validate-suggestion",
+        json={"name": "FastAPI", "aliases": [], "source": "ai_suggestion"},
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Permissão insuficiente para este recurso"
+
+
+async def test_approve_suggestion_does_not_create_skill_when_guardrail_blocks(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_admin_headers(client, db_session)
+    await client.post(
+        "/api/v1/skills",
+        json={"name": "JavaScript", "aliases": ["JS"]},
+        headers=headers,
+    )
+
+    before = await client.get("/api/v1/skills?search=typescript", headers=headers)
+
+    response = await client.post(
+        "/api/v1/skills/approve-suggestion",
+        json={
+            "name": "JS",
+            "aliases": ["JavaScript"],
+            "category": "tool",
+            "description": "Sugestão da IA",
+            "source": "ai_suggestion",
+            "confirm_warnings": True,
+        },
+        headers=headers,
+    )
+
+    after = await client.get("/api/v1/skills?search=typescript", headers=headers)
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["error"]["code"] == "SKILL_CATALOG_GUARDRAIL_BLOCKED"
+    assert "stack" not in response.text.lower()
+    assert {item["type"] for item in payload["error"]["conflicts"]} == {
+        "canonical_matches_existing_alias",
+        "alias_matches_existing_canonical",
+    }
+    assert before.json()["total"] == after.json()["total"] == 0
+
+
+async def test_approve_suggestion_requires_warning_confirmation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_admin_headers(client, db_session)
+
+    response = await client.post(
+        "/api/v1/skills/approve-suggestion",
+        json={
+            "name": "Backend",
+            "aliases": ["APIs internas"],
+            "category": "technical",
+            "source": "ai_suggestion",
+            "confirm_warnings": False,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"]["code"] == "SKILL_CATALOG_WARNING_CONFIRMATION_REQUIRED"
+    assert any(item["type"] == "ambiguous_macro_skill" for item in payload["error"]["warnings"])
+
+
+async def test_approve_suggestion_creates_skill_when_allowed(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_admin_headers(client, db_session)
+
+    response = await client.post(
+        "/api/v1/skills/approve-suggestion",
+        json={
+            "name": "FastAPI",
+            "aliases": ["Starlette Framework"],
+            "category": "tool",
+            "description": "Framework Python",
+            "source": "ai_suggestion",
+            "confirm_warnings": True,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["skill"]["name"] == "FastAPI"
+    assert payload["skill"]["normalized_name"] == "fastapi"
+    assert payload["warnings"] == []
+    assert payload["validation"]["allowed"] is True
+
+    persisted = await client.get("/api/v1/skills?search=fastapi", headers=headers)
+    assert persisted.json()["total"] >= 1
+
+
+async def test_approve_suggestion_does_not_create_duplicate_on_second_attempt(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_admin_headers(client, db_session)
+
+    first = await client.post(
+        "/api/v1/skills/approve-suggestion",
+        json={
+            "name": "Observabilidade Aplicada",
+            "aliases": ["Telemetry Ops"],
+            "category": "tool",
+            "source": "ai_suggestion",
+            "confirm_warnings": True,
+        },
+        headers=headers,
+    )
+    second = await client.post(
+        "/api/v1/skills/approve-suggestion",
+        json={
+            "name": "observabilidade aplicada",
+            "aliases": ["Telemetry Ops"],
+            "category": "tool",
+            "source": "ai_suggestion",
+            "confirm_warnings": True,
+        },
+        headers=headers,
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "SKILL_CATALOG_GUARDRAIL_BLOCKED"

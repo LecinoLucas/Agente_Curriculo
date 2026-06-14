@@ -1,16 +1,21 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.interface.api.dependencies import AdminOnly, InternalUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.skill_catalog_schemas import (
+    ApproveSkillSuggestionRequest,
     ArchiveSkillRequest,
     CreateSkillRequest,
     SkillCatalogResponse,
+    SkillCatalogSuggestionApprovalResponse,
+    SkillCatalogSuggestionValidationResponse,
     UpdateSkillRequest,
+    ValidateSkillSuggestionRequest,
 )
 from src.application.services.audit_service import AuditService
 from src.application.services.skill_catalog_service import SkillCatalogService
@@ -21,6 +26,30 @@ router = APIRouter(prefix="/skills", tags=["skills"])
 def _get_service(db: AsyncSession = Depends(get_db)) -> SkillCatalogService:
     repository = SQLAlchemySkillCatalogRepository(db)
     return SkillCatalogService(repository, audit_service=AuditService(db))
+
+
+def _guardrail_blocked_response(
+    *,
+    request: Request,
+    message: str,
+    conflicts: list[dict[str, object | None]],
+    warnings: list[dict[str, object | None]],
+    status_code: int = status.HTTP_409_CONFLICT,
+    code: str = "SKILL_CATALOG_GUARDRAIL_BLOCKED",
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": {
+                "code": code,
+                "message": message,
+                "conflicts": conflicts,
+                "warnings": warnings,
+            },
+            "request_id": str(getattr(request.state, "request_id", "")),
+            "correlation_id": str(getattr(request.state, "correlation_id", "")),
+        },
+    )
 
 @router.get("", response_model=PaginatedResponse[SkillCatalogResponse])
 async def list_skills(
@@ -74,6 +103,89 @@ async def create_skill(
         created_by=current_user.id,
     )
     return SkillCatalogResponse.model_validate(skill, from_attributes=True)
+
+
+@router.post("/validate-suggestion", response_model=SkillCatalogSuggestionValidationResponse)
+async def validate_skill_suggestion(
+    body: ValidateSkillSuggestionRequest,
+    current_user: RecruiterOrAdmin,
+    service: SkillCatalogService = Depends(_get_service),
+) -> SkillCatalogSuggestionValidationResponse:
+    validation = await service.validate_suggestion(
+        name=body.name,
+        category=body.category,
+        description=body.description,
+        aliases=body.aliases,
+        source=body.source,
+    )
+    return SkillCatalogSuggestionValidationResponse(
+        allowed=validation.allowed,
+        conflicts=[
+            service.guardrail_issue_to_dict(item)
+            for item in validation.conflicts
+        ],
+        warnings=[
+            service.guardrail_issue_to_dict(item)
+            for item in validation.warnings
+        ],
+        normalized_canonical=validation.normalized_canonical,
+        normalized_aliases=list(validation.normalized_aliases),
+        source=validation.source,
+    )
+
+
+@router.post(
+    "/approve-suggestion",
+    response_model=SkillCatalogSuggestionApprovalResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def approve_skill_suggestion(
+    request: Request,
+    body: ApproveSkillSuggestionRequest,
+    current_user: RecruiterOrAdmin,
+    service: SkillCatalogService = Depends(_get_service),
+) -> SkillCatalogSuggestionApprovalResponse | JSONResponse:
+    skill, validation = await service.approve_suggestion(
+        name=body.name,
+        category=body.category,
+        description=body.description,
+        aliases=body.aliases,
+        created_by=current_user.id,
+        source=body.source,
+        confirm_warnings=body.confirm_warnings,
+    )
+    conflicts = [service.guardrail_issue_to_dict(item) for item in validation.conflicts]
+    warnings = [service.guardrail_issue_to_dict(item) for item in validation.warnings]
+    if validation.conflicts:
+        return _guardrail_blocked_response(
+            request=request,
+            message="A sugestão não pode ser aprovada porque colide com o catálogo atual.",
+            conflicts=conflicts,
+            warnings=warnings,
+        )
+    if validation.warnings and not body.confirm_warnings:
+        return _guardrail_blocked_response(
+            request=request,
+            message="A sugestão exige confirmação explícita por causa dos warnings retornados.",
+            conflicts=[],
+            warnings=warnings,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code="SKILL_CATALOG_WARNING_CONFIRMATION_REQUIRED",
+        )
+    assert skill is not None
+    validation_payload = SkillCatalogSuggestionValidationResponse(
+        allowed=validation.allowed,
+        conflicts=conflicts,
+        warnings=warnings,
+        normalized_canonical=validation.normalized_canonical,
+        normalized_aliases=list(validation.normalized_aliases),
+        source=validation.source,
+    )
+    return SkillCatalogSuggestionApprovalResponse(
+        skill=SkillCatalogResponse.model_validate(skill, from_attributes=True),
+        warnings=warnings,
+        validation=validation_payload,
+    )
 
 @router.patch("/{skill_id}", response_model=SkillCatalogResponse)
 async def update_skill(

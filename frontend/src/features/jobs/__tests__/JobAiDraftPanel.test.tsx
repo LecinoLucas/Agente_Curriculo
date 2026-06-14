@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { skillsService, type SkillCatalog } from "@/services/skillsService";
+import { AuthContext } from "@/features/auth/AuthContext";
 
 import { JobAiDraftPanel, draftToFormUpdates } from "../components/JobAiDraftPanel";
 import { MOCK_JOB_AI_DRAFT } from "../utils/mockJobAiDraft";
@@ -35,6 +36,8 @@ vi.mock("../services/jobAiDraftService", async (importOriginal) => {
 vi.mock("@/services/skillsService", () => ({
   skillsService: {
     listSkills: vi.fn(),
+    validateSuggestion: vi.fn(),
+    approveSuggestion: vi.fn(),
   },
 }));
 
@@ -43,6 +46,8 @@ import { generateJobAiDraft, generateJobAiDraftFromImage } from "../services/job
 const mockGenerateJobAiDraft = generateJobAiDraft as ReturnType<typeof vi.fn>;
 const mockGenerateJobAiDraftFromImage = generateJobAiDraftFromImage as ReturnType<typeof vi.fn>;
 const mockListSkills = vi.mocked(skillsService.listSkills);
+const mockValidateSuggestion = vi.mocked(skillsService.validateSuggestion);
+const mockApproveSuggestion = vi.mocked(skillsService.approveSuggestion);
 
 function skill(name: string, id = name.toLowerCase().replace(/\s+/g, "-")): SkillCatalog {
   return {
@@ -428,6 +433,8 @@ describe("JobAiDraftPanel — API real", () => {
     mockGenerateJobAiDraft.mockReset();
     mockGenerateJobAiDraftFromImage.mockReset();
     mockListSkills.mockReset();
+    mockValidateSuggestion.mockReset();
+    mockApproveSuggestion.mockReset();
     mockListSkills.mockImplementation(async ({ search }) => {
       const term = String(search ?? "").trim().toLowerCase();
       const data = MOCK_SKILL_CATALOG.filter(
@@ -440,6 +447,32 @@ describe("JobAiDraftPanel — API real", () => {
         page_size: 10,
         total_pages: 1,
       };
+    });
+    mockValidateSuggestion.mockResolvedValue({
+      allowed: true,
+      conflicts: [],
+      warnings: [],
+      normalized_canonical: "suporte protheus",
+      normalized_aliases: ["totvs protheus", "erp protheus", "suporte totvs"],
+      source: "ai_suggestion",
+    });
+    mockApproveSuggestion.mockResolvedValue({
+      skill: {
+        ...skill("Suporte Protheus", "skill-suporte-protheus"),
+        aliases: [
+          { id: "a1", alias: "TOTVS Protheus", normalized_alias: "totvs protheus" },
+          { id: "a2", alias: "ERP Protheus", normalized_alias: "erp protheus" },
+        ],
+      },
+      warnings: [],
+      validation: {
+        allowed: true,
+        conflicts: [],
+        warnings: [],
+        normalized_canonical: "suporte protheus",
+        normalized_aliases: ["totvs protheus", "erp protheus"],
+        source: "ai_suggestion",
+      },
     });
   });
 
@@ -458,14 +491,38 @@ describe("JobAiDraftPanel — API real", () => {
       minimum_years_experience?: number;
     },
     linkedSkills?: Array<{ skill_id: string; skill_name: string; priority_level: string }>,
+    userRole: "admin" | "recruiter" | "viewer" = "admin",
   ) {
     render(
-      <JobAiDraftPanel
-        formHasData={formHasData}
-        currentFormSnapshot={currentFormSnapshot}
-        linkedSkills={linkedSkills as any}
-        onApply={onApply}
-      />,
+      <AuthContext.Provider
+        value={{
+          user: {
+            id: "user-1",
+            email: "admin@test.com",
+            full_name: "Admin",
+            role: userRole,
+            status: "active",
+            real_ai_token_spend_enabled: false,
+            must_change_password: false,
+            last_login_at: null,
+            created_at: null,
+          },
+          isAuthenticated: true,
+          isLoading: false,
+          login: vi.fn(),
+          loginWithGoogle: vi.fn(),
+          logout: vi.fn(),
+          refreshUser: vi.fn(),
+          updateUser: vi.fn(),
+        }}
+      >
+        <JobAiDraftPanel
+          formHasData={formHasData}
+          currentFormSnapshot={currentFormSnapshot}
+          linkedSkills={linkedSkills as any}
+          onApply={onApply}
+        />
+      </AuthContext.Provider>,
     );
     return { onApply };
   }
@@ -498,9 +555,10 @@ describe("JobAiDraftPanel — API real", () => {
       minimum_years_experience?: number;
     },
     linkedSkills?: Array<{ skill_id: string; skill_name: string; priority_level: string }>,
+    userRole: "admin" | "recruiter" | "viewer" = "admin",
   ) {
     mockGenerateJobAiDraft.mockResolvedValue(MOCK_API_RESPONSE);
-    renderPanel(formHasData, onApply, currentFormSnapshot, linkedSkills);
+    renderPanel(formHasData, onApply, currentFormSnapshot, linkedSkills, userRole);
     fillAndSubmit();
     await screen.findByTestId("ai-draft-result");
     return { onApply };
@@ -582,6 +640,120 @@ describe("JobAiDraftPanel — API real", () => {
     expect(screen.getByTestId("draft-suggested-skills-summary")).toHaveTextContent(
       /Existentes selecionadas/i,
     );
+  });
+
+  it("exibe botão de aprovação para new suggestion quando usuário pode gerenciar vagas", async () => {
+    await generateAndWaitForDraft();
+
+    expect(screen.getByTestId("approve-suggested-skill-Suporte Protheus")).toBeInTheDocument();
+  });
+
+  it("abre modal de aprovação e mostra aliases e descrição da skill sugerida", async () => {
+    await generateAndWaitForDraft();
+
+    fireEvent.click(screen.getByTestId("approve-suggested-skill-Suporte Protheus"));
+
+    const dialog = await screen.findByTestId("job-ai-skill-approval-dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText(/Atendimento e suporte a rotinas no ERP Protheus/i)).toBeInTheDocument();
+    expect(within(dialog).getByTestId("approval-skill-aliases")).toHaveTextContent(/TOTVS Protheus/i);
+    expect(mockValidateSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Suporte Protheus", source: "ai_suggestion" }),
+    );
+  });
+
+  it("bloqueia aprovação quando o guardrail retorna conflitos", async () => {
+    mockValidateSuggestion.mockResolvedValue({
+      allowed: false,
+      conflicts: [
+        {
+          type: "canonical_matches_existing_alias",
+          field: "canonical",
+          value: "Suporte Protheus",
+          normalized_value: "suporte protheus",
+          message: "Canonical colide com alias existente.",
+          existing_skill_name: "ERP Corporativo",
+          existing_alias: "Suporte Protheus",
+        },
+      ],
+      warnings: [],
+      normalized_canonical: "suporte protheus",
+      normalized_aliases: [],
+      source: "ai_suggestion",
+    });
+    await generateAndWaitForDraft();
+
+    fireEvent.click(screen.getByTestId("approve-suggested-skill-Suporte Protheus"));
+
+    expect(await screen.findByTestId("approval-skill-conflicts")).toHaveTextContent(/ERP Corporativo/i);
+    expect(screen.getByTestId("approval-skill-confirm")).toBeDisabled();
+  });
+
+  it("warnings exigem confirmação explícita antes da aprovação", async () => {
+    mockValidateSuggestion.mockResolvedValue({
+      allowed: true,
+      conflicts: [],
+      warnings: [
+        {
+          type: "ambiguous_macro_skill",
+          field: "canonical",
+          value: "Backend",
+          normalized_value: "backend",
+          message: "Canonical amplo demais e deve passar por revisão humana.",
+        },
+      ],
+      normalized_canonical: "backend",
+      normalized_aliases: [],
+      source: "ai_suggestion",
+    });
+    await generateAndWaitForDraft();
+
+    fireEvent.click(screen.getByTestId("approve-suggested-skill-Suporte Protheus"));
+
+    expect(await screen.findByTestId("approval-skill-warnings")).toBeInTheDocument();
+    expect(screen.getByTestId("approval-skill-confirm")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("approval-skill-confirm-warnings"));
+    expect(screen.getByTestId("approval-skill-confirm")).not.toBeDisabled();
+  });
+
+  it("aprovação allowed mostra sucesso e não aplica ao formulário automaticamente", async () => {
+    const { onApply } = await generateAndWaitForDraft();
+
+    fireEvent.click(screen.getByTestId("approve-suggested-skill-Suporte Protheus"));
+    fireEvent.click(await screen.findByTestId("approval-skill-confirm"));
+
+    expect(await screen.findByTestId("approval-skill-success")).toHaveTextContent(/Skill criada no catálogo/i);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId("draft-suggested-skill-checkbox-new-Suporte Protheus"),
+    ).not.toBeChecked();
+  });
+
+  it("permite aplicar ao formulário a skill criada no catálogo apenas após confirmação separada", async () => {
+    const { onApply } = await generateAndWaitForDraft();
+
+    fireEvent.click(screen.getByTestId("approve-suggested-skill-Suporte Protheus"));
+    fireEvent.click(await screen.findByTestId("approval-skill-confirm"));
+    fireEvent.click(await screen.findByTestId("approval-skill-apply-to-form"));
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply.mock.calls[0][2]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ skill_id: "skill-atendimento", name: "Atendimento ao cliente" }),
+        expect.objectContaining({ skill_id: "skill-suporte-protheus", name: "Suporte Protheus" }),
+      ]),
+    );
+  });
+
+  it("não exibe ação de aprovação para usuário sem permissão", async () => {
+    await generateAndWaitForDraft(false, vi.fn(), undefined, undefined, "viewer");
+
+    expect(screen.queryByTestId("approve-suggested-skill-Suporte Protheus")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Apenas usuários com permissão de gestão podem aprovar novas skills no catálogo/i),
+    ).toBeInTheDocument();
   });
 
   it("seleciona existing por padrão e deixa new/conflict desmarcadas de forma visual", async () => {
@@ -771,7 +943,9 @@ describe("JobAiDraftPanel — API real", () => {
     await generateAndWaitForDraft(false);
     fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-new-Suporte Protheus"));
 
-    expect(screen.getByText(/Nova sugestão selecionada\. A criação no catálogo exige etapa futura\./i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nova sugestão selecionada\. A criação no catálogo exige aprovação explícita\./i),
+    ).toBeInTheDocument();
   });
 
   it("conflict selecionada mostra aviso de revisão manual", async () => {
