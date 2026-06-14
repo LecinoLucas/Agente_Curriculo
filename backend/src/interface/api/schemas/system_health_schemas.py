@@ -115,6 +115,91 @@ class AIUsageSummaryResponse(APISchemaModel):
     top_expensive_analyses: list[TopExpensiveAnalysisResponse]
 
 
+class AIUsageCenterPeriodResponse(APISchemaModel):
+    date_from: DateValue | None = Field(default=None, alias="from")
+    date_to: DateValue | None = Field(default=None, alias="to")
+
+
+class AIUsageCenterSummaryResponse(APISchemaModel):
+    total_calls: int
+    success_calls: int
+    failed_calls: int
+    rate_limited_calls: int
+    blocked_calls: int
+    unknown_calls: int
+    total_input_tokens: int
+    total_output_tokens: int
+    total_tokens: int
+    estimated_cost_usd: Decimal | None = None
+    avg_duration_ms: float | None = None
+
+
+class AIUsageCenterModelSummaryResponse(APISchemaModel):
+    provider: str
+    model: str
+    calls: int
+    success_calls: int
+    failed_calls: int
+    rate_limited_calls: int
+    blocked_calls: int
+    unknown_calls: int
+    total_tokens: int
+    estimated_cost_usd: Decimal | None = None
+
+
+class AIUsageCenterOperationSummaryResponse(APISchemaModel):
+    operation: str
+    calls: int
+    success_calls: int
+    failed_calls: int
+    rate_limited_calls: int
+    blocked_calls: int
+    unknown_calls: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    estimated_cost_usd: Decimal | None = None
+    avg_duration_ms: float | None = None
+    models: list[AIUsageCenterModelSummaryResponse]
+
+
+class AIUsageCenterRecentEventResponse(APISchemaModel):
+    created_at: datetime | None = None
+    operation: str
+    provider: str
+    model: str
+    status: str
+    normalized_status: str
+    tokens: int
+    estimated_cost_usd: Decimal | None = None
+    duration_ms: int | None = None
+    safe_error_message: str | None = None
+
+
+class AIUsageCenterPricingResponse(APISchemaModel):
+    source: str
+    updated_at: str | None = None
+    models: list["AIPricingItemResponse"]
+
+
+class AIUsageCenterGapsResponse(APISchemaModel):
+    unknown_operation_count: int
+    missing_token_count: int
+    missing_cost_count: int
+    unknown_status_count: int
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AIUsageCenterResponse(APISchemaModel):
+    period: AIUsageCenterPeriodResponse
+    summary: AIUsageCenterSummaryResponse
+    by_operation: list[AIUsageCenterOperationSummaryResponse]
+    by_model: list[AIUsageCenterModelSummaryResponse]
+    recent_events: list[AIUsageCenterRecentEventResponse]
+    pricing: AIUsageCenterPricingResponse
+    gaps: AIUsageCenterGapsResponse
+
+
 class QueueWorkerStatusResponse(APISchemaModel):
     status: HealthStatus
     message: str | None = None
@@ -190,3 +275,7 @@ class AICostBackfillResponse(APISchemaModel):
     total_null_rows: int
     updated: int
     skipped_unpriced: int
+
+
+AIUsageCenterPricingResponse.model_rebuild()
+AIUsageCenterResponse.model_rebuild()

@@ -149,6 +149,106 @@ async def test_ai_usage_works_without_records(
 
 
 @pytest.mark.asyncio
+async def test_ai_usage_center_returns_grouped_operational_payload(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _admin_headers(client, db_session)
+
+    db_session.add_all(
+        [
+            AIUsageLogModel(
+                provider="google",
+                model="gemini-2.5-flash",
+                operation="job_ai_draft",
+                input_tokens=200,
+                output_tokens=50,
+                total_tokens=250,
+                latency_ms=1400,
+                status="success",
+                estimated_cost_usd=Decimal("0.120000"),
+            ),
+            AIUsageLogModel(
+                provider="google",
+                model="gemini-2.5-flash",
+                operation=None,
+                input_tokens=0,
+                output_tokens=0,
+                total_tokens=0,
+                latency_ms=None,
+                status="rate_limited",
+                error_message="429 rate limit. Bearer secret-token",
+                estimated_cost_usd=None,
+            ),
+            AIUsageLogModel(
+                provider="anthropic",
+                model="claude-sonnet-4-6",
+                operation="resume_analysis",
+                input_tokens=80,
+                output_tokens=20,
+                total_tokens=100,
+                latency_ms=2100,
+                status="weird_status",
+                error_message="api_key=abc123 prompt completo do candidato",
+                estimated_cost_usd=Decimal("0.045000"),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await client.get("/api/v1/admin/health/ai-usage-center", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["total_calls"] == 3
+    assert body["summary"]["success_calls"] == 1
+    assert body["summary"]["rate_limited_calls"] == 1
+    assert body["summary"]["unknown_calls"] == 1
+    assert body["summary"]["total_tokens"] == 350
+    assert body["summary"]["estimated_cost_usd"] == 0.165
+    assert len(body["by_operation"]) == 3
+    assert body["by_operation"][0]["operation"] == "job_ai_draft"
+    assert body["gaps"]["unknown_operation_count"] == 1
+    assert body["gaps"]["missing_token_count"] == 1
+    assert body["gaps"]["missing_cost_count"] == 1
+    assert body["gaps"]["unknown_status_count"] == 1
+    assert "ai_assistant_without_dedicated_operation_logs" in body["gaps"]["warnings"]
+    assert len(body["by_model"]) == 2
+    assert body["recent_events"][0]["safe_error_message"] is not None
+    assert "Bearer secret-token" not in response.text
+    assert "api_key=abc123" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_ai_usage_center_is_admin_only(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _recruiter_headers(client, db_session)
+
+    response = await client.get("/api/v1/admin/health/ai-usage-center", headers=headers)
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_ai_usage_center_works_without_records(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _admin_headers(client, db_session)
+
+    response = await client.get("/api/v1/admin/health/ai-usage-center", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["total_calls"] == 0
+    assert body["by_operation"] == []
+    assert body["by_model"] == []
+    assert body["recent_events"] == []
+
+
+@pytest.mark.asyncio
 async def test_health_endpoints_do_not_expose_api_keys(
     client: AsyncClient,
     db_session: AsyncSession,

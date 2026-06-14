@@ -108,6 +108,10 @@ const AiSettingsPage = lazy(() =>
   }))
 );
 
+const AIUsageCenterPage = lazy(() =>
+  import("../pages/AIUsageCenterPage").then((m) => ({ default: m.AIUsageCenterPage }))
+);
+
 const AdminBiPage = lazy(() =>
   import("../pages/AdminBiPage").then((m) => ({ default: m.AdminBiPage }))
 );
@@ -411,6 +415,11 @@ export function AppRouter() {
         <Route
           path="admin/ia"
           element={protectedPage(<AiSettingsPage />, ADMIN_ONLY_ROLES)}
+        />
+
+        <Route
+          path="admin/ia/uso"
+          element={protectedPage(<AIUsageCenterPage />, ADMIN_ONLY_ROLES)}
         />
 
         <Route

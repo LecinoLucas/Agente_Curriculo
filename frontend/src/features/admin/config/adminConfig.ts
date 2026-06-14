@@ -39,6 +39,7 @@ export const SCREENS: { label: string; path: string; roles: Role[] }[] = [
   { label: "Cadastros Gerais", path: "/admin/cadastros", roles: ADMIN_ONLY_ROLES },
   { label: "Auditoria",       path: "/admin/auditoria", roles: ADMIN_ONLY_ROLES },
   { label: "System Health",   path: "/admin/health",    roles: ADMIN_ONLY_ROLES },
+  { label: "Uso de IA",       path: "/admin/ia/uso", roles: ADMIN_ONLY_ROLES },
   { label: "Credenciais IA",  path: "/admin/ai-provider-credentials", roles: ADMIN_ONLY_ROLES },
   { label: "Laboratório IA",  path: "/admin/ia", roles: ADMIN_ONLY_ROLES },
   { label: "BI & Métricas",   path: "/admin/bi",        roles: ADMIN_ONLY_ROLES },

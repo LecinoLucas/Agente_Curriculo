@@ -9,6 +9,7 @@ from src.application.services.system_health_service import AIUsageQuery, SystemH
 from src.interface.api.dependencies import AdminOnly, get_db
 from src.interface.api.schemas.system_health_schemas import (
     AICostBackfillResponse,
+    AIUsageCenterResponse,
     AIPricingCatalogResponse,
     AIUsageSummaryResponse,
     DatabaseHealthResponse,
@@ -43,6 +44,27 @@ async def get_ai_usage(
 ) -> AIUsageSummaryResponse:
     return AIUsageSummaryResponse.model_validate(
         await service.get_ai_usage(
+            AIUsageQuery(
+                date_from=date_from,
+                date_to=date_to,
+                provider=provider,
+                model=model,
+            )
+        )
+    )
+
+
+@router.get("/ai-usage-center", response_model=AIUsageCenterResponse)
+async def get_ai_usage_center(
+    _current_user: AdminOnly,
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    provider: str | None = Query(default=None),
+    model: str | None = Query(default=None),
+    service: SystemHealthService = Depends(_get_service),
+) -> AIUsageCenterResponse:
+    return AIUsageCenterResponse.model_validate(
+        await service.get_ai_usage_center(
             AIUsageQuery(
                 date_from=date_from,
                 date_to=date_to,

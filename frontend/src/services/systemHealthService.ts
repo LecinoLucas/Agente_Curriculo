@@ -68,6 +68,89 @@ export type AIUsageSummary = {
   top_expensive_analyses: TopExpensiveAnalysis[];
 };
 
+export type AIUsageCenterSummary = {
+  total_calls: number;
+  success_calls: number;
+  failed_calls: number;
+  rate_limited_calls: number;
+  blocked_calls: number;
+  unknown_calls: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number | null;
+  avg_duration_ms: number | null;
+};
+
+export type AIUsageCenterModelSummary = {
+  provider: string;
+  model: string;
+  calls: number;
+  success_calls: number;
+  failed_calls: number;
+  rate_limited_calls: number;
+  blocked_calls: number;
+  unknown_calls: number;
+  total_tokens: number;
+  estimated_cost_usd: number | null;
+};
+
+export type AIUsageCenterOperationSummary = {
+  operation: string;
+  calls: number;
+  success_calls: number;
+  failed_calls: number;
+  rate_limited_calls: number;
+  blocked_calls: number;
+  unknown_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number | null;
+  avg_duration_ms: number | null;
+  models: AIUsageCenterModelSummary[];
+};
+
+export type AIUsageCenterRecentEvent = {
+  created_at: string | null;
+  operation: string;
+  provider: string;
+  model: string;
+  status: string;
+  normalized_status: string;
+  tokens: number;
+  estimated_cost_usd: number | null;
+  duration_ms: number | null;
+  safe_error_message: string | null;
+};
+
+export type AIUsageCenterPricing = {
+  source: string;
+  updated_at: string | null;
+  models: AIPricingItem[];
+};
+
+export type AIUsageCenterGaps = {
+  unknown_operation_count: number;
+  missing_token_count: number;
+  missing_cost_count: number;
+  unknown_status_count: number;
+  warnings: string[];
+};
+
+export type AIUsageCenterResponse = {
+  period: {
+    from: string | null;
+    to: string | null;
+  };
+  summary: AIUsageCenterSummary;
+  by_operation: AIUsageCenterOperationSummary[];
+  by_model: AIUsageCenterModelSummary[];
+  recent_events: AIUsageCenterRecentEvent[];
+  pricing: AIUsageCenterPricing;
+  gaps: AIUsageCenterGaps;
+};
+
 export type QueueHealth = {
   redis: ComponentStatus;
   celery: {
@@ -155,6 +238,10 @@ export const systemHealthService = {
   getAIUsage: (params: AIUsageParams = {}) => {
     const query = buildQuery(params);
     return httpRequest<AIUsageSummary>(`/api/v1/admin/health/ai-usage${query ? `?${query}` : ""}`);
+  },
+  getAIUsageCenter: (params: AIUsageParams = {}) => {
+    const query = buildQuery(params);
+    return httpRequest<AIUsageCenterResponse>(`/api/v1/admin/health/ai-usage-center${query ? `?${query}` : ""}`);
   },
   getQueues: () => httpRequest<QueueHealth>("/api/v1/admin/health/queues"),
   getDatabase: () => httpRequest<DatabaseHealth>("/api/v1/admin/health/database"),

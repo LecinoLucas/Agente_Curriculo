@@ -135,10 +135,10 @@ export function AdminPage() {
 
             <AdminQuickAction
               icon={<BrainCircuit className="h-4 w-4 text-blue-600" />}
-              title="Governança IA"
-              description="Acompanhe status, consumo de tokens, warnings e atalhos administrativos de IA."
-              buttonLabel="Abrir aba IA"
-              onButtonClick={() => setActiveTab("ia")}
+              title="Uso de IA"
+              description="Central única para acompanhar tokens, custos, modelos, falhas e eventos recentes."
+              buttonLabel="Abrir central de uso"
+              onButtonClick={() => navigate("/admin/ia/uso")}
               variant="default"
             />
 

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.ai_pricing import AI_MODEL_PRICING, estimate_ai_cost
 from src.core.app_metadata import APP_VERSION, PROCESS_STARTED_MONOTONIC
+from src.core.log_sanitizer import sanitize_log_text
 from src.core.settings import settings
 from src.infrastructure.ai.gemini_adapter import get_gemini_key_health
 from src.infrastructure.cache.redis_client import get_redis
@@ -180,6 +181,157 @@ class SystemHealthService:
             ],
             "daily_usage": daily_items,
             "top_expensive_analyses": top_expensive_analyses,
+        }
+
+    async def get_ai_usage_center(self, query: AIUsageQuery) -> dict[str, Any]:
+        rows = await self._list_ai_usage_rows(query)
+        pricing_catalog = await self.get_pricing_catalog()
+
+        summary = self._usage_center_bucket({})
+        by_operation: dict[str, dict[str, Any]] = {}
+        by_model: dict[str, dict[str, Any]] = {}
+
+        unknown_operation_count = 0
+        missing_token_count = 0
+        missing_cost_count = 0
+        unknown_status_count = 0
+
+        for row in rows:
+            operation = row.operation or "unknown"
+            normalized_status = self._normalize_ai_usage_status(row.status)
+            if row.operation is None:
+                unknown_operation_count += 1
+            if int(row.total_tokens or 0) <= 0:
+                missing_token_count += 1
+            if row.estimated_cost_usd is None:
+                missing_cost_count += 1
+            if normalized_status == "unknown":
+                unknown_status_count += 1
+
+            self._accumulate_usage_center_bucket(summary, row, normalized_status)
+
+            operation_bucket = by_operation.setdefault(
+                operation,
+                self._usage_center_bucket({"operation": operation, "models": {}}),
+            )
+            self._accumulate_usage_center_bucket(operation_bucket, row, normalized_status)
+
+            model_key = f"{row.provider}:{row.model}"
+            model_bucket = by_model.setdefault(
+                model_key,
+                self._usage_center_model_bucket({"provider": row.provider, "model": row.model}),
+            )
+            self._accumulate_usage_center_model_bucket(model_bucket, row, normalized_status)
+
+            nested_model_bucket = operation_bucket["models"].setdefault(
+                model_key,
+                self._usage_center_model_bucket({"provider": row.provider, "model": row.model}),
+            )
+            self._accumulate_usage_center_model_bucket(nested_model_bucket, row, normalized_status)
+
+        warnings: list[str] = []
+        if unknown_operation_count > 0:
+            warnings.append("unknown_operation_present")
+        if missing_token_count > 0:
+            warnings.append("missing_or_zero_tokens_present")
+        if missing_cost_count > 0:
+            warnings.append("missing_cost_present")
+        if unknown_status_count > 0:
+            warnings.append("unknown_status_present")
+        if not any((row.operation or "") == "ai_assistant" for row in rows):
+            warnings.append("ai_assistant_without_dedicated_operation_logs")
+
+        recent_events = [
+            {
+                "created_at": row.created_at,
+                "operation": row.operation or "unknown",
+                "provider": row.provider,
+                "model": row.model,
+                "status": row.status,
+                "normalized_status": self._normalize_ai_usage_status(row.status),
+                "tokens": int(row.total_tokens or 0),
+                "estimated_cost_usd": row.estimated_cost_usd,
+                "duration_ms": row.latency_ms,
+                "safe_error_message": self._safe_ai_usage_error_message(row.error_message),
+            }
+            for row in sorted(
+                rows,
+                key=lambda item: item.created_at or datetime.min.replace(tzinfo=UTC),
+                reverse=True,
+            )[:20]
+        ]
+
+        finalized_summary_bucket = self._finalize_usage_center_bucket(summary)
+        finalized_summary = {
+            "total_calls": finalized_summary_bucket["calls"],
+            "success_calls": finalized_summary_bucket["success_calls"],
+            "failed_calls": finalized_summary_bucket["failed_calls"],
+            "rate_limited_calls": finalized_summary_bucket["rate_limited_calls"],
+            "blocked_calls": finalized_summary_bucket["blocked_calls"],
+            "unknown_calls": finalized_summary_bucket["unknown_calls"],
+            "total_input_tokens": finalized_summary_bucket["input_tokens"],
+            "total_output_tokens": finalized_summary_bucket["output_tokens"],
+            "total_tokens": finalized_summary_bucket["total_tokens"],
+            "estimated_cost_usd": finalized_summary_bucket["estimated_cost_usd"],
+            "avg_duration_ms": finalized_summary_bucket["avg_duration_ms"],
+        }
+        finalized_operations = []
+        for operation in sorted(by_operation.keys()):
+            bucket = dict(by_operation[operation])
+            nested_models = [
+                self._finalize_usage_center_model_bucket(model_bucket)
+                for model_bucket in sorted(
+                    bucket["models"].values(),
+                    key=lambda item: (
+                        -(item["estimated_cost_usd"] or Decimal("0")),
+                        -item["total_tokens"],
+                        item["provider"],
+                        item["model"],
+                    ),
+                )
+            ]
+            bucket["models"] = nested_models
+            finalized_operations.append(self._finalize_usage_center_bucket(bucket))
+
+        finalized_models = [
+            self._finalize_usage_center_model_bucket(by_model[key])
+            for key in sorted(
+                by_model.keys(),
+                key=lambda item: (
+                    -(by_model[item]["estimated_cost_usd"] or Decimal("0")),
+                    -by_model[item]["total_tokens"],
+                    by_model[item]["provider"],
+                    by_model[item]["model"],
+                ),
+            )
+        ]
+
+        observed_pricing_items = sorted(
+            pricing_catalog["items"],
+            key=lambda item: (item["status"] != "configured", item["provider"], item["model"]),
+        )
+
+        return {
+            "period": {
+                "from": query.date_from,
+                "to": query.date_to,
+            },
+            "summary": finalized_summary,
+            "by_operation": finalized_operations,
+            "by_model": finalized_models,
+            "recent_events": recent_events,
+            "pricing": {
+                "source": "internal_static",
+                "updated_at": None,
+                "models": observed_pricing_items,
+            },
+            "gaps": {
+                "unknown_operation_count": unknown_operation_count,
+                "missing_token_count": missing_token_count,
+                "missing_cost_count": missing_cost_count,
+                "unknown_status_count": unknown_status_count,
+                "warnings": warnings,
+            },
         }
 
     async def get_queues(self) -> dict[str, Any]:
@@ -545,6 +697,105 @@ class SystemHealthService:
         finalized.pop("_latency_sum", None)
         finalized.pop("_latency_count", None)
         return finalized
+
+    @staticmethod
+    def _usage_center_bucket(seed: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **seed,
+            "calls": 0,
+            "success_calls": 0,
+            "failed_calls": 0,
+            "rate_limited_calls": 0,
+            "blocked_calls": 0,
+            "unknown_calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated_cost_usd": None,
+            "avg_duration_ms": None,
+            "_latency_sum": 0,
+            "_latency_count": 0,
+        }
+
+    @staticmethod
+    def _usage_center_model_bucket(seed: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **seed,
+            "calls": 0,
+            "success_calls": 0,
+            "failed_calls": 0,
+            "rate_limited_calls": 0,
+            "blocked_calls": 0,
+            "unknown_calls": 0,
+            "total_tokens": 0,
+            "estimated_cost_usd": None,
+        }
+
+    @staticmethod
+    def _accumulate_usage_center_bucket(
+        bucket: dict[str, Any],
+        row: AIUsageLogModel,
+        normalized_status: str,
+    ) -> None:
+        bucket["calls"] += 1
+        bucket[f"{normalized_status}_calls"] += 1
+        bucket["input_tokens"] += int(row.input_tokens or 0)
+        bucket["output_tokens"] += int(row.output_tokens or 0)
+        bucket["total_tokens"] += int(row.total_tokens or 0)
+        if row.estimated_cost_usd is not None:
+            current = bucket["estimated_cost_usd"] or Decimal("0")
+            bucket["estimated_cost_usd"] = current + Decimal(row.estimated_cost_usd)
+        if row.latency_ms is not None:
+            bucket["_latency_sum"] += int(row.latency_ms)
+            bucket["_latency_count"] += 1
+            bucket["avg_duration_ms"] = bucket["_latency_sum"] / bucket["_latency_count"]
+
+    @staticmethod
+    def _accumulate_usage_center_model_bucket(
+        bucket: dict[str, Any],
+        row: AIUsageLogModel,
+        normalized_status: str,
+    ) -> None:
+        bucket["calls"] += 1
+        bucket[f"{normalized_status}_calls"] += 1
+        bucket["total_tokens"] += int(row.total_tokens or 0)
+        if row.estimated_cost_usd is not None:
+            current = bucket["estimated_cost_usd"] or Decimal("0")
+            bucket["estimated_cost_usd"] = current + Decimal(row.estimated_cost_usd)
+
+    @staticmethod
+    def _finalize_usage_center_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
+        finalized = dict(bucket)
+        finalized.pop("_latency_sum", None)
+        finalized.pop("_latency_count", None)
+        return finalized
+
+    @staticmethod
+    def _finalize_usage_center_model_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
+        return dict(bucket)
+
+    @staticmethod
+    def _normalize_ai_usage_status(status: str | None) -> str:
+        normalized = (status or "").strip().lower()
+        if normalized == "success":
+            return "success"
+        if normalized in {"failed", "failure", "error"}:
+            return "failed"
+        if normalized in {"rate_limited", "rate_limit"}:
+            return "rate_limited"
+        if normalized in {"blocked", "invalid_payload", "skipped", "disabled"}:
+            return "blocked"
+        return "unknown"
+
+    @staticmethod
+    def _safe_ai_usage_error_message(value: str | None) -> str | None:
+        cleaned = sanitize_log_text(value)
+        if cleaned is None:
+            return None
+        trimmed = cleaned.strip()
+        if not trimmed:
+            return None
+        return trimmed[:240]
 
     async def _get_celery_health(self) -> dict[str, Any]:
         def _inspect() -> dict[str, Any]:
