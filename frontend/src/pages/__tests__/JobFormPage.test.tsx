@@ -840,6 +840,8 @@ describe("JobFormPage", () => {
       await generateDraft();
 
       fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+      expect(screen.getByRole("dialog", { name: /Aplicar rascunho da IA\?/i })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
 
       expect(mockUpdateForm).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -863,6 +865,7 @@ describe("JobFormPage", () => {
     it("salvar rascunho manual continua disponível após aplicar o rascunho", async () => {
       await generateDraft();
       fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
 
       expect(screen.getByRole("button", { name: /Salvar rascunho/i })).not.toBeDisabled();
     });
@@ -870,6 +873,7 @@ describe("JobFormPage", () => {
     it("não publica automaticamente após aplicar o rascunho", async () => {
       await generateDraft();
       fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
 
       expect(screen.queryByRole("button", { name: /^Publicar$/i })).not.toBeInTheDocument();
       expect(screen.getByTestId("step-basic")).toBeInTheDocument();

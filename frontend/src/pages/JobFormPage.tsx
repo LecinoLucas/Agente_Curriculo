@@ -388,6 +388,11 @@ export function JobFormPage() {
             ) : (
               <JobAiDraftPanel
                 formHasData={Boolean(form.title || form.description)}
+                currentFormSnapshot={{
+                  salary_min: form.salary_min,
+                  salary_max: form.salary_max,
+                  benefits: form.benefits,
+                }}
                 onApply={(updates, skillSuggestions) => {
                   updateForm(updates);
                   const hasSuggestions =

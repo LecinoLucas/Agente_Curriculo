@@ -3,6 +3,14 @@ import { AlertCircle, CheckCircle2, Info, Loader2, Plus, ShieldAlert, Sparkles, 
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +32,7 @@ import {
 
 interface JobAiDraftPanelProps {
   formHasData: boolean;
+  currentFormSnapshot?: Pick<JobFormValues, "salary_min" | "salary_max" | "benefits">;
   onApply: (
     updates: Partial<JobFormValues>,
     skillSuggestions: { mandatory: string[]; optional: string[] },
@@ -45,6 +54,15 @@ export const draftToFormUpdates = applyLegacyDraftToForm;
 
 function SectionTitle({ children }: { children: string }) {
   return <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{children}</p>;
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <li className="flex flex-col gap-1 text-sm sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <span className="font-medium text-text">{label}</span>
+      <span className="text-text-muted sm:text-right">{value}</span>
+    </li>
+  );
 }
 
 function ChipList({ items, testId }: { items: string[]; testId?: string }) {
@@ -91,6 +109,30 @@ function formatSuggestedSkillImportance(importance: JobAiDraftSuggestedSkill["im
   if (importance === "essential") return "Essencial";
   if (importance === "differential") return "Diferencial";
   return "Competência";
+}
+
+function formatOptionalText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "Não será preenchido";
+}
+
+function formatOptionalNumber(value: number | null | undefined, suffix = "") {
+  if (value === null || value === undefined) return "Não será preenchido";
+  return `${value}${suffix}`;
+}
+
+function formatListSummary(items: string[] | null | undefined) {
+  if (!Array.isArray(items) || items.length === 0) return "Não será preenchido";
+  return items.map((item) => item.trim()).filter(Boolean).join(", ") || "Não será preenchido";
+}
+
+function formatSalaryRange(min: number | null | undefined, max: number | null | undefined) {
+  if (min == null && max == null) return null;
+  if (min != null && max != null) {
+    return `R$ ${min.toLocaleString("pt-BR")} a R$ ${max.toLocaleString("pt-BR")}`;
+  }
+  if (min != null) return `A partir de R$ ${min.toLocaleString("pt-BR")}`;
+  return `Até R$ ${max?.toLocaleString("pt-BR")}`;
 }
 
 function EditableList({
@@ -150,7 +192,12 @@ function EditableList({
   );
 }
 
-export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPanelProps) {
+export function JobAiDraftPanel({
+  formHasData,
+  currentFormSnapshot,
+  onApply,
+  onClose,
+}: JobAiDraftPanelProps) {
   const [inputMode, setInputMode] = useState<DraftInputMode>("text");
   const [prompt, setPrompt] = useState("");
   const [contextText, setContextText] = useState("");
@@ -212,6 +259,55 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     () => selectedSuggestedSkillKeys.length,
     [selectedSuggestedSkillKeys],
   );
+
+  const confirmSummary = useMemo(() => {
+    if (!draft) return null;
+
+    const draftSalaryRange = formatSalaryRange(draft.salary_min, draft.salary_max);
+    const currentSalaryRange = formatSalaryRange(
+      currentFormSnapshot?.salary_min,
+      currentFormSnapshot?.salary_max,
+    );
+    const draftBenefits = Array.isArray(draft.benefits)
+      ? draft.benefits.map((item) => item.trim()).filter(Boolean)
+      : [];
+    const hasDraftBenefits = draftBenefits.length > 0;
+    const hasDraftSalary = Boolean(draftSalaryRange);
+
+    return {
+      title: formatOptionalText(draft.title),
+      area: formatOptionalText(draft.area),
+      seniority: formatOptionalText(draft.seniority),
+      workModel: formatOptionalText(draft.work_model),
+      unit: formatOptionalText(draft.unit),
+      workingHours: formatOptionalText(draft.working_hours),
+      description: formatOptionalText(draft.description),
+      responsibilities: formatListSummary(draft.responsibilities),
+      requirements: formatListSummary(draft.requirements),
+      education: formatOptionalText(draft.minimum_education_level),
+      experience: formatOptionalNumber(draft.minimum_years_experience, " ano(s)"),
+      salary: draftSalaryRange
+        ? `Rascunho indica ${draftSalaryRange}, mas salário não será aplicado automaticamente nesta fase.`
+        : currentSalaryRange
+          ? `Formulário atual: ${currentSalaryRange}. O rascunho não vai alterar salário nesta fase.`
+          : "Nenhum salário ou benefício será preenchido por este rascunho.",
+      benefits: hasDraftBenefits
+        ? draftBenefits.join(", ")
+        : "Nenhum salário ou benefício será preenchido por este rascunho.",
+      mandatorySkills: formatListSummary(draft.mandatory_skills),
+      niceToHaveSkills: formatListSummary(draft.nice_to_have_skills),
+      screeningQuestions: formatListSummary(draft.screening_questions),
+      suggestedSkillsInfo:
+        draft.suggested_skills.length > 0
+          ? "Skills sugeridas revisadas não serão aplicadas como catálogo nesta fase."
+          : "Nenhuma skill sugerida adicional nesta fase.",
+      operationalFlags: [
+        draft.requires_manager_review ? "Requer revisão do gestor" : null,
+        draft.requires_behavioral_assessment ? "Requer avaliação comportamental" : null,
+      ].filter(Boolean) as string[],
+      hasSensitiveDraftData: hasDraftBenefits || hasDraftSalary,
+    };
+  }, [currentFormSnapshot?.salary_max, currentFormSnapshot?.salary_min, draft]);
 
   function toggleSuggestedSkillSelection(item: JobAiDraftSuggestedSkill) {
     const key = getSuggestedSkillKey(item);
@@ -382,11 +478,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
 
   function handleApply() {
     if (!draft) return;
-    if (formHasData) {
-      setShowConfirm(true);
-      return;
-    }
-    confirmApply();
+    setShowConfirm(true);
   }
 
   function handleDiscard() {
@@ -1073,34 +1165,104 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
         )}
       </section>
 
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirmar substituição"
-            className="w-full max-w-md rounded-2xl border border-border bg-background p-5 shadow-xl"
-          >
-            <h3 className="text-base font-semibold text-text">Confirmar substituição</h3>
-            <p className="mt-2 text-sm leading-6 text-text-muted">
-              Aplicar o rascunho substitui os principais campos já preenchidos no formulário.
-              Revise tudo antes de salvar.
-            </p>
-            <div className="mt-5 flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setShowConfirm(false)}
+      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <DialogContent
+          className="max-h-[90vh] max-w-3xl overflow-y-auto"
+          data-testid="job-ai-apply-confirmation-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Aplicar rascunho da IA?</DialogTitle>
+            <DialogDescription className="space-y-2">
+              <span className="block">
+                A IA vai preencher ou alterar campos do formulário. Revise antes de continuar.
+              </span>
+              {formHasData ? (
+                <span className="block">
+                  O formulário já possui dados e alguns campos poderão ser sobrescritos por este rascunho.
+                </span>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          {confirmSummary ? (
+            <div className="space-y-4">
+              <section className="rounded-xl border border-border bg-surface p-4">
+                <SectionTitle>Informações principais</SectionTitle>
+                <ul className="mt-3 space-y-3">
+                  <SummaryRow label="Título" value={confirmSummary.title} />
+                  <SummaryRow label="Área" value={confirmSummary.area} />
+                  <SummaryRow label="Senioridade" value={confirmSummary.seniority} />
+                  <SummaryRow label="Modalidade" value={confirmSummary.workModel} />
+                  <SummaryRow label="Localização/unidade" value={confirmSummary.unit} />
+                  <SummaryRow label="Jornada" value={confirmSummary.workingHours} />
+                </ul>
+              </section>
+
+              <section className="rounded-xl border border-border bg-surface p-4">
+                <SectionTitle>Descrição e requisitos</SectionTitle>
+                <ul className="mt-3 space-y-3">
+                  <SummaryRow label="Descrição" value={confirmSummary.description} />
+                  <SummaryRow label="Responsabilidades" value={confirmSummary.responsibilities} />
+                  <SummaryRow label="Requisitos" value={confirmSummary.requirements} />
+                  <SummaryRow label="Escolaridade" value={confirmSummary.education} />
+                  <SummaryRow label="Experiência mínima" value={confirmSummary.experience} />
+                </ul>
+              </section>
+
+              <section
+                className={`rounded-xl border p-4 ${
+                  confirmSummary.hasSensitiveDraftData
+                    ? "border-warning bg-warning-soft/40"
+                    : "border-border bg-surface"
+                }`}
               >
-                Cancelar
-              </Button>
-              <Button type="button" onClick={confirmApply}>
-                Confirmar e aplicar
-              </Button>
+                <SectionTitle>Salário e benefícios</SectionTitle>
+                <ul className="mt-3 space-y-3">
+                  <SummaryRow label="Salário/faixa salarial" value={confirmSummary.salary} />
+                  <SummaryRow label="Benefícios" value={confirmSummary.benefits} />
+                </ul>
+                <p className="mt-4 text-sm font-medium text-text">
+                  Revise salário, benefícios e requisitos antes de aplicar. O rascunho da IA não salva
+                  nem publica a vaga automaticamente.
+                </p>
+              </section>
+
+              <section className="rounded-xl border border-border bg-surface p-4">
+                <SectionTitle>Skills e perguntas</SectionTitle>
+                <ul className="mt-3 space-y-3">
+                  <SummaryRow label="Mandatory skills" value={confirmSummary.mandatorySkills} />
+                  <SummaryRow label="Nice to have skills" value={confirmSummary.niceToHaveSkills} />
+                  <SummaryRow label="Screening questions" value={confirmSummary.screeningQuestions} />
+                  <SummaryRow label="Suggested skills" value={confirmSummary.suggestedSkillsInfo} />
+                </ul>
+              </section>
+
+              <section className="rounded-xl border border-border bg-surface p-4">
+                <SectionTitle>Campos operacionais</SectionTitle>
+                <ul className="mt-3 space-y-3">
+                  <SummaryRow
+                    label="Flags relevantes"
+                    value={
+                      confirmSummary.operationalFlags.length > 0
+                        ? confirmSummary.operationalFlags.join(", ")
+                        : "Nenhum campo operacional será alterado"
+                    }
+                  />
+                </ul>
+              </section>
             </div>
-          </div>
-        </div>
-      )}
+          ) : null}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={confirmApply}>
+              Aplicar rascunho
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

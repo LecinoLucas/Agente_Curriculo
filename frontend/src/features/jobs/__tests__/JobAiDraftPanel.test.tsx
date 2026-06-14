@@ -7,7 +7,7 @@
  * 3. JobAiDraftPanel — component with real API (mocked via vi.mock)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { JobAiDraftPanel, draftToFormUpdates } from "../components/JobAiDraftPanel";
 import { MOCK_JOB_AI_DRAFT } from "../utils/mockJobAiDraft";
@@ -396,8 +396,18 @@ describe("JobAiDraftPanel — API real", () => {
     mockGenerateJobAiDraftFromImage.mockReset();
   });
 
-  function renderPanel(formHasData = false, onApply = vi.fn()) {
-    render(<JobAiDraftPanel formHasData={formHasData} onApply={onApply} />);
+  function renderPanel(
+    formHasData = false,
+    onApply = vi.fn(),
+    currentFormSnapshot?: { salary_min?: number; salary_max?: number; benefits?: string[] },
+  ) {
+    render(
+      <JobAiDraftPanel
+        formHasData={formHasData}
+        currentFormSnapshot={currentFormSnapshot}
+        onApply={onApply}
+      />,
+    );
     return { onApply };
   }
 
@@ -414,9 +424,13 @@ describe("JobAiDraftPanel — API real", () => {
     fireEvent.click(tab);
   }
 
-  async function generateAndWaitForDraft(formHasData = false, onApply = vi.fn()) {
+  async function generateAndWaitForDraft(
+    formHasData = false,
+    onApply = vi.fn(),
+    currentFormSnapshot?: { salary_min?: number; salary_max?: number; benefits?: string[] },
+  ) {
     mockGenerateJobAiDraft.mockResolvedValue(MOCK_API_RESPONSE);
-    renderPanel(formHasData, onApply);
+    renderPanel(formHasData, onApply, currentFormSnapshot);
     fillAndSubmit();
     await screen.findByTestId("ai-draft-result");
     return { onApply };
@@ -620,11 +634,20 @@ describe("JobAiDraftPanel — API real", () => {
 
   // ── Aplicar rascunho ──────────────────────────────────────────────────────
 
-  it("aplica o rascunho real ao formulário quando o formulário está vazio", async () => {
+  it("abre a modal de confirmação antes de aplicar o rascunho ao formulário", async () => {
+    const { onApply } = await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(screen.getByRole("dialog", { name: /Aplicar rascunho da IA\?/i })).toBeInTheDocument();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it("aplica o rascunho real ao formulário após confirmação", async () => {
     const { onApply } = await generateAndWaitForDraft(false);
     fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-new-Suporte Protheus"));
     fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
 
     expect(onApply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -645,6 +668,7 @@ describe("JobAiDraftPanel — API real", () => {
   it("não cria skill automaticamente nem resolve conflito ao aplicar", async () => {
     const { onApply } = await generateAndWaitForDraft(false);
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
 
     expect(onApply).toHaveBeenCalledTimes(1);
     const [updates, skills] = onApply.mock.calls[0];
@@ -657,6 +681,7 @@ describe("JobAiDraftPanel — API real", () => {
   it("não mapeia salary para o formulário", async () => {
     const { onApply } = await generateAndWaitForDraft(false);
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
 
     const formUpdates = onApply.mock.calls[0][0];
     expect(formUpdates.salary_min).toBeUndefined();
@@ -665,11 +690,57 @@ describe("JobAiDraftPanel — API real", () => {
 
   // ── Confirmação de substituição ───────────────────────────────────────────
 
-  it("pede confirmação antes de aplicar sobre formulário já preenchido", async () => {
+  it("mostra o título e o microcopy obrigatórios na modal", async () => {
+    await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(screen.getByText("Aplicar rascunho da IA?")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Revise salário, benefícios e requisitos antes de aplicar\. O rascunho da IA não salva nem publica a vaga automaticamente\./i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("mostra benefícios quando o draft possui benefits", async () => {
+    await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(screen.getByText(/Vale-transporte/i)).toBeInTheDocument();
+  });
+
+  it("mostra skills, perguntas e aviso informativo de suggested skills", async () => {
+    await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    const dialog = screen.getByRole("dialog", { name: /Aplicar rascunho da IA\?/i });
+
+    expect(within(dialog).getByText(/Mandatory skills/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Atendimento ao cliente, Responsabilidade com caixa/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Tem disponibilidade para turno integral\?/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/Skills sugeridas revisadas não serão aplicadas como catálogo nesta fase\./i),
+    ).toBeInTheDocument();
+  });
+
+  it("abrir, cancelar ou confirmar a modal não dispara novas chamadas de backend/API", async () => {
+    await generateAndWaitForDraft(false);
+    expect(mockGenerateJobAiDraft).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar/i }));
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+    expect(mockGenerateJobAiDraft).toHaveBeenCalledTimes(1);
+    expect(mockGenerateJobAiDraftFromImage).not.toHaveBeenCalled();
+  });
+
+  it("substitui a confirmação antiga e não empilha duas confirmações", async () => {
     await generateAndWaitForDraft(true);
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
 
-    expect(screen.getByRole("dialog", { name: /Confirmar substituição/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Confirmar substituição/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 
   it("cancela a confirmação sem chamar onApply", async () => {
@@ -680,16 +751,46 @@ describe("JobAiDraftPanel — API real", () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
-  it("confirma e aplica quando o usuário aceita substituição", async () => {
+  it("confirma e aplica quando o usuário aceita a revisão", async () => {
     const { onApply } = await generateAndWaitForDraft(true);
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
-    fireEvent.click(screen.getByRole("button", { name: /Confirmar e aplicar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
 
     expect(onApply).toHaveBeenCalledTimes(1);
     expect(onApply).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Operador de Caixa" }),
       expect.any(Object),
     );
+  });
+
+  it("sem benefits no draft mostra a mensagem de nenhum salário ou benefício", async () => {
+    mockGenerateJobAiDraft.mockResolvedValue({
+      ...MOCK_API_RESPONSE,
+      draft: {
+        ...MOCK_API_RESPONSE.draft,
+        benefits: [],
+        salary_min: null,
+        salary_max: null,
+      },
+    });
+    renderPanel(false, vi.fn());
+    fillAndSubmit();
+    await screen.findByTestId("ai-draft-result");
+
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(
+      screen.getAllByText(/Nenhum salário ou benefício será preenchido por este rascunho\./i).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("mostra salário atual do formulário quando existir, sem aplicar salary do draft", async () => {
+    await generateAndWaitForDraft(false, vi.fn(), { salary_min: 3000, salary_max: 4500, benefits: [] });
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(
+      screen.getByText(/Formulário atual: R\$ 3\.000 a R\$ 4\.500\. O rascunho não vai alterar salário nesta fase\./i),
+    ).toBeInTheDocument();
   });
 
   // ── Descartar rascunho ────────────────────────────────────────────────────
