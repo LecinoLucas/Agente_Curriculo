@@ -45,6 +45,10 @@ from src.application.services.job_ai_draft_rules import (
     AiDraftSource,
     AiDraftResult,
 )
+from src.application.services.job_ai_skill_catalog_matcher import JobAiSkillCatalogMatcher
+from src.infrastructure.repositories.sqlalchemy_skill_catalog_repository import (
+    SQLAlchemySkillCatalogRepository,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -102,7 +106,7 @@ class JobAiDraftService:
                 final_state = await job_ai_draft_graph.ainvoke(state_input, config=config)
                 
                 # Extract final response from state
-                return AiDraftResult(
+                result = AiDraftResult(
                     draft=final_state["draft"],
                     needs_review=final_state["needs_review"],
                     warnings=final_state.get("warnings", []),
@@ -114,6 +118,7 @@ class JobAiDraftService:
                         input_character_count=final_state["input_character_count"],
                     ),
                 )
+                return await self._annotate_catalog_status(result, session=session)
             except ImportError:
                 logger.warning("job_ai_draft.langgraph_not_installed", msg="LangGraph is enabled but not installed. Falling back to procedural flow.")
             except Exception as e:
@@ -233,7 +238,7 @@ class JobAiDraftService:
             input_character_count=input_character_count,
         )
 
-        return AiDraftResult(
+        result = AiDraftResult(
             draft=draft,
             needs_review=needs_review,
             warnings=warnings,
@@ -252,3 +257,25 @@ class JobAiDraftService:
                 input_character_count=input_character_count,
             ),
         )
+        return await self._annotate_catalog_status(result, session=session)
+
+    async def _annotate_catalog_status(
+        self,
+        result: AiDraftResult,
+        *,
+        session: AsyncSession,
+    ) -> AiDraftResult:
+        try:
+            repository = SQLAlchemySkillCatalogRepository(session)
+            catalog_skills = list(await repository.list_runtime_skills())
+            matcher = JobAiSkillCatalogMatcher()
+            result.draft.suggested_skills = matcher.annotate(
+                result.draft.suggested_skills,
+                catalog_skills,
+            )
+        except Exception as exc:
+            logger.warning(
+                "job_ai_draft.skill_catalog_annotation_failed",
+                error_type=type(exc).__name__,
+            )
+        return result

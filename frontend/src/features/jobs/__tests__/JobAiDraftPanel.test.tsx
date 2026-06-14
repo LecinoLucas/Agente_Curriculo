@@ -59,6 +59,47 @@ const MOCK_API_RESPONSE: JobAiDraftGenerateResponse = {
     screening_questions: ["Tem disponibilidade para turno integral?"],
     pipeline_steps: ["Triagem", "Entrevista RH"],
     matching_criteria: ["Atendimento ao cliente"],
+    suggested_skills: [
+      {
+        name: "Atendimento ao cliente",
+        category: "behavioral",
+        aliases: ["Atendimento ao público", "Customer service"],
+        description: "Contato direto com clientes no ponto de venda.",
+        importance: "essential",
+        source: "ai_suggested",
+        catalog_status: "existing",
+        catalog_skill_id: "skill-atendimento",
+        catalog_skill_name: "Atendimento ao cliente",
+        catalog_matched_by: ["Atendimento ao cliente"],
+        catalog_conflicts: [],
+      },
+      {
+        name: "Suporte Protheus",
+        category: "tool",
+        aliases: ["TOTVS Protheus", "ERP Protheus", "Suporte TOTVS"],
+        description: "Atendimento e suporte a rotinas no ERP Protheus.",
+        importance: "differential",
+        source: "ai_suggested",
+        catalog_status: "new",
+        catalog_skill_id: null,
+        catalog_skill_name: null,
+        catalog_matched_by: [],
+        catalog_conflicts: [],
+      },
+      {
+        name: "Suporte ERP",
+        category: "business_process",
+        aliases: ["Suporte de sistema", "Suporte TOTVS"],
+        description: null,
+        importance: "competency",
+        source: "ai_suggested",
+        catalog_status: "conflict",
+        catalog_skill_id: null,
+        catalog_skill_name: null,
+        catalog_matched_by: ["Suporte TOTVS"],
+        catalog_conflicts: ["Suporte Protheus", "Atendimento ERP"],
+      },
+    ],
     selection_flow_type: null,
     requires_manager_review: true,
     requires_behavioral_assessment: false,
@@ -436,6 +477,20 @@ describe("JobAiDraftPanel — API real", () => {
     expect(screen.getByLabelText(/Anos mínimos de experiência/i)).toHaveValue(2);
     expect(screen.getByTestId("draft-responsibilities")).toBeInTheDocument();
     expect(screen.getByTestId("draft-mandatory-skills")).toBeInTheDocument();
+  });
+
+  it("exibe skills sugeridas com aliases e status de catálogo", async () => {
+    await generateAndWaitForDraft();
+
+    const block = screen.getByTestId("draft-suggested-skills");
+    expect(block).toHaveTextContent(/Skills sugeridas com aliases/i);
+    expect(block).toHaveTextContent(/Atendimento ao cliente/i);
+    expect(block).toHaveTextContent(/Atendimento ao público/i);
+    expect(block).toHaveTextContent(/Existente no catálogo/i);
+    expect(block).toHaveTextContent(/Suporte Protheus/i);
+    expect(block).toHaveTextContent(/Nova sugestão/i);
+    expect(block).toHaveTextContent(/Suporte ERP/i);
+    expect(block).toHaveTextContent(/Possível conflito/i);
   });
 
   it("exibe warnings novos de forma legível", async () => {

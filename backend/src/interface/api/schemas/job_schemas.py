@@ -871,10 +871,25 @@ class AiDraftFieldsResponse(BaseModel):
     screening_questions: list[str] = Field(default_factory=list)
     pipeline_steps: list[str] = Field(default_factory=list)
     matching_criteria: list[str] = Field(default_factory=list)
+    suggested_skills: list["AiDraftSuggestedSkillResponse"] = Field(default_factory=list)
     selection_flow_type: str | None = None
     requires_manager_review: bool | None = None
     requires_behavioral_assessment: bool | None = None
     quality_score: float | None = None
+
+
+class AiDraftSuggestedSkillResponse(BaseModel):
+    name: str
+    category: str
+    aliases: list[str] = Field(default_factory=list)
+    description: str | None = None
+    importance: Literal["essential", "differential", "competency"]
+    source: Literal["ai_suggested"] = "ai_suggested"
+    catalog_status: Literal["existing", "new", "conflict"] = "new"
+    catalog_skill_id: str | None = None
+    catalog_skill_name: str | None = None
+    catalog_matched_by: list[str] = Field(default_factory=list)
+    catalog_conflicts: list[str] = Field(default_factory=list)
 
 
 class AiDraftUsageResponse(BaseModel):

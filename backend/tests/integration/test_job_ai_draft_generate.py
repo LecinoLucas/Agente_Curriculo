@@ -39,6 +39,24 @@ _MOCK_DRAFT: dict = {
     "screening_questions": ["Você tem disponibilidade para trabalho em turno integral?"],
     "pipeline_steps": ["Triagem", "Entrevista RH", "Decisão"],
     "matching_criteria": ["Experiência em atendimento ao cliente"],
+    "suggested_skills": [
+        {
+            "name": "Atendimento ao cliente",
+            "category": "behavioral",
+            "aliases": ["Atendimento ao público", "Customer service"],
+            "description": "Contato direto com clientes em varejo.",
+            "importance": "essential",
+            "source": "ai_suggested",
+        },
+        {
+            "name": "Suporte Protheus",
+            "category": "tool",
+            "aliases": ["TOTVS Protheus", "ERP Protheus"],
+            "description": "Suporte em ERP Protheus.",
+            "importance": "differential",
+            "source": "ai_suggested",
+        },
+    ],
     "requires_manager_review": True,
     "requires_behavioral_assessment": False,
 }
@@ -62,6 +80,12 @@ def _mock_ai_service(response: AIAnalysisResponse | None = None) -> AsyncMock:
 
 
 _PATCH_TARGET = "src.application.services.job_ai_draft_service.AIServiceFactory.create"
+
+
+@pytest.fixture(autouse=True)
+def _disable_langgraph_for_http_contract() -> None:
+    with patch("src.application.services.job_ai_draft_service.settings.JOB_AI_DRAFT_USE_LANGGRAPH", False):
+        yield
 
 
 # ── Auth & RBAC ───────────────────────────────────────────────────────────────
@@ -192,6 +216,7 @@ async def test_generate_response_has_required_fields(
     assert "screening_questions" in draft
     assert "pipeline_steps" in draft
     assert "matching_criteria" in draft
+    assert "suggested_skills" in draft
     assert "requires_manager_review" in draft
     assert "requires_behavioral_assessment" in draft
 
@@ -206,7 +231,12 @@ async def test_generate_draft_fields_populated(
     with patch(_PATCH_TARGET, return_value=_mock_ai_service()):
         response = await client.post(
             GENERATE_URL,
-            json={"text_input": "Operador de Caixa"},
+            json={
+                "text_input": (
+                    "Operador de Caixa presencial para São Paulo, SP. "
+                    "Jornada 6x1. Processo com entrevista com gestor."
+                )
+            },
             headers=headers,
         )
     body = response.json()
@@ -220,6 +250,8 @@ async def test_generate_draft_fields_populated(
     assert draft["requires_behavioral_assessment"] is False
     assert isinstance(draft["responsibilities"], list)
     assert len(draft["responsibilities"]) > 0
+    assert draft["suggested_skills"][0]["aliases"] == ["Atendimento ao público", "Customer service"]
+    assert draft["suggested_skills"][0]["catalog_status"] in {"existing", "new", "conflict"}
 
 
 @pytest.mark.asyncio

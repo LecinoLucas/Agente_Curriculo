@@ -37,9 +37,24 @@ export type JobAiDraftFields = {
   screening_questions: string[];
   pipeline_steps: string[];
   matching_criteria: string[];
+  suggested_skills: JobAiDraftSuggestedSkill[];
   requires_manager_review: boolean;
   requires_behavioral_assessment: boolean;
   quality_score?: number | null;
+};
+
+export type JobAiDraftSuggestedSkill = {
+  name: string;
+  category: string;
+  aliases: string[];
+  description?: string | null;
+  importance: "essential" | "differential" | "competency";
+  source: "ai_suggested";
+  catalog_status: "existing" | "new" | "conflict";
+  catalog_skill_id?: string | null;
+  catalog_skill_name?: string | null;
+  catalog_matched_by: string[];
+  catalog_conflicts: string[];
 };
 
 export type JobAiDraftUsage = {

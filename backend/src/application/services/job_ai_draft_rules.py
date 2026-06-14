@@ -1,7 +1,9 @@
 import re
 import unicodedata
+from dataclasses import dataclass, field
 from typing import Any, Literal
-from dataclasses import dataclass
+
+from src.application.services.skill_catalog_normalizer import normalize_skill_name
 
 # ── Exceptions ────────────────────────────────────────────────────────────────
 
@@ -38,10 +40,26 @@ class AiDraftFields:
     screening_questions: list[str]
     pipeline_steps: list[str]
     matching_criteria: list[str]
+    suggested_skills: list["AiDraftSuggestedSkill"]
     selection_flow_type: str | None
     requires_manager_review: bool | None
     requires_behavioral_assessment: bool | None
     quality_score: float | None = None
+
+
+@dataclass
+class AiDraftSuggestedSkill:
+    name: str
+    category: str
+    aliases: list[str]
+    description: str | None
+    importance: Literal["essential", "differential", "competency"]
+    source: Literal["ai_suggested"] = "ai_suggested"
+    catalog_status: Literal["existing", "new", "conflict"] = "new"
+    catalog_skill_id: str | None = None
+    catalog_skill_name: str | None = None
+    catalog_matched_by: list[str] = field(default_factory=list)
+    catalog_conflicts: list[str] = field(default_factory=list)
 
 @dataclass
 class AiDraftUsage:
@@ -373,6 +391,7 @@ Regras obrigatórias:
 - minimum_years_experience: preencher somente com anos/meses explícitos no texto. Converta meses para anos decimais (6 meses = 0.5). Não inferir por senioridade.
 - minimum_education_level: "none" | "high_school" | "technical" | "bachelor" | "postgraduate" | "master" | "phd" | null. Preencher somente com escolaridade explícita.
 - experience_context: resumo curto somente de experiência, vivência ou conhecimento explicitamente citados.
+- suggested_skills: gere skills estruturadas para catálogo com aliases úteis e específicos. Não use aliases genéricos demais como "sistema", "software", "comunicação" isoladamente, a menos que isso seja o próprio nome da skill. Cada alias deve ser uma variação plausível, sigla conhecida, nome de fornecedor, nome expandido ou contexto real de mercado.
 - selection_flow_type: "simple" | "standard" | "technical" | "leadership" | null. Preencher somente com mapeamento seguro e explícito; se houver dúvida, usar null.
 - requires_manager_review: true somente se houver evidência explícita de entrevista/aprovação/validação com gestor, gerente ou liderança.
 - requires_behavioral_assessment: true somente se houver evidência explícita de avaliação comportamental, DISC, fit cultural ou teste de perfil.
@@ -419,6 +438,16 @@ SCHEMA OBRIGATÓRIO:
   "screening_questions": ["string — pergunta técnica e objetiva de triagem, 2-5 itens"],
   "pipeline_steps": ["string — etapa do processo seletivo"],
   "matching_criteria": ["string — critério chave para match com candidato, máx 5"],
+  "suggested_skills": [
+    {
+      "name": "string — nome canônico da skill",
+      "category": "string — ex: technical, tool, behavioral, business_process, domain, certification, other",
+      "aliases": ["string — variações úteis e específicas, máx 4, sem repetir o nome"],
+      "description": "string | null — resumo opcional da skill no contexto da vaga",
+      "importance": "essential | differential | competency",
+      "source": "ai_suggested"
+    }
+  ],
   "selection_flow_type": "simple | standard | technical | leadership | null — usar null se não houver mapeamento seguro",
   "requires_manager_review": "boolean | null — true somente com evidência explícita",
   "requires_behavioral_assessment": "boolean | null — true somente com evidência explícita"
@@ -463,6 +492,29 @@ def _safe_list(raw: Any, limit: int = 10) -> list[str]:
             out.append(cleaned)
             if len(out) == limit:
                 break
+    return out
+
+
+def _safe_skill_aliases(raw: Any, *, skill_name: str, limit: int = 4) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+
+    seen: set[str] = set()
+    out: list[str] = []
+    normalized_name = normalize_skill_name(skill_name)
+
+    for item in raw:
+        cleaned = _nonempty_str(item)
+        if not cleaned:
+            continue
+        normalized = normalize_skill_name(cleaned)
+        if not normalized or normalized == normalized_name or normalized in seen:
+            continue
+        seen.add(normalized)
+        out.append(cleaned)
+        if len(out) == limit:
+            break
+
     return out
 
 def _coerce_float(value: Any) -> float | None:
@@ -799,12 +851,99 @@ def has_nice_to_have_source_evidence(item: str, source_text: str) -> bool:
         or "diferencial" in normalized_source
     )
 
+
+def _normalize_skill_importance(value: Any) -> Literal["essential", "differential", "competency"]:
+    cleaned = _nonempty_str(value)
+    if not cleaned:
+        return "essential"
+    normalized = normalize_skill_name(cleaned)
+    if normalized in {"essential", "obrigatoria", "obrigatorio"}:
+        return "essential"
+    if normalized in {"differential", "diferencial", "desejavel", "desejavel"}:
+        return "differential"
+    if normalized in {"competency", "competencia", "competencias"}:
+        return "competency"
+    return "essential"
+
+
+def _fallback_suggested_skills(
+    mandatory_skills: list[str],
+    nice_to_have_skills: list[str],
+) -> list[AiDraftSuggestedSkill]:
+    suggestions: list[AiDraftSuggestedSkill] = []
+    seen: set[str] = set()
+
+    for raw_name, importance in (
+        *((name, "essential") for name in mandatory_skills),
+        *((name, "differential") for name in nice_to_have_skills),
+    ):
+        normalized = normalize_skill_name(raw_name)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        suggestions.append(
+            AiDraftSuggestedSkill(
+                name=raw_name,
+                category="other",
+                aliases=[],
+                description=None,
+                importance=importance,
+            )
+        )
+
+    return suggestions
+
+
+def _parse_suggested_skills(
+    raw: Any,
+    *,
+    mandatory_skills: list[str],
+    nice_to_have_skills: list[str],
+) -> list[AiDraftSuggestedSkill]:
+    if not isinstance(raw, list):
+        return _fallback_suggested_skills(mandatory_skills, nice_to_have_skills)
+
+    suggestions: list[AiDraftSuggestedSkill] = []
+    seen: set[str] = set()
+
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+
+        name = _nonempty_str(item.get("name"))
+        if not name:
+            continue
+
+        normalized_name = normalize_skill_name(name)
+        if not normalized_name or normalized_name in seen:
+            continue
+        seen.add(normalized_name)
+
+        suggestions.append(
+            AiDraftSuggestedSkill(
+                name=name,
+                category=_nonempty_str(item.get("category")) or "other",
+                aliases=_safe_skill_aliases(item.get("aliases"), skill_name=name),
+                description=_nonempty_str(item.get("description")),
+                importance=_normalize_skill_importance(item.get("importance")),
+                source="ai_suggested",
+            )
+        )
+
+    if not suggestions:
+        return _fallback_suggested_skills(mandatory_skills, nice_to_have_skills)
+
+    return suggestions
+
 def parse_draft(data: dict[str, Any]) -> AiDraftFields:
     wm = str(data.get("work_model") or "").strip().lower()
     work_model = wm if wm in _VALID_WORK_MODELS else None
 
     seniority_raw = str(data.get("seniority") or "").strip().lower()
     seniority = seniority_raw if seniority_raw in _VALID_SENIORITY else None
+
+    mandatory_skills = _safe_list(data.get("mandatory_skills"))
+    nice_to_have_skills = _safe_list(data.get("nice_to_have_skills"))
 
     return AiDraftFields(
         title=_nonempty_str(data.get("title")),
@@ -820,13 +959,18 @@ def parse_draft(data: dict[str, Any]) -> AiDraftFields:
         description=_nonempty_str(data.get("description")),
         responsibilities=_safe_list(data.get("responsibilities")),
         requirements=_safe_list(data.get("requirements")),
-        mandatory_skills=_safe_list(data.get("mandatory_skills")),
-        nice_to_have_skills=_safe_list(data.get("nice_to_have_skills")),
+        mandatory_skills=mandatory_skills,
+        nice_to_have_skills=nice_to_have_skills,
         benefits=_safe_list(data.get("benefits")),
         working_hours=_nonempty_str(data.get("working_hours")),
         screening_questions=_safe_list(data.get("screening_questions")),
         pipeline_steps=_safe_list(data.get("pipeline_steps")),
         matching_criteria=_safe_list(data.get("matching_criteria"), limit=5),
+        suggested_skills=_parse_suggested_skills(
+            data.get("suggested_skills"),
+            mandatory_skills=mandatory_skills,
+            nice_to_have_skills=nice_to_have_skills,
+        ),
         selection_flow_type=_normalize_selection_flow_type(data.get("selection_flow_type")),
         requires_manager_review=_coerce_optional_bool(data.get("requires_manager_review")),
         requires_behavioral_assessment=_coerce_optional_bool(data.get("requires_behavioral_assessment")),

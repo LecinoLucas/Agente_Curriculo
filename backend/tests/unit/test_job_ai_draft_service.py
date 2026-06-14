@@ -6,7 +6,9 @@ DB session is mocked to prevent any I/O.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -30,6 +32,8 @@ from src.application.services.job_ai_draft_rules import (
     sanitize as _sanitize,
     _SYSTEM_PROMPT,
 )
+from src.application.services.skill_catalog_normalizer import normalize_skill_name
+from src.infrastructure.database.models.skill_catalog_model import SkillAliasModel, SkillCatalogModel
 
 # ── Fixtures & factories ──────────────────────────────────────────────────────
 
@@ -54,6 +58,16 @@ _DRAFT_JSON: dict = {
     "screening_questions": ["Tem disponibilidade para turno integral?"],
     "pipeline_steps": ["Triagem", "Entrevista RH", "Decisão"],
     "matching_criteria": ["Experiência em atendimento ao cliente"],
+    "suggested_skills": [
+        {
+            "name": "Atendimento ao cliente",
+            "category": "behavioral",
+            "aliases": ["Atendimento ao público", "Customer service"],
+            "description": "Contato com clientes no varejo.",
+            "importance": "essential",
+            "source": "ai_suggested",
+        }
+    ],
     "selection_flow_type": None,
     "requires_manager_review": True,
     "requires_behavioral_assessment": False,
@@ -77,6 +91,9 @@ def _mock_session() -> AsyncMock:
     session = AsyncMock()
     session.add = MagicMock()
     session.flush = AsyncMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=result)
     return session
 
 
@@ -84,6 +101,40 @@ def _mock_ai(response: AIAnalysisResponse | None = None) -> AsyncMock:
     ai = AsyncMock()
     ai.analyze = AsyncMock(return_value=response or _ai_response())
     return ai
+
+
+def _catalog_skill(name: str, *, aliases: list[str] | None = None, category: str | None = "tool") -> SkillCatalogModel:
+    skill = SkillCatalogModel(
+        id=uuid4(),
+        name=name,
+        normalized_name=normalize_skill_name(name),
+        category=category,
+        description=None,
+        domains=[],
+        default_strength=None,
+        catalog_type=None,
+        is_active=True,
+        created_by=None,
+        updated_by=None,
+        archived_at=None,
+        archived_by=None,
+        archive_reason=None,
+        archive_reason_note=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    skill.aliases = [
+        SkillAliasModel(
+            id=uuid4(),
+            skill_id=skill.id,
+            alias=alias,
+            normalized_alias=normalize_skill_name(alias),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        for alias in (aliases or [])
+    ]
+    return skill
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -251,6 +302,167 @@ class TestAiDraftServiceHappyPath:
         assert isinstance(d.mandatory_skills, list)
         assert isinstance(d.screening_questions, list)
         assert isinstance(d.matching_criteria, list)
+        assert isinstance(d.suggested_skills, list)
+
+    @pytest.mark.asyncio
+    async def test_preserves_suggested_skill_aliases_from_ai(self) -> None:
+        svc = JobAiDraftService()
+        session = _mock_session()
+        ai_payload = {
+            **_DRAFT_JSON,
+            "suggested_skills": [
+                {
+                    "name": "Suporte Protheus",
+                    "category": "tool",
+                    "aliases": ["TOTVS Protheus", "ERP Protheus", "Suporte TOTVS", "Suporte Protheus"],
+                    "description": "Suporte operacional em ERP Protheus.",
+                    "importance": "essential",
+                    "source": "ai_suggested",
+                }
+            ],
+        }
+        with (
+            patch(
+                "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+                return_value=_mock_ai(_ai_response(content=json.dumps(ai_payload))),
+            ),
+            patch(
+                "src.application.services.job_ai_draft_service.SQLAlchemySkillCatalogRepository.list_runtime_skills",
+                new=AsyncMock(return_value=[]),
+            ),
+        ):
+            result = await svc.generate(text_input="Suporte Protheus", ocr_text=None, session=session)
+
+        assert result.draft.suggested_skills[0].name == "Suporte Protheus"
+        assert result.draft.suggested_skills[0].aliases == [
+            "TOTVS Protheus",
+            "ERP Protheus",
+            "Suporte TOTVS",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_marks_suggested_skill_as_existing_when_name_matches_catalog(self) -> None:
+        svc = JobAiDraftService()
+        session = _mock_session()
+        with (
+            patch(
+                "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+                return_value=_mock_ai(),
+            ),
+            patch(
+                "src.application.services.job_ai_draft_service.SQLAlchemySkillCatalogRepository.list_runtime_skills",
+                new=AsyncMock(return_value=[_catalog_skill("Atendimento ao cliente")]),
+            ),
+        ):
+            result = await svc.generate(text_input="Atendimento ao cliente", ocr_text=None, session=session)
+
+        suggestion = result.draft.suggested_skills[0]
+        assert suggestion.catalog_status == "existing"
+        assert suggestion.catalog_skill_name == "Atendimento ao cliente"
+
+    @pytest.mark.asyncio
+    async def test_marks_suggested_skill_as_existing_when_alias_matches_catalog(self) -> None:
+        svc = JobAiDraftService()
+        session = _mock_session()
+        ai_payload = {
+            **_DRAFT_JSON,
+            "suggested_skills": [
+                {
+                    "name": "ERP Protheus",
+                    "category": "tool",
+                    "aliases": ["TOTVS Protheus"],
+                    "description": None,
+                    "importance": "differential",
+                    "source": "ai_suggested",
+                }
+            ],
+        }
+        with (
+            patch(
+                "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+                return_value=_mock_ai(_ai_response(content=json.dumps(ai_payload))),
+            ),
+            patch(
+                "src.application.services.job_ai_draft_service.SQLAlchemySkillCatalogRepository.list_runtime_skills",
+                new=AsyncMock(
+                    return_value=[_catalog_skill("Suporte Protheus", aliases=["TOTVS Protheus"])]
+                ),
+            ),
+        ):
+            result = await svc.generate(text_input="TOTVS Protheus", ocr_text=None, session=session)
+
+        suggestion = result.draft.suggested_skills[0]
+        assert suggestion.catalog_status == "existing"
+        assert suggestion.catalog_skill_name == "Suporte Protheus"
+
+    @pytest.mark.asyncio
+    async def test_marks_suggested_skill_as_new_when_catalog_has_no_match(self) -> None:
+        svc = JobAiDraftService()
+        session = _mock_session()
+        ai_payload = {
+            **_DRAFT_JSON,
+            "suggested_skills": [
+                {
+                    "name": "Suporte TOTVS",
+                    "category": "tool",
+                    "aliases": ["Suporte ERP"],
+                    "description": None,
+                    "importance": "differential",
+                    "source": "ai_suggested",
+                }
+            ],
+        }
+        with (
+            patch(
+                "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+                return_value=_mock_ai(_ai_response(content=json.dumps(ai_payload))),
+            ),
+            patch(
+                "src.application.services.job_ai_draft_service.SQLAlchemySkillCatalogRepository.list_runtime_skills",
+                new=AsyncMock(return_value=[]),
+            ),
+        ):
+            result = await svc.generate(text_input="Suporte TOTVS", ocr_text=None, session=session)
+
+        assert result.draft.suggested_skills[0].catalog_status == "new"
+
+    @pytest.mark.asyncio
+    async def test_marks_suggested_skill_as_conflict_when_aliases_match_multiple_catalog_skills(self) -> None:
+        svc = JobAiDraftService()
+        session = _mock_session()
+        ai_payload = {
+            **_DRAFT_JSON,
+            "suggested_skills": [
+                {
+                    "name": "Suporte ERP",
+                    "category": "business_process",
+                    "aliases": ["Suporte TOTVS", "ERP Protheus"],
+                    "description": None,
+                    "importance": "competency",
+                    "source": "ai_suggested",
+                }
+            ],
+        }
+        with (
+            patch(
+                "src.application.services.job_ai_draft_service.AIServiceFactory.create",
+                return_value=_mock_ai(_ai_response(content=json.dumps(ai_payload))),
+            ),
+            patch(
+                "src.application.services.job_ai_draft_service.SQLAlchemySkillCatalogRepository.list_runtime_skills",
+                new=AsyncMock(
+                    return_value=[
+                        _catalog_skill("Suporte Protheus", aliases=["Suporte TOTVS"]),
+                        _catalog_skill("ERP Corporativo", aliases=["ERP Protheus"]),
+                    ]
+                ),
+            ),
+        ):
+            result = await svc.generate(text_input="Suporte ERP", ocr_text=None, session=session)
+
+        suggestion = result.draft.suggested_skills[0]
+        assert suggestion.catalog_status == "conflict"
+        assert set(suggestion.catalog_conflicts) == {"Suporte Protheus", "ERP Corporativo"}
 
 
 # ── Needs Review logic ────────────────────────────────────────────────────────

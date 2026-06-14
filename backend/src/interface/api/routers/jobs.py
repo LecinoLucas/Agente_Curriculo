@@ -109,6 +109,7 @@ from src.interface.api.schemas.job_schemas import (
     AiDraftSafetyCheckResponse,
     AiDraftSafetyFindingResponse,
     AiDraftSourceResponse,
+    AiDraftSuggestedSkillResponse,
     AiDraftUsageResponse,
     ArchiveJobRequest,
     BulkImportJobsResponse,
@@ -208,6 +209,22 @@ def _build_ai_draft_response(
             screening_questions=result.draft.screening_questions,
             pipeline_steps=result.draft.pipeline_steps,
             matching_criteria=result.draft.matching_criteria,
+            suggested_skills=[
+                AiDraftSuggestedSkillResponse(
+                    name=item.name,
+                    category=item.category,
+                    aliases=item.aliases,
+                    description=item.description,
+                    importance=item.importance,
+                    source=item.source,
+                    catalog_status=item.catalog_status,
+                    catalog_skill_id=item.catalog_skill_id,
+                    catalog_skill_name=item.catalog_skill_name,
+                    catalog_matched_by=item.catalog_matched_by,
+                    catalog_conflicts=item.catalog_conflicts,
+                )
+                for item in result.draft.suggested_skills
+            ],
             selection_flow_type=result.draft.selection_flow_type,
             requires_manager_review=result.draft.requires_manager_review,
             requires_behavioral_assessment=result.draft.requires_behavioral_assessment,

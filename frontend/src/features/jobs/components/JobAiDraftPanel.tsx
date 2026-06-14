@@ -19,6 +19,7 @@ import {
   generateJobAiDraftFromImage,
   type JobAiDraftFields,
   type JobAiDraftSafetyCheck,
+  type JobAiDraftSuggestedSkill,
 } from "../services/jobAiDraftService";
 
 interface JobAiDraftPanelProps {
@@ -55,6 +56,25 @@ function ChipList({ items, testId }: { items: string[]; testId?: string }) {
         </Badge>
       ))}
     </div>
+  );
+}
+
+function SuggestedSkillStatusBadge({
+  status,
+}: {
+  status: JobAiDraftSuggestedSkill["catalog_status"];
+}) {
+  const config =
+    status === "existing"
+      ? { label: "Existente no catálogo", className: "bg-success-soft text-success" }
+      : status === "conflict"
+        ? { label: "Possível conflito", className: "bg-danger-soft text-danger" }
+        : { label: "Nova sugestão", className: "bg-warning-soft text-warning" };
+
+  return (
+    <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${config.className}`}>
+      {config.label}
+    </span>
   );
 }
 
@@ -149,6 +169,20 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
         : null,
       draft.unit ? { label: draft.unit, variant: "secondary" as const } : null,
     ].filter(Boolean) as { label: string; variant: "outline" | "secondary" }[];
+  }, [draft]);
+
+  const suggestedSkillGroups = useMemo(() => {
+    const groups: Record<"essential" | "differential" | "competency", JobAiDraftSuggestedSkill[]> = {
+      essential: [],
+      differential: [],
+      competency: [],
+    };
+
+    for (const item of draft?.suggested_skills ?? []) {
+      groups[item.importance].push(item);
+    }
+
+    return groups;
   }, [draft]);
 
   async function handleGenerate() {
@@ -822,6 +856,85 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                 testId="draft-benefits"
               />
             </div>
+
+            {draft.suggested_skills.length > 0 && (
+              <div
+                className="space-y-4 rounded-xl border border-border bg-surface px-4 py-4"
+                data-testid="draft-suggested-skills"
+              >
+                <div className="space-y-1">
+                  <SectionTitle>Skills sugeridas com aliases</SectionTitle>
+                  <p className="text-sm text-text-muted">
+                    A IA sugeriu aliases e o backend comparou cada skill com o catálogo atual.
+                  </p>
+                </div>
+
+                {(
+                  [
+                    ["essential", "Essenciais"],
+                    ["differential", "Diferenciais"],
+                    ["competency", "Competências"],
+                  ] as const
+                ).map(([importance, label]) => {
+                  const items = suggestedSkillGroups[importance];
+                  if (items.length === 0) return null;
+
+                  return (
+                    <div key={importance} className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                        {label} ({items.length})
+                      </p>
+                      <div className="space-y-3">
+                        {items.map((item) => (
+                          <div
+                            key={`${importance}-${item.name}`}
+                            className="rounded-xl border border-border bg-background px-3 py-3"
+                            data-testid={`draft-suggested-skill-${item.catalog_status}`}
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-semibold text-text">{item.name}</p>
+                                  <Badge variant="outline" className="rounded-md px-2 py-0.5 text-[11px]">
+                                    {item.category}
+                                  </Badge>
+                                </div>
+                                {item.description && (
+                                  <p className="text-sm text-text-muted">{item.description}</p>
+                                )}
+                              </div>
+                              <SuggestedSkillStatusBadge status={item.catalog_status} />
+                            </div>
+
+                            {item.aliases.length > 0 && (
+                              <div className="mt-3 space-y-1">
+                                <p className="text-xs font-medium text-text-muted">Aliases sugeridos</p>
+                                <ChipList items={item.aliases} />
+                              </div>
+                            )}
+
+                            {item.catalog_status === "existing" && item.catalog_skill_name && (
+                              <p className="mt-3 text-xs text-success">
+                                Correspondência no catálogo: {item.catalog_skill_name}
+                                {item.catalog_matched_by.length > 0
+                                  ? ` (${item.catalog_matched_by.join(", ")})`
+                                  : ""}
+                              </p>
+                            )}
+
+                            {item.catalog_status === "conflict" && item.catalog_conflicts.length > 0 && (
+                              <p className="mt-3 text-xs text-danger">
+                                Possível conflito com: {item.catalog_conflicts.join(", ")}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-muted/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-2 text-sm text-text-muted">
