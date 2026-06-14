@@ -11,7 +11,7 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai_orchestration.assistant.assistant_request import AssistantRequest
@@ -174,13 +174,22 @@ async def ai_status(
     }
 
 
-@status_router.get("/usage/summary")
+@status_router.get("/usage/summary", deprecated=True)
 async def ai_usage_summary(
     _current_user: AdminOnly,
+    response: Response,
     period: str = "today",
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Retorna consumo agregado de IA sem prompts, respostas ou secrets."""
+    """[DEPRECATED] Use GET /api/v1/admin/health/ai-usage-center instead.
+
+    Returns a simplified AI usage summary. This endpoint is deprecated; the official
+    AI Usage Center at GET /api/v1/admin/health/ai-usage-center is the recommended
+    replacement with full operational metrics and cost visibility.
+    """
+    response.headers["Deprecation"] = "true"
+    response.headers["X-Deprecated-Endpoint"] = "true"
+    response.headers["X-Replacement-Endpoint"] = "/api/v1/admin/health/ai-usage-center"
     normalized_period = period if period in {"today", "7d", "30d"} else "today"
     return await AIUsageService(db).get_usage_summary(normalized_period)  # type: ignore[arg-type]
 

@@ -149,6 +149,21 @@ async def test_ai_usage_works_without_records(
 
 
 @pytest.mark.asyncio
+async def test_ai_usage_legacy_endpoint_returns_deprecation_headers(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _admin_headers(client, db_session)
+
+    response = await client.get("/api/v1/admin/health/ai-usage", headers=headers)
+
+    assert response.status_code == 200
+    assert response.headers.get("deprecation") == "true"
+    assert response.headers.get("x-deprecated-endpoint") == "true"
+    assert response.headers.get("x-replacement-endpoint") == "/api/v1/admin/health/ai-usage-center"
+
+
+@pytest.mark.asyncio
 async def test_ai_usage_center_returns_grouped_operational_payload(
     client: AsyncClient,
     db_session: AsyncSession,

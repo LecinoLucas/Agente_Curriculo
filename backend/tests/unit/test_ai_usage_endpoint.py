@@ -102,6 +102,21 @@ async def test_ai_usage_summary_blocks_non_admin_and_candidate() -> None:
         assert resp.status_code == 403
 
 
+async def test_ai_usage_summary_returns_deprecation_headers() -> None:
+    _fastapi_app.dependency_overrides[get_current_user] = lambda: _user(UserRole.ADMIN)
+    _fastapi_app.dependency_overrides[get_db] = _override_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get(_ENDPOINT)
+    finally:
+        _clear_overrides()
+
+    assert resp.status_code == 200
+    assert resp.headers.get("deprecation") == "true"
+    assert resp.headers.get("x-deprecated-endpoint") == "true"
+    assert resp.headers.get("x-replacement-endpoint") == "/api/v1/admin/health/ai-usage-center"
+
+
 async def test_ai_usage_summary_admin_gets_safe_payload() -> None:
     _fastapi_app.dependency_overrides[get_current_user] = lambda: _user(UserRole.ADMIN)
     _fastapi_app.dependency_overrides[get_db] = _override_db
