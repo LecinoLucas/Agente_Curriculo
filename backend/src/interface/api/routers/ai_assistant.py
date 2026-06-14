@@ -11,7 +11,7 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai_orchestration.assistant.assistant_request import AssistantRequest
@@ -22,7 +22,6 @@ from src.ai_orchestration.core.tool_runtime import ToolRuntime
 from src.ai_orchestration.rag.pgvector_support import is_pgvector_available
 from src.core.settings import settings
 from src.ai_orchestration.tools.registry import DEFAULT_REGISTRY
-from src.application.services.ai_usage_log_service import AIUsageService
 from src.domain.entities.user import User, UserRole
 from src.interface.api.dependencies import AdminOnly, InternalUser, get_db
 from src.interface.api.schemas.ai_assistant_schemas import (
@@ -173,25 +172,6 @@ async def ai_status(
         "warnings": warnings,
     }
 
-
-@status_router.get("/usage/summary", deprecated=True)
-async def ai_usage_summary(
-    _current_user: AdminOnly,
-    response: Response,
-    period: str = "today",
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """[DEPRECATED] Use GET /api/v1/admin/health/ai-usage-center instead.
-
-    Returns a simplified AI usage summary. This endpoint is deprecated; the official
-    AI Usage Center at GET /api/v1/admin/health/ai-usage-center is the recommended
-    replacement with full operational metrics and cost visibility.
-    """
-    response.headers["Deprecation"] = "true"
-    response.headers["X-Deprecated-Endpoint"] = "true"
-    response.headers["X-Replacement-Endpoint"] = "/api/v1/admin/health/ai-usage-center"
-    normalized_period = period if period in {"today", "7d", "30d"} else "today"
-    return await AIUsageService(db).get_usage_summary(normalized_period)  # type: ignore[arg-type]
 
 
 @router.post("/read-only", response_model=AiAssistantReadOnlyResponse)

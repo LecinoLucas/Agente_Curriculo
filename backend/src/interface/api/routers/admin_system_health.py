@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.system_health_service import AIUsageQuery, SystemHealthService
@@ -11,7 +11,6 @@ from src.interface.api.schemas.system_health_schemas import (
     AICostBackfillResponse,
     AIUsageCenterResponse,
     AIPricingCatalogResponse,
-    AIUsageSummaryResponse,
     DatabaseHealthResponse,
     QueueHealthResponse,
     SystemErrorsResponse,
@@ -32,36 +31,6 @@ async def get_health_overview(
 ) -> SystemHealthOverviewResponse:
     return SystemHealthOverviewResponse.model_validate(await service.get_overview())
 
-
-@router.get("/ai-usage", response_model=AIUsageSummaryResponse, deprecated=True)
-async def get_ai_usage(
-    _current_user: AdminOnly,
-    response: Response,
-    date_from: date | None = Query(default=None),
-    date_to: date | None = Query(default=None),
-    provider: str | None = Query(default=None),
-    model: str | None = Query(default=None),
-    service: SystemHealthService = Depends(_get_service),
-) -> AIUsageSummaryResponse:
-    """[DEPRECATED] Use GET /api/v1/admin/health/ai-usage-center instead.
-
-    Returns basic AI usage aggregates. This endpoint is deprecated; the official
-    AI Usage Center at GET /api/v1/admin/health/ai-usage-center provides the
-    full operational view including cost breakdown, gaps analysis and recent events.
-    """
-    response.headers["Deprecation"] = "true"
-    response.headers["X-Deprecated-Endpoint"] = "true"
-    response.headers["X-Replacement-Endpoint"] = "/api/v1/admin/health/ai-usage-center"
-    return AIUsageSummaryResponse.model_validate(
-        await service.get_ai_usage(
-            AIUsageQuery(
-                date_from=date_from,
-                date_to=date_to,
-                provider=provider,
-                model=model,
-            )
-        )
-    )
 
 
 @router.get("/ai-usage-center", response_model=AIUsageCenterResponse)

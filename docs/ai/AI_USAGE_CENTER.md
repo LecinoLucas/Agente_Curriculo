@@ -55,41 +55,28 @@ de IA nem altera tokens/status.
 
 ---
 
-## Endpoints Legados — DEPRECATED
+## Endpoints Legados — REMOVIDOS
 
-Os endpoints abaixo continuam funcionando, mas estão **marcados como deprecated** e
-**não devem ser usados em novas telas ou integrações**.
+Os endpoints abaixo foram **removidos** do backend e retornam `404 Not Found`.
+Não devem ser usados em nenhuma tela ou integração.
 
-Ambos retornam os headers:
-```
-Deprecation: true
-X-Deprecated-Endpoint: true
-X-Replacement-Endpoint: /api/v1/admin/health/ai-usage-center
-```
-
-E aparecem como `deprecated: true` no schema OpenAPI (Swagger UI).
-
-### Legado 1 — Admin Health AI Usage
+### Legado 1 — Admin Health AI Usage (removido)
 
 ```
-GET /api/v1/admin/health/ai-usage
+GET /api/v1/admin/health/ai-usage  →  404
 ```
 
 Retornava aggregates simples (total_calls, successful_calls, failed_calls, tokens,
 by_provider, by_model, daily_usage). Substituído pela central oficial.
 
-**Implementação:** `backend/src/interface/api/routers/admin_system_health.py`
-
-### Legado 2 — AI Status Summary
+### Legado 2 — AI Status Summary (removido)
 
 ```
-GET /api/v1/ai/usage/summary
+GET /api/v1/ai/usage/summary  →  404
 ```
 
 Retornava um resumo simplificado por feature (rag_synthesis, job_ai_draft, etc.) com
 período configurável (`today`, `7d`, `30d`). Substituído pela central oficial.
-
-**Implementação:** `backend/src/interface/api/routers/ai_assistant.py`
 
 ---
 
@@ -133,7 +120,6 @@ Dados source: tabela `ai_usage_logs` via `backend/src/infrastructure/repositorie
 
 | Arquivo | O que cobre |
 |---|---|
-| `backend/tests/integration/test_admin_system_health_api.py` | Payload da central, isolamento de dados, headers de deprecated, auth |
-| `backend/tests/integration/test_ai_usage_cost.py` | Cálculo de custo estimado, backfill |
-| `backend/tests/unit/test_ai_usage_endpoint.py` | Endpoint legado `/ai/usage/summary`, headers de deprecated, auth |
+| `backend/tests/integration/test_admin_system_health_api.py` | Payload da central, 404 dos legados removidos, auth |
+| `backend/tests/integration/test_ai_usage_cost.py` | Cálculo de custo estimado, backfill (usa endpoint oficial) |
 | `frontend/src/pages/__tests__/AIUsageCenterPage.test.tsx` | Renderização da central no frontend |

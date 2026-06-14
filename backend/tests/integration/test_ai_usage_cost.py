@@ -102,13 +102,13 @@ async def test_ai_usage_aggregator_returns_total_cost(
     await db_session.commit()
 
     headers = await _admin_headers(client, db_session)
-    response = await client.get("/api/v1/admin/health/ai-usage", headers=headers)
+    response = await client.get("/api/v1/admin/health/ai-usage-center", headers=headers)
     assert response.status_code == 200
     body = response.json()
-    assert body["total_calls"] == 2
+    assert body["summary"]["total_calls"] == 2
     # 0.30 (input) + 2.50 (output) = 2.80
-    assert body["estimated_cost_usd"] is not None
-    assert Decimal(str(body["estimated_cost_usd"])) == Decimal("2.80")
+    assert body["summary"]["estimated_cost_usd"] is not None
+    assert Decimal(str(body["summary"]["estimated_cost_usd"])) == Decimal("2.80")
 
 
 @pytest.mark.asyncio
@@ -141,11 +141,11 @@ async def test_ai_usage_aggregator_returns_null_when_all_costs_missing(
     await db_session.commit()
 
     headers = await _admin_headers(client, db_session)
-    response = await client.get("/api/v1/admin/health/ai-usage", headers=headers)
+    response = await client.get("/api/v1/admin/health/ai-usage-center", headers=headers)
     assert response.status_code == 200
     body = response.json()
-    assert body["total_calls"] == 2
-    assert body["estimated_cost_usd"] is None
+    assert body["summary"]["total_calls"] == 2
+    assert body["summary"]["estimated_cost_usd"] is None
 
 
 @pytest.mark.asyncio
@@ -253,11 +253,11 @@ async def test_backfill_recomputes_costs_for_legacy_null_rows(
     assert body["skipped_unpriced"] == 1
 
     # After backfill, the aggregator returns a positive estimated_cost_usd
-    summary = await client.get("/api/v1/admin/health/ai-usage", headers=headers)
+    summary = await client.get("/api/v1/admin/health/ai-usage-center", headers=headers)
     assert summary.status_code == 200
     s = summary.json()
-    assert s["estimated_cost_usd"] is not None
-    assert Decimal(str(s["estimated_cost_usd"])) == Decimal("2.80")
+    assert s["summary"]["estimated_cost_usd"] is not None
+    assert Decimal(str(s["summary"]["estimated_cost_usd"])) == Decimal("2.80")
 
 
 @pytest.mark.asyncio
@@ -335,9 +335,9 @@ async def test_ai_usage_aggregator_skips_null_rows_when_partial(
     await db_session.commit()
 
     headers = await _admin_headers(client, db_session)
-    response = await client.get("/api/v1/admin/health/ai-usage", headers=headers)
+    response = await client.get("/api/v1/admin/health/ai-usage-center", headers=headers)
     body = response.json()
-    assert body["total_calls"] == 2
+    assert body["summary"]["total_calls"] == 2
     # Only the gemini-2.5-flash row contributes (0.30); the unconfigured row is skipped.
-    assert body["estimated_cost_usd"] is not None
-    assert Decimal(str(body["estimated_cost_usd"])) == Decimal("0.30")
+    assert body["summary"]["estimated_cost_usd"] is not None
+    assert Decimal(str(body["summary"]["estimated_cost_usd"])) == Decimal("0.30")

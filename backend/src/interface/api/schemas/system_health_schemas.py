@@ -77,43 +77,6 @@ class SystemHealthOverviewResponse(APISchemaModel):
     failed_analyses_24h: int
 
 
-class AIUsageAggregateResponse(APISchemaModel):
-    provider: str | None = None
-    model: str | None = None
-    usage_date: DateValue | None = Field(default=None, alias="date")
-    total_calls: int
-    successful_calls: int
-    failed_calls: int
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
-    estimated_cost_usd: Decimal | None = None
-    avg_latency_ms: float | None = None
-
-
-class TopExpensiveAnalysisResponse(APISchemaModel):
-    analysis_id: UUID
-    provider: str
-    model: str
-    calls: int
-    total_tokens: int
-    estimated_cost_usd: Decimal | None = None
-
-
-class AIUsageSummaryResponse(APISchemaModel):
-    total_calls: int
-    successful_calls: int
-    failed_calls: int
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
-    estimated_cost_usd: Decimal | None = None
-    avg_latency_ms: float | None = None
-    by_provider: list[AIUsageAggregateResponse]
-    by_model: list[AIUsageAggregateResponse]
-    daily_usage: list[AIUsageAggregateResponse]
-    top_expensive_analyses: list[TopExpensiveAnalysisResponse]
-
 
 class AIUsageCenterPeriodResponse(APISchemaModel):
     date_from: DateValue | None = Field(default=None, alias="from")
