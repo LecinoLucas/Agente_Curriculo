@@ -30,44 +30,6 @@ export type HealthOverview = {
   failed_analyses_24h: number;
 };
 
-export type AIUsageAggregate = {
-  provider?: string | null;
-  model?: string | null;
-  date?: string | null;
-  total_calls: number;
-  successful_calls: number;
-  failed_calls: number;
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-  estimated_cost_usd: number | null;
-  avg_latency_ms: number | null;
-};
-
-export type TopExpensiveAnalysis = {
-  analysis_id: string;
-  provider: string;
-  model: string;
-  calls: number;
-  total_tokens: number;
-  estimated_cost_usd: number | null;
-};
-
-export type AIUsageSummary = {
-  total_calls: number;
-  successful_calls: number;
-  failed_calls: number;
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-  estimated_cost_usd: number | null;
-  avg_latency_ms: number | null;
-  by_provider: AIUsageAggregate[];
-  by_model: AIUsageAggregate[];
-  daily_usage: AIUsageAggregate[];
-  top_expensive_analyses: TopExpensiveAnalysis[];
-};
-
 export type AIUsageCenterSummary = {
   total_calls: number;
   success_calls: number;
@@ -235,10 +197,6 @@ export type AICostBackfillResult = {
 
 export const systemHealthService = {
   getOverview: () => httpRequest<HealthOverview>("/api/v1/admin/health/overview"),
-  getAIUsage: (params: AIUsageParams = {}) => {
-    const query = buildQuery(params);
-    return httpRequest<AIUsageSummary>(`/api/v1/admin/health/ai-usage${query ? `?${query}` : ""}`);
-  },
   getAIUsageCenter: (params: AIUsageParams = {}) => {
     const query = buildQuery(params);
     return httpRequest<AIUsageCenterResponse>(`/api/v1/admin/health/ai-usage-center${query ? `?${query}` : ""}`);

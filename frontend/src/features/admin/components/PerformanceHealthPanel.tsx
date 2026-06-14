@@ -225,7 +225,7 @@ export function PerformanceHealthPanel({
             <p>Esta visão não expõe dados internos sensíveis nem payloads técnicos brutos.</p>
           </div>
           <Button type="button" variant="outline" onClick={onOpenAiTab} className="gap-2 self-start lg:self-auto">
-            Ver detalhes em IA / Tokens
+            Ver limites e pricing de IA
             <ArrowRight className="h-4 w-4" />
           </Button>
         </CardContent>
@@ -308,14 +308,14 @@ export function PerformanceHealthPanel({
 
       <Card className="border-border">
         <CardHeader>
-          <CardTitle>IA / Usage</CardTitle>
+          <CardTitle>Uso de IA</CardTitle>
           <CardDescription>
-            Esta aba não duplica o detalhamento de tokens, custo e chamadas recentes. Use a visão de IA / Tokens para análise operacional completa.
+            O detalhamento operacional de tokens, custo e eventos recentes fica na central única de uso de IA.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-text-muted">
-          <p>Resumo de performance: chamadas recentes e limites de IA continuam sendo acompanhados na aba dedicada.</p>
-          <p>Esta visão só sinaliza que a superfície existe e continua sendo a referência para custo, erros e uso agregado.</p>
+          <p>Use a aba de Health para limites e pricing, e a central `/admin/ia/uso` para observabilidade operacional completa.</p>
+          <p>Esta visão de performance não replica tabelas de consumo nem breakdown por modelo ou fluxo.</p>
         </CardContent>
       </Card>
     </div>

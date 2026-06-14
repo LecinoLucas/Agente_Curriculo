@@ -31,48 +31,9 @@ export type AiStatusResponse = {
   warnings: string[];
 };
 
-export type AiUsageSummaryResponse = {
-  ok: boolean;
-  period: "today" | "7d" | "30d" | string;
-  status: {
-    assistant_enabled: boolean;
-    free_text_enabled: boolean;
-    rag_synthesis_enabled: boolean;
-    gemini_embedding_enabled: boolean;
-    protheus_real_send_enabled: boolean;
-    gemini_api_key_configured: boolean;
-  };
-  totals: {
-    requests: number;
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-    errors: number;
-  };
-  by_feature: Array<{
-    feature: string;
-    requests: number;
-    total_tokens: number;
-    errors: number;
-  }>;
-  recent: Array<{
-    created_at: string | null;
-    feature: string;
-    provider: string;
-    model: string;
-    total_tokens: number;
-    status: string;
-  }>;
-  warnings: string[];
-};
-
 export const aiSettingsService = {
   getStatus(): Promise<AiStatusResponse> {
     return httpRequest<AiStatusResponse>("/api/v1/ai/status");
-  },
-
-  getUsageSummary(period = "today"): Promise<AiUsageSummaryResponse> {
-    return httpRequest<AiUsageSummaryResponse>(`/api/v1/ai/usage/summary?period=${period}`);
   },
 
   runAssistantTest(request: AiAssistantRequest): Promise<AiAssistantResponse> {

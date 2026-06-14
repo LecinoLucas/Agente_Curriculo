@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Database, Gauge, HeartPulse, Server, TriangleAlert } from "lucide-react";
+import { Activity, ArrowRight, Database, Gauge, HeartPulse, Server, TriangleAlert } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { SimpleDonutChart } from "../components/charts/SimpleDonutChart";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/common/PageHeader";
 import { PerformanceHealthPanel } from "../features/admin/components/PerformanceHealthPanel";
-import { AiUsagePanel } from "../features/ai-settings/components/AiUsagePanel";
 import { useAsyncState } from "../hooks/useAsyncState";
 import {
   type AIPricingCatalog,
@@ -26,7 +26,7 @@ type HealthTab = "overview" | "performance" | "ai" | "queues" | "database" | "er
 const TAB_ITEMS: Array<{ key: HealthTab; label: string }> = [
   { key: "overview", label: "Visão Geral" },
   { key: "performance", label: "Performance" },
-  { key: "ai", label: "IA / Tokens" },
+  { key: "ai", label: "IA / Limites" },
   { key: "queues", label: "Filas" },
   { key: "database", label: "Banco" },
   { key: "errors", label: "Erros" },
@@ -162,8 +162,8 @@ type SystemHealthPageProps = {
 };
 
 export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps = {}) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<HealthTab>("overview");
-  const [aiUsageRefreshKey, setAiUsageRefreshKey] = useState(0);
 
   const { data: overviewData, error: overviewError, loading: overviewLoading, run: runOverview } = useAsyncState<HealthOverview>();
   const { data: queuesData, error: queuesError, loading: queuesLoading, run: runQueues } = useAsyncState<QueueHealth>();
@@ -255,7 +255,6 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
         total: result.total_null_rows,
         skipped: result.skipped_unpriced,
       });
-      setAiUsageRefreshKey((current) => current + 1);
     } catch (error) {
       setBackfillStatus({
         kind: "error",
@@ -395,9 +394,26 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
       ) : null}
 
       {activeTab === "ai" ? (
-        <SectionShell title="IA / Tokens" description="Consumo interno de chamadas registradas pelo sistema." loading={false} error={null} onRetry={() => undefined}>
+        <SectionShell title="IA / Limites" description="Limites administrativos, pricing e manutenção de custo." loading={false} error={null} onRetry={() => undefined}>
           <div className="space-y-6">
-            <AiUsagePanel refreshKey={aiUsageRefreshKey} />
+            <Card>
+              <CardHeader>
+                <CardTitle>Uso operacional centralizado</CardTitle>
+                <CardDescription>
+                  A visão detalhada de tokens, custos, modelos, eventos recentes e gaps agora fica na central única de uso de IA.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1 text-sm text-text-muted">
+                  <p>Health continua responsável por limites administrativos, pricing e manutenção.</p>
+                  <p>Esta aba não replica mais breakdown operacional de consumo.</p>
+                </div>
+                <Button type="button" onClick={() => navigate("/admin/ia/uso")}>
+                  Ver central de uso
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
 
             <Card>
                 <CardHeader>

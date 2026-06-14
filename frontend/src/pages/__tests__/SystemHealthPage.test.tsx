@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,6 @@ const routerFuture = {
 import { SystemHealthPage } from "../SystemHealthPage";
 
 const getOverviewMock = vi.fn();
-const getAIUsageMock = vi.fn();
 const getQueuesMock = vi.fn();
 const getDatabaseMock = vi.fn();
 const getErrorsMock = vi.fn();
@@ -20,7 +19,6 @@ const getUsageMock = vi.fn();
 vi.mock("../../services/systemHealthService", () => ({
   systemHealthService: {
     getOverview: () => getOverviewMock(),
-    getAIUsage: (params: unknown) => getAIUsageMock(params),
     getQueues: () => getQueuesMock(),
     getDatabase: () => getDatabaseMock(),
     getErrors: () => getErrorsMock(),
@@ -38,7 +36,6 @@ vi.mock("../../services/aiLimitsService", () => ({
 describe("SystemHealthPage", () => {
   beforeEach(() => {
     getOverviewMock.mockReset();
-    getAIUsageMock.mockReset();
     getQueuesMock.mockReset();
     getDatabaseMock.mockReset();
     getErrorsMock.mockReset();
@@ -60,20 +57,6 @@ describe("SystemHealthPage", () => {
       failed_analyses_24h: 0,
     });
 
-    getAIUsageMock.mockResolvedValue({
-      total_calls: 10,
-      successful_calls: 9,
-      failed_calls: 1,
-      input_tokens: 1000,
-      output_tokens: 300,
-      total_tokens: 1300,
-      estimated_cost_usd: null,
-      avg_latency_ms: 2300,
-      by_provider: [{ provider: "google", total_calls: 10, successful_calls: 9, failed_calls: 1, input_tokens: 1000, output_tokens: 300, total_tokens: 1300, estimated_cost_usd: null, avg_latency_ms: 2300 }],
-      by_model: [{ provider: "google", model: "gemini-2.5-flash", total_calls: 10, successful_calls: 9, failed_calls: 1, input_tokens: 1000, output_tokens: 300, total_tokens: 1300, estimated_cost_usd: null, avg_latency_ms: 2300 }],
-      daily_usage: [{ date: "2026-05-12", total_calls: 10, successful_calls: 9, failed_calls: 1, input_tokens: 1000, output_tokens: 300, total_tokens: 1300, estimated_cost_usd: null, avg_latency_ms: 2300 }],
-      top_expensive_analyses: [],
-    });
     getQueuesMock.mockResolvedValue({
       redis: { status: "ok", latency_ms: 4 },
       celery: { status: "unknown", message: "Celery inspect indisponível", workers_online: null },
@@ -119,7 +102,7 @@ describe("SystemHealthPage", () => {
     expect(await screen.findByText("Health do Sistema")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Visão Geral" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Performance" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "IA / Tokens" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "IA / Limites" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Filas" })).toBeInTheDocument();
     expect(screen.getByText("Status geral")).toBeInTheDocument();
   });
@@ -149,7 +132,7 @@ describe("SystemHealthPage", () => {
     expect(screen.getByRole("button", { name: "Tentar novamente" })).toBeInTheDocument();
   });
 
-  it("carrega a aba de IA e mantém a visualização de IA / Tokens", async () => {
+  it("carrega a aba de IA com link para a central e mantém limites/pricing", async () => {
     const user = userEvent.setup();
 
     render(
@@ -159,14 +142,12 @@ describe("SystemHealthPage", () => {
     );
 
     await screen.findByText("Status geral");
-    await user.click(screen.getByRole("button", { name: "IA / Tokens" }));
+    await user.click(screen.getByRole("button", { name: "IA / Limites" }));
 
-    await waitFor(() => {
-      expect(getAIUsageMock).toHaveBeenCalled();
-    });
-
-    expect(await screen.findByText(/billing oficial/i)).toBeInTheDocument();
-    expect(screen.getByText("Métricas IA / Tokens")).toBeInTheDocument();
+    expect(await screen.findByText("Uso operacional centralizado")).toBeInTheDocument();
+    expect(screen.getByText("Limites de IA")).toBeInTheDocument();
+    expect(screen.getByText("Preços IA")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ver central de uso/i })).toBeInTheDocument();
   });
 
   it("renderiza a aba Performance com budgets por módulo", async () => {
@@ -186,7 +167,7 @@ describe("SystemHealthPage", () => {
     expect(screen.getByText("Vagas")).toBeInTheDocument();
     expect(screen.getByText("Pré-admissão")).toBeInTheDocument();
     expect(screen.getByText("RAG / Base de Conhecimento")).toBeInTheDocument();
-    expect(screen.getByText("IA / Usage")).toBeInTheDocument();
+    expect(screen.getByText("Uso de IA")).toBeInTheDocument();
   });
 
   it("expõe os budgets críticos de performance sem inventar métricas em tempo real", async () => {
@@ -229,7 +210,7 @@ describe("SystemHealthPage", () => {
     expect(screen.queryByText(/content_hash/i)).not.toBeInTheDocument();
   });
 
-  it("permite navegar da aba Performance para IA / Tokens sem quebrar a aba existente", async () => {
+  it("permite navegar da aba Performance para IA / Limites sem quebrar a aba existente", async () => {
     const user = userEvent.setup();
 
     render(
@@ -240,11 +221,7 @@ describe("SystemHealthPage", () => {
 
     await screen.findByText("Status geral");
     await user.click(screen.getByRole("button", { name: "Performance" }));
-    await user.click(await screen.findByRole("button", { name: /Ver detalhes em IA \/ Tokens/i }));
-
-    await waitFor(() => {
-      expect(getAIUsageMock).toHaveBeenCalled();
-    });
-    expect(await screen.findByText("Métricas IA / Tokens")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /Ver limites e pricing de IA/i }));
+    expect(await screen.findByText("Uso operacional centralizado")).toBeInTheDocument();
   });
 });

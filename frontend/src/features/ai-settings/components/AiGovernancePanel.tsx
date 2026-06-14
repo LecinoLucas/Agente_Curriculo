@@ -1,30 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { BrainCircuit, CheckCircle2, FlaskConical, HeartPulse, KeyRound, ShieldCheck, TriangleAlert, XCircle } from "lucide-react";
+import { ArrowRight, BrainCircuit, CheckCircle2, FlaskConical, HeartPulse, KeyRound, ShieldCheck, TriangleAlert, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import { aiSettingsService, type AiStatusResponse, type AiUsageSummaryResponse } from "../services/aiSettingsService";
-import { AiUsagePanel } from "./AiUsagePanel";
+import { aiSettingsService, type AiStatusResponse } from "../services/aiSettingsService";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-function formatNumber(value: number | null | undefined): string {
-  return new Intl.NumberFormat("pt-BR").format(value ?? 0);
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return new Intl.DateTimeFormat("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-  }).format(parsed);
-}
 
 function flagBadge(enabled: boolean, enabledLabel = "Ligado", disabledLabel = "Desligado") {
   return <Badge variant={enabled ? "success" : "secondary"}>{enabled ? enabledLabel : disabledLabel}</Badge>;
@@ -63,7 +46,6 @@ function GovernanceStatusCard({
 export function AiGovernancePanel() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<AiStatusResponse | null>(null);
-  const [usageSummary, setUsageSummary] = useState<AiUsageSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,14 +56,10 @@ export function AiGovernancePanel() {
       setLoading(true);
       setError(null);
       try {
-        const [nextStatus, nextUsageSummary] = await Promise.all([
-          aiSettingsService.getStatus(),
-          aiSettingsService.getUsageSummary("today"),
-        ]);
+        const nextStatus = await aiSettingsService.getStatus();
 
         if (!mounted) return;
         setStatus(nextStatus);
-        setUsageSummary(nextUsageSummary);
       } catch (loadError) {
         if (!mounted) return;
         setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar a governança de IA.");
@@ -97,7 +75,7 @@ export function AiGovernancePanel() {
   }, []);
 
   const warnings = useMemo(() => {
-    if (!status && !usageSummary) return [];
+    if (!status) return [];
 
     const items: string[] = [];
     if (status && !status.providers.gemini_api_key_configured) {
@@ -113,31 +91,30 @@ export function AiGovernancePanel() {
       items.push("Protheus real ligado. Use somente com validação operacional explícita.");
     }
     for (const warning of status?.warnings ?? []) items.push(String(warning));
-    for (const warning of usageSummary?.warnings ?? []) items.push(String(warning));
     return Array.from(new Set(items));
-  }, [status, usageSummary]);
+  }, [status]);
 
   const executiveSummary = useMemo(() => {
-    if (!status || !usageSummary) return null;
+    if (!status) return null;
     return [
       {
         label: "Provider padrão",
         value: `${status.providers.provider}/${status.providers.model}`,
       },
       {
-        label: "Chamadas hoje",
-        value: formatNumber(usageSummary.totals.requests),
+        label: "Assistente",
+        value: status.assistant.enabled ? "Habilitado" : "Desligado",
       },
       {
-        label: "Tokens hoje",
-        value: formatNumber(usageSummary.totals.total_tokens),
+        label: "RAG synthesis",
+        value: status.rag.synthesis_enabled ? "Habilitado" : "Desligado",
       },
       {
-        label: "Falhas hoje",
-        value: formatNumber(usageSummary.totals.errors),
+        label: "Envio real Protheus",
+        value: status.protheus.real_send_enabled || status.protheus.erp_allow_real_send ? "Ligado" : "Desligado",
       },
     ];
-  }, [status, usageSummary]);
+  }, [status]);
 
   return (
     <div className="space-y-6">
@@ -162,7 +139,7 @@ export function AiGovernancePanel() {
         </Alert>
       ) : null}
 
-      {status && usageSummary ? (
+      {status ? (
         <>
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <Card>
@@ -183,9 +160,12 @@ export function AiGovernancePanel() {
             <Card>
               <CardHeader>
                 <CardTitle>Atalhos administrativos</CardTitle>
-                <CardDescription>Rotas especializadas continuam disponíveis para operação e auditoria.</CardDescription>
+                <CardDescription>Separação explícita entre governança, observabilidade operacional e auditoria.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                <Button className="w-full justify-start" onClick={() => navigate("/admin/ia/uso")}>
+                  <ArrowRight className="mr-2 h-4 w-4" /> Abrir central de uso de IA
+                </Button>
                 <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/admin/ia")}>
                   <FlaskConical className="mr-2 h-4 w-4" /> Laboratório IA
                 </Button>
@@ -246,39 +226,55 @@ export function AiGovernancePanel() {
             </Alert>
           ) : null}
 
-          <AiUsagePanel />
+          <Card>
+            <CardHeader>
+              <CardTitle>Uso operacional e custos</CardTitle>
+              <CardDescription>
+                Tokens, custos, modelos, eventos recentes e falhas foram centralizados na nova visão única.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1 text-sm text-text-muted">
+                <p>A governança continua aqui. A operação diária de consumo foi movida para a central.</p>
+                <p>Esta página não replica mais tabelas de tokens, custo, chamadas recentes nem breakdown por feature.</p>
+              </div>
+              <Button type="button" onClick={() => navigate("/admin/ia/uso")}>
+                Ver central de uso
+              </Button>
+            </CardContent>
+          </Card>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Consumo por feature</CardTitle>
-                <CardDescription>Agrupamento por operação registrada no backend.</CardDescription>
+                <CardTitle>Configuração ativa</CardTitle>
+                <CardDescription>Estados atuais de provider, assistente, RAG e governança de envio real.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Feature</TableHead>
-                      <TableHead>Requests</TableHead>
-                      <TableHead>Tokens</TableHead>
-                      <TableHead>Erros</TableHead>
+                      <TableHead>Área</TableHead>
+                      <TableHead>Valor</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {usageSummary.by_feature.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-text-muted">Nenhum uso registrado no período.</TableCell>
-                      </TableRow>
-                    ) : (
-                      usageSummary.by_feature.map((item) => (
-                        <TableRow key={item.feature}>
-                          <TableCell className="font-medium">{item.feature}</TableCell>
-                          <TableCell>{formatNumber(item.requests)}</TableCell>
-                          <TableCell>{formatNumber(item.total_tokens)}</TableCell>
-                          <TableCell>{formatNumber(item.errors)}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
+                    <TableRow>
+                      <TableCell className="font-medium">Provider padrão</TableCell>
+                      <TableCell>{status.providers.provider}/{status.providers.model}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Assistant read-only</TableCell>
+                      <TableCell>{flagBadge(status.assistant.enabled && status.assistant.read_only, "Ligado", "Desligado")}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">RAG synthesis</TableCell>
+                      <TableCell>{flagBadge(status.rag.synthesis_enabled, "Ligado", "Desligado")}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Embeddings Gemini</TableCell>
+                      <TableCell>{flagBadge(status.rag.gemini_embedding_enabled, "Ligado", "Desligado")}</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </CardContent>
@@ -286,36 +282,38 @@ export function AiGovernancePanel() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Últimas chamadas</CardTitle>
-                <CardDescription>Eventos recentes sem prompts, respostas ou metadados internos.</CardDescription>
+                <CardTitle>Últimas referências de configuração</CardTitle>
+                <CardDescription>Metadados de governança e ambiente, sem eventos operacionais duplicados.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Data/hora</TableHead>
-                      <TableHead>Feature</TableHead>
-                      <TableHead>Provider/model</TableHead>
-                      <TableHead>Tokens</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Valor</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {usageSummary.recent.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-text-muted">Nenhuma chamada recente.</TableCell>
-                      </TableRow>
-                    ) : (
-                      usageSummary.recent.map((item, index) => (
-                        <TableRow key={`${item.created_at ?? "sem-data"}-${item.feature}-${index}`}>
-                          <TableCell>{formatDateTime(item.created_at)}</TableCell>
-                          <TableCell className="font-medium">{item.feature}</TableCell>
-                          <TableCell>{item.provider}/{item.model}</TableCell>
-                          <TableCell>{formatNumber(item.total_tokens)}</TableCell>
-                          <TableCell>{flagBadge(item.status === "success", "success", item.status || "warning")}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
+                    <TableRow>
+                      <TableCell className="font-medium">Ambiente</TableCell>
+                      <TableCell>{status.environment}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Modelo embedding</TableCell>
+                      <TableCell>{status.rag.embedding_model}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Modelo síntese</TableCell>
+                      <TableCell>{status.rag.synthesis_model}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Storage vetorial</TableCell>
+                      <TableCell>{status.rag.vector_storage_mode}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Observabilidade operacional</TableCell>
+                      <TableCell>Centralizada em /admin/ia/uso</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </CardContent>

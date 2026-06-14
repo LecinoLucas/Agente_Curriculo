@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Activity,
+  ArrowRight,
   BarChart3,
   Briefcase,
   Gauge,
@@ -237,6 +239,7 @@ function AnalyticsTable({
 }
 
 export function AdminBiPage() {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<PeriodKey>("all");
   const [jobId, setJobId] = useState("");
   const [jobArea, setJobArea] = useState("");
@@ -293,10 +296,6 @@ export function AdminBiPage() {
     () => (data?.pipeline_by_stage ?? []).map((item) => ({ ...item, label: getPipelineStageLabel(item.stage) })),
     [data?.pipeline_by_stage],
   );
-  const aiUsageChartData = useMemo(
-    () => data?.ai_usage_daily ?? [],
-    [data?.ai_usage_daily],
-  );
   const analysesDailyChartData = useMemo(
     () => (data?.analyses_daily ?? []).map((item, index) => ({
       label: item.date,
@@ -328,15 +327,6 @@ export function AdminBiPage() {
       color: CHART_COLORS[index % CHART_COLORS.length],
     })),
     [pipelineChartData],
-  );
-  const aiUsageDailyBarData = useMemo(
-    () => aiUsageChartData.map((item, index) => ({
-      label: item.date,
-      value: item.tokens,
-      note: `${formatNumber(item.calls)} chamadas`,
-      color: CHART_COLORS[index % CHART_COLORS.length],
-    })),
-    [aiUsageChartData],
   );
   const topJobsBarData = useMemo(
     () => (data?.top_jobs_by_candidates ?? []).map((item, index) => ({
@@ -433,6 +423,21 @@ export function AdminBiPage() {
         <MetricCard title="Análises com falha" value={formatNumber(data?.summary.failed_analyses ?? 0)} hint={`${formatNumber(data?.total_analyses ?? 0)} análises no período`} icon={<TriangleAlert className="h-5 w-5" />} />
       </div>
 
+      <Card className="border-border bg-surface">
+        <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-text">Uso detalhado de IA</p>
+            <p className="text-sm text-text-muted">
+              O BI mantém apenas indicadores executivos agregados. A observabilidade operacional completa fica na central única de uso de IA.
+            </p>
+          </div>
+          <Button type="button" onClick={() => navigate("/admin/ia/uso")}>
+            Abrir central de uso
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </CardContent>
+      </Card>
+
       {!loading && !data ? (
         <Card className="border-border bg-surface">
           <CardContent className="p-6">
@@ -508,25 +513,6 @@ export function AdminBiPage() {
         </ChartCard>
 
         <ChartCard
-          title="Uso de IA por dia"
-          description="Tokens e chamadas registradas pelo sistema."
-          loading={loading}
-          empty={!loading && aiUsageChartData.length === 0}
-          emptyMessage="Sem dados de uso de IA ainda."
-        >
-          <div className="mb-4 rounded-2xl border border-border bg-surface-muted/60 p-3 text-sm text-text-muted">
-            O consumo exibido é calculado a partir das chamadas registradas pelo sistema. Para billing oficial, consulte Google AI Studio ou Google Cloud Billing.
-          </div>
-          <div className="h-72">
-            <SimpleBarChart
-              ariaLabel="Uso diário de tokens de IA"
-              data={aiUsageDailyBarData}
-              valueFormatter={formatNumber}
-            />
-          </div>
-        </ChartCard>
-
-        <ChartCard
           title="Top vagas por candidatos"
           description="Quais vagas concentram mais candidatos no período."
           loading={loading}
@@ -543,29 +529,6 @@ export function AdminBiPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-3">
-        <AnalyticsTable
-          title="Top análises mais caras"
-          description="Baseado nos logs internos de uso de IA."
-          headers={["Candidato", "Tokens", "Custo estimado"]}
-          rows={
-            data?.top_expensive_analyses.length ? (
-              data.top_expensive_analyses.map((item) => (
-                <TableRow key={item.analysis_id}>
-                  <TableCell className="font-medium text-text">{item.candidate_name}</TableCell>
-                  <TableCell>{formatNumber(item.tokens)}</TableCell>
-                  <TableCell>{formatCurrency(item.estimated_cost_usd)}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={3} className="text-center text-text-muted">
-                  Nenhuma análise cara registrada no período.
-                </TableCell>
-              </TableRow>
-            )
-          }
-        />
-
         <AnalyticsTable
           title="Últimas falhas de análise"
           description="Falhas recentes sem expor prompts ou dados sensíveis."

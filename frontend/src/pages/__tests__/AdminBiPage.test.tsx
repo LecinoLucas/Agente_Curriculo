@@ -104,7 +104,23 @@ describe("AdminBiPage", () => {
     expect(screen.getByRole("img", { name: "Volume de análises por status" })).toBeInTheDocument();
   });
 
-  it("mostra empty state quando não há dados de IA", async () => {
+  it("mostra card agregado de IA e link para a central", async () => {
+    render(
+      <MemoryRouter future={routerFuture}>
+        <AdminBiPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("BI de Recrutamento");
+    expect(screen.getByText("Tokens IA usados")).toBeInTheDocument();
+    expect(screen.getByText("Custo estimado")).toBeInTheDocument();
+    expect(screen.getByText("Uso detalhado de IA")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Abrir central de uso/i })).toBeInTheDocument();
+    expect(screen.queryByText("Uso de IA por dia")).not.toBeInTheDocument();
+    expect(screen.queryByText("Top análises mais caras")).not.toBeInTheDocument();
+  });
+
+  it("mantém o BI utilizável quando não há dados de IA", async () => {
     getBiOverviewMock.mockResolvedValueOnce({
       summary: {
         total_candidates: 0,
@@ -149,7 +165,8 @@ describe("AdminBiPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Sem dados de uso de IA ainda.")).toBeInTheDocument();
+    expect(await screen.findByText("BI de Recrutamento")).toBeInTheDocument();
+    expect(screen.getByText("Uso detalhado de IA")).toBeInTheDocument();
   });
 
   it("reaplica filtros", async () => {
