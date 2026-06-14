@@ -1,18 +1,18 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   BrainCircuit,
   ChevronLeft,
-  ChevronRight,
   Compass,
-  History,
+  Info,
   LoaderCircle,
   MessageSquare,
   PanelTop,
-  Sparkles,
   RotateCcw,
   Search,
+  ShieldCheck,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -197,6 +197,17 @@ export function AiAssistantDrawer({
   const pageContext = deriveAiAssistantPageContext(pathname, search);
   const history = sessionHistory ?? localSessionHistory;
   const hasContextualActions = pageContext.availableActions.length > 0;
+  const mergedSuggestions = [...pageContext.availableActions, ...pageContext.suggestedActions];
+  const showResult = status === "result" && Boolean(result || localAnswer || compositeResult);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
 
   const setHistory = (updater: (current: AiAssistantHistoryItem[]) => AiAssistantHistoryItem[]) => {
     const next = updater(history);
@@ -284,18 +295,21 @@ export function AiAssistantDrawer({
     query: string,
   ) => {
     const normalizedQuery = query.trim();
-    await handleAction({
-      id: intent,
-      kind: "knowledge",
-      label: intent === "knowledge.search" ? "Buscar fontes" : "Responder com fontes",
-      description: normalizedQuery,
-      intent,
-      query: normalizedQuery,
-      arguments: { query: normalizedQuery, limit: 5 },
-    }, {
-      historyQuery: shouldStoreHistoryQuery(normalizedQuery) ? normalizedQuery : null,
-      historySource: "knowledge_manual",
-    });
+    await handleAction(
+      {
+        id: intent,
+        kind: "knowledge",
+        label: intent === "knowledge.search" ? "Buscar fontes" : "Responder com fontes",
+        description: normalizedQuery,
+        intent,
+        query: normalizedQuery,
+        arguments: { query: normalizedQuery, limit: 5 },
+      },
+      {
+        historyQuery: shouldStoreHistoryQuery(normalizedQuery) ? normalizedQuery : null,
+        historySource: "knowledge_manual",
+      },
+    );
   };
 
   const executeCompositeAction = async (plan: AiCompositeAction, rawQuery: string) => {
@@ -500,7 +514,7 @@ export function AiAssistantDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
       aria-label="Assistente IA"
@@ -513,119 +527,140 @@ export function AiAssistantDrawer({
       />
 
       <div
-        className="relative z-10 flex w-full max-w-[760px] max-h-[84vh] flex-col overflow-hidden rounded-3xl bg-surface shadow-2xl border border-slate-200/80 dark:border-border/80"
+        className="relative z-10 flex max-h-[84vh] w-full max-w-[760px] flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-surface shadow-2xl dark:border-border/80"
         data-testid="ai-assistant-drawer"
       >
-        <div className="flex items-center gap-3 border-b border-border/60 bg-surface-muted/30 px-5 py-4">
-          {status !== "idle" ? (
-            <button
-              type="button"
-              onClick={handleBack}
-              aria-label="Voltar"
-              data-testid="ai-assistant-back"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-          ) : (
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-rose-600 text-white shadow-sm">
-              <BrainCircuit className="h-4 w-4" />
-            </div>
-          )}
-
-          <div className="min-w-0 flex-1 flex flex-col justify-center">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-[15px] font-bold text-text">
-                Assistente IA
-              </h2>
-              <span
-                className="shrink-0 rounded-md bg-[hsl(var(--primary))]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[hsl(var(--primary))]"
-                data-testid="ai-assistant-beta-badge"
+        <div className="border-b border-border/60 bg-surface px-5 py-4">
+          <div className="flex items-start gap-3">
+            {status !== "idle" ? (
+              <button
+                type="button"
+                onClick={handleBack}
+                aria-label="Voltar"
+                data-testid="ai-assistant-back"
+                className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/70 text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
               >
-                BETA
-              </span>
-            </div>
-            {status === "idle" && (
-              <p className="text-[12px] font-medium text-text-muted">
-                Copiloto read-only para esta {pageContext.domain === "job" ? "vaga" : pageContext.domain === "candidate" ? "candidatura" : "tela"}
-              </p>
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            ) : (
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] via-rose-700 to-rose-900 text-white shadow-sm">
+                <BrainCircuit className="h-5 w-5" />
+              </div>
             )}
-          </div>
 
-          {status === "idle" && (
-            <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-[16px] font-bold text-text">Assistente IA</h2>
+                <span
+                  className="shrink-0 rounded-md bg-[hsl(var(--primary))]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[hsl(var(--primary))]"
+                  data-testid="ai-assistant-beta-badge"
+                >
+                  BETA
+                </span>
+              </div>
+              <p className="mt-1 text-[12px] font-medium text-text-muted">
+                Copiloto read-only para esta{" "}
+                {pageContext.domain === "job"
+                  ? "vaga"
+                  : pageContext.domain === "candidate"
+                    ? "candidatura"
+                    : pageContext.domain === "admission"
+                      ? "admissão"
+                      : "tela"}
+              </p>
+            </div>
+
+            <div className="hidden shrink-0 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400 sm:flex">
+              <ShieldCheck className="h-3.5 w-3.5" />
               Leitura segura · Sem ações automáticas
             </div>
-          )}
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar assistente"
-            data-testid="ai-assistant-close"
-            className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fechar assistente"
+              data-testid="ai-assistant-close"
+              className="ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/70 text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div
+            className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border/70 bg-surface-muted/35 px-3 py-2.5"
+            data-testid="ai-assistant-context-panel"
           >
-            <X className="h-4 w-4" />
-          </button>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/60 dark:bg-surface dark:ring-border">
+              <Compass className="h-4 w-4 text-text-muted" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="truncate text-sm font-semibold text-text">{pageContext.title}</p>
+                <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-medium text-text-muted">
+                  {getDomainLabel(pageContext.domain)}
+                </span>
+                {hasContextualActions ? (
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
+                    {pageContext.availableActions.length} sugest{pageContext.availableActions.length === 1 ? "ão" : "ões"} contextuais
+                  </span>
+                ) : null}
+              </div>
+              <p
+                className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-text-muted"
+                data-testid="ai-assistant-context-label"
+              >
+                <span>Contexto:</span>
+                <span className="font-medium text-text">{pageContext.subtitle}</span>
+              </p>
+            </div>
+            {pageContext.entityLabel ? (
+              <span
+                className="shrink-0 rounded-lg border border-border/60 bg-surface px-2 py-1 text-[10px] font-mono font-medium text-text-muted"
+                data-testid="ai-assistant-context-entity"
+              >
+                {pageContext.entityLabel}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
-          {status === "idle" && (
-            <div className="space-y-6">
-              <div
-                className="flex items-center gap-3 rounded-2xl border border-border/80 bg-surface-muted/40 px-4 py-3"
-                data-testid="ai-assistant-context-panel"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200/50 dark:bg-surface dark:ring-border">
-                  <Compass className="h-4 w-4 text-text-muted" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-text">{pageContext.subtitle}</p>
-                  <p className="text-[11px] text-text-muted flex items-center gap-1.5" data-testid="ai-assistant-context-label">
-                    Contexto: <span className="font-medium text-text">{pageContext.title}</span>
-                  </p>
-                </div>
-                {pageContext.entityLabel && (
-                  <div className="shrink-0">
-                    <span
-                      className="inline-flex rounded-lg border border-border/60 bg-surface px-2 py-1 text-[10px] font-mono font-medium text-text-muted"
-                      data-testid="ai-assistant-context-entity"
-                    >
-                      {pageContext.entityLabel}
-                    </span>
-                  </div>
-                )}
+          {status === "idle" ? (
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/35 px-4 py-3">
+                <p className="text-sm text-text">
+                  {pageContext.guidance}
+                </p>
               </div>
 
-              <div className="space-y-3">
-                <h3 className="px-1 text-[11px] font-bold uppercase tracking-wider text-text-muted">
-                  Sugestões rápidas
-                </h3>
+              <div className="space-y-3" data-testid="ai-assistant-suggestions-section">
+                <div className="flex items-center justify-between gap-3 px-1">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                    Sugestões rápidas
+                  </h3>
+                  <span className="text-[10px] text-text-muted">
+                    {mergedSuggestions.length} disponíveis
+                  </span>
+                </div>
                 <SuggestionList
-                  actions={[...pageContext.availableActions, ...pageContext.suggestedActions]}
+                  actions={mergedSuggestions}
                   emptyTitle={pageContext.emptyTitle}
                   emptyDescription={pageContext.emptyDescription}
                   onAction={handleAction}
                 />
               </div>
 
-              {history.length > 0 && (
-                <div className="pt-2">
-                  <SessionHistorySection
-                    history={history}
-                    onOpen={handleHistoryOpen}
-                    onClear={handleClearHistory}
-                  />
-                </div>
-              )}
+              {history.length > 0 ? (
+                <SessionHistorySection
+                  history={history}
+                  onOpen={handleHistoryOpen}
+                  onClear={handleClearHistory}
+                />
+              ) : null}
             </div>
-          )}
+          ) : null}
 
-          {status === "loading" && (
+          {status === "loading" ? (
             <div
               className="flex flex-col items-center justify-center gap-3 py-16 text-center"
               data-testid="ai-assistant-loading"
@@ -633,11 +668,11 @@ export function AiAssistantDrawer({
               <LoaderCircle className="h-6 w-6 animate-spin text-[hsl(var(--primary))]" />
               <p className="text-sm text-text-muted">Consultando informações com segurança…</p>
             </div>
-          )}
+          ) : null}
 
-          {status === "error" && (
+          {status === "error" ? (
             <div
-              className="flex flex-col items-center gap-3 rounded-lg border border-danger/20 bg-danger/5 p-4 text-center"
+              className="flex flex-col items-center gap-3 rounded-2xl border border-danger/20 bg-danger/5 p-5 text-center"
               data-testid="ai-assistant-error"
             >
               <AlertCircle className="h-5 w-5 text-danger" />
@@ -652,58 +687,36 @@ export function AiAssistantDrawer({
                 Tentar novamente
               </button>
             </div>
-          )}
+          ) : null}
 
-          {status === "result" && result && (
+          {showResult ? (
             <div className="space-y-4">
-              <AiAssistantResultRenderer result={result} />
+              <AssistantResponseShell
+                title={activeAction?.label ?? "Resposta do assistente"}
+                intent={activeAction?.intent ?? null}
+                timestamp={formatShortTime()}
+              >
+                {result ? <AiAssistantResultRenderer result={result} /> : null}
+                {localAnswer ? (
+                  <LocalAnswerRenderer answer={localAnswer} onNavigate={(href) => navigate(href)} />
+                ) : null}
+                {compositeResult ? <CompositeResultRenderer result={compositeResult} /> : null}
+              </AssistantResponseShell>
+
               <button
                 type="button"
                 onClick={handleBack}
                 data-testid="ai-assistant-new-query"
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Nova consulta
               </button>
             </div>
-          )}
-
-          {status === "result" && localAnswer && (
-            <div className="space-y-4">
-              <LocalAnswerRenderer
-                answer={localAnswer}
-                onNavigate={(href) => navigate(href)}
-              />
-              <button
-                type="button"
-                onClick={handleBack}
-                data-testid="ai-assistant-new-query"
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Nova consulta
-              </button>
-            </div>
-          )}
-
-          {status === "result" && compositeResult && (
-            <div className="space-y-4">
-              <CompositeResultRenderer result={compositeResult} />
-              <button
-                type="button"
-                onClick={handleBack}
-                data-testid="ai-assistant-new-query"
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Nova consulta
-              </button>
-            </div>
-          )}
+          ) : null}
         </div>
 
-        {status === "idle" && (
+        {status === "idle" ? (
           <div className="border-t border-border/60 bg-surface p-4" data-testid="ai-text-intent-section">
             <UnifiedInputSection
               contextDomain={pageContext.domain}
@@ -720,9 +733,66 @@ export function AiAssistantDrawer({
               }}
             />
           </div>
-        )}
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function getDomainLabel(domain: string): string {
+  switch (domain) {
+    case "job":
+      return "Vaga";
+    case "candidate":
+      return "Candidato";
+    case "admission":
+      return "Admissão";
+    case "admin":
+      return "Admin";
+    case "knowledge":
+      return "Conhecimento";
+    default:
+      return "Geral";
+  }
+}
+
+function AssistantResponseShell({
+  title,
+  intent,
+  timestamp,
+  children,
+}: {
+  title: string;
+  intent: string | null;
+  timestamp: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className="overflow-hidden rounded-3xl border border-border/70 bg-surface shadow-sm"
+      data-testid="ai-assistant-response-shell"
+    >
+      <div className="border-b border-border/60 bg-surface-muted/35 px-4 py-3">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] via-rose-700 to-rose-900 text-white shadow-sm">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-sm font-semibold text-text">{title}</p>
+              <span className="rounded-full bg-[hsl(var(--primary))]/10 px-2 py-0.5 text-[10px] font-semibold text-[hsl(var(--primary))]">
+                IA
+              </span>
+              <span className="text-[10px] text-text-muted">{timestamp}</span>
+            </div>
+            <p className="mt-1 text-[11px] text-text-muted">
+              {intent ? `Intent: ${intent}` : "Resposta pronta para revisão humana."}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="space-y-4 px-4 py-4">{children}</div>
+    </section>
   );
 }
 
@@ -735,7 +805,7 @@ function LocalAnswerRenderer({
 }) {
   return (
     <div className="space-y-4" data-testid="ai-assistant-local-answer">
-      <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+      <section className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Resposta local
         </h3>
@@ -744,7 +814,7 @@ function LocalAnswerRenderer({
       </section>
 
       {answer.nextActions && answer.nextActions.length > 0 ? (
-        <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+        <section className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Próximo passo
           </h3>
@@ -774,7 +844,7 @@ function CompositeResultRenderer({ result }: { result: AiCompositeExecutionResul
 
   return (
     <div className="space-y-4" data-testid="ai-assistant-composite-result">
-      <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+      <section className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Consulta composta
         </h3>
@@ -785,7 +855,7 @@ function CompositeResultRenderer({ result }: { result: AiCompositeExecutionResul
         ))}
       </section>
 
-      <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+      <section className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Consultas realizadas
         </h3>
@@ -799,8 +869,8 @@ function CompositeResultRenderer({ result }: { result: AiCompositeExecutionResul
         </ul>
       </section>
 
-      {successfulSteps.length > 0 && (
-        <section className="space-y-3 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+      {successfulSteps.length > 0 ? (
+        <section className="space-y-3 rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Evidências</h3>
           <div className="space-y-4">
             {successfulSteps.map((step) =>
@@ -813,17 +883,20 @@ function CompositeResultRenderer({ result }: { result: AiCompositeExecutionResul
             )}
           </div>
         </section>
-      )}
+      ) : null}
 
-      <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+      <section className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Próximo passo sugerido
         </h3>
-        <p className="text-sm text-text">{result.nextStep}</p>
+        <div className="flex items-start gap-2 rounded-xl bg-[hsl(var(--primary))]/8 p-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
+          <p className="text-sm text-text">{result.nextStep}</p>
+        </div>
       </section>
 
-      {result.domain === "admin" && (
-        <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+      {result.domain === "admin" ? (
+        <section className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Atalhos úteis
           </h3>
@@ -834,10 +907,10 @@ function CompositeResultRenderer({ result }: { result: AiCompositeExecutionResul
             <li>Aba IA em Administração</li>
           </ul>
         </section>
-      )}
+      ) : null}
 
-      {failedSteps.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
+      {failedSteps.length > 0 ? (
+        <section className="space-y-2 rounded-2xl border border-border/70 bg-[hsl(var(--bg))]/60 p-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Limitações
           </h3>
@@ -849,7 +922,7 @@ function CompositeResultRenderer({ result }: { result: AiCompositeExecutionResul
             ))}
           </ul>
         </section>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -881,7 +954,7 @@ function SuggestionList({
   }
 
   return (
-    <ul className="flex flex-wrap gap-2" data-testid="ai-assistant-suggestions">
+    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="ai-assistant-suggestions">
       {actions.map((action) => (
         <li key={action.id}>
           <button
@@ -889,14 +962,24 @@ function SuggestionList({
             onClick={() => onAction(action)}
             data-testid={`ai-suggestion-${action.id}`}
             data-action-kind={action.kind}
-            className="group flex items-center gap-2 rounded-full border border-border/70 bg-surface px-3 py-1.5 transition-all hover:border-[hsl(var(--primary))]/40 hover:bg-surface-muted hover:shadow-sm"
+            className="group flex h-full w-full items-start gap-3 rounded-2xl border border-border/70 bg-surface px-3 py-3 text-left transition-all hover:border-[hsl(var(--primary))]/40 hover:bg-surface-muted hover:shadow-sm"
           >
-            {action.kind === "assistant" || action.kind === "composite" ? (
-              <Sparkles className="h-3 w-3 text-[hsl(var(--primary))]" />
-            ) : (
-              <PanelTop className="h-3 w-3 text-[hsl(var(--primary))]/70" />
-            )}
-            <span className="text-[11px] font-medium text-text group-hover:text-[hsl(var(--primary))] transition-colors">{action.label}</span>
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]">
+              {getSuggestionIcon(action)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="line-clamp-1 text-[12px] font-semibold text-text transition-colors group-hover:text-[hsl(var(--primary))]">
+                  {action.label}
+                </span>
+                <span className="shrink-0 rounded-full bg-surface-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-text-muted">
+                  {describeSuggestionDomain(action)}
+                </span>
+              </div>
+              <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-text-muted">
+                {action.description}
+              </p>
+            </div>
           </button>
         </li>
       ))}
@@ -904,9 +987,10 @@ function SuggestionList({
   );
 }
 
-function getActionIntentLabel(action: AiAssistantContextAction): string {
-  if (action.kind === "navigation") return "navigation";
-  return action.intent;
+function getSuggestionIcon(action: AiAssistantContextAction) {
+  if (action.kind === "knowledge") return <Search className="h-3.5 w-3.5" />;
+  if (action.kind === "navigation") return <PanelTop className="h-3.5 w-3.5" />;
+  return <Sparkles className="h-3.5 w-3.5" />;
 }
 
 function describeSuggestionDomain(action: AiAssistantContextAction): string {
@@ -930,13 +1014,13 @@ function shouldStoreHistoryQuery(query: string): boolean {
 function getTextIntentPlaceholder(contextDomain: string): string {
   switch (contextDomain) {
     case "job":
-      return "Ex.: Essa vaga está bem estruturada?";
+      return "Pergunte sobre a vaga, pipeline, requisitos ou regras internas...";
     case "candidate":
-      return "Ex.: Onde esse candidato está no processo?";
+      return "Pergunte sobre o candidato, pipeline ou critérios de avaliação...";
     case "admission":
-      return "Ex.: O que falta para exportar essa admissão?";
+      return "Pergunte sobre o caso, documentos ou regras de pré-admissão...";
     case "admin":
-      return "Ex.: O Gemini está configurado?";
+      return "Pergunte sobre governança, base de conhecimento ou saúde do sistema...";
     default:
       return "Pergunte sobre a vaga, pipeline, requisitos ou regras internas...";
   }
@@ -957,71 +1041,88 @@ function UnifiedInputSection({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isDisabled = !query.trim() || isSubmitting;
 
+  const submit = async (type: "knowledge" | "sources" | "intent") => {
+    if (isDisabled) return;
+    setIsSubmitting(true);
+    try {
+      await onAction(type, query);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="w-full" data-testid="ai-unified-input-section">
-      {preview && (
+      {preview ? (
         <div
-          className="mb-3 rounded-lg border border-border/70 bg-surface-muted/40 p-2.5"
+          className="mb-3 rounded-xl border border-border/70 bg-surface-muted/40 p-2.5"
           data-testid="ai-text-intent-preview"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
               Intent classificada
             </p>
-            <span className="text-[10px] font-mono text-text-muted bg-surface px-1.5 py-0.5 rounded border border-border/50">{preview.intent}</span>
+            <span className="rounded-full border border-border/50 bg-surface px-2 py-0.5 text-[10px] font-mono text-text-muted">
+              {preview.intent}
+            </span>
           </div>
           <p className="mt-1.5 text-xs font-semibold text-text">{preview.label}</p>
+          <p className="mt-1 text-[11px] text-text-muted">{preview.reason}</p>
         </div>
-      )}
+      ) : null}
 
-      {feedback && (
+      {feedback ? (
         <div
-          className="mb-3 rounded-lg border border-warning/20 bg-warning/5 p-2.5 text-xs text-text"
+          className="mb-3 rounded-xl border border-warning/20 bg-warning/5 p-2.5 text-xs text-text"
           data-testid="ai-text-intent-feedback"
         >
           {feedback}
         </div>
-      )}
+      ) : null}
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-surface-muted/30 p-2 focus-within:border-[hsl(var(--primary))]/40 focus-within:bg-surface focus-within:ring-2 focus-within:ring-[hsl(var(--primary))]/10 transition-all shadow-sm">
+      <div className="rounded-2xl border border-border/80 bg-surface-muted/30 p-2 shadow-sm transition-all focus-within:border-[hsl(var(--primary))]/40 focus-within:bg-surface focus-within:ring-2 focus-within:ring-[hsl(var(--primary))]/10">
         <textarea
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={getTextIntentPlaceholder(contextDomain)}
-          className="min-h-[44px] w-full resize-none bg-transparent px-2 py-1.5 text-[13px] text-text placeholder:text-text-muted/60 focus:outline-none"
+          className="min-h-[58px] w-full resize-none bg-transparent px-2 py-2 text-[13px] text-text placeholder:text-text-muted/60 focus:outline-none"
           data-testid="ai-text-intent-input"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (!isDisabled) void onAction("intent", query);
+          aria-label="Pergunta para o assistente"
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submit("intent");
             }
           }}
         />
-        
-        <div className="flex items-center justify-between px-1 pb-1">
-          <div className="flex gap-2">
+
+        <div className="flex items-center justify-between gap-3 px-1 pb-1">
+          <p className="hidden text-[11px] text-text-muted sm:block">
+            Uma pergunta por vez. O assistente continua em modo leitura.
+          </p>
+          <div className="ml-auto flex gap-2">
             <button
               type="button"
               disabled={isDisabled}
-              onClick={() => void onAction("sources", query)}
+              onClick={() => void submit("sources")}
               data-testid="ai-knowledge-search"
-              className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-surface px-3 py-1.5 text-[11px] font-semibold text-text-muted transition-colors hover:bg-surface-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-surface px-3 py-2 text-[11px] font-semibold text-text-muted transition-colors hover:bg-surface-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Search className="h-3 w-3" />
               Buscar fontes
             </button>
+
+            <button
+              type="button"
+              disabled={isDisabled}
+              onClick={() => void submit("intent")}
+              data-testid="ai-text-intent-submit"
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-rose-700 to-rose-900 px-4 py-2 text-[12px] font-bold text-white shadow-sm transition-all hover:from-rose-800 hover:to-rose-950 disabled:cursor-not-allowed disabled:opacity-50 active:scale-95"
+            >
+              <MessageSquare className="h-3 w-3 text-rose-200" />
+              Perguntar
+            </button>
           </div>
-          
-          <button
-            type="button"
-            disabled={isDisabled}
-            onClick={() => void onAction("intent", query)}
-            data-testid="ai-text-intent-submit"
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-rose-700 to-rose-900 px-4 py-1.5 text-[12px] font-bold text-white shadow-sm transition-all hover:from-rose-800 hover:to-rose-950 disabled:cursor-not-allowed disabled:opacity-50 active:scale-95"
-          >
-            <MessageSquare className="h-3 w-3 text-rose-200" />
-            Perguntar
-          </button>
         </div>
       </div>
     </div>
@@ -1048,56 +1149,44 @@ function SessionHistorySection({
             Últimas consultas desta sessão. Reabrir não faz nova chamada.
           </p>
         </div>
-        {history.length > 0 && (
-          <button
-            type="button"
-            onClick={onClear}
-            data-testid="ai-session-history-clear"
-            className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Limpar
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onClear}
+          data-testid="ai-session-history-clear"
+          className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Limpar
+        </button>
       </div>
 
-      {history.length === 0 ? (
-        <div
-          className="flex items-center gap-3 rounded-lg border border-dashed border-border/70 bg-[hsl(var(--bg))]/40 p-3"
-          data-testid="ai-session-history-empty"
-        >
-          <History className="h-4 w-4 text-text-muted/60" />
-          <p className="text-xs text-text-muted">Nenhuma ação nesta sessão.</p>
-        </div>
-      ) : (
-        <ul className="space-y-1.5" data-testid="ai-session-history-list">
-          {history.map((item) => {
-            const tone =
-              item.status === "error"
-                ? "border-danger/20 bg-danger/5"
-                : "border-border/70 bg-[hsl(var(--bg))]/60";
+      <ul className="grid gap-2 sm:grid-cols-2" data-testid="ai-session-history-list">
+        {history.map((item) => {
+          const tone =
+            item.status === "error"
+              ? "border-danger/20 bg-danger/5"
+              : "border-border/70 bg-[hsl(var(--bg))]/60";
 
-            return (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(item)}
-                  data-testid={`ai-session-history-item-${item.id}`}
-                  className={`w-full rounded-xl border px-3 py-2 text-left transition-colors hover:bg-surface-muted ${tone}`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[12px] font-semibold text-text truncate">
-                      {item.label}
-                    </p>
-                    <span className="text-[10px] text-text-muted shrink-0">{item.timestamp}</span>
-                  </div>
-                  <p className="mt-0.5 line-clamp-1 text-[11px] text-text-muted">{item.query ?? item.summary}</p>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+          return (
+            <li key={item.id}>
+              <button
+                type="button"
+                onClick={() => onOpen(item)}
+                data-testid={`ai-session-history-item-${item.id}`}
+                className={`w-full rounded-2xl border px-3 py-2 text-left transition-colors hover:bg-surface-muted ${tone}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-[12px] font-semibold text-text">{item.label}</p>
+                  <span className="shrink-0 text-[10px] text-text-muted">{item.timestamp}</span>
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-[11px] text-text-muted">
+                  {item.query ?? item.summary}
+                </p>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

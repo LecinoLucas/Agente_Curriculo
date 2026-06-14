@@ -30,6 +30,14 @@ function renderDrawer(path = "/vagas/job-123") {
   return { ...result, onClose };
 }
 
+function ClosedDrawerHarness({ path = "/vagas/job-123" }: { path?: string }) {
+  return (
+    <MemoryRouter initialEntries={[path]} future={routerFuture}>
+      <div />
+    </MemoryRouter>
+  );
+}
+
 function PersistentHistoryHarness({ path = "/vagas/job-123" }: { path?: string }) {
   const [open, setOpen] = useState(true);
   const [history, setHistory] = useState<AiAssistantHistoryItem[]>([]);
@@ -74,24 +82,36 @@ describe("AiAssistantDrawer", () => {
 
   it("renders the drawer with readonly notice", () => {
     renderDrawer();
+    expect(screen.getByRole("dialog", { name: /Assistente IA/i })).toBeInTheDocument();
     expect(screen.getByTestId("ai-assistant-drawer")).toBeInTheDocument();
-    expect(screen.getByText(/Ações recomendadas para esta tela/i)).toBeInTheDocument();
+    expect(screen.getByText("Assistente IA")).toBeInTheDocument();
+    expect(screen.getByText("BETA")).toBeInTheDocument();
+    expect(screen.getByText(/Copiloto read-only para esta vaga/i)).toBeInTheDocument();
+    expect(screen.getByText(/Leitura segura · Sem ações automáticas/i)).toBeInTheDocument();
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      /Contexto: Vaga/i,
+      /Ações recomendadas para esta tela/i,
     );
+    expect(screen.getByTestId("ai-assistant-context-panel")).toHaveTextContent(/Vaga/i);
+  });
+
+  it("does not render the drawer when closed", () => {
+    render(<ClosedDrawerHarness />);
+    expect(screen.queryByRole("dialog", { name: /Assistente IA/i })).not.toBeInTheDocument();
   });
 
   it("renders the controlled text intent field", () => {
     renderDrawer("/vagas/job-123");
     expect(screen.getByTestId("ai-text-intent-section")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Essa vaga está bem estruturada/i)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(/Pergunte sobre a vaga, pipeline, requisitos ou regras internas/i),
+    ).toBeInTheDocument();
   });
 
   it("uses the job placeholder in text intent input", () => {
     renderDrawer("/vagas/job-123");
     expect(screen.getByTestId("ai-text-intent-input")).toHaveAttribute(
       "placeholder",
-      "Ex.: Essa vaga está bem estruturada?",
+      "Pergunte sobre a vaga, pipeline, requisitos ou regras internas...",
     );
   });
 
@@ -99,7 +119,7 @@ describe("AiAssistantDrawer", () => {
     renderDrawer("/candidatos/cand-456");
     expect(screen.getByTestId("ai-text-intent-input")).toHaveAttribute(
       "placeholder",
-      "Ex.: Onde esse candidato está no processo?",
+      "Pergunte sobre o candidato, pipeline ou critérios de avaliação...",
     );
   });
 
@@ -107,7 +127,7 @@ describe("AiAssistantDrawer", () => {
     renderDrawer("/admission/cases/case-456");
     expect(screen.getByTestId("ai-text-intent-input")).toHaveAttribute(
       "placeholder",
-      "Ex.: O que falta para exportar essa admissão?",
+      "Pergunte sobre o caso, documentos ou regras de pré-admissão...",
     );
   });
 
@@ -499,8 +519,9 @@ describe("AiAssistantDrawer", () => {
   it("derives job context and keeps job actions visible on job routes", () => {
     renderDrawer("/vagas/job-123");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      /Contexto: Vaga/i,
+      /Ações recomendadas para esta tela/i,
     );
+    expect(screen.getByTestId("ai-assistant-context-panel")).toHaveTextContent(/Vaga/i);
     expect(screen.getByTestId("ai-suggestion-job.summary")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-job.requirements")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-pipeline.overview")).toBeInTheDocument();
@@ -519,8 +540,9 @@ describe("AiAssistantDrawer", () => {
   it("derives candidate context and keeps candidate actions visible on candidate routes", () => {
     renderDrawer("/candidatos/cand-456");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      /Contexto: Candidato/i,
+      /Ações recomendadas para esta tela/i,
     );
+    expect(screen.getByTestId("ai-assistant-context-panel")).toHaveTextContent(/Candidato/i);
     expect(screen.getByTestId("ai-suggestion-candidate.summary")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-candidate.active_pipeline")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-knowledge.fair_evaluation_rules")).toBeInTheDocument();
@@ -713,8 +735,9 @@ describe("AiAssistantDrawer", () => {
   it("derives admission context and renders admission actions", () => {
     renderDrawer("/admission/cases/case-456");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      /Contexto: Admissão/i,
+      /Ações recomendadas para esta tela/i,
     );
+    expect(screen.getByTestId("ai-assistant-context-panel")).toHaveTextContent(/Admissão/i);
     expect(screen.getByTestId("ai-suggestion-admission.case_summary")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-admission.documents_status")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-admission.events_summary")).toBeInTheDocument();
@@ -897,8 +920,9 @@ describe("AiAssistantDrawer", () => {
   it("derives admin context and renders safe admin shortcuts", () => {
     renderDrawer("/admin");
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      /Contexto: Administração/i,
+      /Consulte governança, saúde e documentação interna de IA/i,
     );
+    expect(screen.getByTestId("ai-assistant-context-panel")).toHaveTextContent(/Admin/i);
     expect(screen.getByTestId("ai-suggestion-nav.admin.ia")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-nav.admin.health")).toBeInTheDocument();
     expect(screen.getByTestId("ai-suggestion-knowledge.assistant_policy")).toBeInTheDocument();
@@ -1060,8 +1084,15 @@ describe("AiAssistantDrawer", () => {
     await user.click(screen.getByTestId("ai-assistant-back"));
 
     expect(screen.getByTestId("ai-assistant-context-label")).toHaveTextContent(
-      /Contexto: Base de conhecimento/i,
+      /Consulte documentação interna com suporte de fontes/i,
     );
+    expect(screen.getByTestId("ai-assistant-context-panel")).toHaveTextContent(/Conhecimento/i);
+  });
+
+  it("renders a single main question area and keeps history compact when empty", () => {
+    renderDrawer("/vagas/job-123");
+    expect(screen.getAllByTestId("ai-text-intent-input")).toHaveLength(1);
+    expect(screen.queryByTestId("ai-session-history")).not.toBeInTheDocument();
   });
 
   it("does not execute contextual intent without required id", async () => {
