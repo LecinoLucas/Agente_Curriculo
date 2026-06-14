@@ -30,6 +30,18 @@ function baseBlocked(
   };
 }
 
+function buildManyGates(total = 20) {
+  return Array.from({ length: total }, (_, index) => ({
+    code: `gate_${index + 1}`,
+    label: `Pendencia ${index + 1}`,
+    description: `Descricao da pendencia ${index + 1}`,
+    action: "open_profile" as const,
+    action_payload: null,
+    severity: "block" as const,
+    forceable: true,
+  }));
+}
+
 describe("PipelineTransitionBlockedModal — Fase 5 force section", () => {
   it("não mostra seção de Forçar quando can_force=false", () => {
     render(
@@ -168,12 +180,37 @@ describe("PipelineTransitionBlockedModal — Fase 5 force section", () => {
       const dialog = screen.getByTestId("pipeline-transition-blocked-modal");
       expect(dialog).toHaveClass("max-h-[85vh]", "flex", "flex-col", "overflow-hidden");
 
+      const header = screen.getByTestId("pipeline-blocked-header");
+      expect(header).toHaveClass("shrink-0", "border-b");
+
       const scrollContainer = screen.getByTestId("pipeline-blocked-scroll-container");
       expect(scrollContainer).toHaveClass("flex-1", "overflow-y-auto", "min-h-0");
 
-      const closeBtn = screen.getByTestId("pipeline-blocked-close");
-      const footer = closeBtn.closest("div");
-      expect(footer).toHaveClass("shrink-0", "p-6", "pt-4");
+      const footer = screen.getByTestId("pipeline-blocked-footer");
+      expect(footer).toHaveClass("shrink-0", "border-t", "p-6", "pt-4");
+    });
+
+    it("mantem as acoes visiveis e renderiza muitas pendencias sem quebrar o modal", () => {
+      render(
+        <PipelineTransitionBlockedModal
+          open
+          candidateId="c-1"
+          candidateName="Ana"
+          blocked={baseBlocked({
+            can_force: true,
+            missing_gates: buildManyGates(18),
+          })}
+          onClose={vi.fn()}
+          onForceSubmit={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText(/Pendências obrigatórias \(18\)/i)).toBeInTheDocument();
+      expect(screen.getByTestId("pipeline-blocked-scroll-container")).toHaveClass("overflow-y-auto");
+      expect(screen.getByTestId("pipeline-blocked-close")).toBeInTheDocument();
+      expect(screen.getByTestId("pipeline-blocked-force-submit")).toBeInTheDocument();
+      expect(screen.getByTestId("pipeline-blocked-force-reason")).toBeInTheDocument();
+      expect(screen.getByTestId("pipeline-blocked-gate-gate_18")).toBeInTheDocument();
     });
   });
 });

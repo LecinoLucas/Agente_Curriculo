@@ -217,10 +217,13 @@ export function PipelineTransitionBlockedModal({
   return (
     <Dialog open={isOpen} onOpenChange={(next) => (!next ? onClose() : undefined)}>
       <DialogContent
-        className="max-w-xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden"
+        className="max-h-[85vh] max-w-xl flex flex-col overflow-hidden p-0 gap-0"
         data-testid="pipeline-transition-blocked-modal"
       >
-        <DialogHeader className="p-6 pb-4 border-b border-slate-100 dark:border-border/40 shrink-0">
+        <DialogHeader
+          className="shrink-0 border-b border-slate-100 p-6 pb-4 dark:border-border/40"
+          data-testid="pipeline-blocked-header"
+        >
           <div className="flex items-center gap-2">
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
               <AlertTriangle className="h-5 w-5" aria-hidden />
@@ -239,7 +242,7 @@ export function PipelineTransitionBlockedModal({
         {blocked ? (
           <div
             data-testid="pipeline-blocked-scroll-container"
-            className="flex-1 overflow-y-auto p-6 min-h-0 flex flex-col gap-4 text-sm"
+            className="min-h-0 flex-1 overflow-y-auto p-6 text-sm flex flex-col gap-4"
           >
             <p
               className="text-slate-700 dark:text-text"
@@ -331,7 +334,10 @@ export function PipelineTransitionBlockedModal({
           </div>
         ) : null}
 
-        <DialogFooter className="p-6 pt-4 border-t border-slate-100 dark:border-border/40 shrink-0 bg-slate-50/50 dark:bg-surface-muted/20">
+        <DialogFooter
+          className="shrink-0 border-t border-slate-100 bg-background p-6 pt-4 dark:border-border/40 dark:bg-surface-muted/20"
+          data-testid="pipeline-blocked-footer"
+        >
           <button
             type="button"
             onClick={onClose}
