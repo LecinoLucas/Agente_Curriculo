@@ -32,7 +32,18 @@ import {
 
 interface JobAiDraftPanelProps {
   formHasData: boolean;
-  currentFormSnapshot?: Pick<JobFormValues, "salary_min" | "salary_max" | "benefits">;
+  currentFormSnapshot?: Pick<
+    JobFormValues,
+    | "salary_min"
+    | "salary_max"
+    | "benefits"
+    | "working_hours"
+    | "work_model"
+    | "location"
+    | "requirements"
+    | "minimum_education_level"
+    | "minimum_years_experience"
+  >;
   onApply: (
     updates: Partial<JobFormValues>,
     skillSuggestions: { mandatory: string[]; optional: string[] },
@@ -62,6 +73,59 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
       <span className="font-medium text-text">{label}</span>
       <span className="text-text-muted sm:text-right">{value}</span>
     </li>
+  );
+}
+
+type CompareStatus = "fill" | "change" | "same" | "missing";
+
+function CompareStatusBadge({ status }: { status: CompareStatus }) {
+  const config: Record<CompareStatus, { label: string; className: string }> = {
+    fill: { label: "Será preenchido", className: "bg-success-soft text-success" },
+    change: { label: "Será alterado", className: "bg-warning-soft text-warning" },
+    same: { label: "Sem alteração", className: "bg-surface-muted text-text-muted" },
+    missing: { label: "Sem sugestão da IA", className: "bg-surface-muted text-text-muted" },
+  };
+
+  return (
+    <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${config[status].className}`}>
+      {config[status].label}
+    </span>
+  );
+}
+
+function CompareCard({
+  label,
+  current,
+  suggested,
+  status,
+  note,
+  testId,
+}: {
+  label: string;
+  current: string;
+  suggested: string;
+  status: CompareStatus;
+  note?: string;
+  testId?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background/70 p-3" data-testid={testId}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold text-text">{label}</p>
+        <CompareStatusBadge status={status} />
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-border bg-surface p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Atual</p>
+          <p className="mt-1 text-sm text-text">{current}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-surface p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">IA</p>
+          <p className="mt-1 text-sm text-text">{suggested}</p>
+        </div>
+      </div>
+      {note ? <p className="mt-2 text-xs text-text-muted">{note}</p> : null}
+    </div>
   );
 }
 
@@ -124,6 +188,31 @@ function formatOptionalNumber(value: number | null | undefined, suffix = "") {
 function formatListSummary(items: string[] | null | undefined) {
   if (!Array.isArray(items) || items.length === 0) return "Não será preenchido";
   return items.map((item) => item.trim()).filter(Boolean).join(", ") || "Não será preenchido";
+}
+
+function truncatePreview(value: string, maxLength = 96) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return "Não informado";
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function formatListPreview(items: string[] | null | undefined, maxItems = 2) {
+  const normalized = Array.isArray(items) ? items.map((item) => item.trim()).filter(Boolean) : [];
+  if (normalized.length === 0) return "Não informado";
+  const preview = normalized.slice(0, maxItems).join(", ");
+  return normalized.length > maxItems ? `${preview} +${normalized.length - maxItems}` : preview;
+}
+
+function normalizeCompareValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function getCompareStatus(current: string, suggested: string, hasSuggestion: boolean): CompareStatus {
+  if (!hasSuggestion) return "missing";
+  if (!current || current === "Não informado") return "fill";
+  if (normalizeCompareValue(current) === normalizeCompareValue(suggested)) return "same";
+  return "change";
 }
 
 function formatSalaryRange(min: number | null | undefined, max: number | null | undefined) {
@@ -271,32 +360,97 @@ export function JobAiDraftPanel({
     const draftBenefits = Array.isArray(draft.benefits)
       ? draft.benefits.map((item) => item.trim()).filter(Boolean)
       : [];
+    const currentBenefits = Array.isArray(currentFormSnapshot?.benefits)
+      ? currentFormSnapshot.benefits.map((item) => item.trim()).filter(Boolean)
+      : [];
     const hasDraftBenefits = draftBenefits.length > 0;
     const hasDraftSalary = Boolean(draftSalaryRange);
+    const benefitsAdded = draftBenefits.filter(
+      (item) => !currentBenefits.some((current) => current.toLowerCase() === item.toLowerCase()),
+    );
+    const benefitsRemoved = currentBenefits.filter(
+      (item) => !draftBenefits.some((draftItem) => draftItem.toLowerCase() === item.toLowerCase()),
+    );
+    const benefitsNote =
+      hasDraftBenefits && (benefitsAdded.length > 0 || benefitsRemoved.length > 0)
+        ? [
+            benefitsAdded.length > 0 ? `Adicionados: ${benefitsAdded.join(", ")}` : null,
+            benefitsRemoved.length > 0 ? `Removidos: ${benefitsRemoved.join(", ")}` : null,
+          ]
+            .filter(Boolean)
+            .join(" | ")
+        : undefined;
+    const currentWorkingHours = currentFormSnapshot?.working_hours?.trim() || "Não informado";
+    const draftWorkingHours = draft.working_hours?.trim() || "Não informado";
+    const currentWorkModel = currentFormSnapshot?.work_model?.trim() || "Não informado";
+    const draftWorkModel = draft.work_model?.trim() || "Não informado";
+    const currentLocation = currentFormSnapshot?.location?.trim() || "Não informado";
+    const draftLocation = draft.unit?.trim() || "Não informado";
+    const currentRequirements = truncatePreview(currentFormSnapshot?.requirements ?? "");
+    const draftRequirements = truncatePreview(draft.requirements.join(" | "));
+    const currentEducation = currentFormSnapshot?.minimum_education_level?.trim() || "Não informado";
+    const draftEducation = draft.minimum_education_level?.trim() || "Não informado";
+    const currentExperience =
+      currentFormSnapshot?.minimum_years_experience != null
+        ? `${currentFormSnapshot.minimum_years_experience} ano(s)`
+        : "Não informado";
+    const draftExperience =
+      draft.minimum_years_experience != null ? `${draft.minimum_years_experience} ano(s)` : "Não informado";
 
     return {
       title: formatOptionalText(draft.title),
       area: formatOptionalText(draft.area),
       seniority: formatOptionalText(draft.seniority),
-      workModel: formatOptionalText(draft.work_model),
-      unit: formatOptionalText(draft.unit),
-      workingHours: formatOptionalText(draft.working_hours),
+      salaryCard: {
+        current: currentSalaryRange ?? "Não informado",
+        suggested: draftSalaryRange ?? "Não informado",
+        status: getCompareStatus(currentSalaryRange ?? "Não informado", draftSalaryRange ?? "Não informado", hasDraftSalary),
+      },
+      benefitsCard: {
+        current: formatListPreview(currentBenefits, 3),
+        suggested: hasDraftBenefits ? formatListPreview(draftBenefits, 3) : "Não informado",
+        status: getCompareStatus(
+          formatListPreview(currentBenefits, 3),
+          hasDraftBenefits ? formatListPreview(draftBenefits, 3) : "Não informado",
+          hasDraftBenefits,
+        ),
+        note: benefitsNote,
+      },
+      workingHoursCard: {
+        current: currentWorkingHours,
+        suggested: draftWorkingHours,
+        status: getCompareStatus(currentWorkingHours, draftWorkingHours, Boolean(draft.working_hours?.trim())),
+      },
+      workModelCard: {
+        current: currentWorkModel,
+        suggested: draftWorkModel,
+        status: getCompareStatus(currentWorkModel, draftWorkModel, Boolean(draft.work_model?.trim())),
+      },
+      locationCard: {
+        current: currentLocation,
+        suggested: draftLocation,
+        status: getCompareStatus(currentLocation, draftLocation, Boolean(draft.unit?.trim())),
+      },
       description: formatOptionalText(draft.description),
       responsibilities: formatListSummary(draft.responsibilities),
-      requirements: formatListSummary(draft.requirements),
-      education: formatOptionalText(draft.minimum_education_level),
-      experience: formatOptionalNumber(draft.minimum_years_experience, " ano(s)"),
-      salary: draftSalaryRange
-        ? `Rascunho indica ${draftSalaryRange}, mas salário não será aplicado automaticamente nesta fase.`
-        : currentSalaryRange
-          ? `Formulário atual: ${currentSalaryRange}. O rascunho não vai alterar salário nesta fase.`
-          : "Nenhum salário ou benefício será preenchido por este rascunho.",
-      benefits: hasDraftBenefits
-        ? draftBenefits.join(", ")
-        : "Nenhum salário ou benefício será preenchido por este rascunho.",
-      mandatorySkills: formatListSummary(draft.mandatory_skills),
-      niceToHaveSkills: formatListSummary(draft.nice_to_have_skills),
-      screeningQuestions: formatListSummary(draft.screening_questions),
+      requirementsCard: {
+        current: currentRequirements,
+        suggested: draftRequirements,
+        status: getCompareStatus(currentRequirements, draftRequirements, draft.requirements.length > 0),
+      },
+      educationCard: {
+        current: currentEducation,
+        suggested: draftEducation,
+        status: getCompareStatus(currentEducation, draftEducation, Boolean(draft.minimum_education_level?.trim())),
+      },
+      experienceCard: {
+        current: currentExperience,
+        suggested: draftExperience,
+        status: getCompareStatus(currentExperience, draftExperience, draft.minimum_years_experience != null),
+      },
+      mandatorySkills: formatListPreview(draft.mandatory_skills, 2),
+      niceToHaveSkills: formatListPreview(draft.nice_to_have_skills, 2),
+      screeningQuestions: formatListPreview(draft.screening_questions, 2),
       suggestedSkillsInfo:
         draft.suggested_skills.length > 0
           ? "Skills sugeridas revisadas não serão aplicadas como catálogo nesta fase."
@@ -307,7 +461,7 @@ export function JobAiDraftPanel({
       ].filter(Boolean) as string[],
       hasSensitiveDraftData: hasDraftBenefits || hasDraftSalary,
     };
-  }, [currentFormSnapshot?.salary_max, currentFormSnapshot?.salary_min, draft]);
+  }, [currentFormSnapshot, draft]);
 
   function toggleSuggestedSkillSelection(item: JobAiDraftSuggestedSkill) {
     const key = getSuggestedSkillKey(item);
@@ -1176,6 +1330,9 @@ export function JobAiDraftPanel({
               <span className="block">
                 A IA vai preencher ou alterar campos do formulário. Revise antes de continuar.
               </span>
+              <span className="block">
+                Campos com valor atual diferente serão substituídos apenas após sua confirmação.
+              </span>
               {formHasData ? (
                 <span className="block">
                   O formulário já possui dados e alguns campos poderão ser sobrescritos por este rascunho.
@@ -1192,10 +1349,30 @@ export function JobAiDraftPanel({
                   <SummaryRow label="Título" value={confirmSummary.title} />
                   <SummaryRow label="Área" value={confirmSummary.area} />
                   <SummaryRow label="Senioridade" value={confirmSummary.seniority} />
-                  <SummaryRow label="Modalidade" value={confirmSummary.workModel} />
-                  <SummaryRow label="Localização/unidade" value={confirmSummary.unit} />
-                  <SummaryRow label="Jornada" value={confirmSummary.workingHours} />
                 </ul>
+                <div className="mt-4 space-y-3">
+                  <CompareCard
+                    label="Modalidade"
+                    current={confirmSummary.workModelCard.current}
+                    suggested={confirmSummary.workModelCard.suggested}
+                    status={confirmSummary.workModelCard.status}
+                    testId="compare-work-model"
+                  />
+                  <CompareCard
+                    label="Localização/unidade"
+                    current={confirmSummary.locationCard.current}
+                    suggested={confirmSummary.locationCard.suggested}
+                    status={confirmSummary.locationCard.status}
+                    testId="compare-location"
+                  />
+                  <CompareCard
+                    label="Jornada"
+                    current={confirmSummary.workingHoursCard.current}
+                    suggested={confirmSummary.workingHoursCard.suggested}
+                    status={confirmSummary.workingHoursCard.status}
+                    testId="compare-working-hours"
+                  />
+                </div>
               </section>
 
               <section className="rounded-xl border border-border bg-surface p-4">
@@ -1203,10 +1380,30 @@ export function JobAiDraftPanel({
                 <ul className="mt-3 space-y-3">
                   <SummaryRow label="Descrição" value={confirmSummary.description} />
                   <SummaryRow label="Responsabilidades" value={confirmSummary.responsibilities} />
-                  <SummaryRow label="Requisitos" value={confirmSummary.requirements} />
-                  <SummaryRow label="Escolaridade" value={confirmSummary.education} />
-                  <SummaryRow label="Experiência mínima" value={confirmSummary.experience} />
                 </ul>
+                <div className="mt-4 space-y-3">
+                  <CompareCard
+                    label="Requisitos"
+                    current={confirmSummary.requirementsCard.current}
+                    suggested={confirmSummary.requirementsCard.suggested}
+                    status={confirmSummary.requirementsCard.status}
+                    testId="compare-requirements"
+                  />
+                  <CompareCard
+                    label="Escolaridade"
+                    current={confirmSummary.educationCard.current}
+                    suggested={confirmSummary.educationCard.suggested}
+                    status={confirmSummary.educationCard.status}
+                    testId="compare-education"
+                  />
+                  <CompareCard
+                    label="Experiência mínima"
+                    current={confirmSummary.experienceCard.current}
+                    suggested={confirmSummary.experienceCard.suggested}
+                    status={confirmSummary.experienceCard.status}
+                    testId="compare-experience"
+                  />
+                </div>
               </section>
 
               <section
@@ -1217,13 +1414,28 @@ export function JobAiDraftPanel({
                 }`}
               >
                 <SectionTitle>Salário e benefícios</SectionTitle>
-                <ul className="mt-3 space-y-3">
-                  <SummaryRow label="Salário/faixa salarial" value={confirmSummary.salary} />
-                  <SummaryRow label="Benefícios" value={confirmSummary.benefits} />
-                </ul>
+                <div className="mt-3 space-y-3">
+                  <CompareCard
+                    label="Salário/faixa salarial"
+                    current={confirmSummary.salaryCard.current}
+                    suggested={confirmSummary.salaryCard.suggested}
+                    status={confirmSummary.salaryCard.status}
+                    testId="compare-salary"
+                  />
+                  <CompareCard
+                    label="Benefícios"
+                    current={confirmSummary.benefitsCard.current}
+                    suggested={confirmSummary.benefitsCard.suggested}
+                    status={confirmSummary.benefitsCard.status}
+                    note={confirmSummary.benefitsCard.note}
+                    testId="compare-benefits"
+                  />
+                </div>
                 <p className="mt-4 text-sm font-medium text-text">
-                  Revise salário, benefícios e requisitos antes de aplicar. O rascunho da IA não salva
-                  nem publica a vaga automaticamente.
+                  Revise com atenção salário e benefícios antes de aplicar.
+                </p>
+                <p className="mt-2 text-sm font-medium text-text">
+                  O rascunho da IA não salva nem publica a vaga automaticamente.
                 </p>
               </section>
 

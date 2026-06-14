@@ -862,6 +862,31 @@ describe("JobFormPage", () => {
       ).toBeInTheDocument();
     });
 
+    it("envia currentFormSnapshot suficiente para a modal comparar valores atuais x IA", async () => {
+      mockFormState.form = {
+        ...EMPTY_FORM,
+        salary_min: 3000,
+        benefits: ["Vale-alimentação"],
+        working_hours: "5x2",
+        work_model: "hybrid",
+        location: "Campinas, SP",
+        requirements: "Atendimento básico",
+        minimum_education_level: "elementary",
+        minimum_years_experience: 1,
+      };
+
+      await generateDraft();
+
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+
+      const dialog = screen.getByRole("dialog", { name: /Aplicar rascunho da IA\?/i });
+      expect(within(dialog).getByText(/R\$ 3\.000/i)).toBeInTheDocument();
+      expect(within(dialog).getAllByText(/Vale-alimentação/i).length).toBeGreaterThan(0);
+      expect(within(dialog).getByText(/5x2/i)).toBeInTheDocument();
+      expect(within(dialog).getByText(/Campinas, SP/i)).toBeInTheDocument();
+      expect(within(dialog).getAllByText(/Será alterado/i).length).toBeGreaterThan(0);
+    });
+
     it("salvar rascunho manual continua disponível após aplicar o rascunho", async () => {
       await generateDraft();
       fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));

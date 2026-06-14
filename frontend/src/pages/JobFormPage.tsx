@@ -392,6 +392,12 @@ export function JobFormPage() {
                   salary_min: form.salary_min,
                   salary_max: form.salary_max,
                   benefits: form.benefits,
+                  working_hours: form.working_hours,
+                  work_model: form.work_model,
+                  location: form.location,
+                  requirements: form.requirements,
+                  minimum_education_level: form.minimum_education_level,
+                  minimum_years_experience: form.minimum_years_experience,
                 }}
                 onApply={(updates, skillSuggestions) => {
                   updateForm(updates);

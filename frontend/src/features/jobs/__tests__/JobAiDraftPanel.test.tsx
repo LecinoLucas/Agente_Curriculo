@@ -399,7 +399,17 @@ describe("JobAiDraftPanel — API real", () => {
   function renderPanel(
     formHasData = false,
     onApply = vi.fn(),
-    currentFormSnapshot?: { salary_min?: number; salary_max?: number; benefits?: string[] },
+    currentFormSnapshot?: {
+      salary_min?: number;
+      salary_max?: number;
+      benefits?: string[];
+      working_hours?: string;
+      work_model?: string;
+      location?: string;
+      requirements?: string;
+      minimum_education_level?: string;
+      minimum_years_experience?: number;
+    },
   ) {
     render(
       <JobAiDraftPanel
@@ -427,7 +437,17 @@ describe("JobAiDraftPanel — API real", () => {
   async function generateAndWaitForDraft(
     formHasData = false,
     onApply = vi.fn(),
-    currentFormSnapshot?: { salary_min?: number; salary_max?: number; benefits?: string[] },
+    currentFormSnapshot?: {
+      salary_min?: number;
+      salary_max?: number;
+      benefits?: string[];
+      working_hours?: string;
+      work_model?: string;
+      location?: string;
+      requirements?: string;
+      minimum_education_level?: string;
+      minimum_years_experience?: number;
+    },
   ) {
     mockGenerateJobAiDraft.mockResolvedValue(MOCK_API_RESPONSE);
     renderPanel(formHasData, onApply, currentFormSnapshot);
@@ -697,16 +717,18 @@ describe("JobAiDraftPanel — API real", () => {
     expect(screen.getByText("Aplicar rascunho da IA?")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Revise salário, benefícios e requisitos antes de aplicar\. O rascunho da IA não salva nem publica a vaga automaticamente\./i,
+        /Campos com valor atual diferente serão substituídos apenas após sua confirmação\./i,
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Revise com atenção salário e benefícios antes de aplicar\./i)).toBeInTheDocument();
+    expect(screen.getByText(/O rascunho da IA não salva nem publica a vaga automaticamente\./i)).toBeInTheDocument();
   });
 
   it("mostra benefícios quando o draft possui benefits", async () => {
     await generateAndWaitForDraft(false);
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
 
-    expect(screen.getByText(/Vale-transporte/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId("compare-benefits")).getAllByText(/Vale-transporte/i).length).toBeGreaterThan(0);
   });
 
   it("mostra skills, perguntas e aviso informativo de suggested skills", async () => {
@@ -720,6 +742,71 @@ describe("JobAiDraftPanel — API real", () => {
     expect(
       within(dialog).getByText(/Skills sugeridas revisadas não serão aplicadas como catálogo nesta fase\./i),
     ).toBeInTheDocument();
+  });
+
+  it("mostra comparação Atual x IA e status 'Será preenchido' quando o campo atual está vazio", async () => {
+    await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    const workingHoursCard = screen.getByTestId("compare-working-hours");
+    expect(within(workingHoursCard).getByText(/Atual/i)).toBeInTheDocument();
+    expect(within(workingHoursCard).getByText(/IA/i)).toBeInTheDocument();
+    expect(within(workingHoursCard).getByText(/Será preenchido/i)).toBeInTheDocument();
+    expect(within(workingHoursCard).getByText("Não informado")).toBeInTheDocument();
+    expect(within(workingHoursCard).getByText("6x1")).toBeInTheDocument();
+  });
+
+  it("mostra status 'Será alterado' quando o valor atual é diferente do sugerido", async () => {
+    mockGenerateJobAiDraft.mockResolvedValue({
+      ...MOCK_API_RESPONSE,
+      draft: {
+        ...MOCK_API_RESPONSE.draft,
+        salary_min: 4000,
+        salary_max: null,
+      },
+    });
+    renderPanel(false, vi.fn(), {
+      salary_min: 3000,
+      benefits: ["Vale-alimentação"],
+      working_hours: "5x2",
+      work_model: "hybrid",
+      location: "Campinas, SP",
+      requirements: "Conhecimento básico em atendimento",
+      minimum_education_level: "elementary",
+      minimum_years_experience: 1,
+    });
+    fillAndSubmit();
+    await screen.findByTestId("ai-draft-result");
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    const salaryCard = screen.getByTestId("compare-salary");
+    const benefitsCard = screen.getByTestId("compare-benefits");
+    expect(within(salaryCard).getByText(/Será alterado/i)).toBeInTheDocument();
+    expect(within(benefitsCard).getByText(/Será alterado/i)).toBeInTheDocument();
+    expect(within(benefitsCard).getByText(/Adicionados: Vale-transporte/i)).toBeInTheDocument();
+    expect(within(benefitsCard).getByText(/Removidos: Vale-alimentação/i)).toBeInTheDocument();
+  });
+
+  it("quando valor atual e IA são iguais mostra 'Sem alteração'", async () => {
+    await generateAndWaitForDraft(false, vi.fn(), {
+      working_hours: "6x1",
+      work_model: "onsite",
+      location: "São Paulo, SP",
+      benefits: ["Vale-transporte"],
+    });
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(within(screen.getByTestId("compare-working-hours")).getByText(/Sem alteração/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId("compare-work-model")).getByText(/Sem alteração/i)).toBeInTheDocument();
+    expect(within(screen.getByTestId("compare-location")).getByText(/Sem alteração/i)).toBeInTheDocument();
+  });
+
+  it("sem currentFormSnapshot a modal continua funcionando", async () => {
+    await generateAndWaitForDraft(false, vi.fn(), undefined);
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(screen.getByRole("dialog", { name: /Aplicar rascunho da IA\?/i })).toBeInTheDocument();
+    expect(within(screen.getByTestId("compare-salary")).getByText(/Sem sugestão da IA/i)).toBeInTheDocument();
   });
 
   it("abrir, cancelar ou confirmar a modal não dispara novas chamadas de backend/API", async () => {
@@ -779,18 +866,18 @@ describe("JobAiDraftPanel — API real", () => {
 
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
 
-    expect(
-      screen.getAllByText(/Nenhum salário ou benefício será preenchido por este rascunho\./i).length,
-    ).toBeGreaterThan(0);
+    const benefitsCard = screen.getByTestId("compare-benefits");
+    expect(within(benefitsCard).getAllByText("Não informado").length).toBeGreaterThan(0);
+    expect(within(benefitsCard).getByText(/Sem sugestão da IA/i)).toBeInTheDocument();
   });
 
   it("mostra salário atual do formulário quando existir, sem aplicar salary do draft", async () => {
     await generateAndWaitForDraft(false, vi.fn(), { salary_min: 3000, salary_max: 4500, benefits: [] });
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
 
-    expect(
-      screen.getByText(/Formulário atual: R\$ 3\.000 a R\$ 4\.500\. O rascunho não vai alterar salário nesta fase\./i),
-    ).toBeInTheDocument();
+    const salaryCard = screen.getByTestId("compare-salary");
+    expect(within(salaryCard).getByText(/Sem sugestão da IA/i)).toBeInTheDocument();
+    expect(within(salaryCard).getByText(/R\$ 3\.000 a R\$ 4\.500/i)).toBeInTheDocument();
   });
 
   // ── Descartar rascunho ────────────────────────────────────────────────────
