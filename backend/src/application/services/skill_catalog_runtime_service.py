@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from time import monotonic
 from typing import Any, Callable
+from uuid import UUID
 
 import structlog
 
@@ -23,6 +24,24 @@ DEFAULT_SCORE_POLICY: dict[str, float] = {
     "partial": 0.5,
     "weak": 0.25,
 }
+
+MACRO_SKILL_TERMS: frozenset[str] = frozenset(
+    {
+        "api",
+        "backend",
+        "bi",
+        "cloud",
+        "crm",
+        "devops",
+        "erp",
+        "frontend",
+        "javascript",
+        "mobile",
+        "python",
+        "qa",
+        "rest",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +86,214 @@ class SkillCatalogRuntimeSnapshot:
 class _CacheEntry:
     expires_at: float
     snapshot: SkillCatalogRuntimeSnapshot
+
+
+@dataclass(frozen=True, slots=True)
+class SkillCatalogGuardrailIssue:
+    type: str
+    field: str
+    value: str
+    normalized_value: str
+    message: str
+    existing_skill_id: UUID | None = None
+    existing_skill_name: str | None = None
+    existing_alias: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SkillCatalogGuardrailResult:
+    allowed: bool
+    conflicts: tuple[SkillCatalogGuardrailIssue, ...]
+    warnings: tuple[SkillCatalogGuardrailIssue, ...]
+    normalized_canonical: str
+    normalized_aliases: tuple[str, ...]
+    source: str | None = None
+
+
+class SkillCatalogAliasGuardrailService:
+    """Read-only validator for canonical/alias collisions in the runtime catalog."""
+
+    def __init__(self, repository: SQLAlchemySkillCatalogRepository) -> None:
+        self._repository = repository
+
+    async def validate(
+        self,
+        *,
+        canonical_name: str,
+        aliases: list[str] | tuple[str, ...] | None = None,
+        current_skill_id: UUID | None = None,
+        source: str | None = None,
+    ) -> SkillCatalogGuardrailResult:
+        conflicts: list[SkillCatalogGuardrailIssue] = []
+        warnings: list[SkillCatalogGuardrailIssue] = []
+
+        raw_canonical = str(canonical_name or "").strip()
+        normalized_canonical = normalize_skill_name(raw_canonical)
+        if not normalized_canonical:
+            conflicts.append(
+                SkillCatalogGuardrailIssue(
+                    type="empty_or_invalid_name",
+                    field="canonical",
+                    value=raw_canonical,
+                    normalized_value=normalized_canonical,
+                    message="Canonical vazio ou inválido.",
+                )
+            )
+
+        if normalized_canonical in MACRO_SKILL_TERMS:
+            warnings.append(
+                SkillCatalogGuardrailIssue(
+                    type="ambiguous_macro_skill",
+                    field="canonical",
+                    value=raw_canonical,
+                    normalized_value=normalized_canonical,
+                    message="Canonical amplo demais e deve passar por revisão humana.",
+                )
+            )
+
+        normalized_aliases: list[str] = []
+        alias_values_by_normalized: dict[str, str] = {}
+        seen_aliases: set[str] = set()
+
+        for raw_alias in aliases or []:
+            alias = str(raw_alias or "").strip()
+            normalized_alias = normalize_skill_name(alias)
+
+            if not normalized_alias:
+                warnings.append(
+                    SkillCatalogGuardrailIssue(
+                        type="empty_or_invalid_name",
+                        field="alias",
+                        value=alias,
+                        normalized_value=normalized_alias,
+                        message="Alias vazio ou inválido foi ignorado.",
+                    )
+                )
+                continue
+
+            if normalized_alias == normalized_canonical:
+                warnings.append(
+                    SkillCatalogGuardrailIssue(
+                        type="alias_same_as_canonical",
+                        field="alias",
+                        value=alias,
+                        normalized_value=normalized_alias,
+                        message="Alias igual ao canonical foi ignorado.",
+                    )
+                )
+                continue
+
+            if normalized_alias in seen_aliases:
+                warnings.append(
+                    SkillCatalogGuardrailIssue(
+                        type="alias_duplicated_in_request",
+                        field="alias",
+                        value=alias,
+                        normalized_value=normalized_alias,
+                        message="Alias duplicado na mesma requisição foi ignorado.",
+                    )
+                )
+                continue
+
+            seen_aliases.add(normalized_alias)
+            alias_values_by_normalized[normalized_alias] = alias
+            normalized_aliases.append(normalized_alias)
+
+        terms_to_check = list(normalized_aliases)
+        if normalized_canonical:
+            terms_to_check.append(normalized_canonical)
+
+        existing_skills = await self._repository.list_skills_by_normalized_names(
+            terms_to_check,
+            exclude_skill_id=current_skill_id,
+        )
+        existing_aliases = await self._repository.list_aliases_by_normalized_values(
+            terms_to_check,
+            exclude_skill_id=current_skill_id,
+        )
+
+        skills_by_normalized = {
+            skill.normalized_name: skill
+            for skill in existing_skills
+        }
+        aliases_by_normalized = {
+            alias.normalized_alias: alias
+            for alias in existing_aliases
+        }
+
+        if normalized_canonical:
+            existing_canonical = skills_by_normalized.get(normalized_canonical)
+            if existing_canonical is not None:
+                conflicts.append(
+                    SkillCatalogGuardrailIssue(
+                        type="canonical_already_exists",
+                        field="canonical",
+                        value=raw_canonical,
+                        normalized_value=normalized_canonical,
+                        message="Canonical já existe no catálogo.",
+                        existing_skill_id=existing_canonical.id,
+                        existing_skill_name=existing_canonical.name,
+                    )
+                )
+
+            existing_alias = aliases_by_normalized.get(normalized_canonical)
+            if existing_alias is not None:
+                conflicts.append(
+                    SkillCatalogGuardrailIssue(
+                        type="canonical_matches_existing_alias",
+                        field="canonical",
+                        value=raw_canonical,
+                        normalized_value=normalized_canonical,
+                        message="Canonical colide com alias existente.",
+                        existing_skill_id=existing_alias.skill_id,
+                        existing_skill_name=(
+                            existing_alias.skill.name if existing_alias.skill else None
+                        ),
+                        existing_alias=existing_alias.alias,
+                    )
+                )
+
+        for normalized_alias in normalized_aliases:
+            alias = alias_values_by_normalized[normalized_alias]
+            existing_canonical = skills_by_normalized.get(normalized_alias)
+            if existing_canonical is not None:
+                conflicts.append(
+                    SkillCatalogGuardrailIssue(
+                        type="alias_matches_existing_canonical",
+                        field="alias",
+                        value=alias,
+                        normalized_value=normalized_alias,
+                        message="Alias colide com skill canônica existente.",
+                        existing_skill_id=existing_canonical.id,
+                        existing_skill_name=existing_canonical.name,
+                    )
+                )
+
+            existing_alias = aliases_by_normalized.get(normalized_alias)
+            if existing_alias is not None:
+                conflicts.append(
+                    SkillCatalogGuardrailIssue(
+                        type="alias_already_exists",
+                        field="alias",
+                        value=alias,
+                        normalized_value=normalized_alias,
+                        message="Alias já está associado a outra skill.",
+                        existing_skill_id=existing_alias.skill_id,
+                        existing_skill_name=(
+                            existing_alias.skill.name if existing_alias.skill else None
+                        ),
+                        existing_alias=existing_alias.alias,
+                    )
+                )
+
+        return SkillCatalogGuardrailResult(
+            allowed=not conflicts,
+            conflicts=tuple(conflicts),
+            warnings=tuple(warnings),
+            normalized_canonical=normalized_canonical,
+            normalized_aliases=tuple(normalized_aliases),
+            source=source,
+        )
 
 
 class SkillCatalogRuntimeService:

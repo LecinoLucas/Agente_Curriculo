@@ -12,6 +12,7 @@ from src.application.services.skill_catalog_comparison_service import (
 )
 from src.application.services.skill_equivalence_service import SkillEquivalenceService
 from src.application.services.skill_catalog_runtime_service import (
+    SkillCatalogAliasGuardrailService,
     SkillCatalogRuntimeService,
 )
 from src.application.services.skill_catalog_sync_service import SkillCatalogSyncService
@@ -258,6 +259,76 @@ async def test_sync_creates_relations_and_preserves_alias_is_legacy_canonical_co
         and item.db_skill == "Python"
         for item in result.conflicts
     )
+
+
+async def test_guardrail_service_detects_runtime_collisions_without_writing(
+    db_session: AsyncSession,
+) -> None:
+    skill = SkillCatalogModel(name="Python", normalized_name="python", is_active=True)
+    db_session.add(skill)
+    await db_session.flush()
+    db_session.add(
+        SkillAliasModel(
+            skill_id=skill.id,
+            alias="Py",
+            normalized_alias="py",
+        )
+    )
+    await db_session.commit()
+
+    repository = SQLAlchemySkillCatalogRepository(db_session)
+    service = SkillCatalogAliasGuardrailService(repository)
+
+    skills_before = len(await repository.list_runtime_skills(include_inactive=True))
+    aliases_before = sum(len(item.aliases) for item in await repository.list_runtime_skills(include_inactive=True))
+
+    result = await service.validate(
+        canonical_name="Py",
+        aliases=["Python"],
+        source="admin",
+    )
+
+    skills_after_models = await repository.list_runtime_skills(include_inactive=True)
+    skills_after = len(skills_after_models)
+    aliases_after = sum(len(item.aliases) for item in skills_after_models)
+
+    assert result.allowed is False
+    assert {item.type for item in result.conflicts} == {
+        "canonical_matches_existing_alias",
+        "alias_matches_existing_canonical",
+    }
+    assert result.source == "admin"
+    assert skills_before == skills_after == 1
+    assert aliases_before == aliases_after == 1
+
+
+async def test_guardrail_service_allows_self_edit_and_ignores_self_collisions(
+    db_session: AsyncSession,
+) -> None:
+    skill = SkillCatalogModel(name="Power BI", normalized_name="power bi", is_active=True)
+    db_session.add(skill)
+    await db_session.flush()
+    db_session.add(
+        SkillAliasModel(
+            skill_id=skill.id,
+            alias="PBI",
+            normalized_alias="pbi",
+        )
+    )
+    await db_session.commit()
+
+    repository = SQLAlchemySkillCatalogRepository(db_session)
+    service = SkillCatalogAliasGuardrailService(repository)
+
+    result = await service.validate(
+        canonical_name="Power-BI",
+        aliases=["PBI", "power_bi"],
+        current_skill_id=skill.id,
+    )
+
+    assert result.allowed is True
+    assert result.conflicts == ()
+    assert any(item.type == "alias_same_as_canonical" for item in result.warnings)
 
 
 async def test_sync_reassigns_known_inverted_aliases_to_expected_canonical_skill(

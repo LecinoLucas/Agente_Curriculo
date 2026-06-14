@@ -53,6 +53,46 @@ class SQLAlchemySkillCatalogRepository:
         result = await self._session.execute(stmt)
         return result.scalars().first()
 
+    async def list_skills_by_normalized_names(
+        self,
+        normalized_names: Sequence[str],
+        *,
+        exclude_skill_id: UUID | None = None,
+    ) -> Sequence[SkillCatalogModel]:
+        if not normalized_names:
+            return []
+
+        stmt = (
+            sa.select(SkillCatalogModel)
+            .options(selectinload(SkillCatalogModel.aliases))
+            .where(SkillCatalogModel.normalized_name.in_(tuple(normalized_names)))
+        )
+        if exclude_skill_id is not None:
+            stmt = stmt.where(SkillCatalogModel.id != exclude_skill_id)
+
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
+    async def list_aliases_by_normalized_values(
+        self,
+        normalized_aliases: Sequence[str],
+        *,
+        exclude_skill_id: UUID | None = None,
+    ) -> Sequence[SkillAliasModel]:
+        if not normalized_aliases:
+            return []
+
+        stmt = (
+            sa.select(SkillAliasModel)
+            .options(selectinload(SkillAliasModel.skill))
+            .where(SkillAliasModel.normalized_alias.in_(tuple(normalized_aliases)))
+        )
+        if exclude_skill_id is not None:
+            stmt = stmt.where(SkillAliasModel.skill_id != exclude_skill_id)
+
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
     async def list_skills(
         self,
         page: int = 1,
