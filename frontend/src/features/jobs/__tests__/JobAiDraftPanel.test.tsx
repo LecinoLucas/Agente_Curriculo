@@ -367,6 +367,12 @@ describe("JobAiDraftPanel — API real", () => {
     fireEvent.click(screen.getByRole("button", { name: /Gerar com IA/i }));
   }
 
+  function switchToTab(name: RegExp) {
+    const tab = screen.getByRole("tab", { name });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+  }
+
   async function generateAndWaitForDraft(formHasData = false, onApply = vi.fn()) {
     mockGenerateJobAiDraft.mockResolvedValue(MOCK_API_RESPONSE);
     renderPanel(formHasData, onApply);
@@ -617,9 +623,65 @@ describe("JobAiDraftPanel — API real", () => {
     expect(screen.getByRole("tab", { name: /Enviar imagem/i })).toBeInTheDocument();
   });
 
+  it("abre no modo 'Colar descrição' mostrando textarea e botão principal", () => {
+    renderPanel();
+
+    expect(screen.getByLabelText(/Descrição da vaga para IA/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Gerar com IA/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Selecionar imagem/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Cole a descrição da vaga e gere um rascunho revisável/i),
+    ).toBeInTheDocument();
+  });
+
+  it("no modo 'Enviar imagem' mostra upload e oculta o textarea", () => {
+    renderPanel();
+    switchToTab(/Enviar imagem/i);
+
+    expect(screen.getByText(/Selecionar imagem/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Extrair e gerar rascunho/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Descrição da vaga para IA/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gerar com IA/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Usar exemplo/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Envie uma arte da vaga\. A IA extrai as informações e gera um rascunho revisável/i),
+    ).toBeInTheDocument();
+  });
+
+  it("preserva texto, imagem e contexto ao trocar de abas", async () => {
+    renderPanel();
+
+    fireEvent.change(screen.getByLabelText(/Descrição da vaga para IA/i), {
+      target: { value: "Texto preservado" },
+    });
+
+    switchToTab(/Enviar imagem/i);
+
+    const image = new File(["binary"], "vaga.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("ai-draft-image-input"), {
+      target: { files: [image] },
+    });
+    fireEvent.change(screen.getByLabelText(/Contexto adicional opcional/i), {
+      target: { value: "Contexto preservado" },
+    });
+
+    expect(screen.getByTestId("ai-draft-image-filename")).toHaveTextContent("vaga.jpg");
+
+    switchToTab(/Colar descrição/i);
+    expect(screen.getByLabelText(/Descrição da vaga para IA/i)).toHaveValue("Texto preservado");
+
+    switchToTab(/Enviar imagem/i);
+    expect(screen.getByLabelText(/Contexto adicional opcional/i)).toHaveValue("Contexto preservado");
+    expect(screen.getByTestId("ai-draft-image-filename")).toHaveTextContent("vaga.jpg");
+    expect(mockGenerateJobAiDraft).not.toHaveBeenCalled();
+    expect(mockGenerateJobAiDraftFromImage).not.toHaveBeenCalled();
+  });
+
   it("bloqueia arquivo inválido antes de chamar o endpoint", async () => {
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+    switchToTab(/Enviar imagem/i);
 
     const input = screen.getByTestId("ai-draft-image-input") as HTMLInputElement;
     const invalidFile = new File(["<svg></svg>"], "vaga.svg", { type: "image/svg+xml" });
@@ -636,7 +698,7 @@ describe("JobAiDraftPanel — API real", () => {
       warnings: ["image_text_extraction_requires_review"],
     });
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+    switchToTab(/Enviar imagem/i);
 
     const image = new File(["binary"], "vaga.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("ai-draft-image-input"), {
@@ -659,7 +721,7 @@ describe("JobAiDraftPanel — API real", () => {
       }),
     );
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+    switchToTab(/Enviar imagem/i);
 
     const image = new File(["binary"], "vaga.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("ai-draft-image-input"), {
@@ -686,7 +748,7 @@ describe("JobAiDraftPanel — API real", () => {
       new Error("Nao foi possivel extrair texto util da imagem enviada."),
     );
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+    switchToTab(/Enviar imagem/i);
 
     const image = new File(["binary"], "vaga.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("ai-draft-image-input"), {

@@ -401,7 +401,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
               <h2 className="text-sm font-semibold text-text">Criar vaga com IA</h2>
             </div>
             <p className="text-sm text-text-muted">
-              Descreva a vaga e a IA gerará um rascunho. Revise antes de aplicar ao formulário.
+              Escolha como enviar o conteúdo da vaga para gerar um rascunho revisável.
             </p>
           </div>
           {onClose && (
@@ -429,7 +429,10 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
               <TabsTrigger value="image">Enviar imagem</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="text" className="space-y-4" forceMount>
+            <TabsContent value="text" className="space-y-4">
+              <p className="text-sm text-text-muted">
+                Cole a descrição da vaga e gere um rascunho revisável.
+              </p>
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <label htmlFor="ai-draft-prompt" className="text-sm font-medium text-text">
@@ -479,12 +482,11 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
               </div>
             </TabsContent>
 
-            <TabsContent
-              value="image"
-              className="space-y-4"
-              data-testid="ai-draft-image-tab"
-              forceMount
-            >
+            <TabsContent value="image" className="space-y-4" data-testid="ai-draft-image-tab">
+              <p className="text-sm text-text-muted">
+                Envie uma arte da vaga. A IA extrai as informações e gera um rascunho revisável.
+              </p>
+
               <div className="space-y-3 rounded-xl border border-dashed border-border bg-surface px-4 py-4">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-text">Enviar imagem da vaga</p>
@@ -552,12 +554,12 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                   )}
                 </Button>
               </div>
+
+              <p className="text-xs text-text-muted">
+                O rascunho é para revisão humana — não salva nem publica automaticamente.
+              </p>
             </TabsContent>
           </Tabs>
-
-          <p className="text-xs text-text-muted">
-            O rascunho é para revisão humana — não salva nem publica automaticamente.
-          </p>
         </div>
 
         {isLoading && (

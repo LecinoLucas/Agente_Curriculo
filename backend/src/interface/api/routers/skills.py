@@ -51,6 +51,15 @@ async def list_skills(
         total_pages=(total + page_size - 1) // page_size if total > 0 else 1,
     )
 
+@router.get("/{skill_id}", response_model=SkillCatalogResponse)
+async def get_skill(
+    skill_id: UUID,
+    current_user: InternalUser,
+    service: SkillCatalogService = Depends(_get_service),
+) -> SkillCatalogResponse:
+    skill = await service.get_skill(skill_id)
+    return SkillCatalogResponse.model_validate(skill, from_attributes=True)
+
 @router.post("", response_model=SkillCatalogResponse, status_code=status.HTTP_201_CREATED)
 async def create_skill(
     body: CreateSkillRequest,

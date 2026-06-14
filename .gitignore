@@ -31,6 +31,7 @@ __pycache__/
 !.env.example
 !.env.test.example
 !.env.homolog.example
+!.env.docker.example
 
 # Python
 __pycache__/

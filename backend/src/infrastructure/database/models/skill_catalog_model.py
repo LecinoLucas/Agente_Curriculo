@@ -79,6 +79,12 @@ class SkillAliasModel(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=sa.text("NOW()"),
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        server_default=sa.text("NOW()"),
+    )
 
     skill: Mapped["SkillCatalogModel"] = relationship(
         "SkillCatalogModel",

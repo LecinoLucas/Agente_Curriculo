@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Modal } from "../../../components/common/Modal";
 import { Button } from "@/components/ui/button";
 import { skillsService, SkillCatalog } from "../../../services/skillsService";
-import { toast } from "../../../shared/utils/toast";
+import { formatErrorDetails, handleApiError } from "../../../shared/utils/errorHandler";
+import { aliasComparisonKey, dedupeAliases, parseAliasInput } from "../../skills/utils/skillHelpers";
 
 const CATEGORIES = [
   { value: "technical", label: "Técnica" },
@@ -44,33 +45,30 @@ export function CreateSkillModal({ open, initialName = "", initialAliases = "", 
   if (!open) return null;
 
   async function handleConfirm() {
-    if (!name.trim()) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
     
     setLoading(true);
     setError("");
     
     try {
-      const normalizedName = name.trim().toLowerCase().replace(/\s+/g, " ");
-      
-      const aliasList = aliases
-        .split(",")
-        .map((a) => a.trim().toLowerCase().replace(/\s+/g, " "))
-        .filter((a) => a.length > 0);
-        
-      // Remove duplicates
-      const uniqueAliases = Array.from(new Set(aliasList));
-      
-      // Check if any alias is equal to name
-      const hasDuplicateWithName = uniqueAliases.some((a) => a === normalizedName);
-      
-      if (hasDuplicateWithName) {
+      const aliasList = parseAliasInput(aliases);
+      const uniqueAliases = dedupeAliases(aliasList);
+
+      if (aliasList.length !== uniqueAliases.length) {
+        setError("Revise os aliases: há duplicidade.");
+        setLoading(false);
+        return;
+      }
+
+      if (uniqueAliases.some((alias) => aliasComparisonKey(alias) === aliasComparisonKey(trimmedName))) {
         setError("Alias não pode ser igual ao nome da skill.");
         setLoading(false);
         return;
       }
         
       const payload = {
-        name: normalizedName,
+        name: trimmedName,
         category: category || undefined,
         aliases: uniqueAliases,
         description: description.trim() || undefined,
@@ -79,12 +77,9 @@ export function CreateSkillModal({ open, initialName = "", initialAliases = "", 
       const skill = await skillsService.createSkill(payload);
       onSuccess(skill);
       onClose();
-    } catch (err: any) {
-      if (err.status === 409) {
-        setError("Já existe uma skill ou alias com esse nome.");
-      } else {
-        setError("Erro ao criar skill. Tente novamente.");
-      }
+    } catch (err) {
+      const details = formatErrorDetails(handleApiError(err));
+      setError(details[0] ?? "Erro ao criar skill. Tente novamente.");
     } finally {
       setLoading(false);
     }

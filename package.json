@@ -6,6 +6,7 @@
     "dev": "npm run validate:repo-root && npm run dev:all",
 
     "dev:full": "npm run validate:repo-root && bash scripts/dev-full.sh",
+    "docker:full": "bash scripts/docker-full.sh",
     "dev:user": "npm run validate:repo-root && ./scripts/dev-user.sh",
     "dev:backend": "npm run validate:repo-root && npm run backend",
     "dev:staff": "npm run validate:repo-root && npm run frontend",

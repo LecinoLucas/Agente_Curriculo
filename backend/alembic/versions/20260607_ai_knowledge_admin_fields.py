@@ -1,6 +1,6 @@
 """AI knowledge admin fields
 
-Revision ID: 20260607_ai_knowledge_admin_fields
+Revision ID: 20260607_ai_knowledge
 Revises: 23dbb452c78a
 Create Date: 2026-06-07 00:00:00.000000
 """

@@ -237,6 +237,9 @@ class SkillCatalogService:
             raise NotFoundException("Skill não encontrada.")
         return skill
 
+    async def get_skill(self, skill_id: UUID) -> SkillCatalogModel:
+        return await self._get_skill(skill_id)
+
     async def _validate_skill_name(
         self,
         name: str,
@@ -245,17 +248,18 @@ class SkillCatalogService:
         if not name:
             raise ValidationException("O nome da skill é obrigatório.")
 
-        normalized_name = normalize_skill_name(name)
+        cleaned_name = name.strip()
+        normalized_name = normalize_skill_name(cleaned_name)
         if not normalized_name:
             raise ValidationException("O nome da skill não pode ser vazio ou apenas espaços.")
 
         existing_skill = await self._repository.find_by_normalized_name(normalized_name)
         if existing_skill and existing_skill.id != current_skill_id:
-            raise ConflictException(f"Já existe uma skill com o nome '{name.strip()}'.")
+            raise ConflictException(f"Já existe uma skill com o nome '{cleaned_name}'.")
 
         existing_alias = await self._repository.find_by_normalized_alias(normalized_name)
         if existing_alias and existing_alias.skill_id != current_skill_id:
-            raise ConflictException(f"O nome '{name.strip()}' já existe como alias para outra skill.")
+            raise ConflictException(f"O nome '{cleaned_name}' já existe como alias de outra skill.")
 
         return normalized_name
 
@@ -270,28 +274,29 @@ class SkillCatalogService:
         normalized_aliases_set: set[str] = set()
 
         for alias_name in aliases or []:
+            cleaned_alias = alias_name.strip()
             norm_alias = normalize_skill_name(alias_name)
             if not norm_alias:
-                continue
+                raise ValidationException("Alias vazio não é permitido.")
 
             if norm_alias in normalized_aliases_set:
-                raise ValidationException(f"O alias '{norm_alias}' está duplicado na requisição.")
+                raise ValidationException(f"O alias '{cleaned_alias}' está duplicado na requisição.")
 
             if norm_alias == normalized_name:
-                raise ValidationException(f"O alias '{norm_alias}' não pode ser igual ao nome da skill.")
+                raise ValidationException(f"O alias '{cleaned_alias}' não pode ser igual ao nome da skill.")
 
             conflict_skill = await self._repository.find_by_normalized_name(norm_alias)
             if conflict_skill and conflict_skill.id != current_skill_id:
-                raise ConflictException(f"O alias '{norm_alias}' já existe como uma skill principal.")
+                raise ConflictException(f"O alias '{cleaned_alias}' já existe como nome de outra skill.")
 
             conflict_alias = await self._repository.find_by_normalized_alias(norm_alias)
             if conflict_alias and conflict_alias.skill_id != current_skill_id:
-                raise ConflictException(f"O alias '{norm_alias}' já está cadastrado para outra skill.")
+                raise ConflictException(f"O alias '{cleaned_alias}' já existe como alias de outra skill.")
 
             normalized_aliases_set.add(norm_alias)
             processed_aliases.append(
                 SkillAliasModel(
-                    alias=alias_name.strip(),
+                    alias=cleaned_alias,
                     normalized_alias=norm_alias,
                 )
             )

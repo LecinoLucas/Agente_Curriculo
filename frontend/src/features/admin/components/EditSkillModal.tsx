@@ -10,6 +10,7 @@ import {
   type UpdateSkillPayload,
 } from "../../../services/skillsService";
 import { formatErrorDetails, handleApiError } from "../../../shared/utils/errorHandler";
+import { aliasComparisonKey, dedupeAliases, parseAliasInput } from "../../skills/utils/skillHelpers";
 
 const CATEGORIES = [
   { value: "", label: "Sem categoria" },
@@ -28,17 +29,6 @@ type EditSkillModalProps = {
   onClose: () => void;
   onSuccess: (skill: SkillCatalog) => void;
 };
-
-function parseAliases(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  );
-}
 
 export function EditSkillModal({ open, skill, onClose, onSuccess }: EditSkillModalProps) {
   const [name, setName] = useState("");
@@ -68,8 +58,14 @@ export function EditSkillModal({ open, skill, onClose, onSuccess }: EditSkillMod
       return;
     }
 
-    const aliasList = parseAliases(aliases);
-    if (aliasList.some((alias) => alias.trim().toLowerCase() === normalizedName)) {
+    const aliasList = parseAliasInput(aliases);
+    const dedupedAliases = dedupeAliases(aliasList);
+    if (aliasList.length !== dedupedAliases.length) {
+      setError("Revise os aliases: há duplicidade.");
+      return;
+    }
+
+    if (dedupedAliases.some((alias) => aliasComparisonKey(alias) === aliasComparisonKey(normalizedName))) {
       setError("Os aliases não podem repetir o nome principal da skill.");
       return;
     }
@@ -80,7 +76,7 @@ export function EditSkillModal({ open, skill, onClose, onSuccess }: EditSkillMod
     const payload: UpdateSkillPayload = {
       name: trimmedName,
       category: category || null,
-      aliases: aliasList,
+      aliases: dedupedAliases,
       description: description.trim() || null,
     };
 

@@ -773,7 +773,9 @@ describe("JobFormPage", () => {
 
     it("renderiza a aba 'Enviar imagem' sem publicar ou salvar automaticamente", async () => {
       await openAiMode();
-      fireEvent.click(screen.getByRole("tab", { name: /Enviar imagem/i }));
+      const imageTab = screen.getByRole("tab", { name: /Enviar imagem/i });
+      fireEvent.mouseDown(imageTab);
+      fireEvent.click(imageTab);
 
       expect(screen.getByText(/Enviar imagem da vaga/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Extrair e gerar rascunho/i })).toBeInTheDocument();

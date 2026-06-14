@@ -39,6 +39,19 @@ async def test_create_skill_success(client: AsyncClient, db_session: AsyncSessio
     assert "py" in aliases
     assert "python 3" in aliases
 
+async def test_create_skill_without_aliases(client: AsyncClient, db_session: AsyncSession):
+    headers = await _get_admin_headers(client, db_session)
+    response = await client.post(
+        "/api/v1/skills",
+        json={"name": "Scrum", "category": "framework"},
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "Scrum"
+    assert data["aliases"] == []
+
 async def test_create_skill_duplicate_name(client: AsyncClient, db_session: AsyncSession):
     await _create_active_user(db_session, "admin-skill-2@test.com", "password123", UserRole.ADMIN)
     headers = await _auth_headers(client, "admin-skill-2@test.com", "password123")
@@ -56,6 +69,23 @@ async def test_create_skill_duplicate_name(client: AsyncClient, db_session: Asyn
         json={"name": " JAVA "},
         headers=headers
     )
+    assert response.status_code == 409
+    assert "Já existe uma skill com o nome" in response.json()["error"]["message"]
+
+async def test_create_skill_duplicate_name_by_accent_normalization(client: AsyncClient, db_session: AsyncSession):
+    headers = await _get_admin_headers(client, db_session)
+    await client.post(
+        "/api/v1/skills",
+        json={"name": "Análise de Sistemas"},
+        headers=headers,
+    )
+
+    response = await client.post(
+        "/api/v1/skills",
+        json={"name": "analise   de sistemas"},
+        headers=headers,
+    )
+
     assert response.status_code == 409
     assert "Já existe uma skill com o nome" in response.json()["error"]["message"]
 
@@ -77,7 +107,7 @@ async def test_create_skill_duplicate_alias_in_db(client: AsyncClient, db_sessio
         headers=headers
     )
     assert response.status_code == 409
-    assert "já está cadastrado para outra skill" in response.json()["error"]["message"]
+    assert "já existe como alias de outra skill" in response.json()["error"]["message"]
 
 async def test_create_skill_name_exists_as_alias(client: AsyncClient, db_session: AsyncSession):
     await _create_active_user(db_session, "admin-skill-4@test.com", "password123", UserRole.ADMIN)
@@ -97,7 +127,7 @@ async def test_create_skill_name_exists_as_alias(client: AsyncClient, db_session
         headers=headers
     )
     assert response.status_code == 409
-    assert "já existe como alias para outra skill" in response.json()["error"]["message"]
+    assert "já existe como alias de outra skill" in response.json()["error"]["message"]
 
 async def test_create_alias_exists_as_skill(client: AsyncClient, db_session: AsyncSession):
     await _create_active_user(db_session, "admin-skill-5@test.com", "password123", UserRole.ADMIN)
@@ -117,7 +147,7 @@ async def test_create_alias_exists_as_skill(client: AsyncClient, db_session: Asy
         headers=headers
     )
     assert response.status_code == 409
-    assert "já existe como uma skill principal" in response.json()["error"]["message"]
+    assert "já existe como nome de outra skill" in response.json()["error"]["message"]
 
 async def test_create_skill_alias_equals_name(client: AsyncClient, db_session: AsyncSession):
     await _create_active_user(db_session, "admin-skill-6@test.com", "password123", UserRole.ADMIN)
@@ -130,6 +160,18 @@ async def test_create_skill_alias_equals_name(client: AsyncClient, db_session: A
     )
     assert response.status_code in (400, 422)
     assert "não pode ser igual ao nome da skill" in response.json()["error"]["message"]
+
+async def test_create_skill_rejects_empty_alias(client: AsyncClient, db_session: AsyncSession):
+    headers = await _get_admin_headers(client, db_session)
+
+    response = await client.post(
+        "/api/v1/skills",
+        json={"name": "Kanban", "aliases": ["  "]},
+        headers=headers,
+    )
+
+    assert response.status_code in (400, 422)
+    assert "Alias vazio não é permitido." == response.json()["error"]["message"]
 
 async def test_list_skills_and_search(client: AsyncClient, db_session: AsyncSession):
     await _create_active_user(db_session, "admin-skill-7@test.com", "password123", UserRole.ADMIN)
@@ -241,6 +283,54 @@ async def test_update_skill_success(client: AsyncClient, db_session: AsyncSessio
     assert data["category"] == "tool"
     assert data["description"] == "BI corporativo"
     assert sorted(alias["normalized_alias"] for alias in data["aliases"]) == ["pbi", "powerbi"]
+
+async def test_get_skill_detail_returns_aliases(client: AsyncClient, db_session: AsyncSession):
+    headers = await _get_admin_headers(client, db_session)
+    created = await client.post(
+        "/api/v1/skills",
+        json={"name": "Excel", "aliases": ["Microsoft Excel"]},
+        headers=headers,
+    )
+    skill_id = created.json()["id"]
+
+    response = await client.get(f"/api/v1/skills/{skill_id}", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == skill_id
+    assert data["aliases"] == [
+        {
+            "id": data["aliases"][0]["id"],
+            "alias": "Microsoft Excel",
+            "normalized_alias": "microsoft excel",
+        }
+    ]
+
+async def test_update_skill_rejects_alias_conflict_with_other_alias_using_normalization(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _get_admin_headers(client, db_session)
+    await client.post(
+        "/api/v1/skills",
+        json={"name": "Análise de Sistemas", "aliases": ["ADS"]},
+        headers=headers,
+    )
+    created = await client.post(
+        "/api/v1/skills",
+        json={"name": "Arquitetura de Software"},
+        headers=headers,
+    )
+    skill_id = created.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/skills/{skill_id}",
+        json={"aliases": ["analise de sistemas"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert "já existe como nome de outra skill" in response.json()["error"]["message"]
 
 async def test_deactivate_archive_restore_and_activate_skill(client: AsyncClient, db_session: AsyncSession):
     headers = await _get_admin_headers(client, db_session)
