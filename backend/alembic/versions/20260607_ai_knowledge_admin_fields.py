@@ -1,6 +1,6 @@
 """AI knowledge admin fields
 
-Revision ID: 20260607_ai_knowledge
+Revision ID: 20260607_ai_knowledge_admin
 Revises: 23dbb452c78a
 Create Date: 2026-06-07 00:00:00.000000
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "20260607_ai_knowledge_admin_fields"
+revision = "20260607_ai_knowledge_admin"
 down_revision = "23dbb452c78a"
 branch_labels = None
 depends_on = None

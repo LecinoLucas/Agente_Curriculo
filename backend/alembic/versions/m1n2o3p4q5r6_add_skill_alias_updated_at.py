@@ -1,7 +1,7 @@
 """Add updated_at to skill aliases
 
 Revision ID: m1n2o3p4q5r6
-Revises: 20260607_ai_knowledge_admin_fields
+Revises: 20260607_ai_knowledge_admin
 Create Date: 2026-06-14 00:00:00.000000
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "m1n2o3p4q5r6"
-down_revision = "20260607_ai_knowledge_admin_fields"
+down_revision = "20260607_ai_knowledge_admin"
 branch_labels = None
 depends_on = None
 
