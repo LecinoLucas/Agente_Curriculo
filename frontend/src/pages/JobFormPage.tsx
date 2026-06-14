@@ -399,12 +399,18 @@ export function JobFormPage() {
                   minimum_education_level: form.minimum_education_level,
                   minimum_years_experience: form.minimum_years_experience,
                 }}
-                onApply={(updates, skillSuggestions) => {
+                linkedSkills={combinedSkills}
+                onApply={async (updates, skillSuggestions, applicableSuggestedSkills = []) => {
                   updateForm(updates);
                   const hasSuggestions =
                     skillSuggestions.mandatory.length > 0 || skillSuggestions.optional.length > 0;
                   if (hasSuggestions) {
                     setAiSkillSuggestions(skillSuggestions);
+                  }
+                  if (applicableSuggestedSkills.length > 0) {
+                    for (const item of applicableSuggestedSkills) {
+                      await handleAddSkill(item.skill, item.priority);
+                    }
                   }
                   setAiApplyNotice("Rascunho aplicado. Revise antes de salvar.");
                   setIsAiPanelOpen(false);

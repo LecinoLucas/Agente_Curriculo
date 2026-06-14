@@ -410,11 +410,13 @@ describe("JobAiDraftPanel — API real", () => {
       minimum_education_level?: string;
       minimum_years_experience?: number;
     },
+    linkedSkills?: Array<{ skill_id: string; skill_name: string; priority_level: string }>,
   ) {
     render(
       <JobAiDraftPanel
         formHasData={formHasData}
         currentFormSnapshot={currentFormSnapshot}
+        linkedSkills={linkedSkills as any}
         onApply={onApply}
       />,
     );
@@ -448,9 +450,10 @@ describe("JobAiDraftPanel — API real", () => {
       minimum_education_level?: string;
       minimum_years_experience?: number;
     },
+    linkedSkills?: Array<{ skill_id: string; skill_name: string; priority_level: string }>,
   ) {
     mockGenerateJobAiDraft.mockResolvedValue(MOCK_API_RESPONSE);
-    renderPanel(formHasData, onApply, currentFormSnapshot);
+    renderPanel(formHasData, onApply, currentFormSnapshot, linkedSkills);
     fillAndSubmit();
     await screen.findByTestId("ai-draft-result");
     return { onApply };
@@ -546,7 +549,7 @@ describe("JobAiDraftPanel — API real", () => {
     expect(
       screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"),
     ).not.toBeChecked();
-    expect(screen.getByText(/seleção abaixo é apenas visual nesta fase/i)).toBeInTheDocument();
+    expect(screen.getByText(/Apenas sugestões `existing` selecionadas podem entrar como skills estruturadas/i)).toBeInTheDocument();
   });
 
   it("não quebra quando o draft não traz suggested_skills", async () => {
@@ -682,6 +685,13 @@ describe("JobAiDraftPanel — API real", () => {
         mandatory: expect.arrayContaining(["Atendimento ao cliente"]),
         optional: expect.arrayContaining(["Experiência em varejo"]),
       }),
+      expect.arrayContaining([
+        expect.objectContaining({
+          skill_id: "skill-atendimento",
+          name: "Atendimento ao cliente",
+          priority: "priority",
+        }),
+      ]),
     );
   });
 
@@ -696,6 +706,48 @@ describe("JobAiDraftPanel — API real", () => {
       expect.arrayContaining(["Atendimento ao cliente", "Responsabilidade com caixa"]),
     );
     expect(skills.mandatory).not.toEqual(expect.arrayContaining(["Suporte Protheus", "Suporte ERP"]));
+    expect(onApply.mock.calls[0][2]).toEqual([
+      expect.objectContaining({ skill_id: "skill-atendimento", name: "Atendimento ao cliente" }),
+    ]);
+  });
+
+  it("existing desmarcada não entra na aplicação estruturada", async () => {
+    const { onApply } = await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-existing-Atendimento ao cliente"));
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+    expect(onApply.mock.calls[0][2]).toEqual([]);
+  });
+
+  it("new selecionada mostra aviso de não criação automática", async () => {
+    await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-new-Suporte Protheus"));
+
+    expect(screen.getByText(/Nova sugestão selecionada\. A criação no catálogo exige etapa futura\./i)).toBeInTheDocument();
+  });
+
+  it("conflict selecionada mostra aviso de revisão manual", async () => {
+    await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
+
+    expect(screen.getByText(/Conflito selecionado\. Escolha manualmente a skill correta no catálogo\./i)).toBeInTheDocument();
+  });
+
+  it("não duplica skill já existente no formulário", async () => {
+    const { onApply } = await generateAndWaitForDraft(
+      false,
+      vi.fn(),
+      undefined,
+      [{ skill_id: "skill-atendimento", skill_name: "Atendimento ao cliente", priority_level: "priority" }],
+    );
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(screen.getByText(/Skill já estava no formulário\./i)).toBeInTheDocument();
+    expect(screen.getByText(/1 skill\(s\) já estavam no formulário e não serão duplicadas\./i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+    expect(onApply.mock.calls[0][2]).toEqual([]);
   });
 
   it("não mapeia salary para o formulário", async () => {
@@ -742,6 +794,9 @@ describe("JobAiDraftPanel — API real", () => {
     expect(
       within(dialog).getByText(/Skills sugeridas revisadas não serão aplicadas como catálogo nesta fase\./i),
     ).toBeInTheDocument();
+    expect(within(dialog).getByText(/1 skills existentes selecionadas serão aplicadas ao catálogo da vaga\./i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/0 novas sugestões não serão criadas automaticamente\./i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/0 conflitos exigem revisão manual\./i)).toBeInTheDocument();
   });
 
   it("mostra comparação Atual x IA e status 'Será preenchido' quando o campo atual está vazio", async () => {
@@ -809,6 +864,29 @@ describe("JobAiDraftPanel — API real", () => {
     expect(within(screen.getByTestId("compare-salary")).getByText(/Sem sugestão da IA/i)).toBeInTheDocument();
   });
 
+  it("sem suggested_skills mantém comportamento antigo", async () => {
+    mockGenerateJobAiDraft.mockResolvedValue({
+      ...MOCK_API_RESPONSE,
+      draft: {
+        ...MOCK_API_RESPONSE.draft,
+        suggested_skills: [],
+      },
+    });
+    const { onApply } = renderPanel(false, vi.fn());
+    fillAndSubmit();
+    await screen.findByTestId("ai-draft-result");
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+    expect(onApply).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        mandatory: expect.arrayContaining(["Atendimento ao cliente"]),
+      }),
+      [],
+    );
+  });
+
   it("abrir, cancelar ou confirmar a modal não dispara novas chamadas de backend/API", async () => {
     await generateAndWaitForDraft(false);
     expect(mockGenerateJobAiDraft).toHaveBeenCalledTimes(1);
@@ -847,6 +925,7 @@ describe("JobAiDraftPanel — API real", () => {
     expect(onApply).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Operador de Caixa" }),
       expect.any(Object),
+      expect.any(Array),
     );
   });
 

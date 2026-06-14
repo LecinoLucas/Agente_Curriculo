@@ -15,13 +15,16 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusPill } from "@/components/ui/status-pill";
+import type { SkillCatalog } from "@/services/skillsService";
 import type { JobFormValues } from "../jobFormConfig";
+import type { JobSkill } from "@/types/domain";
 import {
   applyApiDraftToForm,
   applyLegacyDraftToForm,
   extractSkillSuggestions,
   JOB_AI_PROMPT_EXAMPLE,
 } from "../utils/jobAiDraftHelpers";
+import type { PendingJobSkill } from "../jobFormConfig";
 import {
   generateJobAiDraft,
   generateJobAiDraftFromImage,
@@ -29,6 +32,7 @@ import {
   type JobAiDraftSafetyCheck,
   type JobAiDraftSuggestedSkill,
 } from "../services/jobAiDraftService";
+import type { ApplicableSkill } from "./AiSkillSuggestionsBlock";
 
 interface JobAiDraftPanelProps {
   formHasData: boolean;
@@ -44,15 +48,19 @@ interface JobAiDraftPanelProps {
     | "minimum_education_level"
     | "minimum_years_experience"
   >;
+  linkedSkills?: Array<JobSkill | PendingJobSkill>;
   onApply: (
     updates: Partial<JobFormValues>,
     skillSuggestions: { mandatory: string[]; optional: string[] },
+    applicableSuggestedSkills?: ApplicableSkill[],
   ) => void;
   onClose?: () => void;
 }
 
 type AiStatus = "idle" | "loading" | "ready" | "error";
 type DraftInputMode = "text" | "image";
+
+const EMPTY_LINKED_SKILLS: Array<JobSkill | PendingJobSkill> = [];
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg"];
 const ACCEPTED_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg"];
@@ -215,6 +223,49 @@ function getCompareStatus(current: string, suggested: string, hasSuggestion: boo
   return "change";
 }
 
+function normalizeSkillName(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function buildApplicableSkillFromSuggested(
+  item: JobAiDraftSuggestedSkill,
+  priority: "priority" | "complementary",
+): ApplicableSkill | null {
+  if (item.catalog_status !== "existing" || !item.catalog_skill_id || !item.catalog_skill_name) {
+    return null;
+  }
+
+  return {
+    name: item.catalog_skill_name,
+    skill_id: item.catalog_skill_id,
+    priority,
+    skill: {
+      id: item.catalog_skill_id,
+      name: item.catalog_skill_name,
+      normalized_name: normalizeSkillName(item.catalog_skill_name),
+      category: item.category,
+      catalog_type: "technical",
+      description: item.description ?? null,
+      is_active: true,
+      updated_at: "",
+      archived_at: null,
+      archived_by: null,
+      archive_reason: null,
+      archive_reason_note: null,
+      created_at: "",
+      aliases: item.aliases.map((alias) => ({
+        alias,
+        normalized_alias: normalizeSkillName(alias),
+      })),
+    } satisfies SkillCatalog,
+  };
+}
+
 function formatSalaryRange(min: number | null | undefined, max: number | null | undefined) {
   if (min == null && max == null) return null;
   if (min != null && max != null) {
@@ -284,6 +335,7 @@ function EditableList({
 export function JobAiDraftPanel({
   formHasData,
   currentFormSnapshot,
+  linkedSkills = EMPTY_LINKED_SKILLS,
   onApply,
   onClose,
 }: JobAiDraftPanelProps) {
@@ -348,6 +400,47 @@ export function JobAiDraftPanel({
     () => selectedSuggestedSkillKeys.length,
     [selectedSuggestedSkillKeys],
   );
+
+  const selectedSuggestedSkillItems = useMemo(() => {
+    if (!draft) return [];
+    const selectedKeys = new Set(selectedSuggestedSkillKeys);
+    return draft.suggested_skills.filter((item) => selectedKeys.has(getSuggestedSkillKey(item)));
+  }, [draft, selectedSuggestedSkillKeys]);
+
+  const selectedSuggestedSkillSummary = useMemo(() => {
+    const existing = selectedSuggestedSkillItems.filter((item) => item.catalog_status === "existing");
+    const existingApplicable: ApplicableSkill[] = [];
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+
+    for (const item of existing) {
+      const inferredPriority =
+        item.importance === "differential" ? "complementary" : "priority";
+      const applicable = buildApplicableSkillFromSuggested(item, inferredPriority);
+      if (!applicable) continue;
+
+      const normalizedName = normalizeSkillName(applicable.name);
+      const alreadyLinked = linkedSkills.some((linked) => {
+        if (linked.skill_id === applicable.skill_id) return true;
+        return normalizeSkillName(linked.skill_name) === normalizedName;
+      });
+      if (alreadyLinked || seenIds.has(applicable.skill_id) || seenNames.has(normalizedName)) {
+        continue;
+      }
+
+      seenIds.add(applicable.skill_id);
+      seenNames.add(normalizedName);
+      existingApplicable.push(applicable);
+    }
+
+    return {
+      existingSelected: existing.length,
+      existingApplicable,
+      newSelected: selectedSuggestedSkillItems.filter((item) => item.catalog_status === "new").length,
+      conflictSelected: selectedSuggestedSkillItems.filter((item) => item.catalog_status === "conflict").length,
+      duplicatesSkipped: Math.max(existing.length - existingApplicable.length, 0),
+    };
+  }, [linkedSkills, selectedSuggestedSkillItems]);
 
   const confirmSummary = useMemo(() => {
     if (!draft) return null;
@@ -455,13 +548,14 @@ export function JobAiDraftPanel({
         draft.suggested_skills.length > 0
           ? "Skills sugeridas revisadas não serão aplicadas como catálogo nesta fase."
           : "Nenhuma skill sugerida adicional nesta fase.",
+      selectedSuggestedSkillsSummary: selectedSuggestedSkillSummary,
       operationalFlags: [
         draft.requires_manager_review ? "Requer revisão do gestor" : null,
         draft.requires_behavioral_assessment ? "Requer avaliação comportamental" : null,
       ].filter(Boolean) as string[],
       hasSensitiveDraftData: hasDraftBenefits || hasDraftSalary,
     };
-  }, [currentFormSnapshot, draft]);
+  }, [currentFormSnapshot, draft, selectedSuggestedSkillSummary]);
 
   function toggleSuggestedSkillSelection(item: JobAiDraftSuggestedSkill) {
     const key = getSuggestedSkillKey(item);
@@ -626,7 +720,7 @@ export function JobAiDraftPanel({
     if (!draft) return;
     const updates = applyApiDraftToForm(draft);
     const skills = extractSkillSuggestions(draft);
-    onApply(updates, skills);
+    onApply(updates, skills, selectedSuggestedSkillSummary.existingApplicable);
     setShowConfirm(false);
   }
 
@@ -1174,8 +1268,8 @@ export function JobAiDraftPanel({
                     </div>
                   </div>
                   <p className="text-xs text-text-muted">
-                    A seleção abaixo é apenas visual nesta fase. O botão “Aplicar ao formulário”
-                    continua usando os campos estruturados do rascunho como antes.
+                    Apenas sugestões `existing` selecionadas podem entrar como skills estruturadas.
+                    `new` não cria catálogo automaticamente e `conflict` exige revisão manual.
                   </p>
                 </div>
 
@@ -1275,6 +1369,29 @@ export function JobAiDraftPanel({
                                     </ul>
                                   </details>
                                 )}
+
+                                {item.catalog_status === "new" && isSelected && (
+                                  <p className="text-xs text-warning">
+                                    Nova sugestão selecionada. A criação no catálogo exige etapa futura.
+                                  </p>
+                                )}
+
+                                {item.catalog_status === "conflict" && isSelected && (
+                                  <p className="text-xs text-danger">
+                                    Conflito selecionado. Escolha manualmente a skill correta no catálogo.
+                                  </p>
+                                )}
+
+                                {item.catalog_status === "existing" &&
+                                isSelected &&
+                                selectedSuggestedSkillSummary.existingSelected >
+                                  selectedSuggestedSkillSummary.existingApplicable.length &&
+                                linkedSkills.some((linked) => {
+                                  if (item.catalog_skill_id && linked.skill_id === item.catalog_skill_id) return true;
+                                  return normalizeSkillName(linked.skill_name) === normalizeSkillName(item.catalog_skill_name ?? item.name);
+                                }) ? (
+                                  <p className="text-xs text-text-muted">Skill já estava no formulário.</p>
+                                ) : null}
 
                                 <p className="text-xs text-text-muted">{helperText}</p>
                               </div>
@@ -1447,6 +1564,25 @@ export function JobAiDraftPanel({
                   <SummaryRow label="Screening questions" value={confirmSummary.screeningQuestions} />
                   <SummaryRow label="Suggested skills" value={confirmSummary.suggestedSkillsInfo} />
                 </ul>
+                <div className="mt-4 space-y-2 rounded-xl border border-border bg-background/70 p-3 text-sm">
+                  <p className="text-text">
+                    {confirmSummary.selectedSuggestedSkillsSummary.existingApplicable.length} skills existentes
+                    selecionadas serão aplicadas ao catálogo da vaga.
+                  </p>
+                  <p className="text-text-muted">
+                    {confirmSummary.selectedSuggestedSkillsSummary.newSelected} novas sugestões não serão criadas
+                    automaticamente.
+                  </p>
+                  <p className="text-text-muted">
+                    {confirmSummary.selectedSuggestedSkillsSummary.conflictSelected} conflitos exigem revisão manual.
+                  </p>
+                  {confirmSummary.selectedSuggestedSkillsSummary.duplicatesSkipped > 0 ? (
+                    <p className="text-text-muted">
+                      {confirmSummary.selectedSuggestedSkillsSummary.duplicatesSkipped} skill(s) já estavam no
+                      formulário e não serão duplicadas.
+                    </p>
+                  ) : null}
+                </div>
               </section>
 
               <section className="rounded-xl border border-border bg-surface p-4">

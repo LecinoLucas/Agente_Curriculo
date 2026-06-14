@@ -843,23 +843,114 @@ describe("JobFormPage", () => {
       expect(screen.getByRole("dialog", { name: /Aplicar rascunho da IA\?/i })).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
 
-      expect(mockUpdateForm).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: "Frentista",
-          job_area: "Operação de pista",
-          work_model: "onsite",
-          experience_context: expect.any(String),
-          minimum_years_experience: 1,
-          mandatory_skills: expect.arrayContaining(MOCK_MANDATORY_SKILLS),
-          screening_questions: expect.arrayContaining([
-            "Você tem disponibilidade para trabalhar em escala?",
-          ]),
-        }),
+      await waitFor(() =>
+        expect(mockUpdateForm).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: "Frentista",
+            job_area: "Operação de pista",
+            work_model: "onsite",
+            experience_context: expect.any(String),
+            minimum_years_experience: 1,
+            mandatory_skills: expect.arrayContaining(MOCK_MANDATORY_SKILLS),
+            screening_questions: expect.arrayContaining([
+              "Você tem disponibilidade para trabalhar em escala?",
+            ]),
+          }),
+        ),
+      );
+      expect(mockUpdateForm.mock.calls[0][0].suggested_skills).toBeUndefined();
+      expect(mockHandleAddSkill).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "skill-atendimento", name: "Atendimento ao cliente" }),
+        "priority",
       );
       expect(screen.queryByTestId("ai-draft-panel")).not.toBeInTheDocument();
       expect(
         screen.getByText(/Rascunho aplicado\. Revise antes de salvar\./i),
       ).toBeInTheDocument();
+    });
+
+    it("selected existing com importance differential entra em Diferenciais", async () => {
+      mockGenerateJobAiDraft.mockResolvedValue({
+        ...MOCK_GENERATE_DRAFT_RESPONSE,
+        draft: {
+          ...MOCK_GENERATE_DRAFT_RESPONSE.draft,
+          suggested_skills: [
+            ...MOCK_GENERATE_DRAFT_RESPONSE.draft.suggested_skills,
+            {
+              name: "Experiência anterior com caixa",
+              category: "technical",
+              aliases: ["Caixa varejo"],
+              description: "Vivência prévia com operação de caixa.",
+              importance: "differential",
+              source: "ai_suggested",
+              catalog_status: "existing",
+              catalog_skill_id: "skill-exp-caixa",
+              catalog_skill_name: "Experiência anterior com caixa",
+              catalog_matched_by: ["Experiência anterior com caixa"],
+              catalog_conflicts: [],
+            },
+          ],
+        },
+      });
+
+      await generateDraft();
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+      await waitFor(() =>
+        expect(mockHandleAddSkill).toHaveBeenCalledWith(
+          expect.objectContaining({ id: "skill-exp-caixa", name: "Experiência anterior com caixa" }),
+          "complementary",
+        ),
+      );
+    });
+
+    it("new e conflict não entram como skill estruturada", async () => {
+      mockGenerateJobAiDraft.mockResolvedValue({
+        ...MOCK_GENERATE_DRAFT_RESPONSE,
+        draft: {
+          ...MOCK_GENERATE_DRAFT_RESPONSE.draft,
+          suggested_skills: [
+            ...MOCK_GENERATE_DRAFT_RESPONSE.draft.suggested_skills,
+            {
+              name: "Suporte Protheus",
+              category: "tool",
+              aliases: ["TOTVS Protheus"],
+              description: "Suporte de ERP.",
+              importance: "differential",
+              source: "ai_suggested",
+              catalog_status: "new",
+              catalog_skill_id: null,
+              catalog_skill_name: null,
+              catalog_matched_by: [],
+              catalog_conflicts: [],
+            },
+            {
+              name: "Suporte ERP",
+              category: "business_process",
+              aliases: ["Suporte TOTVS"],
+              description: null,
+              importance: "competency",
+              source: "ai_suggested",
+              catalog_status: "conflict",
+              catalog_skill_id: null,
+              catalog_skill_name: null,
+              catalog_matched_by: ["Suporte TOTVS"],
+              catalog_conflicts: ["Suporte Protheus"],
+            },
+          ],
+        },
+      });
+
+      await generateDraft();
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar ao formulário/i }));
+      fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-new-Suporte Protheus"));
+      fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
+      fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+      await waitFor(() => expect(mockHandleAddSkill).toHaveBeenCalledTimes(1));
+      expect(mockHandleAddSkill).not.toHaveBeenCalledWith(expect.objectContaining({ name: "Suporte Protheus" }), expect.anything());
+      expect(mockHandleAddSkill).not.toHaveBeenCalledWith(expect.objectContaining({ name: "Suporte ERP" }), expect.anything());
     });
 
     it("envia currentFormSnapshot suficiente para a modal comparar valores atuais x IA", async () => {
