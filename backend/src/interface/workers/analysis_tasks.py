@@ -502,15 +502,28 @@ async def _process_analysis_with_session(
 
         resume_text = version.extracted_text
 
-        if not resume_text or not resume_text.strip():
-            raise RuntimeError(
-                "Resume text vazio. Extração de PDF ainda não concluída."
+        if not resume_text or not resume_text.strip() or resume_text.strip() == _PLACEHOLDER_RESUME:
+            now = datetime.now(UTC)
+            analysis.status = "waiting_extraction"
+            analysis.worker_claim_id = None
+            analysis.claimed_at = None
+            analysis.stale_at = None
+            analysis.updated_at = now
+            await record_analysis_audit_event(
+                session,
+                action="analysis_waiting_for_extraction",
+                resource_id=analysis_uuid,
+                user_id=analysis.requested_by,
+                metadata={"task_id": task_id, "worker_id": worker_id},
             )
-
-        if resume_text.strip() == _PLACEHOLDER_RESUME:
-            raise RuntimeError(
-                "Resume text contém placeholder. O PDF ainda não foi extraído."
+            await session.commit()
+            logger.info(
+                "analysis.waiting_for_extraction",
+                analysis_id=str(analysis_uuid),
+                task_id=task_id,
+                worker_id=worker_id,
             )
+            return {"analysis_id": str(analysis_uuid), "status": "waiting_extraction"}
 
         provider = ai_model.provider
         model_id = ai_model.model_id

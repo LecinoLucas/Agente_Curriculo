@@ -578,7 +578,7 @@ async def bulk_retry_analyses(
 ) -> BulkAnalysisActionResponse:
     """Retry multiple failed analyses.
 
-    Only processes analyses with status 'failed'.
+    Only processes analyses with status 'failed' or 'waiting_extraction'.
     """
     from src.infrastructure.database.models.analysis_model import AnalysisModel
     now = datetime.now(UTC)
@@ -590,7 +590,7 @@ async def bulk_retry_analyses(
         analysis = await db.scalar(
             sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
         )
-        if not analysis or analysis.status != "failed":
+        if not analysis or analysis.status not in {"failed", "waiting_extraction"}:
             skipped += 1
             continue
         if _is_rate_limited_analysis_blocked(analysis):
@@ -640,7 +640,7 @@ async def retry_analysis(
 ) -> AnalysisRequestResponse:
     """Reprocess a failed or stuck analysis.
 
-    Can only retry analyses with status 'failed' or 'cancelled'.
+    Can only retry analyses with status 'failed', 'cancelled', or 'waiting_extraction'.
     """
     try:
         from src.infrastructure.database.models.analysis_model import AnalysisModel
@@ -653,10 +653,10 @@ async def retry_analysis(
         if not analysis:
             raise AnalysisNotFoundError
 
-        if analysis.status not in {"failed", "cancelled"}:
+        if analysis.status not in {"failed", "cancelled", "waiting_extraction"}:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Cannot retry analysis in status '{analysis.status}'. Only 'failed' or 'cancelled' analyses can be retried.",
+                detail=f"Cannot retry analysis in status '{analysis.status}'. Only 'failed', 'cancelled', or 'waiting_extraction' analyses can be retried.",
             )
 
         if _is_rate_limited_analysis_blocked(analysis):

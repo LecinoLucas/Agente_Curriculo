@@ -26,6 +26,7 @@ from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.interface.api.routers.analyses import request_analysis
 from src.interface.workers.analysis_tasks import (
+    _PLACEHOLDER_RESUME,
     _claim_analysis_for_processing,
     _process_analysis_with_session,
 )
@@ -577,3 +578,43 @@ async def test_list_global_marks_expired_processing_claim_failed(db_session: Asy
     item = next(item for item in items if item.id == analysis.id)
     assert item.stuck is True
     assert item.reason == "analysis_worker_claim_expired"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "extracted_text",
+    [None, "   ", _PLACEHOLDER_RESUME],
+    ids=["none", "whitespace_only", "placeholder_string"],
+)
+async def test_worker_sets_waiting_extraction_when_text_not_ready(
+    db_session: AsyncSession,
+    extracted_text: str | None,
+) -> None:
+    """When resume_text is absent or placeholder, the worker must park the analysis
+    at waiting_extraction without calling the AI provider."""
+    _, _, _, analysis = await _seed_retry_scheduled_analysis(
+        db_session,
+        extracted_text=extracted_text,
+    )
+
+    result = await _process_analysis_with_session(
+        analysis_id=str(analysis.id),
+        task_id="task-gate-1",
+        sessionmaker=TestSessionFactory,
+    )
+
+    assert result == {"analysis_id": str(analysis.id), "status": "waiting_extraction"}
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "waiting_extraction"
+    assert analysis.worker_claim_id is None
+    assert analysis.claimed_at is None
+    assert analysis.stale_at is None
+
+    audit = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == analysis.id,
+            AuditLogModel.action == "analysis_waiting_for_extraction",
+        )
+    )
+    assert audit is not None

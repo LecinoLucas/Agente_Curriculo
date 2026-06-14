@@ -21,7 +21,7 @@ const SAFE_FAILURE_BY_TYPE: Record<string, string> = {
   connection_error: "Falha temporária de conexão com o provedor IA.",
   provider_unavailable: "Provedor IA temporariamente indisponível.",
   provider_http_error: "Falha temporária no provedor IA.",
-  unexpected_error: "Falha inesperada na IA comportamental.",
+  unexpected_error: "Falha inesperada.",
 };
 
 export function fmtDate(iso: string | null): string {
