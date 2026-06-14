@@ -2,6 +2,23 @@ import { expect, test } from "@playwright/test";
 
 test.describe("Job AI Draft Skills E2E Flow", () => {
   const MOCK_JOB_ID = "00000000-0000-0000-0000-000000000001";
+  const unexpectedErrors: string[] = [];
+
+  test.beforeEach(({ page }) => {
+    unexpectedErrors.length = 0;
+    page.on("response", response => {
+      const url = response.url();
+      const status = response.status();
+      if (status >= 400 && url.includes("/api/v1/")) {
+        unexpectedErrors.push(`${response.request().method()} ${url} -> ${status}`);
+      }
+    });
+  });
+
+  test.afterEach(() => {
+    expect(unexpectedErrors, `Unexpected API errors found: ${unexpectedErrors.join(", ")}`).toEqual([]);
+  });
+
   const MOCK_DRAFT_RESPONSE = {
     draft: {
       title: "Desenvolvedor Fullstack Senior",
@@ -76,14 +93,41 @@ test.describe("Job AI Draft Skills E2E Flow", () => {
   };
 
   test("deve validar o fluxo completo de skills sugeridas pela IA", async ({ page }) => {
-    page.on("console", msg => {
-      if (msg.type() === "error") console.log(`FE Error: ${msg.text()}`);
-      else console.log(`FE Log: ${msg.text()}`);
-    });
-
     // 1. Mocks de rede
     await page.route("**/api/v1/jobs/ai-draft/generate", async (route) => {
       await route.fulfill({ json: MOCK_DRAFT_RESPONSE });
+    });
+
+    await page.route(`**/api/v1/jobs/${MOCK_JOB_ID}`, async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          json: {
+            id: MOCK_JOB_ID,
+            title: "Desenvolvedor Fullstack Senior",
+            area: "Tecnologia",
+            description: "Vaga para atuar em projetos críticos utilizando tecnologias modernas.",
+            status: "draft"
+          }
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await page.route(`**/api/v1/jobs/${MOCK_JOB_ID}/quality`, async (route) => {
+      await route.fulfill({
+        json: {
+          job_id: MOCK_JOB_ID,
+          quality_score: 80,
+          status: "good",
+          can_publish: true,
+          publication_blockers: [],
+          missing_fields: [],
+          suggestions: [],
+          warnings: [],
+          validation_errors: []
+        }
+      });
     });
 
     await page.route("**/api/v1/skills?search=*", async (route) => {
