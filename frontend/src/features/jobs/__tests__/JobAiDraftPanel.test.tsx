@@ -483,14 +483,52 @@ describe("JobAiDraftPanel — API real", () => {
     await generateAndWaitForDraft();
 
     const block = screen.getByTestId("draft-suggested-skills");
-    expect(block).toHaveTextContent(/Skills sugeridas com aliases/i);
+    expect(block).toHaveTextContent(/Revisão de skills sugeridas/i);
+    expect(block).toHaveTextContent(/A criação de novas skills no catálogo não é automática/i);
     expect(block).toHaveTextContent(/Atendimento ao cliente/i);
     expect(block).toHaveTextContent(/Atendimento ao público/i);
     expect(block).toHaveTextContent(/Existente no catálogo/i);
+    expect(block).toHaveTextContent(/Pode ser usada com segurança no matching IA/i);
     expect(block).toHaveTextContent(/Suporte Protheus/i);
     expect(block).toHaveTextContent(/Nova sugestão/i);
+    expect(block).toHaveTextContent(/Não será criada automaticamente no catálogo/i);
     expect(block).toHaveTextContent(/Suporte ERP/i);
-    expect(block).toHaveTextContent(/Possível conflito/i);
+    expect(block).toHaveTextContent(/Conflito — revisar/i);
+    expect(block).toHaveTextContent(/Atendimento ERP/i);
+    expect(screen.getByTestId("draft-suggested-skills-summary")).toHaveTextContent(
+      /Existentes selecionadas/i,
+    );
+  });
+
+  it("seleciona existing por padrão e deixa new/conflict desmarcadas de forma visual", async () => {
+    await generateAndWaitForDraft();
+
+    expect(
+      screen.getByTestId("draft-suggested-skill-checkbox-existing-Atendimento ao cliente"),
+    ).toBeChecked();
+    expect(
+      screen.getByTestId("draft-suggested-skill-checkbox-new-Suporte Protheus"),
+    ).not.toBeChecked();
+    expect(
+      screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"),
+    ).not.toBeChecked();
+    expect(screen.getByText(/seleção abaixo é apenas visual nesta fase/i)).toBeInTheDocument();
+  });
+
+  it("não quebra quando o draft não traz suggested_skills", async () => {
+    mockGenerateJobAiDraft.mockResolvedValue({
+      ...MOCK_API_RESPONSE,
+      draft: {
+        ...MOCK_API_RESPONSE.draft,
+        suggested_skills: [],
+      },
+    });
+    renderPanel();
+    fillAndSubmit();
+
+    await screen.findByTestId("ai-draft-result");
+    expect(screen.queryByTestId("draft-suggested-skills")).not.toBeInTheDocument();
+    expect(screen.getByTestId("ai-draft-apply-btn")).toBeInTheDocument();
   });
 
   it("exibe warnings novos de forma legível", async () => {
@@ -584,6 +622,8 @@ describe("JobAiDraftPanel — API real", () => {
 
   it("aplica o rascunho real ao formulário quando o formulário está vazio", async () => {
     const { onApply } = await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-new-Suporte Protheus"));
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
     fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
 
     expect(onApply).toHaveBeenCalledWith(
@@ -600,6 +640,18 @@ describe("JobAiDraftPanel — API real", () => {
         optional: expect.arrayContaining(["Experiência em varejo"]),
       }),
     );
+  });
+
+  it("não cria skill automaticamente nem resolve conflito ao aplicar", async () => {
+    const { onApply } = await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    const [updates, skills] = onApply.mock.calls[0];
+    expect(updates.mandatory_skills).toEqual(
+      expect.arrayContaining(["Atendimento ao cliente", "Responsabilidade com caixa"]),
+    );
+    expect(skills.mandatory).not.toEqual(expect.arrayContaining(["Suporte Protheus", "Suporte ERP"]));
   });
 
   it("não mapeia salary para o formulário", async () => {

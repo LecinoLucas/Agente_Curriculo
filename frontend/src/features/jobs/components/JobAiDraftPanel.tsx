@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Info, Loader2, Plus, ShieldAlert, Sparkles, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,7 @@ function SuggestedSkillStatusBadge({
     status === "existing"
       ? { label: "Existente no catálogo", className: "bg-success-soft text-success" }
       : status === "conflict"
-        ? { label: "Possível conflito", className: "bg-danger-soft text-danger" }
+        ? { label: "Conflito — revisar", className: "bg-danger-soft text-danger" }
         : { label: "Nova sugestão", className: "bg-warning-soft text-warning" };
 
   return (
@@ -76,6 +76,21 @@ function SuggestedSkillStatusBadge({
       {config.label}
     </span>
   );
+}
+
+function getSuggestedSkillKey(item: JobAiDraftSuggestedSkill) {
+  return [
+    item.name,
+    item.importance,
+    item.catalog_status,
+    item.catalog_skill_id ?? item.catalog_skill_name ?? "catalog-skill",
+  ].join("::");
+}
+
+function formatSuggestedSkillImportance(importance: JobAiDraftSuggestedSkill["importance"]) {
+  if (importance === "essential") return "Essencial";
+  if (importance === "differential") return "Diferencial";
+  return "Competência";
 }
 
 function EditableList({
@@ -148,6 +163,7 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
   const [extractedText, setExtractedText] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [selectedSuggestedSkillKeys, setSelectedSuggestedSkillKeys] = useState<string[]>([]);
 
   const isLoading = aiStatus === "loading";
   const hasDraft = draft !== null;
@@ -171,19 +187,38 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
     ].filter(Boolean) as { label: string; variant: "outline" | "secondary" }[];
   }, [draft]);
 
-  const suggestedSkillGroups = useMemo(() => {
-    const groups: Record<"essential" | "differential" | "competency", JobAiDraftSuggestedSkill[]> = {
-      essential: [],
-      differential: [],
-      competency: [],
+  const suggestedSkillReviewGroups = useMemo(() => {
+    const groups: Record<"existing" | "new" | "conflict", JobAiDraftSuggestedSkill[]> = {
+      existing: [],
+      new: [],
+      conflict: [],
     };
 
     for (const item of draft?.suggested_skills ?? []) {
-      groups[item.importance].push(item);
+      groups[item.catalog_status].push(item);
     }
 
     return groups;
   }, [draft]);
+
+  useEffect(() => {
+    const defaults = (draft?.suggested_skills ?? [])
+      .filter((item) => item.catalog_status === "existing")
+      .map((item) => getSuggestedSkillKey(item));
+    setSelectedSuggestedSkillKeys(defaults);
+  }, [draft]);
+
+  const selectedSuggestedSkillCount = useMemo(
+    () => selectedSuggestedSkillKeys.length,
+    [selectedSuggestedSkillKeys],
+  );
+
+  function toggleSuggestedSkillSelection(item: JobAiDraftSuggestedSkill) {
+    const key = getSuggestedSkillKey(item);
+    setSelectedSuggestedSkillKeys((current) =>
+      current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
+    );
+  }
 
   async function handleGenerate() {
     if (!prompt.trim()) {
@@ -862,73 +897,145 @@ export function JobAiDraftPanel({ formHasData, onApply, onClose }: JobAiDraftPan
                 className="space-y-4 rounded-xl border border-border bg-surface px-4 py-4"
                 data-testid="draft-suggested-skills"
               >
-                <div className="space-y-1">
-                  <SectionTitle>Skills sugeridas com aliases</SectionTitle>
+                <div className="space-y-2">
+                  <SectionTitle>Revisão de skills sugeridas</SectionTitle>
                   <p className="text-sm text-text-muted">
-                    A IA sugeriu aliases e o backend comparou cada skill com o catálogo atual.
+                    As skills sugeridas ajudam a revisar o rascunho gerado pela IA. A criação de
+                    novas skills no catálogo não é automática.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-3" data-testid="draft-suggested-skills-summary">
+                    <div className="rounded-xl border border-success/20 bg-success-soft/60 px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-success">
+                        Existentes selecionadas
+                      </p>
+                      <p className="mt-1 text-lg font-semibold text-text">{selectedSuggestedSkillCount}</p>
+                    </div>
+                    <div className="rounded-xl border border-warning/20 bg-warning-soft/60 px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-warning">
+                        Novas sugestões
+                      </p>
+                      <p className="mt-1 text-lg font-semibold text-text">
+                        {suggestedSkillReviewGroups.new.length}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-danger/20 bg-danger-soft/60 px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">
+                        Conflitos
+                      </p>
+                      <p className="mt-1 text-lg font-semibold text-text">
+                        {suggestedSkillReviewGroups.conflict.length}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-text-muted">
+                    A seleção abaixo é apenas visual nesta fase. O botão “Aplicar ao formulário”
+                    continua usando os campos estruturados do rascunho como antes.
                   </p>
                 </div>
 
                 {(
                   [
-                    ["essential", "Essenciais"],
-                    ["differential", "Diferenciais"],
-                    ["competency", "Competências"],
+                    [
+                      "existing",
+                      "Encontradas no catálogo",
+                      "Encontrada no catálogo. Pode ser usada com segurança no matching IA.",
+                    ],
+                    [
+                      "new",
+                      "Novas sugestões",
+                      "Nova sugestão. Não será criada automaticamente no catálogo.",
+                    ],
+                    [
+                      "conflict",
+                      "Conflitos",
+                      "Conflito de catálogo. Escolha manualmente a skill correta antes de confiar no matching.",
+                    ],
                   ] as const
-                ).map(([importance, label]) => {
-                  const items = suggestedSkillGroups[importance];
+                ).map(([status, label, helperText]) => {
+                  const items = suggestedSkillReviewGroups[status];
                   if (items.length === 0) return null;
 
                   return (
-                    <div key={importance} className="space-y-2">
+                    <div key={status} className="space-y-2">
                       <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                         {label} ({items.length})
                       </p>
-                      <div className="space-y-3">
-                        {items.map((item) => (
+                      <div className="space-y-3" data-testid={`draft-suggested-skills-group-${status}`}>
+                        {items.map((item) => {
+                          const itemKey = getSuggestedSkillKey(item);
+                          const isSelected = selectedSuggestedSkillKeys.includes(itemKey);
+
+                          return (
                           <div
-                            key={`${importance}-${item.name}`}
+                            key={itemKey}
                             className="rounded-xl border border-border bg-background px-3 py-3"
                             data-testid={`draft-suggested-skill-${item.catalog_status}`}
                           >
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-sm font-semibold text-text">{item.name}</p>
-                                  <Badge variant="outline" className="rounded-md px-2 py-0.5 text-[11px]">
-                                    {item.category}
-                                  </Badge>
+                            <div className="flex items-start gap-3">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSuggestedSkillSelection(item)}
+                                className="mt-1 h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
+                                aria-label={`Selecionar skill sugerida ${item.name}`}
+                                data-testid={`draft-suggested-skill-checkbox-${item.catalog_status}-${item.name}`}
+                              />
+                              <div className="min-w-0 flex-1 space-y-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                  <div className="space-y-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm font-semibold text-text">{item.name}</p>
+                                      <Badge variant="outline" className="rounded-md px-2 py-0.5 text-[11px]">
+                                        {item.category}
+                                      </Badge>
+                                      <Badge variant="secondary" className="rounded-md px-2 py-0.5 text-[11px]">
+                                        {formatSuggestedSkillImportance(item.importance)}
+                                      </Badge>
+                                    </div>
+                                    {item.description && (
+                                      <p className="text-sm text-text-muted">{item.description}</p>
+                                    )}
+                                  </div>
+                                  <SuggestedSkillStatusBadge status={item.catalog_status} />
                                 </div>
-                                {item.description && (
-                                  <p className="text-sm text-text-muted">{item.description}</p>
+
+                                {item.aliases.length > 0 && (
+                                  <div className="space-y-1">
+                                    <p className="text-xs font-medium text-text-muted">Aliases sugeridos</p>
+                                    <ChipList items={item.aliases} />
+                                  </div>
                                 )}
+
+                                {item.catalog_status === "existing" && item.catalog_skill_name && (
+                                  <div className="space-y-1 text-xs text-success">
+                                    <p>
+                                      Nome no catálogo: <span className="font-semibold">{item.catalog_skill_name}</span>
+                                    </p>
+                                    {item.catalog_matched_by.length > 0 && (
+                                      <p>Correspondência: {item.catalog_matched_by.join(", ")}</p>
+                                    )}
+                                  </div>
+                                )}
+
+                                {item.catalog_status === "conflict" && item.catalog_conflicts.length > 0 && (
+                                  <details className="rounded-lg border border-danger/20 bg-danger-soft/50 px-3 py-2 text-xs text-danger">
+                                    <summary className="cursor-pointer font-medium">
+                                      Possíveis matches no catálogo ({item.catalog_conflicts.length})
+                                    </summary>
+                                    <ul className="mt-2 list-disc space-y-1 pl-4">
+                                      {item.catalog_conflicts.map((conflict) => (
+                                        <li key={conflict}>{conflict}</li>
+                                      ))}
+                                    </ul>
+                                  </details>
+                                )}
+
+                                <p className="text-xs text-text-muted">{helperText}</p>
                               </div>
-                              <SuggestedSkillStatusBadge status={item.catalog_status} />
                             </div>
-
-                            {item.aliases.length > 0 && (
-                              <div className="mt-3 space-y-1">
-                                <p className="text-xs font-medium text-text-muted">Aliases sugeridos</p>
-                                <ChipList items={item.aliases} />
-                              </div>
-                            )}
-
-                            {item.catalog_status === "existing" && item.catalog_skill_name && (
-                              <p className="mt-3 text-xs text-success">
-                                Correspondência no catálogo: {item.catalog_skill_name}
-                                {item.catalog_matched_by.length > 0
-                                  ? ` (${item.catalog_matched_by.join(", ")})`
-                                  : ""}
-                              </p>
-                            )}
-
-                            {item.catalog_status === "conflict" && item.catalog_conflicts.length > 0 && (
-                              <p className="mt-3 text-xs text-danger">
-                                Possível conflito com: {item.catalog_conflicts.join(", ")}
-                              </p>
-                            )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
