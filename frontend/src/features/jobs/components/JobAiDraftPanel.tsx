@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusPill } from "@/components/ui/status-pill";
-import type { SkillCatalog } from "@/services/skillsService";
+import { skillsService, type SkillCatalog } from "@/services/skillsService";
 import type { JobFormValues } from "../jobFormConfig";
 import type { JobSkill } from "@/types/domain";
 import {
@@ -234,36 +234,34 @@ function normalizeSkillName(value: string | null | undefined): string {
 
 function buildApplicableSkillFromSuggested(
   item: JobAiDraftSuggestedSkill,
+  skill: SkillCatalog,
   priority: "priority" | "complementary",
 ): ApplicableSkill | null {
-  if (item.catalog_status !== "existing" || !item.catalog_skill_id || !item.catalog_skill_name) {
+  if (!skill.id || !skill.name) {
     return null;
   }
 
   return {
-    name: item.catalog_skill_name,
-    skill_id: item.catalog_skill_id,
+    name: skill.name,
+    skill_id: skill.id,
     priority,
-    skill: {
-      id: item.catalog_skill_id,
-      name: item.catalog_skill_name,
-      normalized_name: normalizeSkillName(item.catalog_skill_name),
-      category: item.category,
-      catalog_type: "technical",
-      description: item.description ?? null,
-      is_active: true,
-      updated_at: "",
-      archived_at: null,
-      archived_by: null,
-      archive_reason: null,
-      archive_reason_note: null,
-      created_at: "",
-      aliases: item.aliases.map((alias) => ({
-        alias,
-        normalized_alias: normalizeSkillName(alias),
-      })),
-    } satisfies SkillCatalog,
+    skill,
   };
+}
+
+function findExactSkillMatch(name: string, candidates: SkillCatalog[]): SkillCatalog | null {
+  const normalized = normalizeSkillName(name);
+  return (
+    candidates.find((skill) => {
+      if (normalizeSkillName(skill.name) === normalized) return true;
+      if (normalizeSkillName(skill.normalized_name) === normalized) return true;
+      return skill.aliases.some(
+        (alias) =>
+          normalizeSkillName(alias.alias) === normalized ||
+          normalizeSkillName(alias.normalized_alias) === normalized,
+      );
+    }) ?? null
+  );
 }
 
 function formatSalaryRange(min: number | null | undefined, max: number | null | undefined) {
@@ -352,6 +350,8 @@ export function JobAiDraftPanel({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [selectedSuggestedSkillKeys, setSelectedSuggestedSkillKeys] = useState<string[]>([]);
+  const [conflictCatalogOptions, setConflictCatalogOptions] = useState<Record<string, SkillCatalog[]>>({});
+  const [selectedConflictResolution, setSelectedConflictResolution] = useState<Record<string, string>>({});
 
   const isLoading = aiStatus === "loading";
   const hasDraft = draft !== null;
@@ -394,12 +394,51 @@ export function JobAiDraftPanel({
       .filter((item) => item.catalog_status === "existing")
       .map((item) => getSuggestedSkillKey(item));
     setSelectedSuggestedSkillKeys(defaults);
+    setSelectedConflictResolution({});
+    setConflictCatalogOptions({});
   }, [draft]);
 
-  const selectedSuggestedSkillCount = useMemo(
-    () => selectedSuggestedSkillKeys.length,
-    [selectedSuggestedSkillKeys],
-  );
+  useEffect(() => {
+    const conflictItems = (draft?.suggested_skills ?? []).filter(
+      (item) => item.catalog_status === "conflict" && item.catalog_conflicts.length > 0,
+    );
+    if (conflictItems.length === 0) return;
+
+    let cancelled = false;
+
+    void Promise.all(
+      conflictItems.map(async (item) => {
+        const options: SkillCatalog[] = [];
+        const seen = new Set<string>();
+
+        for (const conflictName of item.catalog_conflicts) {
+          try {
+            const response = await skillsService.listSkills({
+              search: conflictName,
+              page_size: 10,
+              is_active: true,
+            });
+            const match = findExactSkillMatch(conflictName, response.data);
+            if (match && !seen.has(match.id)) {
+              seen.add(match.id);
+              options.push(match);
+            }
+          } catch {
+            // Keep manual resolution unavailable if lookup fails.
+          }
+        }
+
+        return [getSuggestedSkillKey(item), options] as const;
+      }),
+    ).then((resolved) => {
+      if (cancelled) return;
+      setConflictCatalogOptions(Object.fromEntries(resolved));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft]);
 
   const selectedSuggestedSkillItems = useMemo(() => {
     if (!draft) return [];
@@ -410,13 +449,38 @@ export function JobAiDraftPanel({
   const selectedSuggestedSkillSummary = useMemo(() => {
     const existing = selectedSuggestedSkillItems.filter((item) => item.catalog_status === "existing");
     const existingApplicable: ApplicableSkill[] = [];
+    const resolvedConflictApplicable: Array<ApplicableSkill & { suggestedName: string }> = [];
     const seenIds = new Set<string>();
     const seenNames = new Set<string>();
 
     for (const item of existing) {
       const inferredPriority =
         item.importance === "differential" ? "complementary" : "priority";
-      const applicable = buildApplicableSkillFromSuggested(item, inferredPriority);
+      if (!item.catalog_skill_id || !item.catalog_skill_name) continue;
+      const applicable = buildApplicableSkillFromSuggested(
+        item,
+        {
+          id: item.catalog_skill_id,
+          name: item.catalog_skill_name,
+          normalized_name: normalizeSkillName(item.catalog_skill_name),
+          category: item.category,
+          catalog_type: "technical",
+          description: item.description ?? null,
+          is_active: true,
+          updated_at: "",
+          archived_at: null,
+          archived_by: null,
+          archive_reason: null,
+          archive_reason_note: null,
+          created_at: "",
+          aliases: item.aliases.map((alias, index) => ({
+            id: `${item.catalog_skill_id}-alias-${index}`,
+            alias,
+            normalized_alias: normalizeSkillName(alias),
+          })),
+        },
+        inferredPriority,
+      );
       if (!applicable) continue;
 
       const normalizedName = normalizeSkillName(applicable.name);
@@ -433,14 +497,53 @@ export function JobAiDraftPanel({
       existingApplicable.push(applicable);
     }
 
+    const selectedConflicts = selectedSuggestedSkillItems.filter((item) => item.catalog_status === "conflict");
+    let unresolvedConflictSelected = 0;
+
+    for (const item of selectedConflicts) {
+      const itemKey = getSuggestedSkillKey(item);
+      const resolvedSkillId = selectedConflictResolution[itemKey];
+      const options = conflictCatalogOptions[itemKey] ?? [];
+      const resolvedSkill = options.find((option) => option.id === resolvedSkillId);
+      if (!resolvedSkill) {
+        unresolvedConflictSelected += 1;
+        continue;
+      }
+
+      const inferredPriority =
+        item.importance === "differential" ? "complementary" : "priority";
+      const applicable = buildApplicableSkillFromSuggested(item, resolvedSkill, inferredPriority);
+      if (!applicable) continue;
+
+      const normalizedName = normalizeSkillName(applicable.name);
+      const alreadyLinked = linkedSkills.some((linked) => {
+        if (linked.skill_id === applicable.skill_id) return true;
+        return normalizeSkillName(linked.skill_name) === normalizedName;
+      });
+      if (alreadyLinked || seenIds.has(applicable.skill_id) || seenNames.has(normalizedName)) {
+        continue;
+      }
+
+      seenIds.add(applicable.skill_id);
+      seenNames.add(normalizedName);
+      resolvedConflictApplicable.push({ ...applicable, suggestedName: item.name });
+    }
+
     return {
       existingSelected: existing.length,
       existingApplicable,
+      conflictResolvedApplicable: resolvedConflictApplicable,
       newSelected: selectedSuggestedSkillItems.filter((item) => item.catalog_status === "new").length,
       conflictSelected: selectedSuggestedSkillItems.filter((item) => item.catalog_status === "conflict").length,
-      duplicatesSkipped: Math.max(existing.length - existingApplicable.length, 0),
+      unresolvedConflictSelected,
+      duplicatesSkipped:
+        Math.max(existing.length - existingApplicable.length, 0) +
+        Math.max(
+          selectedConflicts.length - unresolvedConflictSelected - resolvedConflictApplicable.length,
+          0,
+        ),
     };
-  }, [linkedSkills, selectedSuggestedSkillItems]);
+  }, [conflictCatalogOptions, linkedSkills, selectedConflictResolution, selectedSuggestedSkillItems]);
 
   const confirmSummary = useMemo(() => {
     if (!draft) return null;
@@ -559,9 +662,22 @@ export function JobAiDraftPanel({
 
   function toggleSuggestedSkillSelection(item: JobAiDraftSuggestedSkill) {
     const key = getSuggestedSkillKey(item);
+    const isCurrentlySelected = selectedSuggestedSkillKeys.includes(key);
     setSelectedSuggestedSkillKeys((current) =>
       current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
     );
+    if (item.catalog_status === "conflict" && isCurrentlySelected) {
+      setSelectedConflictResolution((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
+  function updateConflictResolution(item: JobAiDraftSuggestedSkill, skillId: string) {
+    const key = getSuggestedSkillKey(item);
+    setSelectedConflictResolution((current) => ({ ...current, [key]: skillId }));
   }
 
   async function handleGenerate() {
@@ -720,7 +836,10 @@ export function JobAiDraftPanel({
     if (!draft) return;
     const updates = applyApiDraftToForm(draft);
     const skills = extractSkillSuggestions(draft);
-    onApply(updates, skills, selectedSuggestedSkillSummary.existingApplicable);
+    onApply(updates, skills, [
+      ...selectedSuggestedSkillSummary.existingApplicable,
+      ...selectedSuggestedSkillSummary.conflictResolvedApplicable,
+    ]);
     setShowConfirm(false);
   }
 
@@ -1248,7 +1367,9 @@ export function JobAiDraftPanel({
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-success">
                         Existentes selecionadas
                       </p>
-                      <p className="mt-1 text-lg font-semibold text-text">{selectedSuggestedSkillCount}</p>
+                      <p className="mt-1 text-lg font-semibold text-text">
+                        {selectedSuggestedSkillSummary.existingSelected}
+                      </p>
                     </div>
                     <div className="rounded-xl border border-warning/20 bg-warning-soft/60 px-3 py-2">
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-warning">
@@ -1358,16 +1479,46 @@ export function JobAiDraftPanel({
                                 )}
 
                                 {item.catalog_status === "conflict" && item.catalog_conflicts.length > 0 && (
-                                  <details className="rounded-lg border border-danger/20 bg-danger-soft/50 px-3 py-2 text-xs text-danger">
-                                    <summary className="cursor-pointer font-medium">
-                                      Possíveis matches no catálogo ({item.catalog_conflicts.length})
-                                    </summary>
-                                    <ul className="mt-2 list-disc space-y-1 pl-4">
-                                      {item.catalog_conflicts.map((conflict) => (
-                                        <li key={conflict}>{conflict}</li>
-                                      ))}
-                                    </ul>
-                                  </details>
+                                  <div className="rounded-lg border border-danger/20 bg-danger-soft/50 px-3 py-3 text-xs text-danger">
+                                    <p className="font-medium">
+                                      Escolha manualmente qual skill do catálogo representa esta sugestão. O
+                                      sistema não resolve conflitos sozinho.
+                                    </p>
+                                    <div className="mt-3 space-y-2">
+                                      {(conflictCatalogOptions[itemKey] ?? []).map((conflictOption) => {
+                                        const selectedOptionId = selectedConflictResolution[itemKey];
+                                        const checked = selectedOptionId === conflictOption.id;
+                                        return (
+                                          <label
+                                            key={conflictOption.id}
+                                            className="flex cursor-pointer items-start gap-2 rounded-lg border border-danger/20 bg-background px-3 py-2 text-text"
+                                          >
+                                            <input
+                                              type="radio"
+                                              name={`conflict-resolution-${itemKey}`}
+                                              checked={checked}
+                                              onChange={() => updateConflictResolution(item, conflictOption.id)}
+                                              disabled={!isSelected}
+                                              data-testid={`draft-suggested-skill-conflict-option-${item.name}-${conflictOption.id}`}
+                                            />
+                                            <span className="min-w-0">
+                                              <span className="block font-medium">{conflictOption.name}</span>
+                                              {conflictOption.category ? (
+                                                <span className="block text-xs text-text-muted">
+                                                  Categoria: {conflictOption.category}
+                                                </span>
+                                              ) : null}
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                      {(conflictCatalogOptions[itemKey] ?? []).length === 0 ? (
+                                        <p className="text-xs text-danger">
+                                          Nenhuma opção válida do catálogo pôde ser carregada para este conflito.
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  </div>
                                 )}
 
                                 {item.catalog_status === "new" && isSelected && (
@@ -1378,7 +1529,9 @@ export function JobAiDraftPanel({
 
                                 {item.catalog_status === "conflict" && isSelected && (
                                   <p className="text-xs text-danger">
-                                    Conflito selecionado. Escolha manualmente a skill correta no catálogo.
+                                    {selectedConflictResolution[itemKey]
+                                      ? "Conflito resolvido manualmente. A skill escolhida poderá ser aplicada."
+                                      : "Conflito não resolvido. Escolha uma skill do catálogo para aplicar."}
                                   </p>
                                 )}
 
@@ -1567,15 +1720,25 @@ export function JobAiDraftPanel({
                 <div className="mt-4 space-y-2 rounded-xl border border-border bg-background/70 p-3 text-sm">
                   <p className="text-text">
                     {confirmSummary.selectedSuggestedSkillsSummary.existingApplicable.length} skills existentes
-                    selecionadas serão aplicadas ao catálogo da vaga.
+                    serão aplicadas.
                   </p>
                   <p className="text-text-muted">
                     {confirmSummary.selectedSuggestedSkillsSummary.newSelected} novas sugestões não serão criadas
                     automaticamente.
                   </p>
                   <p className="text-text-muted">
-                    {confirmSummary.selectedSuggestedSkillsSummary.conflictSelected} conflitos exigem revisão manual.
+                    {confirmSummary.selectedSuggestedSkillsSummary.conflictResolvedApplicable.length} conflitos
+                    resolvidos manualmente serão aplicados.
                   </p>
+                  <p className="text-text-muted">
+                    {confirmSummary.selectedSuggestedSkillsSummary.unresolvedConflictSelected} conflitos ainda
+                    exigem revisão.
+                  </p>
+                  {confirmSummary.selectedSuggestedSkillsSummary.conflictResolvedApplicable.map((item) => (
+                    <p key={`${item.skill_id}-${item.suggestedName}`} className="text-text-muted">
+                      {item.suggestedName} {"->"} {item.name}
+                    </p>
+                  ))}
                   {confirmSummary.selectedSuggestedSkillsSummary.duplicatesSkipped > 0 ? (
                     <p className="text-text-muted">
                       {confirmSummary.selectedSuggestedSkillsSummary.duplicatesSkipped} skill(s) já estavam no

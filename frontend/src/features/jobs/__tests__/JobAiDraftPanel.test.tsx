@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { skillsService, type SkillCatalog } from "@/services/skillsService";
 
 import { JobAiDraftPanel, draftToFormUpdates } from "../components/JobAiDraftPanel";
 import { MOCK_JOB_AI_DRAFT } from "../utils/mockJobAiDraft";
@@ -31,10 +32,42 @@ vi.mock("../services/jobAiDraftService", async (importOriginal) => {
   };
 });
 
+vi.mock("@/services/skillsService", () => ({
+  skillsService: {
+    listSkills: vi.fn(),
+  },
+}));
+
 import { generateJobAiDraft, generateJobAiDraftFromImage } from "../services/jobAiDraftService";
 
 const mockGenerateJobAiDraft = generateJobAiDraft as ReturnType<typeof vi.fn>;
 const mockGenerateJobAiDraftFromImage = generateJobAiDraftFromImage as ReturnType<typeof vi.fn>;
+const mockListSkills = vi.mocked(skillsService.listSkills);
+
+function skill(name: string, id = name.toLowerCase().replace(/\s+/g, "-")): SkillCatalog {
+  return {
+    id,
+    name,
+    normalized_name: name.toLowerCase(),
+    category: "Atendimento",
+    catalog_type: "technical",
+    description: null,
+    is_active: true,
+    updated_at: "2026-01-01T00:00:00Z",
+    archived_at: null,
+    archived_by: null,
+    archive_reason: null,
+    archive_reason_note: null,
+    created_at: "2026-01-01T00:00:00Z",
+    aliases: [],
+  };
+}
+
+const MOCK_SKILL_CATALOG = [
+  skill("Suporte Protheus", "skill-protheus"),
+  skill("Atendimento ERP", "skill-atendimento-erp"),
+  skill("Atendimento ao cliente", "skill-atendimento"),
+];
 
 /** Minimal valid API response matching the real backend shape. */
 const MOCK_API_RESPONSE: JobAiDraftGenerateResponse = {
@@ -394,6 +427,20 @@ describe("JobAiDraftPanel — API real", () => {
   beforeEach(() => {
     mockGenerateJobAiDraft.mockReset();
     mockGenerateJobAiDraftFromImage.mockReset();
+    mockListSkills.mockReset();
+    mockListSkills.mockImplementation(async ({ search }) => {
+      const term = String(search ?? "").trim().toLowerCase();
+      const data = MOCK_SKILL_CATALOG.filter(
+        (item) => item.name.toLowerCase() === term || item.normalized_name === term,
+      );
+      return {
+        data,
+        total: data.length,
+        page: 1,
+        page_size: 10,
+        total_pages: 1,
+      };
+    });
   });
 
   function renderPanel(
@@ -731,7 +778,23 @@ describe("JobAiDraftPanel — API real", () => {
     await generateAndWaitForDraft(false);
     fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
 
-    expect(screen.getByText(/Conflito selecionado\. Escolha manualmente a skill correta no catálogo\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Conflito não resolvido\. Escolha uma skill do catálogo para aplicar\./i)).toBeInTheDocument();
+  });
+
+  it("conflict mostra opções de catalog_conflicts", async () => {
+    await generateAndWaitForDraft(false);
+
+    expect(screen.getByText(/Escolha manualmente qual skill do catálogo representa esta sugestão\./i)).toBeInTheDocument();
+    expect(screen.getByTestId("draft-suggested-skill-conflict-option-Suporte ERP-skill-protheus")).toBeInTheDocument();
+    expect(screen.getByTestId("draft-suggested-skill-conflict-option-Suporte ERP-skill-atendimento-erp")).toBeInTheDocument();
+  });
+
+  it("escolher uma opção de conflict marca como resolvido", async () => {
+    await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-conflict-option-Suporte ERP-skill-atendimento-erp"));
+
+    expect(screen.getByText(/Conflito resolvido manualmente\. A skill escolhida poderá ser aplicada\./i)).toBeInTheDocument();
   });
 
   it("não duplica skill já existente no formulário", async () => {
@@ -748,6 +811,51 @@ describe("JobAiDraftPanel — API real", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
     expect(onApply.mock.calls[0][2]).toEqual([]);
+  });
+
+  it("conflict sem escolha não entra na aplicação", async () => {
+    const { onApply } = await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+    expect(onApply.mock.calls[0][2]).toEqual([
+      expect.objectContaining({ skill_id: "skill-atendimento" }),
+    ]);
+    expect(onApply.mock.calls[0][2]).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "Atendimento ERP" })]),
+    );
+  });
+
+  it("confirmar aplica conflict resolvido como ApplicableSkill", async () => {
+    const { onApply } = await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-conflict-option-Suporte ERP-skill-atendimento-erp"));
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+    expect(onApply.mock.calls[0][2]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          skill_id: "skill-atendimento-erp",
+          name: "Atendimento ERP",
+          priority: "priority",
+        }),
+      ]),
+    );
+  });
+
+  it("conflict desmarcado não aplica", async () => {
+    const { onApply } = await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-conflict-option-Suporte ERP-skill-atendimento-erp"));
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+    fireEvent.click(screen.getByRole("button", { name: /Aplicar rascunho/i }));
+
+    expect(onApply.mock.calls[0][2]).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ skill_id: "skill-atendimento-erp" })]),
+    );
   });
 
   it("não mapeia salary para o formulário", async () => {
@@ -794,9 +902,22 @@ describe("JobAiDraftPanel — API real", () => {
     expect(
       within(dialog).getByText(/Skills sugeridas revisadas não serão aplicadas como catálogo nesta fase\./i),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText(/1 skills existentes selecionadas serão aplicadas ao catálogo da vaga\./i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/1 skills existentes serão aplicadas\./i)).toBeInTheDocument();
     expect(within(dialog).getByText(/0 novas sugestões não serão criadas automaticamente\./i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/0 conflitos exigem revisão manual\./i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/0 conflitos resolvidos manualmente serão aplicados\./i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/0 conflitos ainda exigem revisão\./i)).toBeInTheDocument();
+  });
+
+  it("conflict resolvido aparece no resumo da modal", async () => {
+    await generateAndWaitForDraft(false);
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-checkbox-conflict-Suporte ERP"));
+    fireEvent.click(screen.getByTestId("draft-suggested-skill-conflict-option-Suporte ERP-skill-atendimento-erp"));
+    fireEvent.click(screen.getByTestId("ai-draft-apply-btn"));
+
+    const dialog = screen.getByRole("dialog", { name: /Aplicar rascunho da IA\?/i });
+    expect(within(dialog).getByText(/1 conflitos resolvidos manualmente serão aplicados\./i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/0 conflitos ainda exigem revisão\./i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Suporte ERP -> Atendimento ERP/i)).toBeInTheDocument();
   });
 
   it("mostra comparação Atual x IA e status 'Será preenchido' quando o campo atual está vazio", async () => {
