@@ -1,30 +1,42 @@
 {
   "summary": {
     "json_skill_count": 99,
-    "db_skill_count": 99,
-    "json_alias_count": 239,
-    "db_alias_count": 225,
-    "json_relation_count": 135,
+    "db_skill_count": 110,
+    "json_alias_count": 187,
+    "db_alias_count": 253,
+    "json_relation_count": 151,
     "db_relation_count": 139,
     "missing_skills_count": 0,
-    "extra_skills_count": 0,
-    "missing_aliases_count": 5,
-    "extra_aliases_count": 0,
-    "conflicts_count": 9,
-    "metadata_gaps_count": 0,
-    "equivalence_percent": 95.86,
+    "extra_skills_count": 11,
+    "missing_aliases_count": 3,
+    "extra_aliases_count": 73,
+    "conflicts_count": 4,
+    "metadata_gaps_count": 30,
+    "equivalence_percent": 97.55,
     "missing_aliases_by_type": {
-      "duplicate_ownership": 3,
       "invalid_legacy_alias": 1,
+      "duplicate_ownership": 1,
       "alias_should_be_relation": 1
     },
     "conflicts_by_type": {
-      "alias_should_be_relation": 9
+      "alias_should_be_relation": 4
     },
-    "resolved_by_relation_count": 9
+    "resolved_by_relation_count": 4
   },
   "missing_skills": [],
-  "extra_skills": [],
+  "extra_skills": [
+    "atendimento ao cliente",
+    "atendimento de chamados",
+    "comunicação interpessoal",
+    "experiência em posto de combustível",
+    "firewall",
+    "hardware",
+    "redes e infraestrutura",
+    "responsabilidade com caixa",
+    "rotina operacional",
+    "suporte",
+    "venda adicional na pista"
+  ],
   "missing_aliases": [
     {
       "alias": "JS",
@@ -33,22 +45,6 @@
       "db_owner": "JavaScript",
       "related_skill": "JavaScript",
       "suggestion": "O alias legado mistura duas stacks sem equivalência semântica confiável."
-    },
-    {
-      "alias": "Google Cloud Platform",
-      "canonical": "Cloud",
-      "classification": "duplicate_ownership",
-      "db_owner": "GCP",
-      "related_skill": "GCP",
-      "suggestion": "O alias já pertence a outra skill e exige decisão manual de ownership."
-    },
-    {
-      "alias": "TS",
-      "canonical": "JavaScript",
-      "classification": "duplicate_ownership",
-      "db_owner": "TypeScript",
-      "related_skill": "TypeScript",
-      "suggestion": "O alias já pertence a outra skill e exige decisão manual de ownership."
     },
     {
       "alias": "monitoramento",
@@ -67,7 +63,592 @@
       "suggestion": "Spring Boot é uma especialização técnica relacionada a Spring, não um alias textual puro."
     }
   ],
-  "extra_aliases": [],
+  "extra_aliases": [
+    {
+      "alias": "atendimento",
+      "canonical": "atendimento ao cliente",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "atendimento ao público",
+      "canonical": "atendimento ao cliente",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "experiência do cliente",
+      "canonical": "atendimento ao cliente",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "relacionamento com cliente",
+      "canonical": "atendimento ao cliente",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": ".NET",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "API",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "C#",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "GraphQL",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Java",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Laravel",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Node.js",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "PHP",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "REST",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Spring Boot",
+      "canonical": "Backend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "dashboards",
+      "canonical": "BI",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "DAX",
+      "canonical": "BI",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Looker",
+      "canonical": "BI",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Power BI",
+      "canonical": "BI",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Qlik",
+      "canonical": "BI",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "relatórios gerenciais",
+      "canonical": "BI",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Tableau",
+      "canonical": "BI",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "AWS",
+      "canonical": "Cloud",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Azure",
+      "canonical": "Cloud",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "GCP",
+      "canonical": "Cloud",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Oracle Cloud",
+      "canonical": "Cloud",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "comunicação",
+      "canonical": "comunicação interpessoal",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Oracle ERP",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Protheus",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "SAP",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "SAP CO",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "SAP FI",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "SAP MM",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "SAP SD",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Senior Sistemas",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "TOTVS",
+      "canonical": "ERP",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "abastecimento",
+      "canonical": "experiência em posto de combustível",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "atendimento em pista",
+      "canonical": "experiência em posto de combustível",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "operação de posto",
+      "canonical": "experiência em posto de combustível",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "posto de combustível",
+      "canonical": "experiência em posto de combustível",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "ciberseguranca",
+      "canonical": "firewall",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "fortigate",
+      "canonical": "firewall",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Angular",
+      "canonical": "Frontend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "CSS",
+      "canonical": "Frontend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "HTML",
+      "canonical": "Frontend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Next.js",
+      "canonical": "Frontend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "React",
+      "canonical": "Frontend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Tailwind",
+      "canonical": "Frontend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Vue",
+      "canonical": "Frontend",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "hd",
+      "canonical": "hardware",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "impressora",
+      "canonical": "hardware",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "manutencao de computador",
+      "canonical": "hardware",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "TypeScript",
+      "canonical": "JavaScript",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Django",
+      "canonical": "Python",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "FastAPI",
+      "canonical": "Python",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Flask",
+      "canonical": "Python",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Jupyter",
+      "canonical": "Python",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "NumPy",
+      "canonical": "Python",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "Pandas",
+      "canonical": "Python",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "controle de valores",
+      "canonical": "responsabilidade com caixa",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "fechamento de caixa",
+      "canonical": "responsabilidade com caixa",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "manuseio de dinheiro",
+      "canonical": "responsabilidade com caixa",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "operação de caixa",
+      "canonical": "responsabilidade com caixa",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "operação de pista",
+      "canonical": "rotina operacional",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "organização operacional",
+      "canonical": "rotina operacional",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "procedimentos operacionais",
+      "canonical": "rotina operacional",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "rotina de posto",
+      "canonical": "rotina operacional",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "analista n1",
+      "canonical": "suporte",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "suporte de sistema",
+      "canonical": "suporte",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "suporte protheus",
+      "canonical": "suporte",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "abordagem comercial",
+      "canonical": "venda adicional na pista",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "oferta de produtos",
+      "canonical": "venda adicional na pista",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "venda adicional",
+      "canonical": "venda adicional na pista",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    },
+    {
+      "alias": "venda consultiva",
+      "canonical": "venda adicional na pista",
+      "classification": "missing_alias",
+      "db_owner": null,
+      "related_skill": null,
+      "suggestion": null
+    }
+  ],
   "conflicts": [
     {
       "type": "alias_should_be_relation",
@@ -80,56 +661,11 @@
     },
     {
       "type": "alias_should_be_relation",
-      "alias": "Django",
-      "json_canonical": "Backend",
-      "db_canonical": "Django",
-      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
-      "suggestion": "Manter Django como skill canônica e criar relação Backend -> Django em vez de alias direto.",
-      "resolution": "resolved_by_relation"
-    },
-    {
-      "type": "alias_should_be_relation",
-      "alias": "FastAPI",
-      "json_canonical": "Backend",
-      "db_canonical": "FastAPI",
-      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
-      "suggestion": "Manter FastAPI como skill canônica e criar relação Backend -> FastAPI em vez de alias direto.",
-      "resolution": "resolved_by_relation"
-    },
-    {
-      "type": "alias_should_be_relation",
-      "alias": "Python",
-      "json_canonical": "Backend",
-      "db_canonical": "Python",
-      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
-      "suggestion": "Manter Python como skill canônica e criar relação Backend -> Python em vez de alias direto.",
-      "resolution": "resolved_by_relation"
-    },
-    {
-      "type": "alias_should_be_relation",
       "alias": "Machine Learning",
       "json_canonical": "Data Science",
       "db_canonical": "Machine Learning",
       "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
       "suggestion": "Manter Machine Learning como skill canônica e criar relação Data Science -> Machine Learning em vez de alias direto.",
-      "resolution": "resolved_by_relation"
-    },
-    {
-      "type": "alias_should_be_relation",
-      "alias": "JavaScript",
-      "json_canonical": "Frontend",
-      "db_canonical": "JavaScript",
-      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
-      "suggestion": "Manter JavaScript como skill canônica e criar relação Frontend -> JavaScript em vez de alias direto.",
-      "resolution": "resolved_by_relation"
-    },
-    {
-      "type": "alias_should_be_relation",
-      "alias": "TypeScript",
-      "json_canonical": "Frontend",
-      "db_canonical": "TypeScript",
-      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
-      "suggestion": "Manter TypeScript como skill canônica e criar relação Frontend -> TypeScript em vez de alias direto.",
       "resolution": "resolved_by_relation"
     },
     {
@@ -151,5 +687,426 @@
       "resolution": "resolved_by_relation"
     }
   ],
-  "metadata_gaps": []
+  "metadata_gaps": [
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Admissão",
+      "field": "relation",
+      "json_value": {
+        "from": "Admissão",
+        "to": "Departamento Pessoal",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Admissão é uma rotina específica de Departamento Pessoal."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Benefícios",
+      "field": "relation",
+      "json_value": {
+        "from": "Benefícios",
+        "to": "Departamento Pessoal",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Benefícios é uma rotina específica de Departamento Pessoal."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Carga e Descarga",
+      "field": "relation",
+      "json_value": {
+        "from": "Carga e Descarga",
+        "to": "Logística",
+        "type": null,
+        "strength": "partial",
+        "score": 0.65,
+        "reason": "Carga e descarga faz parte da operação logística."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Cobrança",
+      "field": "relation",
+      "json_value": {
+        "from": "Cobrança",
+        "to": "Financeiro",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Cobrança é uma rotina específica de Financeiro."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Conciliação Bancária",
+      "field": "relation",
+      "json_value": {
+        "from": "Conciliação Bancária",
+        "to": "Financeiro",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Conciliação Bancária é uma rotina específica de Financeiro."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Conferente",
+      "field": "relation",
+      "json_value": {
+        "from": "Conferente",
+        "to": "Logística",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Conferente atua em logística e expedição."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "dashboards",
+      "field": "relation",
+      "json_value": {
+        "from": "dashboards",
+        "to": "BI",
+        "type": null,
+        "strength": "partial",
+        "score": 0.55,
+        "reason": "Dashboards são artefatos comuns em BI, mas não equivalem à categoria ampla."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "DAX",
+      "field": "relation",
+      "json_value": {
+        "from": "DAX",
+        "to": "BI",
+        "type": null,
+        "strength": "partial",
+        "score": 0.6,
+        "reason": "DAX indica prática em ferramentas de BI, mas não é sinônimo textual de BI."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Django",
+      "field": "relation",
+      "json_value": {
+        "from": "Django",
+        "to": "Python",
+        "type": null,
+        "strength": "strong",
+        "score": 0.9,
+        "reason": "Django é framework Python e indica experiência prática na linguagem."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Emissão de Nota Fiscal",
+      "field": "relation",
+      "json_value": {
+        "from": "Emissão de Nota Fiscal",
+        "to": "Financeiro",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Emissão de Nota Fiscal é uma rotina específica de Financeiro."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Estoque",
+      "field": "relation",
+      "json_value": {
+        "from": "Estoque",
+        "to": "Logística",
+        "type": null,
+        "strength": "strong",
+        "score": 0.9,
+        "reason": "Controle de estoque faz parte da logística."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "FastAPI",
+      "field": "relation",
+      "json_value": {
+        "from": "FastAPI",
+        "to": "Python",
+        "type": null,
+        "strength": "strong",
+        "score": 0.9,
+        "reason": "FastAPI é framework Python e indica experiência prática na linguagem."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Férias",
+      "field": "relation",
+      "json_value": {
+        "from": "Férias",
+        "to": "Departamento Pessoal",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Férias é uma rotina específica de Departamento Pessoal."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Flask",
+      "field": "relation",
+      "json_value": {
+        "from": "Flask",
+        "to": "Python",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Flask é framework Python e indica experiência prática na linguagem."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Jupyter",
+      "field": "relation",
+      "json_value": {
+        "from": "Jupyter",
+        "to": "Python",
+        "type": null,
+        "strength": "partial",
+        "score": 0.75,
+        "reason": "Jupyter é frequentemente usado com Python, mas não garante domínio completo da linguagem."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Looker",
+      "field": "relation",
+      "json_value": {
+        "from": "Looker",
+        "to": "BI",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Looker é ferramenta diretamente associada a Business Intelligence."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "NumPy",
+      "field": "relation",
+      "json_value": {
+        "from": "NumPy",
+        "to": "Python",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "NumPy pertence ao ecossistema Python e comprova uso prático da linguagem."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Oracle ERP",
+      "field": "relation",
+      "json_value": {
+        "from": "Oracle ERP",
+        "to": "ERP",
+        "type": null,
+        "strength": "partial",
+        "score": 0.6,
+        "reason": "Oracle ERP indica experiência em ERP, mas ERP é categoria ampla."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Pandas",
+      "field": "relation",
+      "json_value": {
+        "from": "Pandas",
+        "to": "Python",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Pandas pertence ao ecossistema Python e comprova uso prático da linguagem."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Ponto Eletrônico",
+      "field": "relation",
+      "json_value": {
+        "from": "Ponto Eletrônico",
+        "to": "Departamento Pessoal",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Ponto Eletrônico é uma rotina específica de Departamento Pessoal."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Qlik",
+      "field": "relation",
+      "json_value": {
+        "from": "Qlik",
+        "to": "BI",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Qlik é ferramenta diretamente associada a Business Intelligence."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "relatórios gerenciais",
+      "field": "relation",
+      "json_value": {
+        "from": "relatórios gerenciais",
+        "to": "BI",
+        "type": null,
+        "strength": "partial",
+        "score": 0.45,
+        "reason": "Relatórios gerenciais se relacionam a BI, mas não equivalem à categoria."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Rescisão",
+      "field": "relation",
+      "json_value": {
+        "from": "Rescisão",
+        "to": "Departamento Pessoal",
+        "type": null,
+        "strength": "strong",
+        "score": 0.85,
+        "reason": "Rescisão é uma rotina específica de Departamento Pessoal."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "SAP CO",
+      "field": "relation",
+      "json_value": {
+        "from": "SAP CO",
+        "to": "ERP",
+        "type": null,
+        "strength": "partial",
+        "score": 0.6,
+        "reason": "SAP CO indica experiência em ERP, mas ERP é categoria ampla."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "SAP FI",
+      "field": "relation",
+      "json_value": {
+        "from": "SAP FI",
+        "to": "ERP",
+        "type": null,
+        "strength": "partial",
+        "score": 0.6,
+        "reason": "SAP FI indica experiência em ERP, mas ERP é categoria ampla."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "SAP SD",
+      "field": "relation",
+      "json_value": {
+        "from": "SAP SD",
+        "to": "ERP",
+        "type": null,
+        "strength": "partial",
+        "score": 0.6,
+        "reason": "SAP SD indica experiência em ERP, mas ERP é categoria ampla."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "scikit-learn",
+      "field": "relation",
+      "json_value": {
+        "from": "scikit-learn",
+        "to": "Machine Learning",
+        "type": null,
+        "strength": "strong",
+        "score": 0.9,
+        "reason": "scikit-learn é biblioteca direta de machine learning."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Senior Sistemas",
+      "field": "relation",
+      "json_value": {
+        "from": "Senior Sistemas",
+        "to": "ERP",
+        "type": null,
+        "strength": "partial",
+        "score": 0.6,
+        "reason": "Senior Sistemas indica experiência em ERP, mas ERP é categoria ampla."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "Shopify",
+      "field": "relation",
+      "json_value": {
+        "from": "Shopify",
+        "to": "E-commerce",
+        "type": null,
+        "strength": "strong",
+        "score": 0.88,
+        "reason": "Shopify é plataforma de e-commerce."
+      },
+      "db_value": null
+    },
+    {
+      "gap_type": "relation_missing",
+      "canonical": "VTEX",
+      "field": "relation",
+      "json_value": {
+        "from": "VTEX",
+        "to": "E-commerce",
+        "type": null,
+        "strength": "strong",
+        "score": 0.9,
+        "reason": "VTEX é plataforma de e-commerce."
+      },
+      "db_value": null
+    }
+  ]
 }

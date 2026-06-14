@@ -34,14 +34,7 @@
       "canonical": "BI",
       "aliases": [
         "BI",
-        "Business Intelligence",
-        "Power BI",
-        "Tableau",
-        "Looker",
-        "Qlik",
-        "dashboards",
-        "DAX",
-        "relatórios gerenciais"
+        "Business Intelligence"
       ],
       "domain": [
         "data",
@@ -73,13 +66,7 @@
     {
       "canonical": "Python",
       "aliases": [
-        "Python",
-        "Pandas",
-        "NumPy",
-        "FastAPI",
-        "Django",
-        "Flask",
-        "Jupyter"
+        "Python"
       ],
       "domain": [
         "technology",
@@ -95,9 +82,7 @@
       "aliases": [
         "JavaScript",
         "JS",
-        "ECMAScript",
-        "TypeScript",
-        "TS"
+        "ECMAScript"
       ],
       "domain": [
         "technology",
@@ -111,20 +96,7 @@
       "canonical": "Backend",
       "aliases": [
         "Backend",
-        "Back-end",
-        "API",
-        "REST",
-        "GraphQL",
-        "Node.js",
-        "Java",
-        "Spring Boot",
-        "Python",
-        "Django",
-        "FastAPI",
-        "C#",
-        ".NET",
-        "PHP",
-        "Laravel"
+        "Back-end"
       ],
       "domain": [
         "technology"
@@ -136,16 +108,7 @@
       "canonical": "Frontend",
       "aliases": [
         "Frontend",
-        "Front-end",
-        "React",
-        "Next.js",
-        "Vue",
-        "Angular",
-        "HTML",
-        "CSS",
-        "Tailwind",
-        "JavaScript",
-        "TypeScript"
+        "Front-end"
       ],
       "domain": [
         "technology"
@@ -157,11 +120,6 @@
       "canonical": "Cloud",
       "aliases": [
         "Cloud",
-        "AWS",
-        "Azure",
-        "GCP",
-        "Google Cloud Platform",
-        "Oracle Cloud",
         "cloud computing"
       ],
       "domain": [
@@ -203,16 +161,7 @@
     {
       "canonical": "ERP",
       "aliases": [
-        "ERP",
-        "SAP",
-        "SAP MM",
-        "SAP SD",
-        "SAP FI",
-        "SAP CO",
-        "TOTVS",
-        "Protheus",
-        "Oracle ERP",
-        "Senior Sistemas"
+        "ERP"
       ],
       "domain": [
         "technology",
@@ -1567,6 +1516,83 @@
       "reason": "Power Query indica tratamento de dados, útil em BI."
     },
     {
+      "from": "Looker",
+      "to": "BI",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Looker é ferramenta diretamente associada a Business Intelligence."
+    },
+    {
+      "from": "Qlik",
+      "to": "BI",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Qlik é ferramenta diretamente associada a Business Intelligence."
+    },
+    {
+      "from": "dashboards",
+      "to": "BI",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Dashboards são artefatos comuns em BI, mas não equivalem à categoria ampla."
+    },
+    {
+      "from": "DAX",
+      "to": "BI",
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "DAX indica prática em ferramentas de BI, mas não é sinônimo textual de BI."
+    },
+    {
+      "from": "relatórios gerenciais",
+      "to": "BI",
+      "strength": "partial",
+      "score": 0.45,
+      "reason": "Relatórios gerenciais se relacionam a BI, mas não equivalem à categoria."
+    },
+    {
+      "from": "Pandas",
+      "to": "Python",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Pandas pertence ao ecossistema Python e comprova uso prático da linguagem."
+    },
+    {
+      "from": "NumPy",
+      "to": "Python",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "NumPy pertence ao ecossistema Python e comprova uso prático da linguagem."
+    },
+    {
+      "from": "FastAPI",
+      "to": "Python",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "FastAPI é framework Python e indica experiência prática na linguagem."
+    },
+    {
+      "from": "Django",
+      "to": "Python",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Django é framework Python e indica experiência prática na linguagem."
+    },
+    {
+      "from": "Flask",
+      "to": "Python",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Flask é framework Python e indica experiência prática na linguagem."
+    },
+    {
+      "from": "Jupyter",
+      "to": "Python",
+      "strength": "partial",
+      "score": 0.75,
+      "reason": "Jupyter é frequentemente usado com Python, mas não garante domínio completo da linguagem."
+    },
+    {
       "from": "TypeScript",
       "to": "JavaScript",
       "strength": "strong",
@@ -1691,6 +1717,41 @@
       "strength": "partial",
       "score": 0.6,
       "reason": "SAP indica experiência em ERP, mas ERP é categoria ampla."
+    },
+    {
+      "from": "SAP SD",
+      "to": "ERP",
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "SAP SD indica experiência em ERP, mas ERP é categoria ampla."
+    },
+    {
+      "from": "SAP FI",
+      "to": "ERP",
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "SAP FI indica experiência em ERP, mas ERP é categoria ampla."
+    },
+    {
+      "from": "SAP CO",
+      "to": "ERP",
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "SAP CO indica experiência em ERP, mas ERP é categoria ampla."
+    },
+    {
+      "from": "Oracle ERP",
+      "to": "ERP",
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "Oracle ERP indica experiência em ERP, mas ERP é categoria ampla."
+    },
+    {
+      "from": "Senior Sistemas",
+      "to": "ERP",
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "Senior Sistemas indica experiência em ERP, mas ERP é categoria ampla."
     },
     {
       "from": "Protheus",

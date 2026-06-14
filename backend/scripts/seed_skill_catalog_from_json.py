@@ -11,100 +11,48 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.infrastructure.database.connection import AsyncSessionFactory, engine
-from src.infrastructure.repositories.sqlalchemy_skill_catalog_repository import SQLAlchemySkillCatalogRepository
-from src.infrastructure.database.models.skill_catalog_model import SkillCatalogModel, SkillAliasModel
 from src.application.services.skill_catalog_normalizer import normalize_skill_name
+from src.application.services.skill_catalog_sync_service import SkillCatalogSyncService
+from src.infrastructure.repositories.sqlalchemy_skill_catalog_repository import (
+    SQLAlchemySkillCatalogRepository,
+)
 
 async def seed_skills(session: AsyncSession, json_path: Path):
     repo = SQLAlchemySkillCatalogRepository(session)
-    
+    sync_service = SkillCatalogSyncService(repo)
+
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-        
-    groups = data.get("groups", [])
-    
-    summary = {
-        "skills_created": 0,
-        "skills_existed": 0,
-        "aliases_created": 0,
-        "aliases_existed": 0,
-        "conflicts_ignored": 0
-    }
-    
-    for group in groups:
-        canonical = group.get("canonical")
-        aliases = group.get("aliases", [])
-        
-        if not canonical:
-            continue
-            
-        normalized_canonical = normalize_skill_name(canonical)
-        
-        # Check if skill exists as skill
-        skill = await repo.find_by_normalized_name(normalized_canonical)
-        
-        if not skill:
-            # Check if canonical name exists as alias
-            existing_alias_as_skill = await repo.find_by_normalized_alias(normalized_canonical)
-            if existing_alias_as_skill:
-                print(f"[CONFLICT] Canonical name '{canonical}' ({normalized_canonical}) already exists as an alias for skill ID {existing_alias_as_skill.skill_id}. Skipping group.")
-                summary["conflicts_ignored"] += 1
-                continue
-                
-            # Create skill
-            skill = SkillCatalogModel(
-                name=canonical.strip(),
-                normalized_name=normalized_canonical,
-                category=None,
-            )
-            session.add(skill)
-            await session.flush()
-            summary["skills_created"] += 1
-        else:
-            summary["skills_existed"] += 1
-            
-        # Process aliases
-        for alias in aliases:
-            norm_alias = normalize_skill_name(alias)
-            
-            if not norm_alias:
-                continue
-                
-            # Rule: alias equal to canonical name normalizado deve ser ignorado
-            if norm_alias == normalized_canonical:
-                continue
-                
-            # Rule: alias que já existe como skill canônica deve ser logado e pulado
-            conflict_skill = await repo.find_by_normalized_name(norm_alias)
-            if conflict_skill:
-                print(f"[CONFLICT] Alias '{alias}' ({norm_alias}) already exists as a canonical skill. Skipping alias.")
-                summary["conflicts_ignored"] += 1
-                continue
-                
-            # Rule: alias já existente em outra skill deve ser logado e pulado
-            conflict_alias = await repo.find_by_normalized_alias(norm_alias)
-            if conflict_alias:
-                if conflict_alias.skill_id != skill.id:
-                    print(f"[CONFLICT] Alias '{alias}' ({norm_alias}) already exists for another skill (ID {conflict_alias.skill_id}). Skipping alias.")
-                    summary["conflicts_ignored"] += 1
-                    continue
-                else:
-                    summary["aliases_existed"] += 1
-                    continue
-                    
-            # Create alias
-            new_alias = SkillAliasModel(
-                skill_id=skill.id,
-                alias=alias.strip(),
-                normalized_alias=norm_alias
-            )
-            session.add(new_alias)
-            summary["aliases_created"] += 1
-            
-        await session.flush()
-        
+
+    result = await sync_service.sync_catalog(data)
     await session.commit()
-    return summary
+
+    valid_groups = sum(
+        1
+        for group in data.get("groups", []) or []
+        if normalize_skill_name(str(group.get("canonical") or "").strip())
+    )
+
+    for conflict in result.conflicts:
+        print(
+            "[CONFLICT] "
+            f"type={conflict.type}; "
+            f"canonical={conflict.canonical}; "
+            f"alias={conflict.alias}; "
+            f"db_skill={conflict.db_skill}; "
+            f"detail={conflict.detail}"
+        )
+
+    return {
+        "skills_created": result.skills_created,
+        "skills_existed": valid_groups - result.skills_created - result.skills_skipped,
+        "aliases_created": result.aliases_created,
+        "aliases_existed": result.aliases_existing,
+        "conflicts_ignored": len(result.conflicts),
+        "relations_created": result.relations_created,
+        "relations_updated": result.relations_updated,
+        "relations_skipped": result.relations_skipped,
+    }
 
 async def main():
     parser = argparse.ArgumentParser(description="Seed skill catalog from JSON.")
@@ -137,6 +85,9 @@ async def main():
     print(f"Aliases criados: {summary['aliases_created']}")
     print(f"Aliases já existentes: {summary['aliases_existed']}")
     print(f"Conflitos ignorados: {summary['conflicts_ignored']}")
+    print(f"Relations criadas: {summary['relations_created']}")
+    print(f"Relations atualizadas: {summary['relations_updated']}")
+    print(f"Relations já existentes: {summary['relations_skipped']}")
 
 if __name__ == "__main__":
     asyncio.run(main())

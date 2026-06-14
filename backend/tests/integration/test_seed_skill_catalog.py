@@ -4,7 +4,11 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from src.infrastructure.database.models.skill_catalog_model import SkillCatalogModel, SkillAliasModel
+from src.infrastructure.database.models.skill_catalog_model import (
+    SkillAliasModel,
+    SkillCatalogModel,
+    SkillRelationModel,
+)
 from scripts.seed_skill_catalog_from_json import seed_skills
 
 pytestmark = pytest.mark.asyncio
@@ -101,6 +105,53 @@ async def test_seed_skills_conflicts(db_session: AsyncSession, tmp_path: Path):
     json_file.write_text(json.dumps(json_data))
     
     summary = await seed_skills(db_session, json_file)
-    assert summary["skills_created"] == 2 # JS and TypeScript should be created
+    assert summary["skills_created"] == 3 # JS, JavaScript and TypeScript should be created
     assert summary["aliases_created"] == 1 # Only JavaScript for JS
-    assert summary["conflicts_ignored"] == 2 # JavaScript as skill and JavaScript as alias for TypeScript
+    assert summary["conflicts_ignored"] == 2 # JavaScript legacy alias conflicts are preserved as relations/manual review
+
+
+async def test_seed_skills_persists_relations_separately_from_aliases(
+    db_session: AsyncSession, tmp_path: Path
+):
+    json_data = {
+        "groups": [
+            {
+                "canonical": "Backend",
+                "aliases": ["Back-end"],
+            },
+            {
+                "canonical": "Python",
+                "aliases": ["Py"],
+            },
+        ],
+        "relations": [
+            {
+                "from": "Python",
+                "to": "Backend",
+                "strength": "partial",
+                "score": 0.55,
+                "reason": "Python se relaciona a Backend, mas Backend é categoria ampla.",
+            }
+        ],
+    }
+    json_file = tmp_path / "test_skills.json"
+    json_file.write_text(json.dumps(json_data))
+
+    summary = await seed_skills(db_session, json_file)
+
+    assert summary["skills_created"] == 2
+    assert summary["aliases_created"] == 2
+    assert summary["relations_created"] == 2
+
+    alias_result = await db_session.execute(select(SkillAliasModel))
+    relation_result = await db_session.execute(select(SkillRelationModel))
+
+    aliases = alias_result.scalars().all()
+    relations = relation_result.scalars().all()
+
+    assert len(aliases) == 2
+    assert len(relations) == 2
+    assert {(relation.source_name, relation.target_name) for relation in relations} == {
+        ("Python", "Backend"),
+        ("Backend", "Python"),
+    }
