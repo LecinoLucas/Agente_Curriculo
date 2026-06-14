@@ -184,10 +184,11 @@ npx playwright test                         # usa playwright.config.ts da raiz
 | Local | O que tem |
 |---|---|
 | `backend/docs/` | Referência operacional do backend (setup, regras de negócio, testing, migrations) |
-| `docs/architecture/` | Glossário de scoring, ADRs, visão de camadas |
+| `docs/architecture/` | Glossário de scoring, ADRs, visão geral do sistema e fluxos de arquitetura |
+| `docs/protheus/` | Diretrizes de desenvolvimento AdvPL/TLPP e integração Protheus |
+| `docs/ai/` | Planos de RAG, definições do Assistente e prompts versionados |
+| `docs/product/` | Mapa de páginas, fluxos de usuário e arquitetura de informação |
 | `docs/deploy/` | Guia Docker local, variáveis de ambiente, runbooks |
-| `workflows/PAGES_MAP.md` | Mapa de páginas e rotas do frontend |
-| `workflows/PROJECT_WORKFLOW.md` | Fluxo de trabalho e processo de desenvolvimento |
 | `.design/` | Relatórios de fase, auditorias e decisões históricas — acervo somente leitura |
 
 ---

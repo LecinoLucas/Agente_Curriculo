@@ -275,7 +275,7 @@ using namespace totvs.framework.structure.interface
 - **Refactoring**: Fix violations found in modified lines/functions. Never introduce new ones.
 - **Optimization**: Respect performance rules (G2). Never use prohibited APIs or bypass framework abstractions.
 
-> **Full rules reference** (G1–G5: Security, Performance, Legacy/Deprecated, Metadata Access, Compilation): read [.agents/skills/references/sonarqube-rules-reference.md](.agents/skills/references/sonarqube-rules-reference.md) or [.agents/skills/references/sonarqube-rules-reference.md](.agents/skills/references/sonarqube-rules-reference.md) before generating or reviewing code.
+> **Full rules reference** (G1–G5: Security, Performance, Legacy/Deprecated, Metadata Access, Compilation): read [../../skills advpl/advpl-tlpp/references/sonarqube-rules-reference.md](../../skills advpl/advpl-tlpp/references/sonarqube-rules-reference.md) before generating or reviewing code.
 
 ---
 
@@ -330,7 +330,7 @@ After any **code generation, migration, or refactoring** task, the agent MUST pe
 
 ## Available Agent Skills
 
-See [.agents/skills/references-skills-reference.md](.agents/skills/references-skills-reference.md) or [.agents/skills/references-skills-reference.md](.agents/skills/references-skills-reference.md) for the full catalog. Summary:
+See [../../skills advpl/advpl-tlpp/references/advpl-tlpp-skills-reference.md](../../skills advpl/advpl-tlpp/references/advpl-tlpp-skills-reference.md) for the full catalog. Summary:
 
 | Category | Skills |
 |----------|--------|
