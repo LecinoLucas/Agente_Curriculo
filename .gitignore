@@ -94,3 +94,8 @@ backup_*.dump
 **/*.log
 test_output.log
 **/test_output.log
+
+# REPO-VERSIONED-ARTIFACTS-CLEANUP-1 - artefatos locais não cobertos anteriormente
+.tmp-smoke/
+backend/.seeded
+backend/full_output.txt
