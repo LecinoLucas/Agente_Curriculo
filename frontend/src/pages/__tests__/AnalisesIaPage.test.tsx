@@ -289,7 +289,11 @@ describe("AnalisesIaPage", () => {
 
     expect(await screen.findByText("Candidata Extração")).toBeInTheDocument();
     expect(screen.getAllByText("Aguardando extração").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("A análise já foi criada e aguarda a extração do currículo.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Extração do currículo em andamento. A análise será iniciada automaticamente quando o texto estiver disponível.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Candidato Fila")).toBeInTheDocument();
     expect(screen.getByText("Na fila")).toBeInTheDocument();
 

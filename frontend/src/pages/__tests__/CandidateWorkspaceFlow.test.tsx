@@ -2258,8 +2258,8 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Análise em andamento.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Gerar análise agora/i })).toBeDisabled();
+    expect(await screen.findByText("Análise IA em processamento.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Aguardar análise/i })).toBeDisabled();
     expect(scoreExplanationService.get).not.toHaveBeenCalled();
   });
 

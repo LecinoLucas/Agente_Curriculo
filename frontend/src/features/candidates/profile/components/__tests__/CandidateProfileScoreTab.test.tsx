@@ -142,6 +142,30 @@ function matchingPendingOverview(): Partial<CandidateOverview> {
   };
 }
 
+function waitingExtractionOverview(): Partial<CandidateOverview> {
+  return {
+    active_job_decision: {
+      score_status: "analysis_processing",
+      analysis_status: "waiting_extraction",
+      current_analysis_id: "analysis-waiting",
+      match_score: null,
+      warnings: [],
+      next_action: "wait_analysis",
+    },
+    resumes: [
+      {
+        id: "resume-1",
+        title: "Currículo principal",
+        status: "active",
+        current_version: 1,
+        current_version_id: "version-1",
+        extraction_status: "processing",
+        extracted_text: null,
+      } as never,
+    ],
+  };
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("CandidateProfileScoreTab — matching_pending state", () => {
@@ -267,5 +291,79 @@ describe("CandidateProfileScoreTab — other states still use onRequestAnalysis"
     expect(btn).toHaveTextContent("Gerar análise agora");
     await userEvent.click(btn);
     expect(onRequestAnalysis).toHaveBeenCalledOnce();
+  });
+
+  it("mostra extração em andamento sem oferecer retry de IA", () => {
+    renderTab({
+      overviewPartial: waitingExtractionOverview(),
+      scoreNotReady: true,
+    });
+
+    expect(screen.getByTestId("empty-title")).toHaveTextContent("Extração do currículo em andamento");
+    expect(screen.getByTestId("empty-description")).toHaveTextContent(
+      "A análise será iniciada automaticamente quando o texto do currículo estiver disponível.",
+    );
+    expect(screen.queryByTestId("empty-action")).not.toBeInTheDocument();
+  });
+
+  it("mostra falha de OCR sem mencionar IA comportamental", () => {
+    renderTab({
+      overviewPartial: {
+        active_job_decision: {
+          score_status: "analysis_failed",
+          analysis_status: "failed",
+          current_analysis_id: "analysis-failed",
+          match_score: null,
+          warnings: [],
+          next_action: "request_analysis",
+        },
+        latest_analysis: {
+          analysis_id: "analysis-failed",
+          job_id: "job-1",
+          status: "failed",
+          failure_reason: "OCR failed: PDF ilegível",
+        } as never,
+        resumes: [
+          {
+            id: "resume-1",
+            title: "Currículo principal",
+            status: "active",
+            current_version: 1,
+            current_version_id: "version-1",
+            extraction_status: "failed",
+            extracted_text: null,
+          } as never,
+        ],
+      },
+    });
+
+    expect(screen.getByTestId("empty-title")).toHaveTextContent("Não foi possível extrair o texto do currículo.");
+    expect(screen.getByTestId("empty-description")).toHaveTextContent(/arquivo está legível/i);
+    expect(screen.queryByText(/IA comportamental/i)).not.toBeInTheDocument();
+  });
+
+  it("mostra cooldown amigável para rate limit", () => {
+    renderTab({
+      overviewPartial: {
+        active_job_decision: {
+          score_status: "analysis_failed",
+          analysis_status: "retry_scheduled",
+          current_analysis_id: "analysis-rate-limit",
+          match_score: null,
+          warnings: [],
+          next_action: "wait_analysis",
+        },
+        latest_analysis: {
+          analysis_id: "analysis-rate-limit",
+          job_id: "job-1",
+          status: "retry_scheduled",
+          failure_reason: "Rate limit do provedor IA. Retry in 30s.",
+        } as never,
+      },
+    });
+
+    expect(screen.getByTestId("empty-title")).toHaveTextContent("Limite temporário do provedor IA");
+    expect(screen.getByTestId("empty-description")).toHaveTextContent(/Aguarde o cooldown/i);
+    expect(screen.queryByTestId("empty-action")).not.toBeInTheDocument();
   });
 });

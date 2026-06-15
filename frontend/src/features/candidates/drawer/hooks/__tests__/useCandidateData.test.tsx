@@ -1,5 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpError } from "../../../../../services/http";
 
 const { analysisServiceMock, getJobRankingMock, getCandidateRankingEntryMock } = vi.hoisted(() => ({
   analysisServiceMock: {
@@ -38,6 +39,7 @@ describe("useCandidateData", () => {
     analysisServiceMock.result.mockReset();
     getJobRankingMock.mockReset();
     getCandidateRankingEntryMock.mockReset();
+    analysisServiceMock.result.mockResolvedValue({ analysis_id: "analysis-1" });
   });
 
   it("não busca ranking nem resultado completo fora das abas de score/análise", () => {
@@ -78,5 +80,45 @@ describe("useCandidateData", () => {
       expect(analysisServiceMock.result).toHaveBeenCalledWith("analysis-1");
       expect(getCandidateRankingEntryMock).toHaveBeenCalledWith("job-1", "candidate-1");
     });
+  });
+
+  it("trata 409 candidate_score_not_ready como estado controlado", async () => {
+    getCandidateRankingEntryMock.mockRejectedValue(
+      new HttpError(409, "Score ainda não disponível.", "candidate_score_not_ready"),
+    );
+
+    const { result } = renderHook(() =>
+      useCandidateData({
+        candidateOverview: overview,
+        candidateActiveJobId: "job-1",
+        activePanelTab: "score",
+        rankingSyncTick: 0,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.rankingEntryScoreNotReady).toBe(true);
+    });
+    expect(result.current.rankingEntryError).toBeNull();
+  });
+
+  it("trata 409 ranking_not_ready como estado controlado", async () => {
+    getCandidateRankingEntryMock.mockRejectedValue(
+      new HttpError(409, "Ranking ainda não disponível.", "ranking_not_ready"),
+    );
+
+    const { result } = renderHook(() =>
+      useCandidateData({
+        candidateOverview: overview,
+        candidateActiveJobId: "job-1",
+        activePanelTab: "score",
+        rankingSyncTick: 0,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.rankingEntryScoreNotReady).toBe(true);
+    });
+    expect(result.current.rankingEntryError).toBeNull();
   });
 });

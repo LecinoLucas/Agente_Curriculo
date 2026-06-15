@@ -24,6 +24,17 @@ const SAFE_FAILURE_BY_TYPE: Record<string, string> = {
   unexpected_error: "Falha inesperada.",
 };
 
+export function isExtractionFailure(
+  providerErrorType: string | null,
+  failureReason: string | null,
+): boolean {
+  if (providerErrorType === "extraction_failed" || providerErrorType === "ocr_failed") {
+    return true;
+  }
+  if (!failureReason) return false;
+  return /(extract|extraction|extraç|ocr|currículo.*ileg|arquivo.*ileg|pdf inválido)/i.test(failureReason);
+}
+
 export function fmtDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", {
@@ -47,6 +58,9 @@ export function formatSafeFailureReason(
   providerErrorType: string | null,
   failureReason: string | null,
 ): string | null {
+  if (isExtractionFailure(providerErrorType, failureReason)) {
+    return "Não foi possível extrair o texto do currículo. Verifique se o arquivo está legível ou envie um novo currículo.";
+  }
   if (providerErrorType && SAFE_FAILURE_BY_TYPE[providerErrorType]) {
     return SAFE_FAILURE_BY_TYPE[providerErrorType];
   }

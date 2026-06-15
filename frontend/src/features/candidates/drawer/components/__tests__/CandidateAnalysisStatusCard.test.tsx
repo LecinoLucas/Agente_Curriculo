@@ -46,8 +46,8 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Análise em processamento")).toBeInTheDocument();
-    expect(screen.getByText("A análise do currículo está em processamento.")).toBeInTheDocument();
+    expect(screen.getByText("Análise IA em processamento.")).toBeInTheDocument();
+    expect(screen.getByText(/A análise IA em processamento/i)).toBeInTheDocument();
   });
 
   it("mostra score principal quando a aderência está pronta", () => {
@@ -98,7 +98,7 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Falha na análise")).toBeInTheDocument();
+    expect(screen.getByText("A análise IA falhou.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
     expect(onPrimaryAction).toHaveBeenCalledTimes(1);
   });
@@ -116,8 +116,8 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Extraindo currículo")).toBeInTheDocument();
-    expect(screen.getByText("Extraindo dados do currículo...")).toBeInTheDocument();
+    expect(screen.getByText("Extração do currículo em andamento")).toBeInTheDocument();
+    expect(screen.getByText(/A análise será iniciada automaticamente/i)).toBeInTheDocument();
   });
 
   it("mostra erro de extração quando extraction_status é failed", () => {
@@ -132,7 +132,7 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Falha na extração do currículo")).toBeInTheDocument();
+    expect(screen.getByText("Não foi possível extrair o texto do currículo.")).toBeInTheDocument();
     expect(screen.getByText(/Não foi possível extrair o texto/)).toBeInTheDocument();
   });
 
@@ -148,7 +148,7 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Análise na fila")).toBeInTheDocument();
+    expect(screen.getByText("Análise IA em processamento.")).toBeInTheDocument();
     expect(screen.queryByText("Extraindo currículo")).not.toBeInTheDocument();
   });
 
@@ -164,8 +164,8 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Aguardando extração")).toBeInTheDocument();
-    expect(screen.getByText("A análise já foi criada e aguarda a extração do currículo.")).toBeInTheDocument();
+    expect(screen.getByText("Extração do currículo em andamento")).toBeInTheDocument();
+    expect(screen.getByText("A análise será iniciada automaticamente quando o texto do currículo estiver disponível.")).toBeInTheDocument();
   });
 
   it("prioriza extraction_status failed sobre analysis completed", () => {
@@ -180,7 +180,7 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Falha na extração do currículo")).toBeInTheDocument();
+    expect(screen.getByText("Não foi possível extrair o texto do currículo.")).toBeInTheDocument();
     expect(screen.queryByText("Aderência pronta")).not.toBeInTheDocument();
   });
 });

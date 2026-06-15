@@ -60,7 +60,7 @@ describe("buildCandidateAnalysisSummary", () => {
       pollingAnalysisId: "analysis-1",
     });
 
-    expect(summary.label).toBe("Análise em processamento");
+    expect(summary.label).toBe("Análise IA em processamento.");
     expect(summary.inProgress).toBe(true);
   });
 
@@ -90,7 +90,7 @@ describe("buildCandidateAnalysisSummary", () => {
       pollingAnalysisId: null,
     });
 
-    expect(summary.label).toBe("Falha na análise");
+    expect(summary.label).toBe("A análise IA falhou.");
     expect(summary.detail).toContain("Timeout no provedor");
   });
 
@@ -120,9 +120,9 @@ describe("buildCandidateAnalysisSummary", () => {
       pollingAnalysisId: null,
     });
 
-    expect(summary.label).toBe("Limite temporário da IA");
+    expect(summary.label).toBe("Limite temporário do provedor IA");
     expect(summary.inProgress).toBe(true);
-    expect(summary.detail).toContain("Nova tentativa automática");
+    expect(summary.detail).toContain("Aguarde o cooldown");
   });
 
   it("não marca em andamento quando a análise pendente é de outra vaga", () => {
@@ -206,6 +206,7 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("failed");
+    expect(state.title).toBe("A análise IA falhou.");
     expect(state.description).toContain("Timeout no provedor");
   });
 
@@ -221,8 +222,8 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("processing");
-    expect(state.title).toBe("Extraindo currículo");
-    expect(state.description).toContain("Extraindo dados do currículo");
+    expect(state.title).toBe("Extração do currículo em andamento");
+    expect(state.description).toContain("A análise será iniciada automaticamente");
   });
 
   it("mostra estado de extração quando extraction_status está processing", () => {
@@ -236,7 +237,7 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("processing");
-    expect(state.title).toBe("Extraindo currículo");
+    expect(state.title).toBe("Extração do currículo em andamento");
     expect(state.inProgress).toBe(true);
   });
 
@@ -251,8 +252,8 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("failed");
-    expect(state.title).toBe("Falha na extração do currículo");
-    expect(state.description).toContain("Tente enviar novamente");
+    expect(state.title).toBe("Não foi possível extrair o texto do currículo.");
+    expect(state.description).toContain("Verifique se o arquivo está legível");
   });
 
   it("mostra análise IA pendente quando extraction está completed mas aiStatus é pending", () => {
@@ -266,7 +267,7 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("queued");
-    expect(state.title).toBe("Análise na fila");
+    expect(state.title).toBe("Análise IA em processamento.");
   });
 
   it("mostra análise aguardando extração quando existe analysis persistida em waiting_extraction", () => {
@@ -280,8 +281,8 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("waiting_extraction");
-    expect(state.title).toBe("Aguardando extração");
-    expect(state.description).toContain("aguarda a extração do currículo");
+    expect(state.title).toBe("Extração do currículo em andamento");
+    expect(state.description).toContain("A análise será iniciada automaticamente");
   });
 
   it("mostra análise em processamento quando extraction completed e aiStatus processing", () => {
@@ -295,7 +296,7 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("processing");
-    expect(state.title).toBe("Análise em processamento");
+    expect(state.title).toBe("Análise IA em processamento.");
     expect(state.inProgress).toBe(true);
   });
 
@@ -311,7 +312,7 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("failed");
-    expect(state.title).toBe("Falha na análise");
+    expect(state.title).toBe("A análise IA falhou.");
     expect(state.description).toContain("Erro ao processar análise");
   });
 
@@ -340,7 +341,23 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("failed");
-    expect(state.title).toBe("Falha na extração do currículo");
+    expect(state.title).toBe("Não foi possível extrair o texto do currículo.");
+  });
+
+  it("mostra cooldown amigável quando a falha foi por rate limit", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: "failed",
+      jobFitScore: null,
+      aiStatus: "failed",
+      extractionStatus: "completed",
+      errorMessage: "Rate limit do provedor IA. Retry in 30s.",
+    });
+
+    expect(state.state).toBe("failed");
+    expect(state.title).toBe("Limite temporário do provedor IA");
+    expect(state.description).toContain("Aguarde o cooldown");
   });
 });
 

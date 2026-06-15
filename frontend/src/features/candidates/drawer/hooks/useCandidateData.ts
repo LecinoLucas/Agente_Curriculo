@@ -6,13 +6,14 @@ import { formatContextError } from "../../../../services/errorMessages";
 import { HttpError } from "../../../../services/http";
 import type { PanelTab } from "../../../pipeline/PipelineContext";
 
-function isCandidateScoreNotReadyError(error: unknown): boolean {
+function isScoreNotReadyError(error: unknown): boolean {
   if (!(error instanceof HttpError)) return false;
   if (error.status !== 409) return false;
-  if (error.code === "candidate_score_not_ready") return true;
+  if (error.code === "candidate_score_not_ready" || error.code === "ranking_not_ready") return true;
   const detail = error.detail;
   if (detail && typeof detail === "object") {
-    return (detail as Record<string, unknown>).code === "candidate_score_not_ready";
+    const code = (detail as Record<string, unknown>).code;
+    return code === "candidate_score_not_ready" || code === "ranking_not_ready";
   }
   return false;
 }
@@ -157,7 +158,7 @@ export function useCandidateData({
       .catch((err: unknown) => {
         if (abortController.signal.aborted) return;
         setRankingEntry(null);
-        if (isCandidateScoreNotReadyError(err)) {
+        if (isScoreNotReadyError(err)) {
           setRankingEntryScoreNotReady(true);
           setRankingEntryError(null);
           return;

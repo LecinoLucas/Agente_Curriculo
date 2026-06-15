@@ -4,6 +4,16 @@ import type {
   CandidateLatestAnalysisOverview,
 } from "../../../types/domain";
 
+function looksLikeExtractionFailure(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  return /(extract|extraction|extraç|ocr|currículo.*ileg|arquivo.*ileg|pdf inválido)/i.test(errorMessage);
+}
+
+function looksLikeRateLimit(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  return /(rate.?limit|quota|cooldown|temporari[ao].*provedor|limita[çc][ãa]o.*provedor|429)/i.test(errorMessage);
+}
+
 export type CandidateAnalysisSummary = {
   label: string;
   detail: string;
@@ -192,9 +202,9 @@ export function getCandidateAnalysisUiState({
   if (extractionStatus === "failed") {
     return {
       state: "failed",
-      title: "Falha na extração do currículo",
-      description: "Não foi possível extrair o texto do currículo. Tente enviar novamente.",
-      primaryAction: "Tentar novamente",
+      title: "Não foi possível extrair o texto do currículo.",
+      description: "Verifique se o arquivo está legível ou envie um novo currículo.",
+      primaryAction: "Enviar novo currículo",
       severity: "danger",
       inProgress: false,
     };
@@ -203,9 +213,9 @@ export function getCandidateAnalysisUiState({
   if (normalizedStatus === "waiting_extraction") {
     return {
       state: "waiting_extraction",
-      title: "Aguardando extração",
-      description: "A análise já foi criada e aguarda a extração do currículo.",
-      primaryAction: "Acompanhar extração",
+      title: "Extração do currículo em andamento",
+      description: "A análise será iniciada automaticamente quando o texto do currículo estiver disponível.",
+      primaryAction: "Aguardar extração",
       severity: "info",
       inProgress: true,
     };
@@ -215,9 +225,9 @@ export function getCandidateAnalysisUiState({
   if (extractionStatus === "pending" || extractionStatus === "processing") {
     return {
       state: "processing",
-      title: "Extraindo currículo",
-      description: "Extraindo dados do currículo...",
-      primaryAction: "Acompanhar extração",
+      title: "Extração do currículo em andamento",
+      description: "A análise será iniciada automaticamente quando o texto do currículo estiver disponível.",
+      primaryAction: "Aguardar extração",
       severity: "info",
       inProgress: true,
     };
@@ -272,30 +282,30 @@ export function getCandidateAnalysisUiState({
   if (normalizedStatus === "retry_scheduled") {
     return {
       state: "retry_scheduled",
-      title: "Limite temporário da IA",
-      description: "O provedor IA limitou a requisição. Nova tentativa automática já foi agendada.",
+      title: "Limite temporário do provedor IA",
+      description: "A IA está temporariamente limitada pelo provedor. Aguarde o cooldown antes de tentar novamente.",
       primaryAction: "Acompanhar análise",
       severity: "warning",
       inProgress: true,
     };
   }
 
-  if (normalizedStatus === "pending") {
+  if (normalizedStatus === "pending" || normalizedStatus === "processing") {
     return {
-      state: "queued",
-      title: "Análise na fila",
-      description: "A análise do currículo já está na fila.",
+      state: normalizedStatus === "pending" ? "queued" : "processing",
+      title: "Análise IA em processamento.",
+      description: "A análise IA em processamento será concluída automaticamente quando o backend finalizar as etapas pendentes.",
       primaryAction: "Acompanhar análise",
       severity: "info",
       inProgress: true,
     };
   }
 
-  if (pollingAnalysisId || normalizedStatus === "processing") {
+  if (pollingAnalysisId) {
     return {
       state: "processing",
-      title: "Análise em processamento",
-      description: "A análise do currículo está em processamento.",
+      title: "Análise IA em processamento.",
+      description: "A análise IA em processamento será concluída automaticamente quando o backend finalizar as etapas pendentes.",
       primaryAction: "Acompanhar análise",
       severity: "info",
       inProgress: true,
@@ -303,12 +313,34 @@ export function getCandidateAnalysisUiState({
   }
 
   if (normalizedStatus === "failed" || normalizedStatus === "cancelled") {
+    if (looksLikeExtractionFailure(errorMessage)) {
+      return {
+        state: "failed",
+        title: "Não foi possível extrair o texto do currículo.",
+        description: "Verifique se o arquivo está legível ou envie um novo currículo.",
+        primaryAction: "Enviar novo currículo",
+        severity: "danger",
+        inProgress: false,
+      };
+    }
+
+    if (looksLikeRateLimit(errorMessage)) {
+      return {
+        state: "failed",
+        title: "Limite temporário do provedor IA",
+        description: "A IA está temporariamente limitada pelo provedor. Aguarde o cooldown antes de tentar novamente.",
+        primaryAction: "Aguardar cooldown",
+        severity: "warning",
+        inProgress: false,
+      };
+    }
+
     return {
       state: "failed",
-      title: "Falha na análise",
+      title: "A análise IA falhou.",
       description:
         errorMessage?.trim() ||
-        "Não foi possível concluir a análise.",
+        "Não foi possível concluir a análise IA.",
       primaryAction: "Tentar novamente",
       severity: "danger",
       inProgress: false,

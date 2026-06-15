@@ -1,6 +1,6 @@
 import { ActionMenu } from "../../../components/common/ActionMenu";
 import { AnalysisGlobalItem } from "../../../types/domain";
-import { STATUS_CONFIG, fmtDate, fmtDuration, formatSafeFailureReason } from "../utils/analysisFormatters";
+import { STATUS_CONFIG, fmtDate, fmtDuration, formatSafeFailureReason, isExtractionFailure } from "../utils/analysisFormatters";
 
 interface AnalysisRowProps {
   item: AnalysisGlobalItem;
@@ -65,6 +65,7 @@ export function AnalysisRow({
   const processingStuck = item.status === "processing" && processingForMs > 30 * 60 * 1000;
   const likelyStuck = item.stuck || pendingStuck || processingStuck;
   const safeFailureReason = formatSafeFailureReason(item.provider_error_type, item.failure_reason);
+  const extractionFailure = isExtractionFailure(item.provider_error_type, item.failure_reason);
   const hasCandidate = Boolean(item.candidate_id);
   const canRetryBehavioral = isBehavioral && (isFailed || likelyStuck || (isRetryScheduled && retryDue));
   const actionItems = [
@@ -82,7 +83,7 @@ export function AnalysisRow({
           disabled: actionInFlight,
         }
       : null,
-    (isFailed || canRetryBehavioral)
+    ((isFailed && !extractionFailure) || canRetryBehavioral)
       ? {
           label: actionInFlight ? "Reprocessando..." : isBehavioral ? "Tentar novamente" : "Reprocessar",
           onClick: onRetry,
@@ -158,12 +159,17 @@ export function AnalysisRow({
           ) : null}
           {item.status === "waiting_extraction" ? (
             <span className="max-w-[240px] text-xs text-text-muted">
-              A análise já foi criada e aguarda a extração do currículo.
+              Extração do currículo em andamento. A análise será iniciada automaticamente quando o texto estiver disponível.
             </span>
           ) : null}
           {likelyStuck ? (
             <span className="max-w-[260px] text-xs text-warning">
               A análise está demorando mais que o esperado. Verifique o worker ou tente reprocessar.
+            </span>
+          ) : null}
+          {extractionFailure ? (
+            <span className="max-w-[240px] text-xs text-warning">
+              Esta falha é de extração/OCR. Reenvie o currículo ou valide o arquivo antes de tentar nova análise IA.
             </span>
           ) : null}
           {safeFailureReason && (isFailed || isRetryScheduled) ? (

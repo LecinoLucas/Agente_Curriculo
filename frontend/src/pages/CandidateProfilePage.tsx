@@ -188,6 +188,24 @@ export function CandidateProfilePage() {
   const activeScore = useMemo(() => getActiveJobScore(overview, activeEntry), [overview, activeEntry]);
   const profileEntry = activeEntry ?? overview?.pipeline_entries[0] ?? null;
   const profileJobId = activeEntry?.job_id ?? overview?.active_job_id ?? profileEntry?.job_id ?? null;
+  const activeResumeVersionId = useMemo(
+    () =>
+      activeEntry?.resume_version_id ??
+      profileEntry?.resume_version_id ??
+      overview?.resumes[0]?.current_version_id ??
+      null,
+    [activeEntry?.resume_version_id, overview?.resumes, profileEntry?.resume_version_id],
+  );
+  const latestExtractionStatus = useMemo(
+    () =>
+      (
+        overview?.resumes.find((resume) => resume.current_version_id === activeResumeVersionId)
+          ?.extraction_status ??
+        overview?.resumes[0]?.extraction_status ??
+        null
+      )?.toLowerCase() ?? null,
+    [activeResumeVersionId, overview?.resumes],
+  );
   const historyFocusJobId = useMemo(
     () => new URLSearchParams(location.search).get("job_id"),
     [location.search],
@@ -474,6 +492,18 @@ export function CandidateProfilePage() {
       if (!profileJobId || manualAnalysisRequesting) return;
 
       const effectiveStatus = manualAnalysisStatus ?? overview?.active_job_decision?.analysis_status ?? null;
+      if (latestExtractionStatus === "pending" || latestExtractionStatus === "processing") {
+        toast.info("Extração do currículo em andamento. A análise será iniciada automaticamente quando o texto estiver disponível.");
+        return;
+      }
+      if (latestExtractionStatus === "failed") {
+        toast.error("Não foi possível extrair o texto do currículo. Verifique se o arquivo está legível ou envie um novo currículo.");
+        return;
+      }
+      if (effectiveStatus === "waiting_extraction") {
+        toast.info("A análise está aguardando o texto do currículo. Aguarde a conclusão da extração.");
+        return;
+      }
       if (effectiveStatus === "pending" || effectiveStatus === "processing" || effectiveStatus === "retry_scheduled") {
         toast.info("Análise em andamento.");
         return;
@@ -532,6 +562,7 @@ export function CandidateProfilePage() {
       getAnalysisResumeVersionId,
       manualAnalysisRequesting,
       manualAnalysisStatus,
+      latestExtractionStatus,
       overview?.active_job_decision?.analysis_status,
       profileJobId,
       reloadWorkspace,

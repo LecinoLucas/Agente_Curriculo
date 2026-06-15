@@ -7,6 +7,7 @@ import { formatDateTime, getScoreAttentionPoints, getScoreStrengths } from "../p
 import { ActionButton, DefinitionList, EmptyBlock, SectionCard } from "./ProfileSharedUI";
 import { scoreExplanationService } from "../../../../services/scoreExplanationService";
 import type { ScoreExplanationResponse } from "../../../../services/scoreExplanationService";
+import { HttpError } from "../../../../services/http";
 import type {
   AnalysisResult,
   AnalysisStatus,
@@ -34,6 +35,27 @@ interface CandidateProfileScoreTabProps {
   compatibilityGuidance: ReturnType<typeof useCandidateDecision>["compatibilityGuidance"];
 }
 
+function isScorePendingError(error: unknown): boolean {
+  if (!(error instanceof HttpError)) return false;
+  if (error.status !== 409) return false;
+  if (error.code === "candidate_score_not_ready" || error.code === "ranking_not_ready") return true;
+  if (error.detail && typeof error.detail === "object") {
+    const code = (error.detail as Record<string, unknown>).code;
+    return code === "candidate_score_not_ready" || code === "ranking_not_ready";
+  }
+  return false;
+}
+
+function looksLikeExtractionFailure(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  return /(extract|extraction|extraç|ocr|currículo.*ileg|arquivo.*ileg|pdf inválido)/i.test(errorMessage);
+}
+
+function looksLikeRateLimit(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  return /(rate.?limit|quota|cooldown|temporari[ao].*provedor|limita[çc][ãa]o.*provedor|429)/i.test(errorMessage);
+}
+
 export function CandidateProfileScoreTab({
   overview,
   activeJobId,
@@ -58,23 +80,45 @@ export function CandidateProfileScoreTab({
     overview.latest_analysis?.analysis_id === currentAnalysisId ? overview.latest_analysis : null;
   const status = manualAnalysisStatus ?? decision?.analysis_status ?? null;
   const scoreStatus = decision?.score_status ?? null;
-  const isProcessing =
-    scoreStatus === "analysis_processing" ||
-    status === "pending" ||
-    status === "processing" ||
-    status === "retry_scheduled";
+  const currentFailureReason = currentAnalysisOverview?.failure_reason ?? null;
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(null);
   const [scoreExplanationLoading, setScoreExplanationLoading] = useState(false);
+  const [scoreExplanationError, setScoreExplanationError] = useState<string | null>(null);
+  const activeResumeVersionId =
+    activePipelineEntry?.resume_version_id ??
+    overview.resumes[0]?.current_version_id ??
+    null;
+  const latestExtractionStatus =
+    (
+      overview.resumes.find((r) => r.current_version_id === activeResumeVersionId)
+        ?.extraction_status ?? overview.resumes[0]?.extraction_status ?? null
+    )?.toLowerCase() ?? null;
+  const extractionInFlight =
+    latestExtractionStatus === "pending" || latestExtractionStatus === "processing";
+  const extractionFailed = latestExtractionStatus === "failed";
+  const waitingExtraction = status === "waiting_extraction";
+  const rateLimitedFailure =
+    status === "retry_scheduled" ||
+    ((status === "failed" || scoreStatus === "analysis_failed") &&
+      looksLikeRateLimit(currentFailureReason));
+  const isMatchingPending = scoreStatus === "matching_pending";
+  const isProcessing =
+    !waitingExtraction &&
+    !rateLimitedFailure &&
+    !isMatchingPending &&
+    (scoreStatus === "analysis_processing" || status === "pending" || status === "processing");
 
   useEffect(() => {
-    if (!activeJobId || !candidateId || !currentAnalysisId || isProcessing) {
+    if (!activeJobId || !candidateId || !currentAnalysisId || isProcessing || scoreNotReady) {
       setScoreExplanation(null);
       setScoreExplanationLoading(false);
+      setScoreExplanationError(null);
       return;
     }
 
     let cancelled = false;
     setScoreExplanationLoading(true);
+    setScoreExplanationError(null);
     void scoreExplanationService
       .get(activeJobId, candidateId)
       .then((payload) => {
@@ -85,8 +129,14 @@ export function CandidateProfileScoreTab({
         }
         setScoreExplanation(payload);
       })
-      .catch(() => {
-        if (!cancelled) setScoreExplanation(null);
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setScoreExplanation(null);
+        if (isScorePendingError(error)) {
+          setScoreExplanationError(null);
+          return;
+        }
+        setScoreExplanationError("Não foi possível carregar a explicação detalhada do score.");
       })
       .finally(() => {
         if (!cancelled) setScoreExplanationLoading(false);
@@ -95,7 +145,7 @@ export function CandidateProfileScoreTab({
     return () => {
       cancelled = true;
     };
-  }, [activeJobId, candidateId, currentAnalysisId, isProcessing]);
+  }, [activeJobId, candidateId, currentAnalysisId, isProcessing, scoreNotReady]);
 
   if (!activeJobId) {
     return (
@@ -109,11 +159,38 @@ export function CandidateProfileScoreTab({
   if (isProcessing) {
     return (
       <EmptyBlock
-        title="Análise em andamento."
+        title="Análise IA em processamento."
         description="A análise da vaga ativa ainda está sendo processada."
-        actionLabel="Gerar análise agora"
+        actionLabel="Aguardar análise"
         onAction={() => void onRequestAnalysis()}
         actionDisabled
+      />
+    );
+  }
+
+  if (waitingExtraction || extractionInFlight) {
+    return (
+      <EmptyBlock
+        title="Extração do currículo em andamento"
+        description="A análise será iniciada automaticamente quando o texto do currículo estiver disponível."
+      />
+    );
+  }
+
+  if (extractionFailed || looksLikeExtractionFailure(currentFailureReason)) {
+    return (
+      <EmptyBlock
+        title="Não foi possível extrair o texto do currículo."
+        description="Verifique se o arquivo está legível ou envie um novo currículo."
+      />
+    );
+  }
+
+  if (rateLimitedFailure) {
+    return (
+      <EmptyBlock
+        title="Limite temporário do provedor IA"
+        description="A IA está temporariamente limitada pelo provedor. Aguarde o cooldown antes de tentar novamente."
       />
     );
   }
@@ -121,7 +198,7 @@ export function CandidateProfileScoreTab({
   if (status === "failed" || scoreStatus === "analysis_failed") {
     return (
       <EmptyBlock
-        title="Análise falhou."
+        title="A análise IA falhou."
         description="A análise da vaga ativa não foi concluída. Solicite uma nova tentativa quando quiser."
         actionLabel={analysisRequesting ? "Solicitando..." : "Tentar novamente"}
         onAction={() => void onRequestAnalysis()}
@@ -131,47 +208,35 @@ export function CandidateProfileScoreTab({
   }
 
   if ((scoreNotReady || (!currentAnalysisId && !rankingEntry)) && !loading) {
-    const activeResumeVersionId =
-      activePipelineEntry?.resume_version_id ??
-      overview.resumes[0]?.current_version_id ??
-      null;
-    const latestExtractionStatus =
-      (
-        overview.resumes.find((r) => r.current_version_id === activeResumeVersionId)
-          ?.extraction_status ?? overview.resumes[0]?.extraction_status ?? null
-      )?.toLowerCase() ?? null;
-    const extractionInFlight =
-      latestExtractionStatus === "pending" || latestExtractionStatus === "processing";
-
     let title = "Análise ainda não gerada";
     let subtitle =
       "O candidato está vinculado à vaga ativa, mas ainda não existe análise IA canônica para este vínculo.";
     let actionLabel = analysisRequesting ? "Solicitando..." : "Gerar análise agora";
     let actionDisabled = analysisRequesting;
 
-    if (extractionInFlight) {
-      title = "Extração de currículo em andamento";
-      subtitle = "Extração do currículo em andamento.";
-      actionDisabled = true;
-    } else if (currentAnalysisId && status === "completed") {
+    if (isMatchingPending || (currentAnalysisId && status === "completed")) {
       title = "Matching pendente";
       subtitle =
-        "Esta análise IA já foi concluída. Falta apenas recalcular o matching/ranking desta vaga. Essa ação não usa IA e pode levar alguns instantes.";
+        "O score será exibido após a conclusão da análise e do matching. Essa ação não usa IA e pode levar alguns instantes.";
       actionLabel = matchingRecalculating ? "Recalculando..." : "Recalcular matching";
+    } else if (extractionInFlight || waitingExtraction) {
+      title = "Extração do currículo em andamento";
+      subtitle = "A análise será iniciada automaticamente quando o texto do currículo estiver disponível.";
+      actionDisabled = true;
     } else if (currentAnalysisId) {
-      title = "Análise interrompida";
+      title = "Score ainda não disponível.";
       subtitle =
-        "Existe uma análise canônica para a vaga ativa, mas ela não está em processamento válido.";
+        "O score será exibido após a conclusão da análise e do matching.";
       actionLabel = analysisRequesting ? "Solicitando..." : "Reprocessar análise";
     }
 
-    const isMatchingPending = currentAnalysisId != null && status === "completed";
-    const handleAction = isMatchingPending
+    const canRecalculateMatching = isMatchingPending || (currentAnalysisId != null && status === "completed");
+    const handleAction = canRecalculateMatching
       ? onRecalculateMatching
         ? () => void onRecalculateMatching()
         : undefined
       : () => void onRequestAnalysis({ force: true });
-    const isActionDisabled = isMatchingPending
+    const isActionDisabled = canRecalculateMatching
       ? matchingRecalculating || !activeJobId || !onRecalculateMatching
       : actionDisabled;
 
@@ -251,6 +316,12 @@ export function CandidateProfileScoreTab({
               empty="Sem pontos de atenção destacados."
             />
           </div>
+        </SectionCard>
+      ) : null}
+
+      {scoreExplanationError ? (
+        <SectionCard title="Explicação resumida">
+          <p className="text-sm text-rose-700">{scoreExplanationError}</p>
         </SectionCard>
       ) : null}
 
