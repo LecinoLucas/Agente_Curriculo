@@ -1,11 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
+const { scoreExplanationGetMock } = vi.hoisted(() => ({
+  scoreExplanationGetMock: vi.fn(),
+}));
+
 vi.mock("../../../../../services/scoreExplanationService", () => ({
-  scoreExplanationService: { get: vi.fn().mockResolvedValue(null) },
+  scoreExplanationService: { get: scoreExplanationGetMock },
 }));
 
 vi.mock("../../drawer/tabs/ScoreTab", () => ({
@@ -168,6 +172,13 @@ function waitingExtractionOverview(): Partial<CandidateOverview> {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+beforeEach(() => {
+  scoreExplanationGetMock.mockReset();
+  scoreExplanationGetMock.mockImplementation(
+    () => new Promise(() => undefined),
+  );
+});
+
 describe("CandidateProfileScoreTab — matching_pending state", () => {
   it("shows 'Matching pendente' title", () => {
     renderTab({ overviewPartial: matchingPendingOverview(), scoreNotReady: true });
@@ -306,7 +317,7 @@ describe("CandidateProfileScoreTab — other states still use onRequestAnalysis"
     expect(screen.queryByTestId("empty-action")).not.toBeInTheDocument();
   });
 
-  it("mostra falha de OCR sem mencionar IA comportamental", () => {
+  it("mostra falha de OCR sem mencionar IA comportamental", async () => {
     renderTab({
       overviewPartial: {
         active_job_decision: {
@@ -337,12 +348,15 @@ describe("CandidateProfileScoreTab — other states still use onRequestAnalysis"
       },
     });
 
+    await waitFor(() => {
+      expect(scoreExplanationGetMock).toHaveBeenCalledTimes(1);
+    });
     expect(screen.getByTestId("empty-title")).toHaveTextContent("Não foi possível extrair o texto do currículo.");
     expect(screen.getByTestId("empty-description")).toHaveTextContent(/arquivo está legível/i);
     expect(screen.queryByText(/IA comportamental/i)).not.toBeInTheDocument();
   });
 
-  it("mostra cooldown amigável para rate limit", () => {
+  it("mostra cooldown amigável para rate limit", async () => {
     renderTab({
       overviewPartial: {
         active_job_decision: {
@@ -362,6 +376,9 @@ describe("CandidateProfileScoreTab — other states still use onRequestAnalysis"
       },
     });
 
+    await waitFor(() => {
+      expect(scoreExplanationGetMock).toHaveBeenCalledTimes(1);
+    });
     expect(screen.getByTestId("empty-title")).toHaveTextContent("Limite temporário do provedor IA");
     expect(screen.getByTestId("empty-description")).toHaveTextContent(/Aguarde o cooldown/i);
     expect(screen.queryByTestId("empty-action")).not.toBeInTheDocument();
