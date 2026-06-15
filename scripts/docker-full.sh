@@ -108,7 +108,10 @@ if [ "$OPT_BUILD" = "true" ]; then
   print_ok "Build concluido"
 fi
 
-# ── 4. Infraestrutura: postgres + redis ───────────────────────────────────────
+# ── 4. Garantir diretório de uploads compartilhado ───────────────────────────
+mkdir -p "$ROOT_DIR/uploads"
+
+# ── 5. Infraestrutura: postgres + redis ───────────────────────────────────────
 print_section "Subindo infraestrutura (postgres + redis)"
 $COMPOSE up -d --wait postgres redis
 print_ok "postgres e redis healthy"

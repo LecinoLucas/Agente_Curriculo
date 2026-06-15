@@ -14,7 +14,8 @@ frontend/.env
 *.pyc
 __pycache__/
 backend/uploads/
-uploads/
+uploads/*
+!uploads/.gitkeep
 *.db
 test_run.db
 __pycache__/

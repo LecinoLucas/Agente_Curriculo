@@ -79,6 +79,8 @@ services:
     <<: *backend-common
     ports:
       - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/live || exit 1"]
       interval: 10s
@@ -96,6 +98,8 @@ services:
       celery -A src.infrastructure.queue.celery_app worker
       --loglevel=info
       -Q analysis,extraction,matching,document_ai,behavioral_ai
+    volumes:
+      - ./uploads:/app/uploads
 
   # ──────────────────────────────────────────
   # CELERY BEAT (periodic tasks)
