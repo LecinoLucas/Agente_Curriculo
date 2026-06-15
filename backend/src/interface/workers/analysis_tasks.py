@@ -21,6 +21,7 @@ from src.ai_orchestration.analysis.prompt_builder import (
     build_minimal_user_prompt,
 )
 from src.ai_orchestration.analysis.prompt_compaction import (
+    _remove_sensitive_resume_data,
     compact_job_for_prompt,
     compact_resume_for_prompt,
 )
@@ -45,6 +46,7 @@ logger = structlog.get_logger(__name__)
 _build_minimal_user_prompt = build_minimal_user_prompt
 _compact_resume_for_prompt = compact_resume_for_prompt
 _compact_job_for_prompt = compact_job_for_prompt
+_remove_sensitive_resume_data = _remove_sensitive_resume_data
 _validate_prompt_before_ai = validate_prompt_before_ai
 _classify_analysis_exception = classify_analysis_exception
 _extract_rate_limit_retry_after_seconds = extract_rate_limit_retry_after_seconds
