@@ -1,41 +1,38 @@
-"""Legacy dev helper for preparing the local database.
+"""DEPRECIADO — não use este script.
 
-Schema creation is delegated to Alembic. This script remains only as a
-compatibility wrapper for older local workflows.
+Use sempre o bootstrap oficial:
+    python scripts/bootstrap_dev.py
+
+bootstrap_dev_db.py não insere o template ativo full_analysis nem aplica
+as proteções de ambiente contra banco de produção. Banco bootstrapeado por
+este script ficará incompleto e causará:
+
+    ValidationException("Nenhum template ativo para tipo 'full_analysis'")
+
+na primeira criação de análise IA.
 """
 from __future__ import annotations
 
-import asyncio
 import sys
-from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
-
-def upgrade_schema() -> None:
-    alembic_cfg = Config(str(ROOT_DIR / "alembic.ini"))
-    command.upgrade(alembic_cfg, "head")
-
-
-async def seed_minimal_dev_data() -> None:
-    from scripts.seed_ai_models import seed_ai_models
-    from src.infrastructure.database.connection import engine
-
-    async with engine.begin() as connection:
-        await seed_ai_models(connection)
-
-    await engine.dispose()
+print(
+    "\n[ERRO] bootstrap_dev_db.py é legado e não deve ser usado.\n"
+    "\n"
+    "       Use o bootstrap oficial:\n"
+    "\n"
+    "           python scripts/bootstrap_dev.py\n"
+    "\n"
+    "       Este script não insere o template ativo full_analysis e não\n"
+    "       tem proteções de ambiente contra banco de produção.\n"
+    "       Banco criado por este script causará erro na análise IA.\n",
+    file=sys.stderr,
+)
+sys.exit(1)
 
 
 def main() -> None:
-    upgrade_schema()
-    asyncio.run(seed_minimal_dev_data())
-    print("Banco de desenvolvimento preparado com Alembic.")
+    # Nunca executado — sys.exit(1) acima garante o abort.
+    raise RuntimeError("bootstrap_dev_db.py está depreciado. Use bootstrap_dev.py.")
 
 
 if __name__ == "__main__":

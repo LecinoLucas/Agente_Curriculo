@@ -158,10 +158,35 @@ O Docker é uma alternativa, não um substituto obrigatório.
 
 ---
 
+## Storage de uploads local
+
+Currículos enviados pela API são gravados em `./uploads/resumes/` (bind mount `./uploads:/app/uploads`).  
+Tanto `backend-api` quanto `celery-worker` montam o mesmo diretório no path interno `/app/uploads`, garantindo que o worker consiga ler os arquivos salvos pela API.
+
+- O diretório `./uploads/` é ignorado pelo Git (`.gitignore`). Apenas `uploads/.gitkeep` é versionado.
+- Após `docker compose down -v`, o banco é zerado, mas os arquivos em `./uploads/` permanecem (bind mount, não volume Docker).
+- Para reset completo local, remova manualmente: `rm -rf uploads/resumes/`
+
+---
+
+## Bootstrap oficial
+
+O script de bootstrap oficial é **`python scripts/bootstrap_dev.py`**.
+
+Ele é chamado automaticamente por `npm run docker:full` e por `scripts/reset_dev_db.sh`.  
+Após o bootstrap, o script valida que o template ativo `full_analysis` está presente — se estiver faltando, ele aborta com mensagem clara.
+
+> **`backend/scripts/bootstrap_dev_db.py` é legado e está depreciado.**  
+> Ele não insere o template `full_analysis` e não tem proteções de ambiente.  
+> Banco criado com esse script falha na primeira criação de análise IA com:  
+> `ValidationException("Nenhum template ativo para tipo 'full_analysis'")`  
+> Não use `bootstrap_dev_db.py` — sempre use `bootstrap_dev.py`.
+
+---
+
 ## Limitações desta fase
 
 - Sem HTTPS (apenas HTTP local)
 - Sem reverse proxy (Nginx/Traefik) na frente
 - `VITE_*` vars baked in no build — mudanças exigem rebuild dos frontends
-- Uploads de arquivo mapeados apenas em memória (sem volume para `/app/uploads`)
 - Não é configuração de produção — secrets gerenciados via `.env.docker.local` local

@@ -223,6 +223,28 @@ async def _check_required_tables() -> None:
         )
 
 
+async def _check_full_analysis_template() -> None:
+    engine = _get_engine()
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                sa.text(
+                    "SELECT COUNT(*) FROM prompt_templates "
+                    "WHERE template_type = 'full_analysis' AND is_active = true"
+                )
+            )
+            count = result.scalar() or 0
+    except SQLAlchemyError as exc:
+        _fail(f"Falha ao validar template full_analysis: {exc}")
+
+    if count == 0:
+        _fail(
+            "Bootstrap incompleto: template ativo full_analysis não encontrado. "
+            "Verifique se seed_dev_admin.py foi executado corretamente ou rode: "
+            "python scripts/bootstrap_dev.py"
+        )
+
+
 def _ensure_directories(verbose: bool) -> None:
     for directory in REQUIRED_DIRECTORIES:
         directory.mkdir(parents=True, exist_ok=True)
@@ -297,16 +319,20 @@ async def _dispose_engine() -> None:
 
 
 async def _run_async_steps(*, skip_jobs: bool, verbose: bool) -> None:
-    _print("\n[2/5] Validando schema crítico...")
+    _print("\n[2/6] Validando schema crítico...")
     await _check_required_tables()
     _print("[OK] Tabelas críticas presentes.")
 
-    _print("\n[3/5] Garantindo diretórios locais...")
+    _print("\n[3/6] Garantindo diretórios locais...")
     _ensure_directories(verbose)
     _print("[OK] uploads, private_uploads e reports disponíveis.")
 
-    _print("\n[4/5] Rodando seeds de desenvolvimento...")
+    _print("\n[4/6] Rodando seeds de desenvolvimento...")
     await _run_seeds(skip_jobs=skip_jobs, verbose=verbose)
+
+    _print("\n[5/6] Validando template ativo full_analysis...")
+    await _check_full_analysis_template()
+    _print("[OK] Template ativo full_analysis presente.")
 
 
 def main() -> None:
@@ -323,12 +349,12 @@ def main() -> None:
         _print(f"DATABASE_URL...: {_safe_database_url(database_url)}")
         _print("Modo...........: preserva dados, não dropa banco, não apaga registros")
 
-        _print("\n[1/5] Aplicando migrations (alembic upgrade head)...")
+        _print("\n[1/6] Aplicando migrations (alembic upgrade head)...")
         _run_alembic_upgrade(alembic_cfg, args.verbose)
 
         asyncio.run(_run_async_steps(skip_jobs=args.skip_jobs, verbose=args.verbose))
 
-        _print("\n[5/5] Revisão Alembic aplicada...")
+        _print("\n[6/6] Revisão Alembic aplicada...")
         _show_alembic_current(alembic_cfg, args.verbose)
     except BootstrapError as exc:
         print(f"\n[ERRO] {exc}", file=sys.stderr)
