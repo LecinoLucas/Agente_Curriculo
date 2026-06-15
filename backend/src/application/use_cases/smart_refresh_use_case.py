@@ -23,6 +23,7 @@ import sqlalchemy as sa
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.analysis_retry_policy import rate_limit_cooldown
 from src.infrastructure.database.models.analysis_model import AnalysisModel, AnalysisResultModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
@@ -54,6 +55,9 @@ class _CandidateRow:
     has_resume: bool
     # True only when an analysis_results row exists AND extracted_data != {}
     has_extracted_data: bool
+    # True when the current analysis failed by provider rate-limit/quota and is
+    # still inside its cooldown window — must not be re-dispatched (would re-burn quota).
+    rate_limited_blocked: bool = False
 
 
 @dataclass(frozen=True)
@@ -103,6 +107,7 @@ def _classify(row: _CandidateRow) -> tuple[str, str]:
     if not row.has_resume:
         return "skipped_no_resume", "no_resume"
     if row.analysis_status in _PROCESSING_STATUSES:
+        # waiting_extraction is included here: it awaits extraction, never AI.
         return "skipped_already_processing", "already_processing"
     if row.analysis_status == _VALID_COMPLETED_STATUS:
         if not row.has_extracted_data:
@@ -110,6 +115,10 @@ def _classify(row: _CandidateRow) -> tuple[str, str]:
             return "ai_analysis", "legacy_incomplete_analysis"
         return "ranking_recalculation", ""
     if row.analysis_status in _FAILED_STATUSES:
+        if row.rate_limited_blocked:
+            # Failed by provider rate-limit/quota and still in cooldown — do NOT
+            # re-dispatch; that would reopen provider attempts and re-burn quota.
+            return "skipped_already_processing", "rate_limited_cooldown"
         # Failed/cancelled — retry via AI worker (stage bypass handled in dispatcher)
         return "ai_analysis", "failed_analysis_retry"
     return "ai_analysis", "no_valid_analysis"
@@ -160,6 +169,11 @@ class SmartRefreshUseCase:
                 pipeline.candidate_id,
                 CandidateModel.full_name.label("candidate_name"),
                 AnalysisModel.status.label("analysis_status"),
+                AnalysisModel.provider_error_type.label("provider_error_type"),
+                AnalysisModel.provider_status_code.label("provider_status_code"),
+                AnalysisModel.next_retry_at.label("next_retry_at"),
+                AnalysisModel.failed_at.label("failed_at"),
+                AnalysisModel.updated_at.label("updated_at"),
                 has_resume_subq.label("has_resume"),
                 has_extracted_data_subq.label("has_extracted_data"),
             )
@@ -176,16 +190,27 @@ class SmartRefreshUseCase:
         )
 
         result = await self._db.execute(stmt)
-        return [
-            _CandidateRow(
-                candidate_id=row.candidate_id,
-                candidate_name=row.candidate_name or "",
-                analysis_status=row.analysis_status,
-                has_resume=bool(row.has_resume),
-                has_extracted_data=bool(row.has_extracted_data),
+        rows: list[_CandidateRow] = []
+        for row in result.mappings():
+            cooldown = rate_limit_cooldown(
+                status=row.analysis_status,
+                provider_error_type=row.provider_error_type,
+                provider_status_code=row.provider_status_code,
+                next_retry_at=row.next_retry_at,
+                failed_at=row.failed_at,
+                updated_at=row.updated_at,
             )
-            for row in result.mappings()
-        ]
+            rows.append(
+                _CandidateRow(
+                    candidate_id=row.candidate_id,
+                    candidate_name=row.candidate_name or "",
+                    analysis_status=row.analysis_status,
+                    has_resume=bool(row.has_resume),
+                    has_extracted_data=bool(row.has_extracted_data),
+                    rate_limited_blocked=cooldown.blocked,
+                )
+            )
+        return rows
 
     async def preview(self, job_id: UUID) -> SmartRefreshPreviewData:
         await self._require_job(job_id)
@@ -281,6 +306,7 @@ class SmartRefreshUseCase:
         skipped_no_resume = 0
         skipped_legacy_incomplete = 0
 
+        skipped_rate_limited = 0
         for row in rows:
             category, reason = _classify(row)
             if category == "ranking_recalculation":
@@ -291,8 +317,18 @@ class SmartRefreshUseCase:
                     skipped_legacy_incomplete += 1
             elif category == "skipped_already_processing":
                 skipped_already_processing += 1
+                if reason == "rate_limited_cooldown":
+                    skipped_rate_limited += 1
             else:
                 skipped_no_resume += 1
+
+        if skipped_rate_limited:
+            logger.info(
+                "analysis.smart_refresh_skipped",
+                job_id=str(job_id),
+                reason="rate_limited_cooldown",
+                candidate_count=skipped_rate_limited,
+            )
 
         ranking_recalculation_enqueued = False
         if ranking_candidates:

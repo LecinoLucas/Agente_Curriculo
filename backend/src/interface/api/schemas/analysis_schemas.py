@@ -183,6 +183,11 @@ class BulkAnalysisActionRequest(BaseModel):
 class BulkAnalysisActionResponse(BaseModel):
     processed: int
     skipped: int
+    # Detailed breakdown (processed == queued_count; skipped == skipped_count + blocked_count).
+    queued_count: int = 0
+    skipped_count: int = 0
+    blocked_count: int = 0
+    skipped_reasons: dict[str, int] = Field(default_factory=dict)
 
 
 class DiscardAnalysisRequest(BaseModel):

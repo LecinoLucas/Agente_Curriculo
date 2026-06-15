@@ -508,6 +508,10 @@ async def _process_analysis_with_session(
             analysis.worker_claim_id = None
             analysis.claimed_at = None
             analysis.stale_at = None
+            # Clear task_id so the extraction worker (which re-enqueues analyses
+            # with task_id IS NULL once text is ready) can pick this one up again.
+            # Leaving it set would strand the analysis in waiting_extraction.
+            analysis.task_id = None
             analysis.updated_at = now
             await record_analysis_audit_event(
                 session,

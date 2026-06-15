@@ -10,6 +10,11 @@ from src.application.services.ai_limit_override_service import (
     AIDailyLimitExceededError,
     AILimitOverrideService,
 )
+from src.application.services.analysis_retry_policy import (
+    RateLimitCooldown,
+    rate_limit_cooldown_for_analysis,
+)
+from src.core.analysis_observability import record_analysis_audit_event
 from src.application.services.analysis_service import (
     AnalysisDiscardBlockedError,
     AnalysisNotCompletedError,
@@ -56,6 +61,7 @@ from src.interface.api.schemas.analysis_schemas import (
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.workers.analysis_dispatcher import enqueue_analysis
 from src.interface.workers.analysis_dispatcher import ANALYSIS_QUEUE
+from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
 
 router = APIRouter(prefix="/analyses", tags=["analyses"])
 
@@ -126,14 +132,56 @@ def _analysis_service(db: AsyncSession) -> AnalysisService:
     return AnalysisService(SQLAlchemyAnalysisRepository(db), audit_service=AuditService(db))
 
 
+_WAITING_EXTRACTION_DETAIL = {
+    "code": "analysis_waiting_extraction",
+    "message": (
+        "A extração do currículo ainda não foi concluída. "
+        "Reprocesse a extração ou aguarde."
+    ),
+    "retry_target": "extraction",
+}
+
+
+def _analysis_cooldown(analysis) -> RateLimitCooldown:
+    """Rate-limit/quota cooldown covering both retry_scheduled and failed states."""
+    return rate_limit_cooldown_for_analysis(analysis)
+
+
 def _is_rate_limited_analysis_blocked(analysis) -> bool:
-    if analysis.status != "retry_scheduled":
-        return False
-    if analysis.next_retry_at is None:
-        return False
-    if analysis.provider_error_type != "rate_limited":
-        return False
-    return analysis.next_retry_at > datetime.now(UTC)
+    """Backward-compatible boolean wrapper over the cooldown policy."""
+    return _analysis_cooldown(analysis).blocked
+
+
+def _rate_limited_detail(cooldown: RateLimitCooldown) -> dict:
+    return {
+        "code": "ai_provider_rate_limited",
+        "message": (
+            "Limite de uso do provedor IA atingido. "
+            "Aguarde o fim da janela de cooldown antes de tentar novamente."
+        ),
+        "retry_after_seconds": cooldown.retry_after_seconds,
+        "blocked_until": (
+            cooldown.blocked_until.isoformat() if cooldown.blocked_until else None
+        ),
+    }
+
+
+async def _retrigger_resume_extraction(db: AsyncSession, analysis) -> None:
+    """Best-effort re-enqueue of resume extraction for a waiting_extraction analysis.
+
+    Never raises: a broker hiccup here must not turn a controlled 409 into a 500.
+    The extraction task self-guards (it only claims pending/failed versions), so
+    a duplicate enqueue is a no-op when extraction is already running/completed.
+    """
+    try:
+        enqueue_resume_extraction(analysis.resume_version_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "analysis.retry_extraction_reenqueue_failed",
+            analysis_id=str(analysis.id),
+            resume_version_id=str(analysis.resume_version_id),
+            error=str(exc),
+        )
 
 
 async def _resolve_requestor_name(db: AsyncSession, user_id: UUID) -> str | None:
@@ -578,23 +626,47 @@ async def bulk_retry_analyses(
 ) -> BulkAnalysisActionResponse:
     """Retry multiple failed analyses.
 
-    Only processes analyses with status 'failed' or 'waiting_extraction'.
+    Only re-queues analyses in status 'failed'. Analyses in 'waiting_extraction'
+    are skipped (they await extraction, not AI). Analyses that failed by provider
+    rate-limit/quota inside the cooldown window are blocked (no attempt reset).
     """
     from src.infrastructure.database.models.analysis_model import AnalysisModel
     now = datetime.now(UTC)
-    processed = 0
-    skipped = 0
+    queued_count = 0
+    skipped_count = 0
+    blocked_count = 0
+    skipped_reasons: dict[str, int] = {}
     to_enqueue = []
+    extraction_to_retrigger: list = []
+
+    def _record_skip(reason: str) -> None:
+        nonlocal skipped_count
+        skipped_count += 1
+        skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
 
     for analysis_id in body.analysis_ids:
         analysis = await db.scalar(
             sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
         )
-        if not analysis or analysis.status not in {"failed", "waiting_extraction"}:
-            skipped += 1
+        if not analysis:
+            _record_skip("not_found")
             continue
-        if _is_rate_limited_analysis_blocked(analysis):
-            skipped += 1
+
+        # waiting_extraction never goes to the AI queue — re-trigger extraction.
+        if analysis.status == "waiting_extraction":
+            extraction_to_retrigger.append(analysis)
+            _record_skip("waiting_extraction")
+            continue
+
+        # Rate-limit/quota cooldown blocks re-queue AND attempt reset.
+        cooldown = _analysis_cooldown(analysis)
+        if cooldown.blocked:
+            blocked_count += 1
+            skipped_reasons["rate_limited"] = skipped_reasons.get("rate_limited", 0) + 1
+            continue
+
+        if analysis.status != "failed":
+            _record_skip("not_retryable")
             continue
 
         analysis.status = "pending"
@@ -606,13 +678,15 @@ async def bulk_retry_analyses(
         analysis.next_retry_at = None
         analysis.provider_error_type = None
         analysis.provider_status_code = None
+        analysis.worker_claim_id = None
+        analysis.claimed_at = None
+        analysis.stale_at = None
         analysis.updated_at = now
         to_enqueue.append(analysis.id)
-        processed += 1
+        queued_count += 1
 
-    if processed > 0:
+    if queued_count > 0 or extraction_to_retrigger:
         await db.commit()
-        from src.infrastructure.database.models.analysis_model import AnalysisModel
         for aid in to_enqueue:
             analysis = await db.scalar(
                 sa.select(AnalysisModel).where(AnalysisModel.id == aid)
@@ -621,14 +695,34 @@ async def bulk_retry_analyses(
                 logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(aid))
             else:
                 enqueue_analysis(aid)
+        for analysis in extraction_to_retrigger:
+            await _retrigger_resume_extraction(db, analysis)
 
+    skipped_total = skipped_count + blocked_count
     logger.info(
         "analysis.bulk_retried",
         user_id=str(current_user.id),
-        processed=processed,
-        skipped=skipped,
+        queued_count=queued_count,
+        skipped_count=skipped_count,
+        blocked_count=blocked_count,
+        skipped_reasons=skipped_reasons,
     )
-    return BulkAnalysisActionResponse(processed=processed, skipped=skipped)
+    if skipped_total > 0:
+        logger.info(
+            "analysis.bulk_retry_skipped",
+            user_id=str(current_user.id),
+            skipped_count=skipped_count,
+            blocked_count=blocked_count,
+            skipped_reasons=skipped_reasons,
+        )
+    return BulkAnalysisActionResponse(
+        processed=queued_count,
+        skipped=skipped_total,
+        queued_count=queued_count,
+        skipped_count=skipped_count,
+        blocked_count=blocked_count,
+        skipped_reasons=skipped_reasons,
+    )
 
 
 @router.post("/{analysis_id}/retry", response_model=AnalysisRequestResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -653,19 +747,64 @@ async def retry_analysis(
         if not analysis:
             raise AnalysisNotFoundError
 
-        if analysis.status not in {"failed", "cancelled", "waiting_extraction"}:
+        # waiting_extraction is an EXTRACTION state, not an AI-analysis state.
+        # Never push it to the AI queue (the worker would only bounce it back to
+        # waiting_extraction). Re-trigger extraction and return a controlled 409.
+        if analysis.status == "waiting_extraction":
+            await _retrigger_resume_extraction(db, analysis)
+            await record_analysis_audit_event(
+                db,
+                action="analysis_retry_blocked_waiting_extraction",
+                resource_id=analysis.id,
+                user_id=current_user.id,
+                metadata={
+                    "status": analysis.status,
+                    "resume_version_id": str(analysis.resume_version_id),
+                    "retry_target": "extraction",
+                },
+            )
+            await db.commit()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Cannot retry analysis in status '{analysis.status}'. Only 'failed', 'cancelled', or 'waiting_extraction' analyses can be retried.",
+                detail=_WAITING_EXTRACTION_DETAIL,
             )
 
-        if _is_rate_limited_analysis_blocked(analysis):
+        # Provider rate-limit/quota cooldown — covers BOTH retry_scheduled and
+        # failed. A failure by quota must not be retried (and have its attempt
+        # budget reset) before the cooldown window elapses.
+        cooldown = _analysis_cooldown(analysis)
+        if cooldown.blocked:
+            await record_analysis_audit_event(
+                db,
+                action="analysis_retry_blocked_rate_limit",
+                resource_id=analysis.id,
+                user_id=current_user.id,
+                metadata={
+                    "status": analysis.status,
+                    "provider_error_type": analysis.provider_error_type,
+                    "provider_status_code": analysis.provider_status_code,
+                    "retry_after_seconds": cooldown.retry_after_seconds,
+                    "blocked_until": (
+                        cooldown.blocked_until.isoformat()
+                        if cooldown.blocked_until
+                        else None
+                    ),
+                },
+            )
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=_rate_limited_detail(cooldown),
+            )
+
+        if analysis.status not in {"failed", "cancelled"}:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Já existe bloqueio temporário por limite da IA. Aguarde até o fim da janela de retry.",
+                detail=f"Cannot retry analysis in status '{analysis.status}'. Only 'failed' or 'cancelled' analyses can be retried.",
             )
 
-        # Reset to pending and requeue
+        # Reset to pending and requeue. Clear any stale claim so a previously
+        # crashed worker's claim cannot block the fresh dispatch.
         now = datetime.now(UTC)
         analysis.status = "pending"
         analysis.failure_reason = None
@@ -676,6 +815,9 @@ async def retry_analysis(
         analysis.next_retry_at = None
         analysis.provider_error_type = None
         analysis.provider_status_code = None
+        analysis.worker_claim_id = None
+        analysis.claimed_at = None
+        analysis.stale_at = None
         analysis.updated_at = now
 
         await db.commit()

@@ -24,13 +24,30 @@ from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
-from src.interface.api.routers.analyses import request_analysis
+from src.application.services.analysis_retry_policy import (
+    RATE_LIMIT_FAILED_COOLDOWN_SECONDS,
+    rate_limit_cooldown,
+)
+from src.application.use_cases.smart_refresh_use_case import _CandidateRow, _classify
+from src.interface.api.routers import analyses as analyses_router
+from src.interface.api.routers.analyses import (
+    bulk_retry_analyses,
+    request_analysis,
+    retry_analysis,
+)
+from src.interface.api.schemas.analysis_schemas import BulkAnalysisActionRequest
 from src.interface.workers.analysis_tasks import (
     _PLACEHOLDER_RESUME,
     _claim_analysis_for_processing,
     _process_analysis_with_session,
 )
 from tests.conftest import TestSessionFactory
+
+
+def _naive_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
 
 
 async def _seed_retry_scheduled_analysis(
@@ -138,6 +155,42 @@ async def _seed_retry_scheduled_analysis(
     )
 
     db_session.add_all([user, candidate, resume, version, job, ai_model, prompt, analysis])
+    await db_session.commit()
+    return user, version, job, analysis
+
+
+async def _seed_failed_analysis(
+    db_session: AsyncSession,
+    *,
+    status: str = "failed",
+    provider_error_type: str | None = "provider_unavailable",
+    provider_status_code: int | None = 503,
+    failed_seconds_ago: int = 30,
+    retry_count: int = 2,
+    attempts: int = 2,
+    extraction_status: str = "completed",
+    extracted_text: str | None = "Experiência com Python e FastAPI",
+) -> tuple[UserModel, ResumeVersionModel, JobModel, AnalysisModel]:
+    user, version, job, analysis = await _seed_retry_scheduled_analysis(
+        db_session,
+        extraction_status=extraction_status,
+        extracted_text=extracted_text,
+    )
+    now = datetime.now(UTC)
+    analysis.status = status
+    analysis.retry_count = retry_count
+    analysis.attempts = attempts
+    analysis.failed_at = now - timedelta(seconds=failed_seconds_ago)
+    analysis.started_at = now - timedelta(seconds=failed_seconds_ago + 5)
+    analysis.next_retry_at = None
+    analysis.failure_reason = "Erro temporário no provedor"
+    analysis.provider_error_type = provider_error_type
+    analysis.provider_status_code = provider_status_code
+    analysis.task_id = "analysis:old-task"
+    analysis.worker_claim_id = None
+    analysis.claimed_at = None
+    analysis.stale_at = None
+    analysis.updated_at = now
     await db_session.commit()
     return user, version, job, analysis
 
@@ -588,6 +641,7 @@ async def test_list_global_marks_expired_processing_claim_failed(db_session: Asy
 )
 async def test_worker_sets_waiting_extraction_when_text_not_ready(
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
     extracted_text: str | None,
 ) -> None:
     """When resume_text is absent or placeholder, the worker must park the analysis
@@ -596,6 +650,16 @@ async def test_worker_sets_waiting_extraction_when_text_not_ready(
         db_session,
         extracted_text=extracted_text,
     )
+    monkeypatch.setattr(
+        "src.interface.workers.analysis_tasks._run_real_ai_analysis",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("AI provider must not be called for waiting_extraction")
+        ),
+    )
+    # Pre-set a stale task_id to prove the guard clears it so the extraction
+    # worker (which re-enqueues only task_id IS NULL) can pick it up later.
+    analysis.task_id = "analysis:stale"
+    await db_session.commit()
 
     result = await _process_analysis_with_session(
         analysis_id=str(analysis.id),
@@ -610,6 +674,7 @@ async def test_worker_sets_waiting_extraction_when_text_not_ready(
     assert analysis.worker_claim_id is None
     assert analysis.claimed_at is None
     assert analysis.stale_at is None
+    assert analysis.task_id is None
 
     audit = await db_session.scalar(
         sa.select(AuditLogModel).where(
@@ -618,3 +683,265 @@ async def test_worker_sets_waiting_extraction_when_text_not_ready(
         )
     )
     assert audit is not None
+
+
+@pytest.mark.asyncio
+async def test_retry_analysis_waiting_extraction_returns_409_and_retriggers_extraction(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, version, _, analysis = await _seed_retry_scheduled_analysis(
+        db_session,
+        extraction_status="pending",
+        extracted_text=None,
+    )
+    analysis.status = "waiting_extraction"
+    analysis.task_id = None
+    analysis.retry_count = 3
+    analysis.attempts = 3
+    await db_session.commit()
+
+    ai_enqueues: list = []
+    extraction_requeues: list = []
+    monkeypatch.setattr(
+        analyses_router,
+        "enqueue_resume_extraction",
+        lambda resume_version_id: extraction_requeues.append(resume_version_id),
+    )
+    monkeypatch.setattr(
+        analyses_router,
+        "enqueue_analysis",
+        lambda analysis_id: ai_enqueues.append(analysis_id),
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.analysis_dispatcher.enqueue_analysis",
+        lambda analysis_id: ai_enqueues.append(analysis_id),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await retry_analysis(
+            analysis_id=analysis.id,
+            current_user=user,
+            db=db_session,
+            _rl=None,
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "analysis_waiting_extraction"
+    assert exc_info.value.detail["retry_target"] == "extraction"
+    assert ai_enqueues == []
+    assert extraction_requeues == [version.id]
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "waiting_extraction"
+    assert analysis.retry_count == 3
+    assert analysis.attempts == 3
+
+
+@pytest.mark.asyncio
+async def test_retry_analysis_rate_limited_within_cooldown_returns_429_without_reset(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, _, _, analysis = await _seed_failed_analysis(
+        db_session,
+        provider_error_type="rate_limited",
+        provider_status_code=429,
+        failed_seconds_ago=30,
+        retry_count=4,
+        attempts=4,
+    )
+    original_failed_at = analysis.failed_at
+    original_updated_at = analysis.updated_at
+
+    ai_enqueues: list = []
+    monkeypatch.setattr(
+        analyses_router,
+        "enqueue_analysis",
+        lambda analysis_id: ai_enqueues.append(analysis_id),
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.analysis_dispatcher.enqueue_analysis",
+        lambda analysis_id: ai_enqueues.append(analysis_id),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await retry_analysis(
+            analysis_id=analysis.id,
+            current_user=user,
+            db=db_session,
+            _rl=None,
+        )
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail["code"] == "ai_provider_rate_limited"
+    assert ai_enqueues == []
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "failed"
+    assert analysis.retry_count == 4
+    assert analysis.attempts == 4
+    assert analysis.failed_at == _naive_utc(original_failed_at)
+    assert analysis.updated_at == _naive_utc(original_updated_at)
+
+
+@pytest.mark.asyncio
+async def test_bulk_retry_waiting_extraction_skips_ai_queue_and_counts_reason(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, version, _, analysis = await _seed_retry_scheduled_analysis(
+        db_session,
+        extraction_status="pending",
+        extracted_text=None,
+    )
+    analysis.status = "waiting_extraction"
+    analysis.task_id = None
+    analysis.retry_count = 2
+    analysis.attempts = 2
+    await db_session.commit()
+
+    ai_enqueues: list = []
+    extraction_requeues: list = []
+    monkeypatch.setattr(
+        analyses_router,
+        "enqueue_analysis",
+        lambda analysis_id: ai_enqueues.append(analysis_id),
+    )
+    monkeypatch.setattr(
+        analyses_router,
+        "enqueue_resume_extraction",
+        lambda resume_version_id: extraction_requeues.append(resume_version_id),
+    )
+
+    response = await bulk_retry_analyses(
+        body=BulkAnalysisActionRequest(analysis_ids=[analysis.id]),
+        current_user=user,
+        db=db_session,
+    )
+
+    assert response.processed == 0
+    assert response.queued_count == 0
+    assert response.skipped_count == 1
+    assert response.blocked_count == 0
+    assert response.skipped_reasons["waiting_extraction"] == 1
+    assert ai_enqueues == []
+    assert extraction_requeues == [version.id]
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "waiting_extraction"
+    assert analysis.retry_count == 2
+    assert analysis.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_retry_rate_limited_within_cooldown_blocks_without_reset(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, _, _, analysis = await _seed_failed_analysis(
+        db_session,
+        provider_error_type="quota_exceeded",
+        provider_status_code=429,
+        failed_seconds_ago=10,
+        retry_count=5,
+        attempts=5,
+    )
+    original_failed_at = analysis.failed_at
+    original_updated_at = analysis.updated_at
+
+    ai_enqueues: list = []
+    monkeypatch.setattr(
+        analyses_router,
+        "enqueue_analysis",
+        lambda analysis_id: ai_enqueues.append(analysis_id),
+    )
+
+    response = await bulk_retry_analyses(
+        body=BulkAnalysisActionRequest(analysis_ids=[analysis.id]),
+        current_user=user,
+        db=db_session,
+    )
+
+    assert response.processed == 0
+    assert response.queued_count == 0
+    assert response.blocked_count == 1
+    assert response.skipped_reasons["rate_limited"] == 1
+    assert ai_enqueues == []
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "failed"
+    assert analysis.retry_count == 5
+    assert analysis.attempts == 5
+    assert analysis.failed_at == _naive_utc(original_failed_at)
+    assert analysis.updated_at == _naive_utc(original_updated_at)
+
+
+def test_smart_refresh_classify_rate_limited_cooldown_as_skipped() -> None:
+    row = _CandidateRow(
+        candidate_id=uuid4(),
+        candidate_name="Rate Limited Candidate",
+        analysis_status="failed",
+        has_resume=True,
+        has_extracted_data=False,
+        rate_limited_blocked=True,
+    )
+
+    assert _classify(row) == ("skipped_already_processing", "rate_limited_cooldown")
+
+
+@pytest.mark.asyncio
+async def test_retry_analysis_temporary_failure_outside_cooldown_is_still_allowed(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, _, _, analysis = await _seed_failed_analysis(
+        db_session,
+        provider_error_type="provider_unavailable",
+        provider_status_code=503,
+        failed_seconds_ago=RATE_LIMIT_FAILED_COOLDOWN_SECONDS + 30,
+        retry_count=2,
+        attempts=2,
+    )
+
+    ai_enqueues: list = []
+    monkeypatch.setattr(
+        analyses_router,
+        "enqueue_analysis",
+        lambda analysis_id: ai_enqueues.append(analysis_id),
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.analysis_dispatcher.enqueue_analysis",
+        lambda analysis_id: ai_enqueues.append(analysis_id),
+    )
+
+    response = await retry_analysis(
+        analysis_id=analysis.id,
+        current_user=user,
+        db=db_session,
+        _rl=None,
+    )
+
+    assert response.analysis_id == analysis.id
+    assert response.status == "pending"
+    assert response.reason == "analysis_retry_started"
+    assert ai_enqueues == [analysis.id]
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "pending"
+    assert analysis.retry_count == 0
+    assert analysis.attempts == 0
+    assert analysis.failed_at is None
+    assert analysis.provider_error_type is None
+    assert analysis.provider_status_code is None
+
+
+def test_bulk_analysis_action_response_defaults_preserve_old_contract() -> None:
+    response = analyses_router.BulkAnalysisActionResponse(processed=2, skipped=1)
+
+    assert response.processed == 2
+    assert response.skipped == 1
+    assert response.queued_count == 0
+    assert response.skipped_count == 0
+    assert response.blocked_count == 0
+    assert response.skipped_reasons == {}
