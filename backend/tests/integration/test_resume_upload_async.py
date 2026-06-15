@@ -80,6 +80,30 @@ async def _create_candidate(client: AsyncClient, headers: dict[str, str]) -> str
     return response.json()["id"]
 
 
+async def _ensure_active_analysis_config(
+    db_session: AsyncSession,
+    *,
+    created_by: UUID,
+) -> tuple[AIModelModel, PromptTemplateModel]:
+    ai_model = AIModelModel(
+        provider="gemini",
+        model_id=f"gemini-resume-upload-{uuid4().hex[:8]}",
+        model_name="Gemini Resume Upload Test",
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        name=f"resume_upload_prompt_{uuid4().hex[:8]}",
+        version=1,
+        template_type="full_analysis",
+        user_prompt_template="{}",
+        is_active=True,
+        created_by=created_by,
+    )
+    db_session.add_all([ai_model, prompt])
+    await db_session.commit()
+    return ai_model, prompt
+
+
 @pytest.mark.asyncio
 async def test_upload_returns_202_and_does_not_extract_in_request(
     client: AsyncClient,
@@ -483,3 +507,272 @@ async def test_upload_without_job_does_not_create_analysis_or_pipeline(
 
     assert pipeline_count == 0
     assert analysis_count == 0
+
+
+@pytest.mark.asyncio
+async def test_public_upload_textual_pdf_completes_extraction_and_enqueues_waiting_analysis(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job: JobModel,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"ocr-config-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _ensure_active_analysis_config(db_session, created_by=recruiter.id)
+
+    monkeypatch.setattr(
+        "src.infrastructure.storage.resume_files.RESUME_UPLOAD_DIR",
+        tmp_path,
+    )
+    monkeypatch.setattr(
+        "src.interface.api.routers.public.enqueue_resume_extraction",
+        lambda _resume_version_id: None,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _stub_celery_sessionmaker(),
+    )
+
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Fluxo Textual",
+            "cpf": "98011111000",
+            "email": f"fluxo-textual-{uuid4().hex[:6]}@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "7000",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", _pdf_with_text("Ana Souza\nPython FastAPI"), "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["analysis_auto_requested"] is True
+    assert payload["analysis_status"] == "waiting_extraction"
+
+    enqueued: list[str] = []
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks.enqueue_analysis",
+        lambda analysis_id: enqueued.append(str(analysis_id)),
+    )
+
+    result = await _process_resume_extraction_async(resume_version_id=payload["resume_version_id"])
+
+    assert result["status"] == "completed"
+    assert enqueued == [payload["analysis_id"]]
+
+    version = await db_session.scalar(
+        sa.select(ResumeVersionModel).where(ResumeVersionModel.id == UUID(payload["resume_version_id"]))
+    )
+    assert version is not None
+    assert version.extraction_status == "completed"
+    assert "Ana Souza" in (version.extracted_text or "")
+
+    started_audit = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == UUID(payload["resume_version_id"]),
+            AuditLogModel.action == "extraction_started",
+        )
+    )
+    assert started_audit is not None
+
+    analysis = await db_session.scalar(
+        sa.select(AnalysisModel).where(AnalysisModel.id == UUID(payload["analysis_id"]))
+    )
+    assert analysis is not None
+    assert analysis.status == "pending"
+    assert analysis.task_id == f"analysis:{payload['analysis_id']}"
+
+
+@pytest.mark.asyncio
+async def test_public_upload_low_quality_pdf_uses_ocr_fallback_and_releases_analysis(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job: JobModel,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"ocr-fallback-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _ensure_active_analysis_config(db_session, created_by=recruiter.id)
+
+    monkeypatch.setattr(
+        "src.infrastructure.storage.resume_files.RESUME_UPLOAD_DIR",
+        tmp_path,
+    )
+    monkeypatch.setattr(
+        "src.interface.api.routers.public.enqueue_resume_extraction",
+        lambda _resume_version_id: None,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _stub_celery_sessionmaker(),
+    )
+
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Fluxo OCR",
+            "cpf": "98011111001",
+            "email": f"fluxo-ocr-{uuid4().hex[:6]}@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "7000",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", _pdf_with_text("|||||||| 000000 ----"), "application/pdf")},
+    )
+
+    payload = response.json()
+    enqueued: list[str] = []
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks.enqueue_analysis",
+        lambda analysis_id: enqueued.append(str(analysis_id)),
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks.extract_pdf_text",
+        lambda _content: SimpleNamespace(
+            text="Bruna Lima\nExperiência: Analista de Dados\nPython SQL",
+            page_count=1,
+            word_count=8,
+            used_ocr=True,
+            empty_pages=1,
+        ),
+    )
+
+    result = await _process_resume_extraction_async(resume_version_id=payload["resume_version_id"])
+
+    assert result["status"] == "completed"
+    assert result["used_ocr"] is True
+    assert enqueued == [payload["analysis_id"]]
+
+    audit_event = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == UUID(payload["resume_version_id"]),
+            AuditLogModel.action == "extraction_completed",
+        )
+    )
+    assert audit_event is not None
+    assert audit_event.metadata_["extraction_used_ocr"] is True
+
+
+@pytest.mark.asyncio
+async def test_public_upload_ocr_unavailable_marks_extraction_failed_without_enqueueing_analysis(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job: JobModel,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"ocr-unavailable-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _ensure_active_analysis_config(db_session, created_by=recruiter.id)
+
+    monkeypatch.setattr(
+        "src.infrastructure.storage.resume_files.RESUME_UPLOAD_DIR",
+        tmp_path,
+    )
+    monkeypatch.setattr(
+        "src.interface.api.routers.public.enqueue_resume_extraction",
+        lambda _resume_version_id: None,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _stub_celery_sessionmaker(),
+    )
+
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Fluxo OCR Indisponivel",
+            "cpf": "98011111002",
+            "email": f"fluxo-ocr-off-{uuid4().hex[:6]}@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "7000",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", _pdf_with_text("|||||||| 000000 ----"), "application/pdf")},
+    )
+
+    payload = response.json()
+    enqueued: list[str] = []
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks.enqueue_analysis",
+        lambda analysis_id: enqueued.append(str(analysis_id)),
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks.extract_pdf_text",
+        lambda _content: (_ for _ in ()).throw(
+            PdfTextExtractionError(
+                "OCR indisponível neste ambiente. Envie um PDF com texto selecionável ou habilite pdf2image/pytesseract.",
+                reason_code="ocr_unavailable",
+                ocr_available=False,
+            )
+        ),
+    )
+
+    result = await _process_resume_extraction_async(resume_version_id=payload["resume_version_id"])
+
+    assert result["status"] == "failed"
+    assert enqueued == []
+
+    version = await db_session.scalar(
+        sa.select(ResumeVersionModel).where(ResumeVersionModel.id == UUID(payload["resume_version_id"]))
+    )
+    assert version is not None
+    assert version.extraction_status == "failed"
+    assert version.extraction_error == (
+        "OCR indisponível neste ambiente. Envie um PDF com texto selecionável ou habilite pdf2image/pytesseract."
+    )
+
+    analysis = await db_session.scalar(
+        sa.select(AnalysisModel).where(AnalysisModel.id == UUID(payload["analysis_id"]))
+    )
+    assert analysis is not None
+    assert analysis.status == "failed"
+    assert analysis.failure_reason == "resume_extraction_failed"
+    assert analysis.provider_error_type == "resume_extraction_failed"
+
+    failure_audit = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.resource_id == UUID(payload["resume_version_id"]),
+            AuditLogModel.action == "extraction_failed",
+        )
+    )
+    assert failure_audit is not None
+    assert failure_audit.metadata_["failure_code"] == "ocr_unavailable"
+    assert failure_audit.metadata_["text_quality_status"] == "ocr_unavailable"

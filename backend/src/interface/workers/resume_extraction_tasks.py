@@ -70,6 +70,9 @@ async def _mark_resume_version_failed(
     error_message: str,
     sessionmaker,
     analysis_failure_reason: str = "resume_extraction_failed",
+    failure_code: str | None = None,
+    text_quality_status: str | None = None,
+    used_ocr: bool | None = None,
 ) -> None:
     async with sessionmaker() as session:
         now = datetime.now(UTC)
@@ -110,12 +113,15 @@ async def _mark_resume_version_failed(
             resource_id=parsed_resume_version_id,
             metadata={
                 "failure_reason": analysis_failure_reason,
+                "failure_code": failure_code or analysis_failure_reason,
                 "extraction_failure_reason": error_message,
-                "text_quality_status": (
+                "text_quality_status": text_quality_status
+                or (
                     "low_quality"
                     if analysis_failure_reason == LOW_QUALITY_FAILURE_REASON
                     else "failed"
                 ),
+                "extraction_used_ocr": used_ocr,
                 "affected_analysis_count": int(analysis_result.rowcount or 0),
             },
         )
@@ -213,6 +219,27 @@ async def _process_resume_extraction_async(
                 )
                 return {"status": "failed", "reason": "resume_context_not_found"}
 
+            await record_analysis_audit_event(
+                session,
+                action="extraction_started",
+                resource_type="resume_version",
+                resource_id=parsed_resume_version_id,
+                metadata={
+                    "worker_name": worker_name,
+                    "resume_id": str(resume.id),
+                    "candidate_id": str(candidate.id),
+                    "original_file_name": version.original_file_name,
+                    "mime_type": version.mime_type,
+                },
+            )
+            await session.commit()
+            logger.info(
+                "resume_extraction.started",
+                resume_version_id=str(parsed_resume_version_id),
+                worker_name=worker_name,
+                original_file_name=version.original_file_name,
+            )
+
             file_path = resolve_resume_storage_path(version.s3_key)
 
             try:
@@ -229,15 +256,29 @@ async def _process_resume_extraction_async(
                 _validate_resume_version_supported_for_extraction(version)
                 extracted = await asyncio.to_thread(extract_pdf_text, content)
             except PdfTextExtractionError as exc:
-                failure_reason = (
-                    LOW_QUALITY_FAILURE_REASON
-                    if str(exc) == LOW_QUALITY_FAILURE_REASON
-                    else "resume_extraction_failed"
-                )
+                failure_code = getattr(exc, "reason_code", "resume_extraction_failed")
+                if failure_code == "low_quality" or str(exc) == LOW_QUALITY_FAILURE_REASON:
+                    failure_reason = LOW_QUALITY_FAILURE_REASON
+                    text_quality_status = "low_quality"
+                elif failure_code == "ocr_unavailable":
+                    failure_reason = "resume_extraction_failed"
+                    text_quality_status = "ocr_unavailable"
+                    logger.warning(
+                        "resume_extraction.ocr_unavailable",
+                        resume_version_id=str(parsed_resume_version_id),
+                        worker_name=worker_name,
+                        error=str(exc),
+                    )
+                else:
+                    failure_reason = "resume_extraction_failed"
+                    text_quality_status = "failed"
                 await _mark_resume_version_failed(
                     parsed_resume_version_id=parsed_resume_version_id,
                     error_message=str(exc),
                     analysis_failure_reason=failure_reason,
+                    failure_code=failure_code,
+                    text_quality_status=text_quality_status,
+                    used_ocr=bool(getattr(exc, "ocr_attempted", False)),
                     sessionmaker=celery_sessionmaker,
                 )
                 return {"status": "failed", "reason": str(exc)}
@@ -300,6 +341,13 @@ async def _process_resume_extraction_async(
             )
             await session.commit()
 
+            if extracted.used_ocr:
+                logger.info(
+                    "resume_extraction.ocr_fallback_used",
+                    resume_version_id=str(parsed_resume_version_id),
+                    worker_name=worker_name,
+                )
+
             for analysis_id in pending_analysis_ids:
                 try:
                     enqueue_analysis(analysis_id)
@@ -352,6 +400,7 @@ async def _process_resume_extraction_async(
             await _mark_resume_version_failed(
                 parsed_resume_version_id=parsed_uuid,
                 error_message="unexpected_extraction_failure",
+                failure_code="unexpected_extraction_failure",
                 sessionmaker=celery_sessionmaker,
             )
 

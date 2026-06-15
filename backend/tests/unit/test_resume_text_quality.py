@@ -136,10 +136,21 @@ def test_extract_pdf_text_fails_when_ocr_unavailable_after_low_quality_text(
     monkeypatch.setattr(
         text_extractor,
         "_extract_with_ocr",
-        lambda _content: (_ for _ in ()).throw(PdfTextExtractionError("OCR indisponível")),
+        lambda _content: (_ for _ in ()).throw(
+            PdfTextExtractionError(
+                "OCR indisponível neste ambiente. Envie um PDF com texto selecionável "
+                "ou habilite pdf2image/pytesseract.",
+                reason_code="ocr_unavailable",
+                ocr_available=False,
+            )
+        ),
     )
 
     with pytest.raises(PdfTextExtractionError) as exc_info:
         extract_pdf_text(b"%PDF")
 
-    assert str(exc_info.value) == LOW_QUALITY_FAILURE_REASON
+    assert str(exc_info.value) == (
+        "OCR indisponível neste ambiente. Envie um PDF com texto selecionável "
+        "ou habilite pdf2image/pytesseract."
+    )
+    assert exc_info.value.reason_code == "ocr_unavailable"

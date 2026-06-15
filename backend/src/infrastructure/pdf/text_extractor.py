@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 class PdfTextExtractionError(Exception):
     """Erro ao extrair texto do PDF."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason_code: str = "extraction_failed",
+        ocr_attempted: bool = False,
+        ocr_available: bool | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+        self.ocr_attempted = ocr_attempted
+        self.ocr_available = ocr_available
+
 
 @dataclass(frozen=True)
 class ExtractedPdfText:
@@ -95,12 +108,15 @@ def _extract_with_ocr(
         from pdf2image import convert_from_bytes
     except ModuleNotFoundError as exc:
         logger.warning(
-            "pdf.ocr_dependencies_missing",
+            "pdf.ocr_unavailable",
             extra={"error": str(exc)},
         )
         raise PdfTextExtractionError(
-            "OCR indisponível. Instale pdf2image e pytesseract ou envie um PDF "
-            "com texto selecionável."
+            "OCR indisponível neste ambiente. Envie um PDF com texto selecionável "
+            "ou habilite pdf2image/pytesseract.",
+            reason_code="ocr_unavailable",
+            ocr_attempted=False,
+            ocr_available=False,
         ) from exc
 
     try:
@@ -115,7 +131,12 @@ def _extract_with_ocr(
             "pdf.ocr_convert_failed",
             extra={"error": str(exc)},
         )
-        raise PdfTextExtractionError("Erro ao preparar OCR do PDF.") from exc
+        raise PdfTextExtractionError(
+            "Erro ao preparar OCR do PDF.",
+            reason_code="ocr_failed",
+            ocr_attempted=True,
+            ocr_available=True,
+        ) from exc
 
     page_texts: list[str] = []
 
@@ -164,7 +185,7 @@ def extract_pdf_text(content: bytes) -> ExtractedPdfText:
 
     if should_use_ocr:
         logger.info(
-            "pdf.low_text_detected_trying_ocr",
+            "pdf.ocr_fallback_started",
             extra={
                 "chars": len(text),
                 "quality_reason": quality.reason,
@@ -180,18 +201,28 @@ def extract_pdf_text(content: bytes) -> ExtractedPdfText:
             ocr_texts = _extract_with_ocr(content)
         except PdfTextExtractionError as exc:
             logger.warning(
-                "pdf.ocr_unavailable_after_low_quality_text",
+                "pdf.ocr_fallback_failed",
                 extra={
                     "quality_reason": quality.reason,
                     "error": str(exc),
+                    "reason_code": exc.reason_code,
+                    "ocr_available": exc.ocr_available,
                 },
             )
-            raise PdfTextExtractionError(LOW_QUALITY_FAILURE_REASON) from exc
+            raise
 
         ocr_text = _clean_text("\n\n".join(ocr_texts))
         ocr_quality = assess_extracted_text_quality(ocr_text)
 
         if ocr_quality.is_useful:
+            logger.info(
+                "pdf.ocr_fallback_used",
+                extra={
+                    "direct_quality_reason": quality.reason,
+                    "ocr_chars": len(ocr_text),
+                    "ocr_alpha_words": ocr_quality.alpha_word_count,
+                },
+            )
             text = ocr_text
             used_ocr = True
             empty_pages = 0
@@ -207,10 +238,20 @@ def extract_pdf_text(content: bytes) -> ExtractedPdfText:
                     "ocr_alpha_ratio": round(ocr_quality.alpha_ratio, 3),
                 },
             )
-            raise PdfTextExtractionError(LOW_QUALITY_FAILURE_REASON)
+            raise PdfTextExtractionError(
+                LOW_QUALITY_FAILURE_REASON,
+                reason_code="low_quality",
+                ocr_attempted=True,
+                ocr_available=True,
+            )
 
     if not quality.is_useful:
-        raise PdfTextExtractionError(LOW_QUALITY_FAILURE_REASON)
+        raise PdfTextExtractionError(
+            LOW_QUALITY_FAILURE_REASON,
+            reason_code="low_quality",
+            ocr_attempted=used_ocr,
+            ocr_available=True if used_ocr else None,
+        )
 
     word_count = _count_words(text)
 
