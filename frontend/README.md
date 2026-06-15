@@ -38,6 +38,9 @@ frontend/
 - Base URL via `VITE_API_BASE_URL`
 - Endpoints usando `/api/v1`
 - Fluxo de auth com `login`, `refresh` por cookie `HttpOnly`, `logout`, `users/me`
+- O card `Status Protheus` consome apenas o backend do Admissão RH.
+- Nunca configurar `VITE_*` com `PROTHEUS_BRIDGE_INTERNAL_API_KEY`.
+- O link `Abrir cockpit técnico` abre a URL retornada pelo backend, sem executar ações na bridge.
 
 ## Execução
 

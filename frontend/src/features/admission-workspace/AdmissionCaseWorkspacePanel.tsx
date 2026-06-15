@@ -29,6 +29,7 @@ import { AdmissionDocumentsCard } from "./components/AdmissionDocumentsCard";
 import { AdmissionNextActionsCard } from "./components/AdmissionNextActionsCard";
 import { AdmissionRecentEventsCard } from "./components/AdmissionRecentEventsCard";
 import { AdmissionSummaryCard } from "./components/AdmissionSummaryCard";
+import { AdmissionProtheusBridgeSummaryPanel } from "./AdmissionProtheusBridgeSummaryPanel";
 import { AdmissionProtheusIntegrationPanel } from "./AdmissionProtheusIntegrationPanel";
 
 type AdmissionCaseWorkspacePanelProps = {
@@ -535,6 +536,7 @@ export function AdmissionCaseWorkspacePanel({
         {/* ── Right column — status → next actions → docs → history → ERP */}
         <div className="admission-side-rail space-y-5">
           <AdmissionSummaryCard workspace={workspace} />
+          <AdmissionProtheusBridgeSummaryPanel caseId={caseId} />
           <AdmissionNextActionsCard
             actions={workspace.next_actions}
             integrationHref={resolvedIntegrationHref}

@@ -102,6 +102,7 @@ vi.mock("../../services/admissionWorkspaceService", () => ({
   admissionWorkspaceService: {
     getOverview: vi.fn(),
     getWorkspace: vi.fn(),
+    getProtheusBridgeSummary: vi.fn(),
     approveChecklistItem: vi.fn(),
     rejectChecklistItem: vi.fn(),
     requestChecklistItemCorrection: vi.fn(),

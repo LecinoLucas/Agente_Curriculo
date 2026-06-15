@@ -97,6 +97,26 @@ npm run dev:candidate
 
 `npm run dev:full` executa `bash scripts/dev-full.sh`, que sobe os três processos com um único comando.
 
+### Protheus Bridge Read-Only Local
+
+Para validar o card `Status Protheus` no workspace de pré-admissão junto com a bridge local:
+
+1. Suba a bridge em memory mode no repositório `protheus-admission-bridge` com `npm run dev:memory`.
+2. Valide a bridge com `npm run check:memory-runtime`.
+3. Configure no backend do Admissão RH:
+   - `PROTHEUS_BRIDGE_ENABLED=true`
+   - `PROTHEUS_BRIDGE_BASE_URL=http://127.0.0.1:8010`
+   - `PROTHEUS_BRIDGE_INTERNAL_API_KEY=dev-bridge-key-local`
+   - `PROTHEUS_BRIDGE_DASHBOARD_URL=http://localhost:5180`
+   - `PROTHEUS_BRIDGE_TIMEOUT_SECONDS=2`
+4. Suba o ATS com `npm run dev:full`.
+5. Opcional: rode `npm run check:protheus-bridge-readonly`.
+
+Referências:
+
+- [Runbook local da integração bridge](/Users/lecinolucas/Developer/Agente_Curriculo/docs/protheus/ADMISSION_RH_BRIDGE_LOCAL_INTEGRATION_RUNBOOK.md)
+- [Arquitetura read-only da bridge](/Users/lecinolucas/Developer/Agente_Curriculo/docs/protheus/ADMISSION_RH_BRIDGE_READONLY_EMBED.md)
+
 ---
 
 ## Como Rodar com Docker

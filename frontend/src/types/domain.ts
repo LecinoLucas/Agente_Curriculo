@@ -1632,6 +1632,44 @@ export type AdmissionCaseEventsPage = {
   has_next: boolean;
 };
 
+export type AdmissionProtheusBridgeLatestTrace = {
+  trace_id: string | null;
+  action_type: string | null;
+  status: string | null;
+  blocked_reason: string | null;
+  error_code: string | null;
+  created_at: string | null;
+};
+
+export type AdmissionProtheusBridgeSafety = {
+  would_execute: boolean;
+  protheus_registration: string | null;
+  erp_send_attempted: boolean;
+  registration_routine_called: boolean;
+};
+
+export type AdmissionProtheusBridgeSummaryStatus =
+  | "ready"
+  | "warning"
+  | "blocked"
+  | "unavailable"
+  | "disabled"
+  | string;
+
+export type AdmissionProtheusBridgeSummary = {
+  enabled: boolean;
+  available: boolean;
+  status: AdmissionProtheusBridgeSummaryStatus;
+  message: string | null;
+  environment: string | null;
+  storage_mode: string | null;
+  readiness: string | null;
+  latest_trace: AdmissionProtheusBridgeLatestTrace | null;
+  safety: AdmissionProtheusBridgeSafety;
+  next_action: string;
+  dashboard_url: string;
+};
+
 export type AdmissionCaseWorkspace = {
   case: AdmissionWorkspaceCase;
   candidate: AdmissionWorkspaceCandidate;

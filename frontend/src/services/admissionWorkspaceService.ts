@@ -3,6 +3,7 @@ import type {
   AdmissionCaseDocumentsPayload,
   AdmissionCaseEventsPage,
   AdmissionCaseOverview,
+  AdmissionProtheusBridgeSummary,
   AdmissionCaseWorkspace,
 } from "../types/domain";
 
@@ -26,6 +27,12 @@ async function getEvents(
 
 async function getWorkspace(caseId: string): Promise<AdmissionCaseWorkspace> {
   return httpRequest<AdmissionCaseWorkspace>(`/api/v1/admission/cases/${caseId}/workspace`);
+}
+
+async function getProtheusBridgeSummary(caseId: string): Promise<AdmissionProtheusBridgeSummary> {
+  return httpRequest<AdmissionProtheusBridgeSummary>(
+    `/api/v1/pre-admission/cases/${caseId}/protheus-bridge-summary`,
+  );
 }
 
 async function approveChecklistItem(itemId: string): Promise<AdmissionCaseWorkspace> {
@@ -65,6 +72,7 @@ export const admissionWorkspaceService = {
   getDocuments,
   getEvents,
   getWorkspace,
+  getProtheusBridgeSummary,
   approveChecklistItem,
   rejectChecklistItem,
   requestChecklistItemCorrection,

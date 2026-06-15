@@ -489,6 +489,36 @@ class AdmissionIntegrationStatusSchema(BaseModel):
     ready_for_export: bool
 
 
+class AdmissionProtheusBridgeLatestTraceSchema(BaseModel):
+    trace_id: str | None = None
+    action_type: str | None = None
+    status: str | None = None
+    blocked_reason: str | None = None
+    error_code: str | None = None
+    created_at: datetime | None = None
+
+
+class AdmissionProtheusBridgeSafetySchema(BaseModel):
+    would_execute: bool = False
+    protheus_registration: str | None = None
+    erp_send_attempted: bool = False
+    registration_routine_called: bool = False
+
+
+class AdmissionProtheusBridgeSummaryResponse(BaseModel):
+    enabled: bool
+    available: bool
+    status: str
+    message: str | None = None
+    environment: str | None = None
+    storage_mode: str | None = None
+    readiness: str | None = None
+    latest_trace: AdmissionProtheusBridgeLatestTraceSchema | None = None
+    safety: AdmissionProtheusBridgeSafetySchema
+    next_action: str
+    dashboard_url: str
+
+
 class AdmissionCaseOverviewResponse(BaseModel):
     case: AdmissionCaseSummarySchema
     candidate: AdmissionCandidateSummarySchema

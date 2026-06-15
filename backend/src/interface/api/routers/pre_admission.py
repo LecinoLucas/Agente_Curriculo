@@ -37,6 +37,7 @@ from src.interface.api.schemas.pre_admission_schemas import (
     AdmissionCaseDocumentsResponse,
     AdmissionCaseEventsPageResponse,
     AdmissionCaseOverviewResponse,
+    AdmissionProtheusBridgeSummaryResponse,
     AdmissionCaseWorkspaceResponse,
     CandidatePortalPreAdmissionDocumentUploadResponse,
     CandidatePortalPreAdmissionEnvelopeResponse,
@@ -342,6 +343,18 @@ async def get_admission_case_events_page(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get(
+    "/pre-admission/cases/{case_id}/protheus-bridge-summary",
+    response_model=AdmissionProtheusBridgeSummaryResponse,
+)
+async def get_admission_case_protheus_bridge_summary(
+    case_id: UUID,
+    _current_user: PreAdmissionReadStaff,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionProtheusBridgeSummaryResponse:
+    return await _workspace_service(db).get_protheus_bridge_summary(case_id=case_id)
 
 
 @router.post(

@@ -146,6 +146,11 @@ class Settings(BaseSettings):
     PROTHEUS_TIMEOUT_SECONDS: float = 30.0
     PROTHEUS_REAL_SEND_ENABLED: bool = False
     ERP_ALLOW_REAL_SEND: bool = False  # CRITICAL: only true in homologation
+    PROTHEUS_BRIDGE_ENABLED: bool = False
+    PROTHEUS_BRIDGE_BASE_URL: str = "http://127.0.0.1:8010"
+    PROTHEUS_BRIDGE_INTERNAL_API_KEY: str = ""
+    PROTHEUS_BRIDGE_DASHBOARD_URL: str = "http://localhost:5180"
+    PROTHEUS_BRIDGE_TIMEOUT_SECONDS: float = 2.0
 
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"

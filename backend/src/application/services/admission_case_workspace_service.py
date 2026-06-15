@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+import httpx
+
+from src.core.settings import settings
 from src.application.services.pre_admission_state_machine import (
     PRE_ADMISSION_CASE_ENTITY,
     PRE_ADMISSION_CHECKLIST_ITEM_ENTITY,
@@ -43,6 +46,9 @@ from src.interface.api.schemas.pre_admission_schemas import (
     AdmissionIntegrationStatusSchema,
     AdmissionJobSummarySchema,
     AdmissionNextActionSchema,
+    AdmissionProtheusBridgeLatestTraceSchema,
+    AdmissionProtheusBridgeSafetySchema,
+    AdmissionProtheusBridgeSummaryResponse,
     AdmissionProgressSchema,
     AdmissionRecentEventSchema,
 )
@@ -127,6 +133,14 @@ class AdmissionCaseWorkspaceService:
             candidate=candidate,
             job=job,
         )
+
+    async def get_protheus_bridge_summary(
+        self,
+        *,
+        case_id: UUID,
+    ) -> AdmissionProtheusBridgeSummaryResponse:
+        await self._load_workspace_context(case_id)
+        return await self._load_bridge_summary()
 
     async def approve_checklist_item(
         self,
@@ -301,13 +315,13 @@ class AdmissionCaseWorkspaceService:
         if case is None:
             raise NotFoundException("Caso de pré-admissão não encontrado.")
 
-        pipeline = await self._repository.get_latest_pipeline_for_job_candidate(
+        pipeline = await self._repository.get_active_pipeline_for_job_candidate(
             candidate_id=case.candidate_id,
             job_id=case.job_id,
         )
         if pipeline is None:
             raise ValidationException(
-                "Caso de pré-admissão não possui pipeline vinculado."
+                "Caso de pré-admissão não possui pipeline ativo vinculado."
             )
 
         candidate = await self._repository.get_candidate(pipeline.candidate_id)
@@ -397,6 +411,122 @@ class AdmissionCaseWorkspaceService:
             recent_events=[self._recent_event(event, user_names=user_names) for event in events],
         )
 
+    async def _load_bridge_summary(self) -> AdmissionProtheusBridgeSummaryResponse:
+        dashboard_url = settings.PROTHEUS_BRIDGE_DASHBOARD_URL.rstrip("/")
+        safety = AdmissionProtheusBridgeSafetySchema()
+
+        if not settings.PROTHEUS_BRIDGE_ENABLED:
+            return AdmissionProtheusBridgeSummaryResponse(
+                enabled=False,
+                available=False,
+                status="disabled",
+                message="Integração Protheus Bridge desativada neste ambiente.",
+                environment=None,
+                storage_mode=None,
+                readiness=None,
+                latest_trace=None,
+                safety=safety,
+                next_action="Ative a bridge apenas em ambientes controlados de simulação técnica.",
+                dashboard_url=dashboard_url,
+            )
+
+        base_url = settings.PROTHEUS_BRIDGE_BASE_URL.rstrip("/")
+        if not base_url or not settings.PROTHEUS_BRIDGE_INTERNAL_API_KEY.strip():
+            return AdmissionProtheusBridgeSummaryResponse(
+                enabled=True,
+                available=False,
+                status="unavailable",
+                message="Protheus Bridge não está configurada corretamente neste ambiente.",
+                environment=None,
+                storage_mode=None,
+                readiness=None,
+                latest_trace=None,
+                safety=safety,
+                next_action="Revise as variáveis PROTHEUS_BRIDGE_BASE_URL e PROTHEUS_BRIDGE_INTERNAL_API_KEY.",
+                dashboard_url=dashboard_url,
+            )
+
+        request_url = f"{base_url}/internal/protheus/dashboard/status"
+        try:
+            async with httpx.AsyncClient(
+                timeout=settings.PROTHEUS_BRIDGE_TIMEOUT_SECONDS,
+                follow_redirects=False,
+            ) as client:
+                response = await client.get(
+                    request_url,
+                    headers={"X-Internal-Api-Key": settings.PROTHEUS_BRIDGE_INTERNAL_API_KEY},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except httpx.TimeoutException:
+            return AdmissionProtheusBridgeSummaryResponse(
+                enabled=True,
+                available=False,
+                status="unavailable",
+                message="Protheus Bridge indisponível no momento.",
+                environment=None,
+                storage_mode=None,
+                readiness=None,
+                latest_trace=None,
+                safety=safety,
+                next_action="Verifique se o serviço da bridge está rodando em modo memory ou full.",
+                dashboard_url=dashboard_url,
+            )
+        except (httpx.RequestError, httpx.HTTPStatusError, ValueError):
+            return AdmissionProtheusBridgeSummaryResponse(
+                enabled=True,
+                available=False,
+                status="unavailable",
+                message="Protheus Bridge indisponível no momento.",
+                environment=None,
+                storage_mode=None,
+                readiness=None,
+                latest_trace=None,
+                safety=safety,
+                next_action="Verifique se o serviço da bridge está rodando em modo memory ou full.",
+                dashboard_url=dashboard_url,
+            )
+
+        bridge = payload if isinstance(payload, dict) else {}
+        latest_trace_payload = bridge.get("latest_trace")
+        latest_trace_data = latest_trace_payload if isinstance(latest_trace_payload, dict) else {}
+        latest_trace = self._bridge_latest_trace(latest_trace_data)
+
+        overall_status = str(bridge.get("overall_status") or bridge.get("status") or "unknown").lower()
+        storage_mode = str(bridge.get("storage_mode") or "unknown")
+        environment = str(
+            bridge.get("logical_environment")
+            or bridge.get("environment")
+            or bridge.get("protheus_environment")
+            or "unknown"
+        )
+        real_send_enabled = bool(bridge.get("real_send_enabled"))
+        erp_allow_real_send = bool(bridge.get("erp_allow_real_send"))
+        summary_status = self._bridge_status(
+            overall_status=overall_status,
+            latest_trace=latest_trace,
+            real_send_enabled=real_send_enabled,
+            erp_allow_real_send=erp_allow_real_send,
+        )
+
+        return AdmissionProtheusBridgeSummaryResponse(
+            enabled=True,
+            available=True,
+            status=summary_status,
+            message=self._bridge_message(summary_status),
+            environment=environment,
+            storage_mode=storage_mode,
+            readiness=overall_status,
+            latest_trace=latest_trace,
+            safety=safety,
+            next_action=self._bridge_next_action(
+                status=summary_status,
+                real_send_enabled=real_send_enabled,
+                erp_allow_real_send=erp_allow_real_send,
+            ),
+            dashboard_url=dashboard_url,
+        )
+
     def _overview_response(
         self,
         *,
@@ -471,6 +601,87 @@ class AdmissionCaseWorkspaceService:
             in_review=in_review,
             waived=waived,
         )
+
+    @staticmethod
+    def _bridge_latest_trace(
+        payload: dict[str, object],
+    ) -> AdmissionProtheusBridgeLatestTraceSchema | None:
+        if not payload:
+            return None
+
+        created_at_raw = payload.get("created_at")
+        created_at: datetime | None = None
+        if isinstance(created_at_raw, str):
+            try:
+                created_at = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
+            except ValueError:
+                created_at = None
+
+        return AdmissionProtheusBridgeLatestTraceSchema(
+            trace_id=str(payload.get("trace_id")) if payload.get("trace_id") is not None else None,
+            action_type=(
+                str(payload.get("action_type"))
+                if payload.get("action_type") is not None
+                else (
+                    str(payload.get("action"))
+                    if payload.get("action") is not None
+                    else None
+                )
+            ),
+            status=str(payload.get("status")) if payload.get("status") is not None else None,
+            blocked_reason=(
+                str(payload.get("blocked_reason"))
+                if payload.get("blocked_reason") is not None
+                else None
+            ),
+            error_code=str(payload.get("error_code")) if payload.get("error_code") is not None else None,
+            created_at=created_at,
+        )
+
+    @staticmethod
+    def _bridge_status(
+        *,
+        overall_status: str,
+        latest_trace: AdmissionProtheusBridgeLatestTraceSchema | None,
+        real_send_enabled: bool,
+        erp_allow_real_send: bool,
+    ) -> str:
+        if latest_trace and (
+            (latest_trace.status or "").lower() == "blocked" or latest_trace.blocked_reason
+        ):
+            return "blocked"
+        if real_send_enabled or erp_allow_real_send:
+            return "warning"
+        if overall_status in {"ready", "ok", "healthy"}:
+            return "ready"
+        if overall_status in {"warning", "degraded", "partial"}:
+            return "warning"
+        return "warning"
+
+    @staticmethod
+    def _bridge_message(status: str) -> str:
+        if status == "ready":
+            return "Bridge operacional para simulações seguras."
+        if status == "blocked":
+            return "Última simulação foi bloqueada por segurança."
+        if status == "warning":
+            return "Bridge disponível com atenção operacional."
+        return "Protheus Bridge indisponível."
+
+    @staticmethod
+    def _bridge_next_action(
+        *,
+        status: str,
+        real_send_enabled: bool,
+        erp_allow_real_send: bool,
+    ) -> str:
+        if real_send_enabled or erp_allow_real_send:
+            return "Revise o cockpit técnico: envio real deve permanecer desativado neste fluxo read-only."
+        if status == "blocked":
+            return "Revise o bloqueio no cockpit técnico antes de prosseguir com novas simulações."
+        if status == "ready":
+            return "Simulação segura disponível no cockpit técnico."
+        return "Verifique se o serviço da bridge está rodando em modo memory ou full."
 
     def _readiness_blockers(
         self,

@@ -8,6 +8,7 @@
     "dev:full": "npm run validate:repo-root && bash scripts/dev-full.sh",
     "docker:full": "bash scripts/docker-full.sh",
     "dev:user": "npm run validate:repo-root && ./scripts/dev-user.sh",
+    "check:protheus-bridge-readonly": "npm run validate:repo-root && bash scripts/check-protheus-bridge-readonly-integration.sh",
     "dev:backend": "npm run validate:repo-root && npm run backend",
     "dev:staff": "npm run validate:repo-root && npm run frontend",
     "dev:candidate": "npm run validate:repo-root && sh -c 'VITE_API_URL=${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1} VITE_PUBLIC_API_BASE_URL=${VITE_PUBLIC_API_BASE_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1/public} npm --silent --prefix candidate-portal run dev'",

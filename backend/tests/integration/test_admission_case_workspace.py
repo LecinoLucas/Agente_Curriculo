@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID
 
+import httpx
 import pytest
 import sqlalchemy as sa
 from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.settings import settings
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
@@ -247,6 +250,217 @@ async def test_staff_slice_endpoints_require_staff_auth_and_block_candidate_port
     client.cookies.clear()
 
     assert portal_response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    bridge_response = await client.get(
+        f"/api/v1/pre-admission/cases/{case['id']}/protheus-bridge-summary"
+    )
+    assert bridge_response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def _bridge_http_response(payload: dict) -> httpx.Response:
+    return httpx.Response(
+        status_code=status.HTTP_200_OK,
+        json=payload,
+        request=httpx.Request("GET", "http://127.0.0.1:8010/internal/protheus/dashboard/status"),
+    )
+
+
+class _BridgeClientSuccess:
+    last_url: str | None = None
+    last_headers: dict[str, str] | None = None
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def get(self, url: str, *, headers: dict[str, str] | None = None) -> httpx.Response:
+        type(self).last_url = url
+        type(self).last_headers = headers
+        return _bridge_http_response(
+            {
+                "overall_status": "ready",
+                "storage_mode": "memory",
+                "logical_environment": "homolog",
+                "real_send_enabled": False,
+                "erp_allow_real_send": False,
+                "latest_trace": {
+                    "trace_id": "trace-123",
+                    "action_type": "precheck",
+                    "status": "success",
+                    "blocked_reason": None,
+                    "error_code": None,
+                    "created_at": "2026-06-15T11:22:33Z",
+                    "payload_raw": {"cpf": "123.456.789-00"},
+                },
+                "token": "secret-bridge-token",
+                "headers": {"Authorization": "Bearer secret"},
+            }
+        )
+
+
+class _BridgeClientTimeout:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def get(self, url: str, *, headers: dict[str, str] | None = None) -> httpx.Response:
+        raise httpx.ReadTimeout("bridge timeout")
+
+
+@pytest.mark.asyncio
+async def test_protheus_bridge_summary_returns_sanitized_read_only_summary(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers, _job_id, _candidate_id, case, _item = await _seed_pre_admission_with_item(
+        client,
+        db_session,
+    )
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_ENABLED", True)
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_BASE_URL", "http://127.0.0.1:8010")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_INTERNAL_API_KEY", "dev-bridge-key-local")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_DASHBOARD_URL", "http://localhost:5180")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_TIMEOUT_SECONDS", 2.0)
+
+    with patch(
+        "src.application.services.admission_case_workspace_service.httpx.AsyncClient",
+        _BridgeClientSuccess,
+    ):
+        response = await client.get(
+            f"/api/v1/pre-admission/cases/{case['id']}/protheus-bridge-summary",
+            headers=headers,
+        )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    payload = response.json()
+    assert payload == {
+        "enabled": True,
+        "available": True,
+        "status": "ready",
+        "message": "Bridge operacional para simulações seguras.",
+        "environment": "homolog",
+        "storage_mode": "memory",
+        "readiness": "ready",
+        "latest_trace": {
+            "trace_id": "trace-123",
+            "action_type": "precheck",
+            "status": "success",
+            "blocked_reason": None,
+            "error_code": None,
+            "created_at": "2026-06-15T11:22:33Z",
+        },
+        "safety": {
+            "would_execute": False,
+            "protheus_registration": None,
+            "erp_send_attempted": False,
+            "registration_routine_called": False,
+        },
+        "next_action": "Simulação segura disponível no cockpit técnico.",
+        "dashboard_url": "http://localhost:5180",
+    }
+    assert _BridgeClientSuccess.last_url == "http://127.0.0.1:8010/internal/protheus/dashboard/status"
+    assert _BridgeClientSuccess.last_headers == {"X-Internal-Api-Key": "dev-bridge-key-local"}
+    serialized = response.text.lower()
+    assert "authorization" not in serialized
+    assert "x-internal-api-key" not in serialized
+    assert "secret-bridge-token" not in serialized
+    assert "123.456.789-00" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_protheus_bridge_summary_returns_disabled_when_feature_flag_is_off(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers, _job_id, _candidate_id, case, _item = await _seed_pre_admission_with_item(
+        client,
+        db_session,
+    )
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_ENABLED", False)
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_DASHBOARD_URL", "http://localhost:5180")
+
+    response = await client.get(
+        f"/api/v1/pre-admission/cases/{case['id']}/protheus-bridge-summary",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    assert response.json() == {
+        "enabled": False,
+        "available": False,
+        "status": "disabled",
+        "message": "Integração Protheus Bridge desativada neste ambiente.",
+        "environment": None,
+        "storage_mode": None,
+        "readiness": None,
+        "latest_trace": None,
+        "safety": {
+            "would_execute": False,
+            "protheus_registration": None,
+            "erp_send_attempted": False,
+            "registration_routine_called": False,
+        },
+        "next_action": "Ative a bridge apenas em ambientes controlados de simulação técnica.",
+        "dashboard_url": "http://localhost:5180",
+    }
+
+
+@pytest.mark.asyncio
+async def test_protheus_bridge_summary_returns_unavailable_when_bridge_times_out(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers, _job_id, _candidate_id, case, _item = await _seed_pre_admission_with_item(
+        client,
+        db_session,
+    )
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_ENABLED", True)
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_BASE_URL", "http://127.0.0.1:8010")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_INTERNAL_API_KEY", "dev-bridge-key-local")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_DASHBOARD_URL", "http://localhost:5180")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_TIMEOUT_SECONDS", 2.0)
+
+    with patch(
+        "src.application.services.admission_case_workspace_service.httpx.AsyncClient",
+        _BridgeClientTimeout,
+    ):
+        response = await client.get(
+            f"/api/v1/pre-admission/cases/{case['id']}/protheus-bridge-summary",
+            headers=headers,
+        )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    assert response.json() == {
+        "enabled": True,
+        "available": False,
+        "status": "unavailable",
+        "message": "Protheus Bridge indisponível no momento.",
+        "environment": None,
+        "storage_mode": None,
+        "readiness": None,
+        "latest_trace": None,
+        "safety": {
+            "would_execute": False,
+            "protheus_registration": None,
+            "erp_send_attempted": False,
+            "registration_routine_called": False,
+        },
+        "next_action": "Verifique se o serviço da bridge está rodando em modo memory ou full.",
+        "dashboard_url": "http://localhost:5180",
+    }
 
 
 @pytest.mark.asyncio

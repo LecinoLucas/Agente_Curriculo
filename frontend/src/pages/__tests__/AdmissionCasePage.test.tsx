@@ -15,6 +15,7 @@ import type {
   AdmissionCaseDocumentsPayload,
   AdmissionCaseEventsPage,
   AdmissionCaseOverview,
+  AdmissionProtheusBridgeSummary,
   AdmissionCaseWorkspace,
   PreAdmissionDocument,
 } from "../../types/domain";
@@ -25,6 +26,7 @@ vi.mock("../../services/admissionWorkspaceService", () => ({
     getDocuments: vi.fn(),
     getEvents: vi.fn(),
     getWorkspace: vi.fn(),
+    getProtheusBridgeSummary: vi.fn(),
     approveChecklistItem: vi.fn(),
     rejectChecklistItem: vi.fn(),
     requestChecklistItemCorrection: vi.fn(),
@@ -185,6 +187,32 @@ const mockWorkspace: AdmissionCaseWorkspace = {
   ],
 };
 
+const mockBridgeSummary: AdmissionProtheusBridgeSummary = {
+  enabled: true,
+  available: true,
+  status: "ready",
+  message: "Bridge operacional para simulações seguras.",
+  environment: "homolog",
+  storage_mode: "memory",
+  readiness: "ready",
+  latest_trace: {
+    trace_id: "trace-123",
+    action_type: "precheck",
+    status: "success",
+    blocked_reason: null,
+    error_code: null,
+    created_at: "2026-06-15T11:22:33Z",
+  },
+  safety: {
+    would_execute: false,
+    protheus_registration: null,
+    erp_send_attempted: false,
+    registration_routine_called: false,
+  },
+  next_action: "Simulação segura disponível no cockpit técnico.",
+  dashboard_url: "http://localhost:5180",
+};
+
 const mockOverview: AdmissionCaseOverview = {
   case: mockWorkspace.case,
   candidate: mockWorkspace.candidate,
@@ -324,6 +352,7 @@ describe("AdmissionCasePage", () => {
     vi.mocked(admissionWorkspaceService.getOverview).mockResolvedValue(mockOverview);
     vi.mocked(admissionWorkspaceService.getDocuments).mockResolvedValue(mockDocumentsPayload);
     vi.mocked(admissionWorkspaceService.getEvents).mockResolvedValue(mockEventsPage);
+    vi.mocked(admissionWorkspaceService.getProtheusBridgeSummary).mockResolvedValue(mockBridgeSummary);
     vi.mocked(admissionPackageService.getPackageByCaseId).mockResolvedValue({
       id: "pkg-1",
       case_id: "case-42",
