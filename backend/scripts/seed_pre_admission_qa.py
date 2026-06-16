@@ -4,7 +4,8 @@ import argparse
 import asyncio
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -62,6 +63,24 @@ def build_seed_blueprint() -> dict[str, object]:
             document_status="approved",
         ),
         ChecklistSeedItem(
+            document_key="pis",
+            item_type="pis",
+            title="PIS",
+            item_status="approved",
+            required=True,
+            filename="pis-qa.pdf",
+            document_status="approved",
+        ),
+        ChecklistSeedItem(
+            document_key="carteira_trabalho",
+            item_type="carteira_trabalho",
+            title="Carteira de trabalho",
+            item_status="approved",
+            required=True,
+            filename="ctps-qa.pdf",
+            document_status="approved",
+        ),
+        ChecklistSeedItem(
             document_key="comprovante_endereco",
             item_type="comprovante_endereco",
             title="Comprovante de residência",
@@ -112,6 +131,8 @@ def build_seed_blueprint() -> dict[str, object]:
             "status": "documents_pending",
             "work_model": "CLT",
             "notes": QA_CASE_NOTES,
+            "start_date": "2026-06-20",
+            "salary_offer": "3200.00",
         },
         "checklist_items": checklist_items,
         "events": [
@@ -366,6 +387,8 @@ async def _get_or_create_case(
             hiring_decision_id=hiring_decision_id,
             checklist_template_name="QA Assistant Admission Seed",
             status=str(case_data["status"]),
+            salary_offer=Decimal(str(case_data["salary_offer"])),
+            start_date=date.fromisoformat(str(case_data["start_date"])),
             work_model=str(case_data["work_model"]),
             notes=str(case_data["notes"]),
             created_by=created_by,
@@ -378,6 +401,8 @@ async def _get_or_create_case(
         case.hiring_decision_id = hiring_decision_id
         case.checklist_template_name = "QA Assistant Admission Seed"
         case.status = str(case_data["status"])
+        case.salary_offer = Decimal(str(case_data["salary_offer"]))
+        case.start_date = date.fromisoformat(str(case_data["start_date"]))
         case.work_model = str(case_data["work_model"])
         case.notes = str(case_data["notes"])
         case.created_by = created_by
