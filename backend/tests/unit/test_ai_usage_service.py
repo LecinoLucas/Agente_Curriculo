@@ -138,6 +138,26 @@ async def test_ai_usage_recent_limits_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_rows_applies_limit() -> None:
+    """_list_rows must apply _LIST_ROWS_MAX to prevent unbounded DB fetches (B-01 fix)."""
+    from src.application.services.ai_usage_log_service import _LIST_ROWS_MAX
+
+    captured_stmts: list = []
+
+    class _CapturingSession(_FakeSession):
+        async def execute(self, stmt, *_args, **_kwargs) -> _ExecuteResult:
+            captured_stmts.append(stmt)
+            return _ExecuteResult(self.rows)
+
+    service = AIUsageService(_CapturingSession(rows=[]))  # type: ignore[arg-type]
+    await service.get_usage_summary("30d")
+
+    assert captured_stmts, "execute() was not called"
+    compiled = str(captured_stmts[0].compile(compile_kwargs={"literal_binds": True}))
+    assert f"LIMIT {_LIST_ROWS_MAX}" in compiled
+
+
+@pytest.mark.asyncio
 async def test_ai_usage_summary_does_not_return_sensitive_metadata() -> None:
     service = AIUsageService(_FakeSession([_row(operation="rag_synthesis", total_tokens=1)]))  # type: ignore[arg-type]
 

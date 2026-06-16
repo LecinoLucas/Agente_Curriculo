@@ -27,6 +27,7 @@ export function BehavioralAIEvaluationPanel({
   const isMountedRef = useRef(true);
   const isPollingRef = useRef(false);
   const pollIntervalRef = useRef<number | null>(null);
+  const hardStopTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -35,6 +36,10 @@ export function BehavioralAIEvaluationPanel({
       if (pollIntervalRef.current !== null) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
+      }
+      if (hardStopTimerRef.current !== null) {
+        clearTimeout(hardStopTimerRef.current);
+        hardStopTimerRef.current = null;
       }
     };
   }, []);
@@ -96,7 +101,11 @@ export function BehavioralAIEvaluationPanel({
         pollIntervalRef.current = window.setInterval(poll, 3000);
 
         // Hard stop after 5 minutes — show informational message if still in-progress
-        window.setTimeout(() => {
+        if (hardStopTimerRef.current !== null) {
+          clearTimeout(hardStopTimerRef.current);
+        }
+        hardStopTimerRef.current = window.setTimeout(() => {
+          hardStopTimerRef.current = null;
           if (pollIntervalRef.current !== null) {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;

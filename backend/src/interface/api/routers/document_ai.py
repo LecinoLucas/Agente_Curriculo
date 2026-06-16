@@ -3,7 +3,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import User, UserRole
@@ -107,12 +107,16 @@ async def get_document_ai_history(
     document_id: UUID,
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ) -> list[DocumentAIAnalysisResponse]:
     await _assert_document_ai_access(db=db, document_id=document_id, current_user=current_user)
     rows = await db.execute(
         sa.select(DocumentAIAnalysisModel)
         .where(DocumentAIAnalysisModel.document_id == document_id)
         .order_by(DocumentAIAnalysisModel.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     analyses = rows.scalars().all()
     return [_to_response(item) for item in analyses]

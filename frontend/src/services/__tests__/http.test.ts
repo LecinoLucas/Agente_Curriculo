@@ -26,4 +26,10 @@ describe("resolveApiBaseUrl", () => {
       resolveApiBaseUrl("http://192.168.1.219:9000", "localhost", true)
     ).toBe("http://localhost:9000");
   });
+
+  it("usa a mesma origin do app local no dev para aproveitar o proxy do Vite", () => {
+    expect(
+      resolveApiBaseUrl("http://localhost:8000", "localhost", true, "http://127.0.0.1:5173")
+    ).toBe("http://127.0.0.1:5173");
+  });
 });

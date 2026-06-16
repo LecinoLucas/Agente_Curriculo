@@ -104,7 +104,7 @@ export function CandidateHiringDecisionPanel({
   const [formOpen, setFormOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const load = async () => {
+  const load = async (signal?: AbortSignal) => {
     if (!jobId || !candidateId) {
       setDecision(null);
       setHistory([]);
@@ -115,20 +115,24 @@ export function CandidateHiringDecisionPanel({
     setError(null);
     try {
       const [currentPayload, historyPayload] = await Promise.all([
-        getHiringDecision(jobId, candidateId),
-        getHiringDecisionHistory(jobId, candidateId),
+        getHiringDecision(jobId, candidateId, signal),
+        getHiringDecisionHistory(jobId, candidateId, signal),
       ]);
+      if (signal?.aborted) return;
       setDecision(currentPayload.decision);
       setHistory(historyPayload.decisions);
     } catch {
+      if (signal?.aborted) return;
       setError("Não foi possível carregar a decisão final.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
   useEffect(() => {
-    void load();
+    const abortController = new AbortController();
+    void load(abortController.signal);
+    return () => abortController.abort();
   }, [candidateId, jobId]);
 
   const handleSubmit = async (payload: HiringDecisionPayload) => {

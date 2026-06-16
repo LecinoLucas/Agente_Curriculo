@@ -129,6 +129,46 @@ describe("BehavioralAIEvaluationPanel", () => {
     expectNoDecisionLanguage();
   });
 
+  it("cancela o hard-stop timer de 5min ao desmontar o componente (F-03 fix)", async () => {
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+    const user = userEvent.setup();
+
+    const { unmount } = renderPanel();
+    const btn = await screen.findByRole("button", { name: /Gerar análise assistida por IA/i });
+    await user.click(btn);
+
+    await waitFor(() => {
+      expect(aiEvaluationService.triggerBehavioralAnalysis).toHaveBeenCalled();
+    });
+
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+    clearTimeoutSpy.mockRestore();
+  });
+
+  it("hard-stop timer ref nao fica pendente quando o componente desmonta antes de disparar (F-03 fix)", async () => {
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+    const user = userEvent.setup();
+
+    const { unmount } = renderPanel();
+    await screen.findByRole("button", { name: /Gerar análise assistida por IA/i });
+    await user.click(screen.getByRole("button", { name: /Gerar análise assistida por IA/i }));
+
+    await waitFor(() => {
+      expect(aiEvaluationService.triggerBehavioralAnalysis).toHaveBeenCalledTimes(1);
+    });
+
+    // Unmount before the 5-minute timer fires — clearTimeout must be invoked
+    unmount();
+
+    const callArgs = clearTimeoutSpy.mock.calls.flat();
+    // clearTimeout must have been called with a non-null timer id
+    expect(callArgs.some((id) => id !== undefined && id !== null)).toBe(true);
+
+    clearTimeoutSpy.mockRestore();
+  });
+
   it("exibe estado failed e permite tentar novamente", async () => {
     const user = userEvent.setup();
     vi.mocked(aiEvaluationService.getBehavioralEvaluation).mockResolvedValue({

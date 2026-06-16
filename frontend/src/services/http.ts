@@ -22,6 +22,7 @@ export function resolveApiBaseUrl(
   configuredBaseUrl: string,
   currentHostname?: string,
   isDev = import.meta.env.DEV,
+  currentOrigin?: string,
 ): string {
   if (!isDev || !currentHostname) {
     return configuredBaseUrl;
@@ -32,6 +33,21 @@ export function resolveApiBaseUrl(
     parsedBaseUrl = new URL(configuredBaseUrl);
   } catch {
     return configuredBaseUrl;
+  }
+
+  if (
+    currentOrigin &&
+    isLocalDevHost(parsedBaseUrl.hostname) &&
+    isLocalDevHost(currentHostname)
+  ) {
+    try {
+      const parsedOrigin = new URL(currentOrigin);
+      if (isLocalDevHost(parsedOrigin.hostname)) {
+        return parsedOrigin.origin;
+      }
+    } catch {
+      return configuredBaseUrl;
+    }
   }
 
   if (
@@ -49,6 +65,8 @@ export function resolveApiBaseUrl(
 export const API_BASE_URL = resolveApiBaseUrl(
   import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000",
   typeof window !== "undefined" ? window.location.hostname : undefined,
+  import.meta.env.DEV,
+  typeof window !== "undefined" ? window.location.origin : undefined,
 );
 
 let refreshInFlight: Promise<void> | null = null;
@@ -230,6 +248,7 @@ type RequestOptions = {
   body?: unknown;
   withAuth?: boolean;
   retryOnUnauthorized?: boolean;
+  signal?: AbortSignal;
 };
 
 type DevHttpChaosMode = "fail" | "timeout";
@@ -292,7 +311,7 @@ async function applyDevHttpChaos(method: string, path: string): Promise<void> {
 }
 
 export async function httpRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, withAuth = true, retryOnUnauthorized = true } = options;
+  const { method = "GET", body, withAuth = true, retryOnUnauthorized = true, signal } = options;
   const isFormData = body instanceof FormData;
   const token = withAuth ? tokenStorage.get() : null;
 
@@ -312,6 +331,16 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
       ? window.setTimeout(() => controller.abort("timeout"), DEFAULT_REQUEST_TIMEOUT_MS)
       : null;
 
+  // Forward external abort signal to the internal timeout controller.
+  const onExternalAbort = signal ? () => controller.abort() : null;
+  if (signal && onExternalAbort) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
+
   try {
     await applyDevHttpChaos(method, path);
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -325,6 +354,10 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
     if (error instanceof HttpError) {
       throw error;
     }
+    // External caller aborted — surface as standard AbortError so callers can detect it.
+    if (signal?.aborted) {
+      throw new DOMException("Request aborted", "AbortError");
+    }
     if (controller.signal.aborted) {
       throw new HttpError(504, "Tempo de resposta do servidor esgotado. Tente novamente.", undefined, error);
     }
@@ -332,6 +365,9 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
   } finally {
     if (timeoutId !== null) {
       window.clearTimeout(timeoutId);
+    }
+    if (signal && onExternalAbort) {
+      signal.removeEventListener("abort", onExternalAbort);
     }
   }
 

@@ -98,6 +98,9 @@ async def safe_persist_ai_usage_log(
         )
 
 
+_LIST_ROWS_MAX = 500
+
+
 class AIUsageService:
     """Read-only usage summary plus safe usage recording.
 
@@ -185,6 +188,7 @@ class AIUsageService:
             sa.select(AIUsageLogModel)
             .where(AIUsageLogModel.created_at >= start)
             .order_by(AIUsageLogModel.created_at.desc())
+            .limit(_LIST_ROWS_MAX)
         )
         return list(result.scalars().all())
 

@@ -32,44 +32,65 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
   const [loadedManagers, setLoadedManagers] = useState(false);
   const [reviewTargetLabel, setReviewTargetLabel] = useState<string | null>(null);
 
-  const fetchComments = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await collaborationService.listCollaboration(jobId, candidateId);
-      setComments(response.comments);
-    } catch {
-      setError("Não foi possível carregar os comentários de colaboração.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchComments();
+    const abortController = new AbortController();
+
+    const fetchComments = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await collaborationService.listCollaboration(
+          jobId,
+          candidateId,
+          abortController.signal,
+        );
+        if (abortController.signal.aborted) return;
+        setComments(response.comments);
+      } catch {
+        if (abortController.signal.aborted) return;
+        setError("Não foi possível carregar os comentários de colaboração.");
+      } finally {
+        if (!abortController.signal.aborted) setLoading(false);
+      }
+    };
+
+    void fetchComments();
+    return () => abortController.abort();
   }, [candidateId, jobId]);
 
   useEffect(() => {
-    if (mode !== "review_request" || loadedManagers || loadingManagers) {
+    // loadedManagers guards against reload after success.
+    // loadingManagers is intentionally NOT in deps — setting it inside the effect
+    // would otherwise trigger cleanup and abort the in-flight request.
+    if (mode !== "review_request" || loadedManagers) {
       return;
     }
+
+    let cancelled = false;
 
     const loadManagers = async () => {
       try {
         setLoadingManagers(true);
         setError(null);
         const response = await usersService.listManagers();
+        if (cancelled) return;
         setManagers(response.managers);
       } catch {
+        if (cancelled) return;
         setError("Não foi possível carregar a lista de gestores.");
       } finally {
-        setLoadingManagers(false);
-        setLoadedManagers(true);
+        if (!cancelled) {
+          setLoadingManagers(false);
+          setLoadedManagers(true);
+        }
       }
     };
 
-    loadManagers();
-  }, [loadedManagers, loadingManagers, mode]);
+    void loadManagers();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedManagers, mode]);
 
   const hasManagerFeedback = comments.some((c) => c.comment_type === "manager_feedback");
   const hasPendingRequest = comments.some((c) => c.comment_type === "review_request") && !hasManagerFeedback;

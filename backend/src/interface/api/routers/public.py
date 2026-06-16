@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,16 +57,22 @@ router = APIRouter(prefix="/public", tags=["public"])
 logger = structlog.get_logger(__name__)
 
 
+_PUBLISHED_JOBS_DEFAULT_LIMIT = 50
+_PUBLISHED_JOBS_MAX_LIMIT = 200
+
+
 @router.get("/jobs", response_model=list[PublicJobResponse])
 async def list_public_jobs(
     db: AsyncSession = Depends(get_db),
+    limit: int = Query(_PUBLISHED_JOBS_DEFAULT_LIMIT, ge=1, le=_PUBLISHED_JOBS_MAX_LIMIT),
+    offset: int = Query(0, ge=0),
 ) -> list[PublicJobResponse]:
     """
     Lista vagas publicadas disponíveis para candidatura pública.
     Retorna apenas vagas com status='published' e não deletadas.
     """
     job_repo = SQLAlchemyJobRepository(db)
-    jobs = await job_repo.list_published()
+    jobs = await job_repo.list_published(limit=limit, offset=offset)
     return [
         PublicJobResponse(
             id=job.id,

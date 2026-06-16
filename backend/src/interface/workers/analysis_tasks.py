@@ -1264,6 +1264,9 @@ async def _mark_analysis_failed(
         return False
 
 
+_STUCK_CLEANUP_BATCH_SIZE = 200
+
+
 async def mark_stuck_analyses_as_failed(*, sessionmaker) -> int:
     from src.infrastructure.database.models.analysis_model import AnalysisModel
 
@@ -1274,7 +1277,8 @@ async def mark_stuck_analyses_as_failed(*, sessionmaker) -> int:
         processing_threshold = now - timedelta(minutes=30)
 
         processing_stuck = await session.execute(
-            sa.select(AnalysisModel).where(
+            sa.select(AnalysisModel)
+            .where(
                 AnalysisModel.status == "processing",
                 sa.or_(
                     AnalysisModel.stale_at < now,
@@ -1285,6 +1289,7 @@ async def mark_stuck_analyses_as_failed(*, sessionmaker) -> int:
                     ),
                 ),
             )
+            .limit(_STUCK_CLEANUP_BATCH_SIZE)
         )
 
         for analysis in processing_stuck.scalars().all():
@@ -1314,11 +1319,13 @@ async def mark_stuck_analyses_as_failed(*, sessionmaker) -> int:
         pending_threshold = now - timedelta(hours=2)
 
         pending_stuck = await session.execute(
-            sa.select(AnalysisModel).where(
+            sa.select(AnalysisModel)
+            .where(
                 AnalysisModel.status == "pending",
                 AnalysisModel.created_at < pending_threshold,
                 AnalysisModel.next_retry_at.is_(None),
             )
+            .limit(_STUCK_CLEANUP_BATCH_SIZE)
         )
 
         for analysis in pending_stuck.scalars().all():

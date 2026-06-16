@@ -31,6 +31,19 @@ from src.infrastructure.repositories.sqlalchemy_skill_catalog_repository import 
 
 logger = structlog.get_logger(__name__)
 
+# Process-wide singletons — intentionally shared across all SkillEquivalenceService
+# instances (DB catalog cache + observability counters). Kept at module level to make
+# the shared nature explicit and prevent accidental per-instance shadowing.
+_DB_CACHE_TTL_SECONDS: int = 300
+_db_cache_entry: "tuple[float, dict[str, Any], tuple[int, int, int]] | None" = None
+_source_usage_totals: "dict[str, int]" = {
+    "json": 0,
+    "database": 0,
+    "database_failed_fallback_json": 0,
+}
+_fallback_total: int = 0
+_counter_lock = threading.Lock()
+
 
 @dataclass(frozen=True, slots=True)
 class SkillMatchEvidence:
@@ -56,16 +69,6 @@ class _CatalogLoadResult:
 
 class SkillEquivalenceService:
     """Service for evaluating skill equivalence with scoring."""
-
-    _db_cache_ttl_seconds = 300
-    _db_cache_entry: tuple[float, dict[str, Any], tuple[int, int, int]] | None = None
-    _source_usage_totals: dict[str, int] = {
-        "json": 0,
-        "database": 0,
-        "database_failed_fallback_json": 0,
-    }
-    _fallback_total = 0
-    _counter_lock = threading.Lock()
 
     def __init__(
         self,
@@ -94,18 +97,20 @@ class SkillEquivalenceService:
 
     @classmethod
     def clear_catalog_cache(cls) -> None:
+        global _db_cache_entry
         cls._load_catalog.cache_clear()
-        cls._db_cache_entry = None
+        _db_cache_entry = None
 
     @classmethod
     def reset_observability_counters(cls) -> None:
-        with cls._counter_lock:
-            cls._source_usage_totals = {
+        global _source_usage_totals, _fallback_total
+        with _counter_lock:
+            _source_usage_totals = {
                 "json": 0,
                 "database": 0,
                 "database_failed_fallback_json": 0,
             }
-            cls._fallback_total = 0
+            _fallback_total = 0
 
     @classmethod
     def for_matching(cls, catalog_path: Path | None = None) -> "SkillEquivalenceService":
@@ -173,9 +178,10 @@ class SkillEquivalenceService:
 
     @classmethod
     def _load_database_catalog_with_stats(cls) -> _CatalogLoadResult:
+        global _db_cache_entry
         started_at = perf_counter()
         now = monotonic()
-        cached = cls._db_cache_entry
+        cached = _db_cache_entry
         if cached is not None and cached[0] > now:
             catalog = cached[1]
             skills_count, aliases_count, relations_count = cached[2]
@@ -190,8 +196,8 @@ class SkillEquivalenceService:
             )
 
         catalog, counts = cls._run_async_sync(cls._fetch_catalog_from_database())
-        cls._db_cache_entry = (
-            now + cls._db_cache_ttl_seconds,
+        _db_cache_entry = (
+            now + _DB_CACHE_TTL_SECONDS,
             catalog,
             counts,
         )
@@ -335,17 +341,18 @@ class SkillEquivalenceService:
 
     @classmethod
     def _register_source_usage(cls, source: str) -> tuple[int, dict[str, int], int]:
-        with cls._counter_lock:
-            current = cls._source_usage_totals.get(source, 0) + 1
-            cls._source_usage_totals[source] = current
+        global _fallback_total
+        with _counter_lock:
+            current = _source_usage_totals.get(source, 0) + 1
+            _source_usage_totals[source] = current
             if source == "database_failed_fallback_json":
-                cls._fallback_total += 1
-            return current, dict(cls._source_usage_totals), cls._fallback_total
+                _fallback_total += 1
+            return current, dict(_source_usage_totals), _fallback_total
 
     @classmethod
     def _peek_fallback_total(cls) -> int:
-        with cls._counter_lock:
-            return cls._fallback_total
+        with _counter_lock:
+            return _fallback_total
 
     def match_skill(
         self,

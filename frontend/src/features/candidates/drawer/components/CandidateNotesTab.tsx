@@ -30,22 +30,28 @@ export function CandidateNotesTab({ candidateId }: CandidateNotesTabProps) {
 
   const isSaveDisabled = submitting || !text.trim() || text.trim().length > MAX_NOTE_LENGTH;
 
-  const loadNotes = async () => {
-    if (!candidateId) return;
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await candidatesService.listNotes(candidateId);
-      setNotes(Array.isArray(response) ? response : []);
-    } catch {
-      setError("Não foi possível carregar as observações internas.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    if (!candidateId) return;
+
+    const abortController = new AbortController();
+
+    const loadNotes = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await candidatesService.listNotes(candidateId, abortController.signal);
+        if (abortController.signal.aborted) return;
+        setNotes(Array.isArray(response) ? response : []);
+      } catch {
+        if (abortController.signal.aborted) return;
+        setError("Não foi possível carregar as observações internas.");
+      } finally {
+        if (!abortController.signal.aborted) setLoading(false);
+      }
+    };
+
     void loadNotes();
+    return () => abortController.abort();
   }, [candidateId]);
 
   const handleCreate = async () => {

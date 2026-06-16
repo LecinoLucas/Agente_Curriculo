@@ -8,6 +8,7 @@ import pytest
 from src.application.services.skill_equivalence_service import (
     SkillEquivalenceService,
     _CatalogLoadResult,
+    _source_usage_totals,
 )
 
 
@@ -632,3 +633,78 @@ class TestSkillEquivalenceCatalogCrud:
         assert react.matched is True
         assert react.strength == "partial"
         assert react.score == 0.45
+
+
+class TestSkillEquivalenceServiceStateIsolation:
+    """B-06 fix: module-level singletons must not bleed into per-instance catalog state."""
+
+    _catalog_a = {
+        "version": "test",
+        "groups": [
+            {
+                "canonical": "Python",
+                "aliases": ["py"],
+                "domain": [],
+                "type": "skill",
+                "strength": "strong",
+            }
+        ],
+        "relations": [],
+    }
+    _catalog_b = {
+        "version": "test",
+        "groups": [],
+        "relations": [],
+    }
+
+    def test_two_instances_with_different_catalogs_do_not_share_group_state(self) -> None:
+        """Instance B must not see groups added to instance A's catalog."""
+        svc_a = SkillEquivalenceService(catalog=self._catalog_a)
+        svc_b = SkillEquivalenceService(catalog=self._catalog_b)
+
+        groups_a = svc_a.list_groups(search="Python")
+        groups_b = svc_b.list_groups(search="Python")
+
+        assert len(groups_a) == 1, "Instance A should find Python group"
+        assert len(groups_b) == 0, "Instance B must not inherit instance A's catalog"
+
+    def test_match_on_instance_a_does_not_affect_instance_b(self) -> None:
+        """Calling match_skill on A must not pollute B's results."""
+        svc_a = SkillEquivalenceService(catalog=self._catalog_a)
+        svc_b = SkillEquivalenceService(catalog=self._catalog_b)
+
+        # A can match Python (it has the group); B cannot.
+        result_a = svc_a.match_skill("py", "Python")
+        result_b = svc_b.match_skill("py", "Python")
+
+        assert result_a.matched is True
+        assert result_b.matched is False, "B must not see A's catalog groups"
+
+    def test_equivalence_rules_preserved_after_module_level_refactor(self) -> None:
+        """Core matching rules must still hold after B-06 module-level refactor."""
+        svc = SkillEquivalenceService()
+        evidence = svc.match_skill("PostgreSQL", "SQL")
+        assert evidence.matched is True
+        assert evidence.strength in {"strong", "exact"}
+        assert evidence.score >= 0.85
+
+    def test_observability_counters_are_module_level_not_per_instance(self) -> None:
+        """After B-06 fix, counters live at module level; class has no _source_usage_totals attr."""
+        assert not hasattr(SkillEquivalenceService, "_source_usage_totals"), (
+            "_source_usage_totals must no longer be a class attribute (moved to module level)"
+        )
+        # But the module-level variable IS accessible and is a dict
+        assert isinstance(_source_usage_totals, dict)
+        assert "json" in _source_usage_totals
+
+    def test_reset_observability_counters_resets_module_level_state(self) -> None:
+        """reset_observability_counters must zero out the module-level counters."""
+        import src.application.services.skill_equivalence_service as svc_mod
+
+        # Force a non-zero count
+        SkillEquivalenceService._register_source_usage("json")
+        assert svc_mod._source_usage_totals["json"] > 0
+
+        SkillEquivalenceService.reset_observability_counters()
+        assert svc_mod._source_usage_totals["json"] == 0
+        assert svc_mod._fallback_total == 0

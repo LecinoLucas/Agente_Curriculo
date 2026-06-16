@@ -407,8 +407,8 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
-    async def list_published(self) -> list[JobModel]:
-        """Lista todas as vagas com status='published' e não deletadas."""
+    async def list_published(self, *, limit: int = 50, offset: int = 0) -> list[JobModel]:
+        """Lista vagas com status='published' e não deletadas, com paginação."""
         result = await self._session.execute(
             sa.select(JobModel)
             .where(
@@ -416,6 +416,8 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
                 JobModel.deleted_at.is_(None),
             )
             .order_by(JobModel.title.asc())
+            .limit(limit)
+            .offset(offset)
         )
         return list(result.scalars().all())
 

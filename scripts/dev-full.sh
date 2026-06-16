@@ -18,7 +18,13 @@ DEV_MODE=${DEV_MODE:-local}
 DEV_HOST=${DEV_HOST:-}
 DEV_PUBLIC_HOST=${DEV_PUBLIC_HOST:-}
 INCLUDE_CANDIDATE_PORTAL=${INCLUDE_CANDIDATE_PORTAL:-true}
-INCLUDE_CELERY=${INCLUDE_CELERY:-true}
+# Celery é opt-in: use DEV_FULL_WITH_WORKER=1 para habilitar.
+# Motivo: worker usa ~300-600 MB em dev; não é necessário para o sistema abrir.
+# Compatibilidade retroativa: INCLUDE_CELERY=true também funciona.
+INCLUDE_CELERY=${INCLUDE_CELERY:-false}
+if [ "${DEV_FULL_WITH_WORKER:-}" = "1" ]; then
+  INCLUDE_CELERY=true
+fi
 BACKEND_PORT=${BACKEND_PORT:-8000}
 FRONTEND_PORT=${FRONTEND_PORT:-5173}
 CANDIDATE_PORTAL_PORT=${CANDIDATE_PORTAL_PORT:-5174}
@@ -37,7 +43,12 @@ Opcoes:
   --host <host>       127.0.0.1 para local ou 0.0.0.0 para network
   --public-host <ip>  IP/host mostrado para outros dispositivos na LAN
   --no-candidate      Nao sobe candidate-portal
-  --no-celery         Nao sobe worker Celery
+  --no-celery         Nao sobe worker Celery (redundante quando INCLUDE_CELERY=false)
+  --with-worker       Sobe worker Celery (equivalente a DEV_FULL_WITH_WORKER=1)
+
+Variaveis de ambiente:
+  DEV_FULL_WITH_WORKER=1  Habilita o worker Celery (opt-in; default: desligado)
+  INCLUDE_CELERY=true     Alternativa para habilitar Celery
 
 Este modo network e somente para LAN/desenvolvimento, nao para producao.
 EOF
@@ -84,6 +95,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --no-celery)
       INCLUDE_CELERY=false
+      shift
+      ;;
+    --with-worker)
+      INCLUDE_CELERY=true
       shift
       ;;
     -h|--help)
@@ -417,6 +432,18 @@ cleanup() {
 if [ ! -f "$BACKEND_DIR/.env" ]; then
   print_error "Arquivo $BACKEND_DIR/.env nao encontrado."
   echo "Crie esse arquivo antes de rodar o ambiente completo."
+  echo "Referencia: backend/.env.example"
+  exit 1
+fi
+
+# Garante que flags de envio ERP real estao desligadas
+_real_send=$(grep -E "^PROTHEUS_REAL_SEND_ENABLED=" "$BACKEND_DIR/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+_erp_allow=$(grep -E "^ERP_ALLOW_REAL_SEND=" "$BACKEND_DIR/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || true)
+if [ "${_real_send}" = "true" ] || [ "${_erp_allow}" = "true" ]; then
+  print_error "ALERTA DE SEGURANCA: flags de envio ERP real estao habilitadas no .env."
+  print_error "  PROTHEUS_REAL_SEND_ENABLED=${_real_send:-<nao definido>}"
+  print_error "  ERP_ALLOW_REAL_SEND=${_erp_allow:-<nao definido>}"
+  print_error "Defina ambas como 'false' antes de continuar em ambiente de desenvolvimento."
   exit 1
 fi
 
@@ -582,14 +609,18 @@ if [ "$INCLUDE_CELERY" = "true" ]; then
   print_info "Subindo worker Celery..."
   (
     cd "$BACKEND_DIR"
+    CELERY_WORKER_MAX_MEMORY_PER_CHILD=${CELERY_WORKER_MAX_MEMORY_PER_CHILD:-300000} \
     .venv/bin/celery -A src.infrastructure.queue.celery_app worker \
       --queues=analysis,matching,document_ai,extraction,behavioral_ai \
       --loglevel=warning \
-      --concurrency=2
+      --concurrency=2 \
+      --max-tasks-per-child=50
   ) &
   CELERY_PID=$!
   CHILD_PIDS+=("$CELERY_PID")
   print_ok "Worker Celery iniciado (PID $CELERY_PID)"
+else
+  print_info "Worker Celery omitido. Use DEV_FULL_WITH_WORKER=1 para habilitar."
 fi
 
 print_section "Verificacao"

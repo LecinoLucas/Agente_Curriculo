@@ -309,6 +309,65 @@ async def test_pre_admission_document_id_does_not_resolve_as_document_ai_candida
 
 
 @pytest.mark.asyncio
+async def test_document_ai_history_accepts_limit_param(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """GET /history must accept limit query param and return results (B-04 fix)."""
+    admin = await _create_active_user(
+        db_session,
+        f"document-ai-history-limit-{uuid4().hex}@example.com",
+        "Senha123!",
+        UserRole.ADMIN,
+    )
+    headers = await _auth_headers(client, admin.email, "Senha123!")
+    document_id, analysis_id, _candidate_id, _job_id = await _seed_candidate_document_analysis(
+        db_session,
+        created_by=admin.id,
+        with_pipeline=False,
+    )
+
+    response = await client.get(
+        f"/api/v1/document-ai/{document_id}/history?limit=10",
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert isinstance(body, list)
+    assert len(body) == 1
+    assert body[0]["id"] == str(analysis_id)
+
+
+@pytest.mark.asyncio
+async def test_document_ai_history_offset_skips_results(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """GET /history with offset beyond total must return empty list (B-04 fix)."""
+    admin = await _create_active_user(
+        db_session,
+        f"document-ai-history-offset-{uuid4().hex}@example.com",
+        "Senha123!",
+        UserRole.ADMIN,
+    )
+    headers = await _auth_headers(client, admin.email, "Senha123!")
+    document_id, _first_id, _candidate_id, _job_id = await _seed_candidate_document_analysis(
+        db_session,
+        created_by=admin.id,
+        with_pipeline=False,
+    )
+
+    response = await client.get(
+        f"/api/v1/document-ai/{document_id}/history?limit=10&offset=99",
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
 async def test_document_ai_analysis_response_keeps_expected_contract(
     client: AsyncClient,
     db_session: AsyncSession,

@@ -14,6 +14,8 @@ logger = structlog.get_logger(__name__)
 
 CLEANUP_QUEUE = "maintenance"
 
+_STALE_CLEANUP_BATCH_SIZE = 200
+
 
 @celery_app.task(
     bind=True,
@@ -44,10 +46,12 @@ async def _cleanup_stale_processing_analyses_async(timeout_seconds: int = 120) -
 
         async with celery_sessionmaker() as session:
             result = await session.execute(
-                sa.select(DocumentAIAnalysisModel).where(
+                sa.select(DocumentAIAnalysisModel)
+                .where(
                     DocumentAIAnalysisModel.status == "processing",
                     DocumentAIAnalysisModel.created_at < cutoff_time,
                 )
+                .limit(_STALE_CLEANUP_BATCH_SIZE)
             )
 
             stale_analyses = result.scalars().all()

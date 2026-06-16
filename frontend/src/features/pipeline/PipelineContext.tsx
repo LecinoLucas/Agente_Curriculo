@@ -16,6 +16,20 @@ import { getJobPipeline, listJobs } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import { moveBoardCandidate, updateBoardCandidate } from "./pipelineBoardState";
 import {
+  isMatchingAttemptBlocked,
+  MATCHING_ATTEMPT_TTL_MS,
+  MAX_MATCHING_ATTEMPTS,
+  MatchingAttemptEntry,
+  setMatchingAttemptWithLimit,
+} from "./utils/matchingAttempts";
+import {
+  CachedCandidateEntry,
+  CANDIDATE_CACHE_TTL_MS,
+  getCandidateCacheEntry,
+  MAX_CANDIDATE_CACHE_ENTRIES,
+  setCandidateCacheEntryWithLimit,
+} from "./utils/candidateCache";
+import {
   AIAnalysisStatus,
   AnalysisStatus,
   CandidateOverview,
@@ -244,7 +258,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
   // Candidate overview cache: serves repeated openCandidate() calls instantly.
   // Invalidated on: closeCandidate, moveCandidateStage, refreshCandidateOverview.
-  const candidateCacheRef = useRef<Map<string, CandidateOverview>>(new Map());
+  const candidateCacheRef = useRef<Map<string, CachedCandidateEntry>>(new Map());
   const candidateFetchInFlightRef = useRef<Map<string, Promise<CandidateOverview>>>(new Map());
 
   // Fetch deduplication for loadJobs — prevents concurrent or duplicate calls.
@@ -259,9 +273,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
   const pollingPrevStatusRef = useRef<string | null>(null);
   const pollingStaleCountRef = useRef(0);
   const isPageVisibleRef = useRef(true);
-  const matchingAttemptRef = useRef<Map<string, { status: "in_flight" | "completed" | "failed"; error?: string }>>(
-    new Map(),
-  );
+  const matchingAttemptRef = useRef<Map<string, MatchingAttemptEntry>>(new Map());
 
   const notifyCandidatesChanged = useCallback(() => {
     setState((prev) => ({ ...prev, candidatesSyncTick: prev.candidatesSyncTick + 1 }));
@@ -479,7 +491,9 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
   const patchCandidate = useCallback(
     (candidateId: string, payload: Partial<CandidateOverview["candidate"]>) => {
-      const cached = candidateCacheRef.current.get(candidateId);
+      const now = Date.now();
+      const cacheOpts = { maxSize: MAX_CANDIDATE_CACHE_ENTRIES, ttlMs: CANDIDATE_CACHE_TTL_MS, now };
+      const cached = getCandidateCacheEntry(candidateCacheRef.current, candidateId, cacheOpts);
       if (cached) {
         const nextOverview: CandidateOverview = {
           ...cached,
@@ -489,7 +503,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           },
         };
 
-        candidateCacheRef.current.set(candidateId, nextOverview);
+        setCandidateCacheEntryWithLimit(candidateCacheRef.current, candidateId, nextOverview, cacheOpts);
         setState((prev) =>
           prev.selectedCandidateId === candidateId
             ? { ...prev, candidateOverview: nextOverview, candidateError: null }
@@ -508,8 +522,10 @@ export function PipelineProvider({ children }: PropsWithChildren) {
   );
 
   const fetchCandidateOverview = useCallback(async (candidateId: string, force = false): Promise<CandidateOverview> => {
+    const now = Date.now();
+    const cacheOpts = { maxSize: MAX_CANDIDATE_CACHE_ENTRIES, ttlMs: CANDIDATE_CACHE_TTL_MS, now };
     if (!force) {
-      const cached = candidateCacheRef.current.get(candidateId);
+      const cached = getCandidateCacheEntry(candidateCacheRef.current, candidateId, cacheOpts);
       if (cached) return cached;
     }
 
@@ -519,7 +535,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     const request = candidatesService
       .getOverview(candidateId)
       .then((overview) => {
-        candidateCacheRef.current.set(candidateId, overview);
+        setCandidateCacheEntryWithLimit(candidateCacheRef.current, candidateId, overview, { maxSize: MAX_CANDIDATE_CACHE_ENTRIES, ttlMs: CANDIDATE_CACHE_TTL_MS, now: Date.now() });
         return overview;
       })
       .finally(() => {
@@ -541,7 +557,9 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         resumeTitle?: string | null;
       },
     ) => {
-      const cached = candidateCacheRef.current.get(candidateId);
+      const nowMs = Date.now();
+      const cacheOpts = { maxSize: MAX_CANDIDATE_CACHE_ENTRIES, ttlMs: CANDIDATE_CACHE_TTL_MS, now: nowMs };
+      const cached = getCandidateCacheEntry(candidateCacheRef.current, candidateId, cacheOpts);
       if (!cached) return;
 
       const now = new Date().toISOString();
@@ -589,7 +607,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
             },
       };
 
-      candidateCacheRef.current.set(candidateId, nextOverview);
+      setCandidateCacheEntryWithLimit(candidateCacheRef.current, candidateId, nextOverview, cacheOpts);
       setState((prev) =>
         prev.selectedCandidateId === candidateId
           ? { ...prev, candidateOverview: nextOverview, candidateError: null }
@@ -609,7 +627,9 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         error?: string | null;
       },
     ) => {
-      const cached = candidateCacheRef.current.get(candidateId);
+      const nowMs = Date.now();
+      const cacheOpts = { maxSize: MAX_CANDIDATE_CACHE_ENTRIES, ttlMs: CANDIDATE_CACHE_TTL_MS, now: nowMs };
+      const cached = getCandidateCacheEntry(candidateCacheRef.current, candidateId, cacheOpts);
       if (!cached) return;
 
       const existingPipeline = cached.latest_analysis_pipeline;
@@ -637,7 +657,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           : nextPipeline,
       };
 
-      candidateCacheRef.current.set(candidateId, nextOverview);
+      setCandidateCacheEntryWithLimit(candidateCacheRef.current, candidateId, nextOverview, cacheOpts);
       setState((prev) =>
         prev.selectedCandidateId === candidateId
           ? { ...prev, candidateOverview: nextOverview, candidateError: null }
@@ -655,7 +675,9 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         stage: PipelineStage;
       },
     ) => {
-      const cached = candidateCacheRef.current.get(candidateId);
+      const nowMs = Date.now();
+      const cacheOpts = { maxSize: MAX_CANDIDATE_CACHE_ENTRIES, ttlMs: CANDIDATE_CACHE_TTL_MS, now: nowMs };
+      const cached = getCandidateCacheEntry(candidateCacheRef.current, candidateId, cacheOpts);
       if (!cached) return;
 
       const now = new Date().toISOString();
@@ -683,7 +705,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         pipeline_entries: nextEntries,
       };
 
-      candidateCacheRef.current.set(candidateId, nextOverview);
+      setCandidateCacheEntryWithLimit(candidateCacheRef.current, candidateId, nextOverview, cacheOpts);
       setState((prev) =>
         prev.selectedCandidateId === candidateId
           ? { ...prev, candidateOverview: nextOverview, candidateError: null }
@@ -698,7 +720,10 @@ export function PipelineProvider({ children }: PropsWithChildren) {
   const openCandidate = useCallback(async (candidateId: string, initialTab: PanelTab = "summary") => {
     selectedCandidateIdRef.current = candidateId;
 
-    const cached = candidateCacheRef.current.get(candidateId);
+    const cached = getCandidateCacheEntry(candidateCacheRef.current, candidateId, {
+      ttlMs: CANDIDATE_CACHE_TTL_MS,
+      now: Date.now(),
+    });
     if (cached) {
       setState((prev) => ({
         ...prev,
@@ -934,12 +959,9 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       jobId: string;
     }) => {
       const key = `${analysisId}:${jobId}`;
-      const existingAttempt = matchingAttemptRef.current.get(key);
-      if (
-        existingAttempt?.status === "in_flight" ||
-        existingAttempt?.status === "completed" ||
-        existingAttempt?.status === "failed"
-      ) {
+      const now = Date.now();
+      const pruneOpts = { maxSize: MAX_MATCHING_ATTEMPTS, ttlMs: MATCHING_ATTEMPT_TTL_MS, now };
+      if (isMatchingAttemptBlocked(matchingAttemptRef.current.get(key), { ttlMs: MATCHING_ATTEMPT_TTL_MS, now })) {
         return;
       }
 
@@ -948,7 +970,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         return;
       }
       if (currentPipeline?.matching_status === "completed") {
-        matchingAttemptRef.current.set(key, { status: "completed" });
+        setMatchingAttemptWithLimit(matchingAttemptRef.current, key, { status: "completed" }, pruneOpts);
         patchCandidateOverviewMatching(candidateId, {
           analysisId,
           jobId,
@@ -967,7 +989,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      matchingAttemptRef.current.set(key, { status: "in_flight" });
+      setMatchingAttemptWithLimit(matchingAttemptRef.current, key, { status: "in_flight" }, pruneOpts);
       patchCandidateOverviewMatching(candidateId, {
         analysisId,
         jobId,
@@ -978,7 +1000,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
       try {
         const match = await matchToJob(analysisId, jobId);
-        matchingAttemptRef.current.set(key, { status: "completed" });
+        setMatchingAttemptWithLimit(matchingAttemptRef.current, key, { status: "completed" }, pruneOpts);
         patchCandidateOverviewMatching(candidateId, {
           analysisId,
           jobId,
@@ -1005,7 +1027,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         }
       } catch (err) {
         const message = toFriendlyText(err, "Falha ao persistir o matching explícito.");
-        matchingAttemptRef.current.set(key, { status: "failed", error: message });
+        setMatchingAttemptWithLimit(matchingAttemptRef.current, key, { status: "failed", error: message }, pruneOpts);
         patchCandidateOverviewMatching(candidateId, {
           analysisId,
           jobId,
@@ -1071,15 +1093,16 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       toStage: PipelineStage,
       options?: { reason?: string; notes?: string | null },
     ) => {
+      const moveCacheOpts = { maxSize: MAX_CANDIDATE_CACHE_ENTRIES, ttlMs: CANDIDATE_CACHE_TTL_MS, now: Date.now() };
       const jobId =
         activeJobIdRef.current ??
-        candidateCacheRef.current.get(candidateId)?.active_job_id ??
+        getCandidateCacheEntry(candidateCacheRef.current, candidateId, moveCacheOpts)?.active_job_id ??
         null;
       if (!jobId) {
         throw new Error("Candidato sem vaga ativa para mover etapa.");
       }
 
-      const previousOverview = candidateCacheRef.current.get(candidateId) ?? null;
+      const previousOverview = getCandidateCacheEntry(candidateCacheRef.current, candidateId, moveCacheOpts) ?? null;
       let previousBoard: JobPipelineBoard | null = null;
 
       patchCandidateOverviewStage(candidateId, { jobId, stage: toStage });
@@ -1111,7 +1134,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         return moveResult;
       } catch (err) {
         if (previousOverview) {
-          candidateCacheRef.current.set(candidateId, previousOverview);
+          setCandidateCacheEntryWithLimit(candidateCacheRef.current, candidateId, previousOverview, moveCacheOpts);
           setState((prev) =>
             prev.selectedCandidateId === candidateId
               ? { ...prev, candidateOverview: previousOverview, candidateError: null }

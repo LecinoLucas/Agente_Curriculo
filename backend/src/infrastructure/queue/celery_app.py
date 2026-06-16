@@ -55,6 +55,7 @@ celery_app.conf.update(
 
     # 🔥 evita leak de memória
     worker_max_tasks_per_child=50,
+    worker_max_memory_per_child=settings.CELERY_WORKER_MAX_MEMORY_PER_CHILD,
 
     # ─────────────────────────────────────────
     # DEFAULT ROUTING
