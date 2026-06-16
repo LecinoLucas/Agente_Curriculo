@@ -200,7 +200,7 @@ export function CandidatePreAdmissionPanel({
         <EmptyState
           icon="🔒"
           title="Pré-admissão sem permissão de acesso."
-          description="A criação e gestão do caso admissional ficam disponíveis para administradores, RH e recrutadores."
+          description="A criação e gestão do caso admissional ficam disponíveis para administradores e RH."
         />
       </div>
     );
