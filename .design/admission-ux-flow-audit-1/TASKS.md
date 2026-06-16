@@ -279,6 +279,31 @@ Proibido:
 - `frontend/src/features/admission-workspace/AdmissionProtheusExportQueuePanel.tsx`
 - `frontend/src/features/admission-workspace/__tests__/AdmissionProtheusExportQueuePanel.test.tsx`
 - `frontend/src/features/admission-workspace/__tests__/AdmissionProtheusBridgeSummaryPanel.test.tsx`
+
+---
+
+## ADMISSION-UX-FINAL-REVIEW-1
+
+**Status:** Concluído  
+**Data:** 2026-06-16  
+**Resultado final:** PASS_WITH_NOTES
+
+### Conclusão
+
+- Fluxo do RH está claro, orientado por próxima ação e com empty states mais úteis.
+- Fluxo do candidato está compreensível, com correção/rejeição e upload bem orientados.
+- Painel Protheus/ERP ficou legível para RH e continua sem sugerir envio real.
+- Segurança e privacidade permanecem coerentes: sem botão falso de envio real e sem vazamento de `review_notes` ao candidato.
+
+### Notas residuais
+
+- Revisão visual desta sessão foi estrutural/read-only; não houve captura de screenshots porque não havia browser tool disponível.
+- `PreAdmissionChecklist.tsx` continua no repositório como componente legado, marcado como não utilizado.
+- Testes backend focados desta revisão não rodaram por ausência de env local carregado (`APP_SECRET_KEY`, `DATABASE_URL`, `JWT_SECRET_KEY`), mas a cobertura relevante foi mapeada por leitura.
+
+### Artefatos
+
+- Relatório final: `.design/admission-ux-flow-audit-1/FINAL_REVIEW.md`
 - Criar testes em `backend/tests/integration/`
 
 ### Arquivos prováveis
