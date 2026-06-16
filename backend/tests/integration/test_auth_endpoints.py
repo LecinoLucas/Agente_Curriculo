@@ -33,6 +33,21 @@ async def test_login_returns_access_token(client: AsyncClient, db_session: Async
 
 
 @pytest.mark.asyncio
+async def test_login_accepts_reserved_test_domain_email(client: AsyncClient, db_session: AsyncSession):
+    await _create_active_user(db_session, "admin.local@example.test", "AdminLocal123!")
+
+    response = await client.post("/api/v1/auth/login", json={
+        "email": "admin.local@example.test",
+        "password": "AdminLocal123!",
+    })
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+
+@pytest.mark.asyncio
 async def test_login_with_wrong_password_returns_401(client: AsyncClient, db_session: AsyncSession):
     await _create_active_user(db_session, "wrong@test.com", "correct_password")
 
