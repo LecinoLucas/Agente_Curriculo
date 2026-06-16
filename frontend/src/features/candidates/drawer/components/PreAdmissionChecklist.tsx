@@ -1,3 +1,5 @@
+// LEGACY — componente não renderizado em nenhuma rota ativa (confirmado em 2026-06-16).
+// Não adicionar novos usos. Rejeição via este componente não passa rejection_reason_public ao candidato.
 import { Plus } from "lucide-react";
 import { useState } from "react";
 
