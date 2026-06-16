@@ -28,7 +28,6 @@ describe("AdmissionDocumentsCard", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   it("renderiza lista de documentos enviados", () => {

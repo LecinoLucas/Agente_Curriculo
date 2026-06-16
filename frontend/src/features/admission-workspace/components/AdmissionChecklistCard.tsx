@@ -3,6 +3,7 @@ import {
   Eye,
   FileText,
   MoreHorizontal,
+  ClipboardList,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -139,9 +140,21 @@ export function AdmissionChecklistCard({
 
       {/* Item list */}
       <div className="divide-y divide-[hsl(var(--border))]/50">
+        {items.length === 0 ? (
+          <div className="flex items-start gap-3 px-5 py-5 text-text-muted">
+            <ClipboardList className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-medium text-text">Nenhum item no checklist</p>
+              <p className="mt-0.5 text-xs">
+                O template admissional não foi aplicado ou não possui itens ativos para este caso.
+              </p>
+            </div>
+          </div>
+        ) : null}
         {items.map((item) => (
           <div
             key={item.id}
+            data-checklist-item-id={item.id}
             className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-surface-muted/40"
           >
             {/* Position badge */}

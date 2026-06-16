@@ -530,7 +530,9 @@ describe("AdmissionCasePage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Exportação ERP")).toBeInTheDocument();
+    // O painel de exportação ERP aparece (busca por todos pois ExportQueuePanel também usa esse texto)
+    const erpLabels = await screen.findAllByText("Exportação ERP");
+    expect(erpLabels.length).toBeGreaterThan(0);
     expect(await screen.findByRole("button", { name: /Enviar para ERP/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Baixar JSON \(conferência\)/i })).toBeInTheDocument();
   });
@@ -606,7 +608,14 @@ describe("AdmissionCasePage", () => {
   it("empty state de histórico quando não há eventos", async () => {
     mockWorkspaceSlices(emptyWorkspace);
     renderPage();
-    expect(await screen.findByText("Nenhum evento recente.")).toBeInTheDocument();
+    expect(await screen.findByText(/Nenhuma ação registrada ainda/i)).toBeInTheDocument();
+  });
+
+  it("empty state de checklist quando não há itens no caso", async () => {
+    mockWorkspaceSlices(emptyWorkspace);
+    renderPage();
+    expect(await screen.findByText("Nenhum item no checklist")).toBeInTheDocument();
+    expect(screen.getByText(/O template admissional não foi aplicado/i)).toBeInTheDocument();
   });
 
   it("blockers/pendências aparecem quando existem", async () => {
@@ -720,7 +729,35 @@ describe("AdmissionCasePage", () => {
     });
   });
 
-  it("aprova documento pelo endpoint correto", async () => {
+  it("aprova documento pelo endpoint correto após confirmação inline", async () => {
+    const user = userEvent.setup();
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [
+        {
+          ...mockWorkspace.documents[0],
+          status: "uploaded",
+          reviewed_at: null,
+          reviewed_by_name: null,
+          approved_at: null,
+        },
+      ],
+    });
+    renderPage();
+
+    // Primeiro clique: abre confirmação inline
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+    expect(screen.getByRole("alertdialog", { name: "Confirmar aprovação" })).toBeInTheDocument();
+
+    // Segundo clique: confirma e chama o endpoint
+    await user.click(screen.getByTestId("admission-document-approve-doc-1"));
+
+    await waitFor(() => {
+      expect(approvePreAdmissionDocument).toHaveBeenCalledWith("doc-1");
+    });
+  });
+
+  it("cancelar confirmação inline de aprovação não chama o endpoint", async () => {
     const user = userEvent.setup();
     mockWorkspaceSlices({
       ...mockWorkspace,
@@ -737,10 +774,12 @@ describe("AdmissionCasePage", () => {
     renderPage();
 
     await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+    expect(screen.getByRole("alertdialog", { name: "Confirmar aprovação" })).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(approvePreAdmissionDocument).toHaveBeenCalledWith("doc-1");
-    });
+    await user.click(screen.getByTestId("admission-document-approve-cancel-doc-1"));
+
+    expect(screen.queryByRole("alertdialog", { name: "Confirmar aprovação" })).not.toBeInTheDocument();
+    expect(approvePreAdmissionDocument).not.toHaveBeenCalled();
   });
 
   it("mostra motivo público e nota interna em áreas separadas para documento rejeitado", async () => {
@@ -1000,7 +1039,11 @@ describe("AdmissionCasePage", () => {
     renderPage();
 
     await screen.findByText("Checklist admissional");
+    // Clique 1: abre o painel de confirmação inline
     await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+    // Espera o alertdialog aparecer, depois clica em confirmar
+    await screen.findByRole("alertdialog", { name: "Confirmar aprovação" });
+    await user.click(screen.getByTestId("admission-document-approve-doc-1"));
 
     await waitFor(() => {
       expect(approvePreAdmissionDocument).toHaveBeenCalled();
@@ -1026,7 +1069,10 @@ describe("AdmissionCasePage", () => {
     renderPage();
 
     await screen.findByText("Checklist admissional");
+    // Confirmação inline: clique 1 abre dialog, clique 2 confirma
     await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+    await screen.findByRole("alertdialog", { name: "Confirmar aprovação" });
+    await user.click(screen.getByTestId("admission-document-approve-doc-1"));
 
     await waitFor(() => {
       expect(approvePreAdmissionDocument).toHaveBeenCalled();
@@ -1067,7 +1113,10 @@ describe("AdmissionCasePage", () => {
     renderPage();
 
     await screen.findByText("Checklist admissional");
+    // Confirmação inline: clique 1 abre dialog, clique 2 confirma
     await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+    await screen.findByRole("alertdialog", { name: "Confirmar aprovação" });
+    await user.click(screen.getByTestId("admission-document-approve-doc-1"));
 
     await waitFor(() => {
       expect(approvePreAdmissionDocument).toHaveBeenCalled();
@@ -1089,12 +1138,15 @@ describe("AdmissionCasePage", () => {
 
     renderPage();
 
-    await screen.findByText("Exportação ERP");
+    await screen.findByText("Checklist admissional");
 
     expect(admissionPackageService.getPackageByCaseId).toHaveBeenCalledTimes(1);
     expect(admissionPackageService.listErpAttempts).toHaveBeenCalledTimes(1);
 
+    // Confirmação inline: clique 1 abre dialog, clique 2 confirma
     await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+    await screen.findByRole("alertdialog", { name: "Confirmar aprovação" });
+    await user.click(screen.getByTestId("admission-document-approve-doc-1"));
 
     await waitFor(() => {
       expect(approvePreAdmissionDocument).toHaveBeenCalled();
@@ -1138,5 +1190,74 @@ describe("AdmissionCasePage", () => {
       expect(admissionWorkspaceService.getDocuments).toHaveBeenCalledTimes(initialDocsCalls + 1);
       expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(initialEventsCalls + 1);
     });
+  });
+
+  // ── UX-WORKSPACE-MEDIUM-1: botão de atualização no header ───────────────────
+
+  it("UX-M1: botão 'Atualizar workspace' no header recarrega os três endpoints", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Checklist admissional");
+
+    const initialOverviewCalls = vi.mocked(admissionWorkspaceService.getOverview).mock.calls.length;
+    const initialDocsCalls = vi.mocked(admissionWorkspaceService.getDocuments).mock.calls.length;
+    const initialEventsCalls = vi.mocked(admissionWorkspaceService.getEvents).mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: /atualizar workspace/i }));
+
+    await waitFor(() => {
+      expect(admissionWorkspaceService.getOverview).toHaveBeenCalledTimes(initialOverviewCalls + 1);
+      expect(admissionWorkspaceService.getDocuments).toHaveBeenCalledTimes(initialDocsCalls + 1);
+      expect(admissionWorkspaceService.getEvents).toHaveBeenCalledTimes(initialEventsCalls + 1);
+    });
+  });
+
+  // ── UX-WORKSPACE-MEDIUM-1: confirmação inline de aprovação ──────────────────
+
+  it("UX-M1: aprovação inline — primeiro clique abre confirmação sem chamar backend", async () => {
+    const user = userEvent.setup();
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [{ ...mockWorkspace.documents[0], status: "uploaded", reviewed_at: null, reviewed_by_name: null, approved_at: null }],
+    });
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+
+    expect(screen.getByRole("alertdialog", { name: "Confirmar aprovação" })).toBeInTheDocument();
+    expect(approvePreAdmissionDocument).not.toHaveBeenCalled();
+  });
+
+  it("UX-M1: aprovação inline — segundo clique confirma e chama endpoint", async () => {
+    const user = userEvent.setup();
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [{ ...mockWorkspace.documents[0], status: "uploaded", reviewed_at: null, reviewed_by_name: null, approved_at: null }],
+    });
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+    await user.click(screen.getByTestId("admission-document-approve-doc-1")); // confirmar
+
+    await waitFor(() => {
+      expect(approvePreAdmissionDocument).toHaveBeenCalledWith("doc-1");
+    });
+  });
+
+  it("UX-M1: aprovação inline — cancelar descarta confirmação sem chamar backend", async () => {
+    const user = userEvent.setup();
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [{ ...mockWorkspace.documents[0], status: "uploaded", reviewed_at: null, reviewed_by_name: null, approved_at: null }],
+    });
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+    await user.click(screen.getByTestId("admission-document-approve-cancel-doc-1"));
+
+    expect(screen.queryByRole("alertdialog", { name: "Confirmar aprovação" })).not.toBeInTheDocument();
+    expect(approvePreAdmissionDocument).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("admission-document-approve-doc-1")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, FileText, Loader2, MessageSquareWarning, ShieldAlert, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileText, Loader2, MessageSquareWarning, ShieldAlert, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,20 @@ type AdmissionDocumentsCardProps = {
   onDownload: (document: AdmissionWorkspaceDocument) => void | Promise<void>;
 };
 
+function documentIconStyle(status: string): { bg: string; icon: string } {
+  if (status === "approved") return { bg: "bg-success-soft", icon: "text-success" };
+  if (status === "rejected") return { bg: "bg-danger-soft", icon: "text-danger" };
+  if (status === "replaced") return { bg: "bg-surface-muted", icon: "text-text-muted" };
+  return { bg: "bg-[hsl(var(--warning-soft))]", icon: "text-[hsl(var(--warning))]" };
+}
+
+function documentIconComponent(status: string) {
+  if (status === "approved") return CheckCircle2;
+  if (status === "replaced") return FileText;
+  if (status === "rejected") return XCircle;
+  return Clock;
+}
+
 function formatFileSize(sizeBytes: number): string {
   if (sizeBytes < 1024) return `${sizeBytes} B`;
   if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
@@ -58,6 +72,7 @@ export function AdmissionDocumentsCard({
   onReject,
   onDownload,
 }: AdmissionDocumentsCardProps) {
+  const [confirmingApproveId, setConfirmingApproveId] = useState<string | null>(null);
   const [modalDocument, setModalDocument] = useState<AdmissionWorkspaceDocument | null>(null);
   const [modalMode, setModalMode] = useState<DocumentReviewMode>("request-correction");
   const [publicReason, setPublicReason] = useState("");
@@ -151,6 +166,10 @@ export function AdmissionDocumentsCard({
                 document.rejection_reason_public?.trim() ||
                 "Nenhuma mensagem pública salva. O portal deve exibir o fallback genérico.";
 
+              const iconStyle = documentIconStyle(document.status);
+              const IconComponent = documentIconComponent(document.status);
+              const isConfirmingApprove = confirmingApproveId === document.id;
+
               return (
                 <article
                   key={document.id}
@@ -166,10 +185,10 @@ export function AdmissionDocumentsCard({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start gap-3">
                         <div
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-danger-soft"
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconStyle.bg}`}
                           aria-hidden="true"
                         >
-                          <FileText className="h-5 w-5 text-danger" />
+                          <IconComponent className={`h-5 w-5 ${iconStyle.icon}`} />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -247,7 +266,7 @@ export function AdmissionDocumentsCard({
                       ) : null}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 lg:w-[230px] lg:justify-end">
+                    <div className="flex flex-col items-stretch gap-2 lg:w-[230px]">
                       <button
                         type="button"
                         onClick={() => void onDownload(document)}
@@ -258,19 +277,49 @@ export function AdmissionDocumentsCard({
                         {downloadLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                         Baixar
                       </button>
-                      <button
-                        type="button"
-                        disabled={!canApprove || approveLoading}
-                        data-testid={`admission-document-approve-${document.id}`}
-                        onClick={() => {
-                          if (!window.confirm("Confirmar aprovação deste documento?")) return;
-                          void onApprove(document);
-                        }}
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {approveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                        Aprovar
-                      </button>
+
+                      {isConfirmingApprove ? (
+                        <div
+                          role="alertdialog"
+                          aria-label="Confirmar aprovação"
+                          className="flex gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-1.5"
+                        >
+                          <button
+                            type="button"
+                            data-testid={`admission-document-approve-${document.id}`}
+                            disabled={approveLoading}
+                            onClick={() => {
+                              setConfirmingApproveId(null);
+                              void onApprove(document);
+                            }}
+                            className="flex-1 inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                          >
+                            {approveLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            Confirmar
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`admission-document-approve-cancel-${document.id}`}
+                            onClick={() => setConfirmingApproveId(null)}
+                            className="inline-flex min-h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                            aria-label="Cancelar aprovação"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={!canApprove || approveLoading}
+                          data-testid={`admission-document-approve-${document.id}`}
+                          onClick={() => setConfirmingApproveId(document.id)}
+                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {approveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                          Aprovar
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         disabled={actionDisabled || rejectLoading}

@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -26,6 +27,8 @@ type AdmissionCaseHeaderProps = {
   onMarkReady?: () => void;
   submitting?: boolean;
   actionMessage?: string | null;
+  /** quick-reload handler shown as icon button in the header */
+  onReload?: () => void;
 };
 
 export function AdmissionCaseHeader({
@@ -35,6 +38,7 @@ export function AdmissionCaseHeader({
   onMarkReady,
   submitting = false,
   actionMessage,
+  onReload,
 }: AdmissionCaseHeaderProps) {
   const [confirming, setConfirming] = useState(false);
 
@@ -73,11 +77,24 @@ export function AdmissionCaseHeader({
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <Badge variant={isReady ? "success" : "warning"}>
-            {isReady
-              ? "Pronto para exportação"
-              : stageLabel(caseData.current_stage) + " em andamento"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {onReload ? (
+              <button
+                type="button"
+                onClick={onReload}
+                aria-label="Atualizar workspace"
+                title="Atualizar workspace"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-surface text-text-muted shadow-sm transition-colors hover:bg-surface-muted hover:text-text"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            <Badge variant={isReady ? "success" : "warning"}>
+              {isReady
+                ? "Pronto para exportação"
+                : stageLabel(caseData.current_stage) + " em andamento"}
+            </Badge>
+          </div>
           {openPageHref ? (
             <Link
               to={openPageHref}

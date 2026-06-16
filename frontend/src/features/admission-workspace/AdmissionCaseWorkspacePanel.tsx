@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCards } from "@/components/common/Skeleton";
@@ -236,6 +236,10 @@ export function AdmissionCaseWorkspacePanel({
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [loadingActionKey, setLoadingActionKey] = useState<string | null>(null);
   const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
+  // Ref kept in sync with documentsPayload on every render so updateDocumentLocally
+  // can read current state synchronously (avoids race with React's deferred updater scheduling).
+  const documentsPayloadRef = useRef(documentsPayload);
+  documentsPayloadRef.current = documentsPayload;
   const [highlightedDocumentId, setHighlightedDocumentId] = useState<string | null>(null);
 
   const resolvedIntegrationHref = useMemo(
@@ -332,17 +336,24 @@ export function AdmissionCaseWorkspacePanel({
 
   const updateDocumentLocally = useCallback(
     (updatedDocument: PreAdmissionDocument) => {
-      let applied = false;
+      // Read current state synchronously from the ref (always up-to-date after renders).
+      // Avoids a race condition where React defers the setState updater and the closure
+      // variable `applied` would be read before the updater runs.
+      const snapshot = documentsPayloadRef.current;
+      if (!snapshot) return false;
+
+      const documentIndex = snapshot.documents.findIndex((item) => item.id === updatedDocument.id);
+      if (documentIndex < 0) return false;
 
       setDocumentsPayload((current) => {
         if (!current) return current;
 
-        const documentIndex = current.documents.findIndex((item) => item.id === updatedDocument.id);
-        if (documentIndex < 0) return current;
+        const idx = current.documents.findIndex((item) => item.id === updatedDocument.id);
+        if (idx < 0) return current;
 
         const nextDocuments = [...current.documents];
-        const previousDocument = nextDocuments[documentIndex];
-        nextDocuments[documentIndex] = {
+        const previousDocument = nextDocuments[idx];
+        nextDocuments[idx] = {
           ...previousDocument,
           checklist_item_id: updatedDocument.checklist_item_id,
           filename: updatedDocument.original_filename || previousDocument.filename,
@@ -367,7 +378,6 @@ export function AdmissionCaseWorkspacePanel({
             : item,
         );
 
-        applied = true;
         return {
           checklist: {
             ...current.checklist,
@@ -377,11 +387,8 @@ export function AdmissionCaseWorkspacePanel({
         };
       });
 
-      if (applied) {
-        setDocumentsError(null);
-      }
-
-      return applied;
+      setDocumentsError(null);
+      return true;
     },
     [],
   );
@@ -567,6 +574,7 @@ export function AdmissionCaseWorkspacePanel({
         onMarkReady={handleMarkReady}
         submitting={loadingActionKey === "case:mark-ready"}
         actionMessage={summaryMessage}
+        onReload={() => void reloadSections()}
       />
 
       {/* ─── Main 2-column grid ─────────────────────────────────────────── */}

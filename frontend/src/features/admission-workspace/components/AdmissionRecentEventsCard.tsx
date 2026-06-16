@@ -32,7 +32,7 @@ export function AdmissionRecentEventsCard({
     >
       {events.length === 0 ? (
         <p className="py-2 text-sm text-text-muted">
-          Nenhum evento recente.
+          Nenhuma ação registrada ainda. As movimentações do RH e do candidato aparecerão aqui.
         </p>
       ) : (
         <div className="relative space-y-0">

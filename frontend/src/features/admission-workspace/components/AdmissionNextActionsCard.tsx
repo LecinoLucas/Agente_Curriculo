@@ -48,7 +48,7 @@ export function AdmissionNextActionsCard({
     <AdmissionSectionCard title="Próximas ações">
       {actions.length === 0 ? (
         <p className="py-2 text-sm text-text-muted">
-          Nenhuma ação disponível no momento.
+          Nenhuma ação pendente. O caso pode estar aguardando envio de documentos pelo candidato ou já está pronto para exportação.
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-2">
