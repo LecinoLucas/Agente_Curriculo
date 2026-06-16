@@ -61,6 +61,12 @@ const PreAdmissionChecklistsPage = lazy(() =>
   }))
 );
 
+const ProtheusExportQueueDashboardPage = lazy(() =>
+  import("../features/admission-workspace/ProtheusExportQueueDashboardPage").then((m) => ({
+    default: m.ProtheusExportQueueDashboardPage,
+  }))
+);
+
 const VagasPage = lazy(() =>
   import("../pages/VagasPage").then((m) => ({ default: m.VagasPage }))
 );
@@ -315,6 +321,11 @@ export function AppRouter() {
         <Route
           path="admissao/checklists"
           element={protectedPage(<PreAdmissionChecklistsPage />, PRE_ADMISSION_AREA_ROLES)}
+        />
+
+        <Route
+          path="admissao/protheus-export-dashboard"
+          element={protectedPage(<ProtheusExportQueueDashboardPage />, PRE_ADMISSION_AREA_ROLES)}
         />
 
         <Route

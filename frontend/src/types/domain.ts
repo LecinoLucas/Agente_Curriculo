@@ -1969,3 +1969,106 @@ export type ManagerListResponse = {
 export type ReviewRequestListResponse = {
   requests: ReviewRequestItem[];
 };
+
+export type KnownProtheusPayloadStatus = "ready" | "incomplete";
+
+export type ProtheusPayloadStatus = KnownProtheusPayloadStatus | (string & {});
+
+export type KnownProtheusExportQueueStatus =
+  | "queued"
+  | "processing"
+  | "retry_scheduled"
+  | "success"
+  | "failed_permanent"
+  | "blocked"
+  | "cancelled";
+
+export type ProtheusExportQueueStatus = KnownProtheusExportQueueStatus | (string & {});
+
+export type ProtheusExportQueueItem = {
+  id: string;
+  case_id: string;
+  status: ProtheusExportQueueStatus;
+  status_label: string;
+  recommended_action: string;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at: string | null;
+  last_error_code: string | null;
+  last_error_message_redacted: string | null;
+  last_trace_id: string | null;
+  can_cancel: boolean;
+  can_retry_manually: boolean;
+  created_at: string;
+  updated_at: string;
+  finished_at: string | null;
+  payload_status?: ProtheusPayloadStatus | null;
+  payload_status_label?: string | null;
+  pending_requirements?: string[];
+  can_request_new?: boolean;
+  can_enqueue?: boolean;
+  is_stub_mode: boolean;
+  disclaimer: string | null;
+};
+
+export type ProtheusExportDashboardTotals = Record<KnownProtheusExportQueueStatus | "unknown", number>;
+
+export type ProtheusExportDashboardTopError = {
+  code: string | null;
+  message_redacted: string | null;
+  count: number;
+};
+
+export type ProtheusExportDashboardOperationalFlags = {
+  is_stub_mode: boolean;
+  bridge_enabled: boolean;
+  real_send_enabled: boolean;
+};
+
+export type ProtheusExportDashboardSummary = {
+  total: number;
+  active: number;
+  terminal: number;
+  action_required: number;
+  totals_by_status: ProtheusExportDashboardTotals;
+  top_errors: ProtheusExportDashboardTopError[];
+  operational_flags: ProtheusExportDashboardOperationalFlags;
+};
+
+export type ProtheusExportDashboardItem = Omit<
+  ProtheusExportQueueItem,
+  "pending_requirements" | "can_enqueue" | "disclaimer"
+> & {
+  blocked_reason: string | null;
+};
+
+export type ProtheusExportDashboardItemsParams = {
+  status?: ProtheusExportQueueStatus | "";
+  limit?: number;
+  offset?: number;
+};
+
+export type ProtheusExportDashboardItemsResponse = {
+  items: ProtheusExportDashboardItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_next: boolean;
+};
+
+export type ProtheusExportQueueCreateResponse = {
+  was_existing: boolean;
+  export_request: ProtheusExportQueueItem;
+};
+
+export type ProtheusExportQueuePreflight = {
+  payload_status: ProtheusPayloadStatus;
+  payload_status_label: string;
+  pending_requirements: string[];
+  shape_debug?: Record<string, unknown> | null;
+  safe_error_code?: string | null;
+  safe_error_message?: string | null;
+  can_enqueue: boolean;
+  is_stub_mode: boolean;
+  disclaimer: string | null;
+};

@@ -123,6 +123,7 @@ function buildNavigationConfig(): NavGroup[] {
     items: [
       { to: "/admitidos", label: "Admitidos", caption: "Casos de pré-admissão", roles: PRE_ADMISSION_AREA_ROLES },
       { to: "/admissao/checklists", label: "Checklists admissionais", caption: "Templates de documentos", roles: PRE_ADMISSION_AREA_ROLES },
+      { to: "/admissao/protheus-export-dashboard", label: "Fila Protheus", caption: "Operação e bloqueios", roles: PRE_ADMISSION_AREA_ROLES },
     ],
   },
   {
@@ -201,6 +202,7 @@ const ICON_MAP: Record<string, any> = {
   "/manager": ShieldCheck,
   "/admitidos": UserRound,
   "/admissao/checklists": ShieldCheck,
+  "/admissao/protheus-export-dashboard": Activity,
   "/admin": Settings,
   "/admin/estrutura-operacional": MapPinned,
   "/admin/usuarios": UserRound,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -557,3 +557,120 @@ class AdmissionCaseWorkspaceResponse(BaseModel):
     next_actions: list[AdmissionNextActionSchema] = Field(default_factory=list)
     summary: AdmissionCaseWorkspaceSummarySchema
     recent_events: list[AdmissionRecentEventSchema] = Field(default_factory=list)
+
+
+# ── Protheus Export Queue ─────────────────────────────────────────────────────
+
+
+class ProtheusExportQueueCreateRequest(BaseModel):
+    unit_code: str = Field(default="STUB", max_length=40)
+    protheus_group_code: str = Field(default="T01", max_length=40)
+    protheus_branch_code: str = Field(default="01", max_length=40)
+
+
+class ProtheusExportQueuePreflightResponse(BaseModel):
+    payload_status: str
+    payload_status_label: str
+    pending_requirements: list[str] = Field(default_factory=list)
+    shape_debug: dict[str, Any] | None = None
+    safe_error_code: str | None = None
+    safe_error_message: str | None = None
+    can_enqueue: bool
+    is_stub_mode: bool
+    disclaimer: str | None = None
+
+
+class ProtheusExportQueueStatusResponse(BaseModel):
+    id: str
+    case_id: str
+    status: str
+    status_label: str
+    recommended_action: str
+    attempt_count: int
+    max_attempts: int
+    next_attempt_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_message_redacted: str | None = None
+    last_trace_id: str | None = None
+    can_cancel: bool
+    can_retry_manually: bool
+    created_at: str
+    updated_at: str
+    finished_at: str | None = None
+    payload_status: str | None = None
+    payload_status_label: str | None = None
+    pending_requirements: list[str] = Field(default_factory=list)
+    can_request_new: bool
+    can_enqueue: bool
+    is_stub_mode: bool
+    disclaimer: str | None = None
+
+
+class ProtheusExportQueueCreateResponse(BaseModel):
+    was_existing: bool
+    export_request: ProtheusExportQueueStatusResponse
+
+
+class ProtheusExportDashboardTotalsResponse(BaseModel):
+    queued: int = 0
+    processing: int = 0
+    retry_scheduled: int = 0
+    success: int = 0
+    failed_permanent: int = 0
+    blocked: int = 0
+    cancelled: int = 0
+    unknown: int = 0
+
+
+class ProtheusExportDashboardTopErrorResponse(BaseModel):
+    code: str | None = None
+    message_redacted: str | None = None
+    count: int = 0
+
+
+class ProtheusExportDashboardOperationalFlagsResponse(BaseModel):
+    is_stub_mode: bool
+    bridge_enabled: bool
+    real_send_enabled: bool
+
+
+class ProtheusExportDashboardSummaryResponse(BaseModel):
+    total: int
+    active: int
+    terminal: int
+    action_required: int
+    totals_by_status: ProtheusExportDashboardTotalsResponse
+    top_errors: list[ProtheusExportDashboardTopErrorResponse] = Field(default_factory=list)
+    operational_flags: ProtheusExportDashboardOperationalFlagsResponse
+
+
+class ProtheusExportDashboardItemResponse(BaseModel):
+    id: str
+    case_id: str
+    status: str
+    status_label: str
+    payload_status: str | None = None
+    payload_status_label: str | None = None
+    attempt_count: int
+    max_attempts: int
+    next_attempt_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_message_redacted: str | None = None
+    blocked_reason: str | None = None
+    last_trace_id: str | None = None
+    created_at: str
+    updated_at: str
+    finished_at: str | None = None
+    recommended_action: str
+    can_cancel: bool
+    can_retry_manually: bool
+    can_request_new: bool
+    is_stub_mode: bool
+
+
+class ProtheusExportDashboardItemsResponse(BaseModel):
+    items: list[ProtheusExportDashboardItemResponse] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
+    has_next: bool

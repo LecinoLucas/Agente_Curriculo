@@ -317,6 +317,40 @@ class _BridgeClientTimeout:
         raise httpx.ReadTimeout("bridge timeout")
 
 
+class _BridgeClientNonExecBlocked:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def get(self, url: str, *, headers: dict[str, str] | None = None) -> httpx.Response:
+        return _bridge_http_response(
+            {
+                "overall_status": "warning",
+                "storage_mode": "memory",
+                "logical_environment": "homolog",
+                "real_send_enabled": False,
+                "erp_allow_real_send": False,
+                "latest_trace": {
+                    "trace_id": "trace-blocked",
+                    "action_type": "precheck",
+                    "status": "nonexec_blocked",
+                    "blocked_reason": "malicious_would_execute",
+                    "error_code": "ERR_NONEXEC_WOULD_EXECUTE_BLOCKED",
+                    "created_at": "2026-06-15T11:30:00Z",
+                    "headers": {"Authorization": "Bearer secret"},
+                    "payload_raw": {"cpf": "123.456.789-00"},
+                },
+                "token": "secret-bridge-token",
+                "headers": {"X-Internal-Api-Key": "dev-bridge-key-local"},
+            }
+        )
+
+
 @pytest.mark.asyncio
 async def test_protheus_bridge_summary_returns_sanitized_read_only_summary(
     client: AsyncClient,
@@ -371,6 +405,60 @@ async def test_protheus_bridge_summary_returns_sanitized_read_only_summary(
     }
     assert _BridgeClientSuccess.last_url == "http://127.0.0.1:8010/internal/protheus/dashboard/status"
     assert _BridgeClientSuccess.last_headers == {"X-Internal-Api-Key": "dev-bridge-key-local"}
+    serialized = response.text.lower()
+    assert "authorization" not in serialized
+    assert "x-internal-api-key" not in serialized
+    assert "secret-bridge-token" not in serialized
+    assert "123.456.789-00" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_protheus_bridge_summary_maps_nonexec_blocked_to_blocked(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers, _job_id, _candidate_id, case, _item = await _seed_pre_admission_with_item(
+        client,
+        db_session,
+    )
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_ENABLED", True)
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_BASE_URL", "http://127.0.0.1:8010")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_INTERNAL_API_KEY", "dev-bridge-key-local")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_DASHBOARD_URL", "http://localhost:5180")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_TIMEOUT_SECONDS", 2.0)
+
+    with patch(
+        "src.application.services.admission_case_workspace_service.httpx.AsyncClient",
+        _BridgeClientNonExecBlocked,
+    ):
+        response = await client.get(
+            f"/api/v1/pre-admission/cases/{case['id']}/protheus-bridge-summary",
+            headers=headers,
+        )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    payload = response.json()
+    assert payload["enabled"] is True
+    assert payload["available"] is True
+    assert payload["status"] == "blocked"
+    assert payload["next_action"] == (
+        "Bloqueio de segurança detectado. Revise o cockpit técnico antes de prosseguir com novas simulações."
+    )
+    assert payload["latest_trace"] == {
+        "trace_id": "trace-blocked",
+        "action_type": "precheck",
+        "status": "nonexec_blocked",
+        "blocked_reason": "malicious_would_execute",
+        "error_code": "ERR_NONEXEC_WOULD_EXECUTE_BLOCKED",
+        "created_at": "2026-06-15T11:30:00Z",
+    }
+    assert payload["safety"] == {
+        "would_execute": False,
+        "protheus_registration": None,
+        "erp_send_attempted": False,
+        "registration_routine_called": False,
+    }
     serialized = response.text.lower()
     assert "authorization" not in serialized
     assert "x-internal-api-key" not in serialized

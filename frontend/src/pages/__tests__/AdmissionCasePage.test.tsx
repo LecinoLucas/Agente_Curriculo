@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdmissionCasePage } from "../../pages/AdmissionCasePage";
 import { admissionWorkspaceService } from "../../services/admissionWorkspaceService";
 import * as admissionPackageService from "../../services/admissionPackageService";
+import { HttpError } from "../../services/http";
 import {
   approvePreAdmissionDocument,
   downloadPreAdmissionDocument,
@@ -490,6 +491,16 @@ describe("AdmissionCasePage", () => {
     expect(await screen.findByText("Informações do caso")).toBeInTheDocument();
   });
 
+  it("renderiza o card 'Status Protheus' quando workspace e summary respondem 200", async () => {
+    renderPage();
+    expect(await screen.findByText("Status Protheus")).toBeInTheDocument();
+    expect(screen.getByText("memory")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Abrir cockpit técnico/i })).toHaveAttribute(
+      "href",
+      "http://localhost:5180",
+    );
+  });
+
   it("renderiza 'Documentos enviados'", async () => {
     renderPage();
     expect(await screen.findByText("Documentos enviados")).toBeInTheDocument();
@@ -618,6 +629,31 @@ describe("AdmissionCasePage", () => {
     );
     renderPage();
     expect(await screen.findByText("Workspace indisponível")).toBeInTheDocument();
+  });
+
+  it("mostra caso não encontrado apenas para 404 real do workspace", async () => {
+    vi.mocked(admissionWorkspaceService.getOverview).mockRejectedValue(
+      new HttpError(404, "Caso de pré-admissão não encontrado."),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Caso admissional não encontrado")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Não foi possível localizar este caso admissional\./i),
+    ).toBeInTheDocument();
+  });
+
+  it("não mascara 403 como caso não encontrado", async () => {
+    vi.mocked(admissionWorkspaceService.getOverview).mockRejectedValue(
+      new HttpError(403, "Sem permissão para esta operação"),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Acesso negado ao workspace")).toBeInTheDocument();
+    expect(screen.queryByText("Caso admissional não encontrado")).not.toBeInTheDocument();
+    expect(screen.getByText(/Você não tem permissão para visualizar este caso admissional\./i)).toBeInTheDocument();
   });
 
   it("abre modal de rejeição e exige mensagem para o candidato", async () => {

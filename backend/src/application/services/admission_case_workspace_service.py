@@ -646,15 +646,22 @@ class AdmissionCaseWorkspaceService:
         real_send_enabled: bool,
         erp_allow_real_send: bool,
     ) -> str:
+        latest_trace_status = (latest_trace.status or "").lower() if latest_trace else ""
+        latest_trace_error_code = latest_trace.error_code or "" if latest_trace else ""
         if latest_trace and (
-            (latest_trace.status or "").lower() == "blocked" or latest_trace.blocked_reason
+            latest_trace_status in {"blocked", "nonexec_blocked"}
+            or latest_trace.blocked_reason
+            or latest_trace_error_code.startswith("ERR_NONEXEC_")
         ):
             return "blocked"
         if real_send_enabled or erp_allow_real_send:
             return "warning"
-        if overall_status in {"ready", "ok", "healthy"}:
+        normalized_overall_status = overall_status.lower()
+        if normalized_overall_status in {"blocked", "nonexec_blocked"}:
+            return "blocked"
+        if normalized_overall_status in {"ready", "ok", "healthy"}:
             return "ready"
-        if overall_status in {"warning", "degraded", "partial"}:
+        if normalized_overall_status in {"warning", "degraded", "partial"}:
             return "warning"
         return "warning"
 
@@ -678,7 +685,7 @@ class AdmissionCaseWorkspaceService:
         if real_send_enabled or erp_allow_real_send:
             return "Revise o cockpit técnico: envio real deve permanecer desativado neste fluxo read-only."
         if status == "blocked":
-            return "Revise o bloqueio no cockpit técnico antes de prosseguir com novas simulações."
+            return "Bloqueio de segurança detectado. Revise o cockpit técnico antes de prosseguir com novas simulações."
         if status == "ready":
             return "Simulação segura disponível no cockpit técnico."
         return "Verifique se o serviço da bridge está rodando em modo memory ou full."

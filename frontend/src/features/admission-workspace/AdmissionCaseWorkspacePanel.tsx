@@ -30,6 +30,7 @@ import { AdmissionNextActionsCard } from "./components/AdmissionNextActionsCard"
 import { AdmissionRecentEventsCard } from "./components/AdmissionRecentEventsCard";
 import { AdmissionSummaryCard } from "./components/AdmissionSummaryCard";
 import { AdmissionProtheusBridgeSummaryPanel } from "./AdmissionProtheusBridgeSummaryPanel";
+import { AdmissionProtheusExportQueuePanel } from "./AdmissionProtheusExportQueuePanel";
 import { AdmissionProtheusIntegrationPanel } from "./AdmissionProtheusIntegrationPanel";
 
 type AdmissionCaseWorkspacePanelProps = {
@@ -39,6 +40,10 @@ type AdmissionCaseWorkspacePanelProps = {
 };
 
 type DocumentReviewMode = "reject" | "request-correction";
+type WorkspaceOverviewErrorState = {
+  title: string;
+  description: string;
+};
 
 function extractBlockersFromError(error: unknown): AdmissionWorkspaceBlocker[] {
   if (!(error instanceof HttpError) || !error.detail || typeof error.detail !== "object") {
@@ -147,6 +152,74 @@ function mapDocumentStatusToChecklistStatus(status: PreAdmissionDocument["status
   }
 }
 
+function describeOverviewError(error: unknown): WorkspaceOverviewErrorState {
+  if (error instanceof HttpError) {
+    if (error.status === 401) {
+      return {
+        title: "Sessão expirada",
+        description: formatContextError(
+          error,
+          "Sua sessão não é mais válida para abrir este workspace.",
+          "Faça login novamente e tente abrir o caso de novo.",
+        ),
+      };
+    }
+
+    if (error.status === 403) {
+      return {
+        title: "Acesso negado ao workspace",
+        description: formatContextError(
+          error,
+          "Você não tem permissão para visualizar este caso admissional.",
+          "Confirme seu perfil de acesso com o time responsável.",
+        ),
+      };
+    }
+
+    if (error.status === 404) {
+      return {
+        title: "Caso admissional não encontrado",
+        description: formatContextError(
+          error,
+          "Não foi possível localizar este caso admissional.",
+          "Abra a tela a partir de um caso válido de pré-admissão.",
+        ),
+      };
+    }
+
+    if (error.status === 422) {
+      return {
+        title: "Workspace bloqueado para este caso",
+        description: formatContextError(
+          error,
+          "Este caso não pode ser aberto no workspace admissional no estado atual.",
+          "Revise o vínculo do pipeline ativo e as pendências do caso.",
+        ),
+      };
+    }
+
+    if (error.status === 0 || error.status >= 500) {
+      return {
+        title: "Backend indisponível",
+        description: formatContextError(
+          error,
+          "O backend não conseguiu responder ao abrir este workspace.",
+          "Verifique se o serviço está online e tente novamente.",
+        ),
+      };
+    }
+  }
+
+  return {
+    title: "Workspace indisponível",
+    description: formatContextError(
+      error,
+      "Não foi possível carregar o overview da pré-admissão.",
+      "Atualize a página ou revise o vínculo do pipeline ativo.",
+    ),
+  };
+}
+
 export function AdmissionCaseWorkspacePanel({
   caseId,
   openPageHref,
@@ -158,7 +231,7 @@ export function AdmissionCaseWorkspacePanel({
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
-  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [overviewError, setOverviewError] = useState<WorkspaceOverviewErrorState | null>(null);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [loadingActionKey, setLoadingActionKey] = useState<string | null>(null);
@@ -177,13 +250,7 @@ export function AdmissionCaseWorkspacePanel({
       const payload = await admissionWorkspaceService.getOverview(caseId);
       setOverview(payload);
     } catch (requestError) {
-      setOverviewError(
-        formatContextError(
-          requestError,
-          "Não foi possível carregar o overview da pré-admissão.",
-          "Atualize a página ou revise o vínculo do pipeline ativo.",
-        ),
-      );
+      setOverviewError(describeOverviewError(requestError));
     } finally {
       setOverviewLoading(false);
     }
@@ -479,8 +546,8 @@ export function AdmissionCaseWorkspacePanel({
       <div className="admission-section-card p-6">
         <EmptyState
           icon="⚠️"
-          title="Workspace indisponível"
-          description={overviewError ?? "Não foi possível localizar este caso admissional."}
+          title={overviewError?.title ?? "Workspace indisponível"}
+          description={overviewError?.description ?? "Não foi possível localizar este caso admissional."}
           action={{ label: "Recarregar", onClick: () => void loadOverview() }}
         />
       </div>
@@ -537,6 +604,7 @@ export function AdmissionCaseWorkspacePanel({
         <div className="admission-side-rail space-y-5">
           <AdmissionSummaryCard workspace={workspace} />
           <AdmissionProtheusBridgeSummaryPanel caseId={caseId} />
+          <AdmissionProtheusExportQueuePanel caseId={caseId} />
           <AdmissionNextActionsCard
             actions={workspace.next_actions}
             integrationHref={resolvedIntegrationHref}
