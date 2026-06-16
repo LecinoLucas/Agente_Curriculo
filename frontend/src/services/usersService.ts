@@ -75,8 +75,8 @@ export const usersService = {
   stats: (): Promise<UserStats> =>
     httpRequest<UserStats>("/api/v1/users/stats"),
 
-  listManagers: (): Promise<ManagerListResponse> =>
-    httpRequest<ManagerListResponse>("/api/v1/users/managers"),
+  listManagers: (signal?: AbortSignal): Promise<ManagerListResponse> =>
+    httpRequest<ManagerListResponse>("/api/v1/users/managers", { signal }),
 
   uploadAvatar: (formData: FormData): Promise<UserSummary> => {
     const headers = new Headers();

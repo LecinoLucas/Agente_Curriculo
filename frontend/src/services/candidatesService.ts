@@ -477,8 +477,8 @@ export const candidatesService = {
     }));
   },
 
-  async listNotes(candidateId: string): Promise<CandidateNote[]> {
-    return httpRequest<CandidateNote[]>(`/api/v1/candidates/${candidateId}/notes`);
+  async listNotes(candidateId: string, signal?: AbortSignal): Promise<CandidateNote[]> {
+    return httpRequest<CandidateNote[]>(`/api/v1/candidates/${candidateId}/notes`, { signal });
   },
 
   async createNote(candidateId: string, payload: CandidateNotePayload): Promise<CandidateNote> {

@@ -9,18 +9,22 @@ import type {
 export async function getHiringDecision(
   jobId: string,
   candidateId: string,
+  signal?: AbortSignal,
 ): Promise<HiringDecisionEnvelope> {
   return httpRequest<HiringDecisionEnvelope>(
     `/api/v1/jobs/${jobId}/candidates/${candidateId}/hiring-decision`,
+    { signal },
   );
 }
 
 export async function getHiringDecisionHistory(
   jobId: string,
   candidateId: string,
+  signal?: AbortSignal,
 ): Promise<HiringDecisionHistory> {
   return httpRequest<HiringDecisionHistory>(
     `/api/v1/jobs/${jobId}/candidates/${candidateId}/hiring-decision/history`,
+    { signal },
   );
 }
 

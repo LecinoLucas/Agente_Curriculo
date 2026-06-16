@@ -15,9 +15,10 @@ export type RequestManagerReviewPayload = {
 
 export const collaborationService = {
   // Recruiter endpoints
-  listCollaboration(jobId: string, candidateId: string) {
+  listCollaboration(jobId: string, candidateId: string, signal?: AbortSignal) {
     return httpRequest<CollaborationListResponse>(
       `/api/v1/jobs/${jobId}/candidates/${candidateId}/collaboration`,
+      { signal },
     );
   },
 
