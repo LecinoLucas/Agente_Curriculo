@@ -778,3 +778,63 @@ async def test_workspace_blocks_case_when_pipeline_is_inactive(
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_reject_checklist_item_sets_rejection_reason_public(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client,
+        db_session,
+    )
+    await _upload_candidate_document(
+        client,
+        db_session,
+        candidate_id=candidate_id,
+        case=case,
+        item=item,
+        token="workspace-reject-public",
+    )
+
+    response = await client.post(
+        f"/api/v1/admission/checklist-items/{item['id']}/reject",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    document = response.json()["documents"][0]
+    assert document["status"] == "rejected"
+    assert document["rejection_reason_public"] is not None
+    assert len(document["rejection_reason_public"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_request_checklist_item_correction_sets_rejection_reason_public(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client,
+        db_session,
+    )
+    await _upload_candidate_document(
+        client,
+        db_session,
+        candidate_id=candidate_id,
+        case=case,
+        item=item,
+        token="workspace-correction-public",
+    )
+
+    response = await client.post(
+        f"/api/v1/admission/checklist-items/{item['id']}/request-correction",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    document = response.json()["documents"][0]
+    assert document["status"] == "rejected"
+    assert document["rejection_reason_public"] is not None
+    assert len(document["rejection_reason_public"]) > 0

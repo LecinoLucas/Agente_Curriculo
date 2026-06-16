@@ -188,6 +188,7 @@ class AdmissionCaseWorkspaceService:
             actor_id=actor_id,
             event_type="checklist_item_rejected",
             review_notes="Item rejeitado.",
+            rejection_reason_public="Este documento foi rejeitado pelo RH. Envie uma nova versão ou entre em contato com o RH para mais informações.",
         )
 
     async def request_checklist_item_correction(
@@ -201,6 +202,7 @@ class AdmissionCaseWorkspaceService:
             actor_id=actor_id,
             event_type="checklist_item_correction_requested",
             review_notes="Correção solicitada.",
+            rejection_reason_public="O RH solicitou correção deste documento. Envie uma nova versão ou entre em contato com o RH para mais detalhes.",
         )
 
     async def mark_checklist_item_not_required(
@@ -277,6 +279,7 @@ class AdmissionCaseWorkspaceService:
         actor_id: UUID | None,
         event_type: str,
         review_notes: str,
+        rejection_reason_public: str | None = None,
     ) -> AdmissionCaseWorkspaceResponse:
         case, item = await self._required_item_context(item_id)
         now = datetime.now(UTC)
@@ -288,6 +291,7 @@ class AdmissionCaseWorkspaceService:
             document.reviewed_at = now
             document.reviewed_by = actor_id
             document.review_notes = review_notes
+            document.rejection_reason_public = rejection_reason_public
             document.updated_at = now
         await self._repository.flush()
         await self._sync_case_status_after_checklist_change(
