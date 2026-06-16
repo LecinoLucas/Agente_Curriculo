@@ -1,0 +1,13 @@
+{
+  "contract_version": "protheus_export_status.v1",
+  "payload_statuses": ["ready", "incomplete"],
+  "queue_statuses": ["queued", "processing", "success", "retry_scheduled", "failed_permanent", "blocked", "cancelled"],
+  "max_attempts": 3,
+  "terminal_statuses": ["success", "failed_permanent", "blocked", "cancelled"],
+  "active_statuses": ["queued", "processing", "retry_scheduled"],
+  "safe_ui_rules": {
+    "frontend_never_calls_bridge_directly": true,
+    "api_key_backend_only": true,
+    "no_raw_sensitive_fields": true
+  }
+}
