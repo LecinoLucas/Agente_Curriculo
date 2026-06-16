@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/common/EmptyState";
@@ -9,6 +9,7 @@ import { admissionWorkspaceService } from "../../services/admissionWorkspaceServ
 import type { ProtheusExportQueueItem, ProtheusExportQueuePreflight } from "../../types/domain";
 import {
   canShowExportButton,
+  getErrorCodeLabel,
   getPayloadStatusLabel,
   getQueueStatusDescription,
   getQueueStatusLabel,
@@ -199,6 +200,23 @@ export function AdmissionProtheusExportQueuePanel({ caseId }: Props) {
       }
     >
       <div className="space-y-4" data-testid="admission-protheus-export-queue-panel">
+        {(item?.is_stub_mode || preflight?.is_stub_mode) ? (
+          <div
+            className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+            data-testid="stub-mode-banner"
+          >
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-800">
+                Envio real ao Protheus está bloqueado neste ambiente
+              </p>
+              <p className="mt-0.5 text-xs text-emerald-700">
+                Todas as operações são realizadas em modo seguro (STUB). Nenhum cadastro real foi executado.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         {item == null ? (
           <>
             <EmptyState
@@ -280,9 +298,10 @@ export function AdmissionProtheusExportQueuePanel({ caseId }: Props) {
                   </div>
                 ) : null}
                 {item.last_error_code != null ? (
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-1">
                     <dt className="text-text-muted">Código de erro</dt>
-                    <dd className="font-medium text-red-600">{item.last_error_code}</dd>
+                    <dd className="font-medium text-red-600">{getErrorCodeLabel(item.last_error_code)}</dd>
+                    <dd className="font-mono text-[11px] text-red-400 opacity-70">{item.last_error_code}</dd>
                   </div>
                 ) : null}
                 {item.last_error_message_redacted != null ? (

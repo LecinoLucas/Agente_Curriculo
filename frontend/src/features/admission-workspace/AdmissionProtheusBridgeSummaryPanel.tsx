@@ -7,6 +7,12 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { formatContextError } from "../../services/errorMessages";
 import { admissionWorkspaceService } from "../../services/admissionWorkspaceService";
 import type { AdmissionProtheusBridgeSummary } from "../../types/domain";
+import {
+  getBlockedReasonLabel,
+  getErrorCodeLabel,
+  getReadinessLabel,
+  READINESS_LABELS,
+} from "./protheusExportStatus";
 import { AdmissionSectionCard } from "./components/AdmissionSectionCard";
 
 type AdmissionProtheusBridgeSummaryPanelProps = {
@@ -19,6 +25,12 @@ const STATUS_LABELS: Record<string, string> = {
   blocked: "Bloqueada",
   unavailable: "Indisponível",
   disabled: "Desativada",
+};
+
+const SAFETY_ROW_LABELS: Record<string, string> = {
+  would_execute: "Execução real disparada",
+  erp_send_attempted: "Envio ao ERP realizado",
+  registration_routine_called: "Rotina de cadastro acionada",
 };
 
 function formatDateTime(value: string | null | undefined): string {
@@ -39,15 +51,14 @@ function statusTone(status: string): string {
 }
 
 function SafetyRow({
-  label,
+  fieldKey,
   active,
-  value,
 }: {
-  label: string;
+  fieldKey: string;
   active: boolean;
-  value: string;
 }) {
   const Icon = active ? ShieldX : ShieldCheck;
+  const label = SAFETY_ROW_LABELS[fieldKey] ?? fieldKey;
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-muted/35 px-3 py-2">
       <span className="text-sm text-text">{label}</span>
@@ -58,7 +69,7 @@ function SafetyRow({
         ].join(" ")}
       >
         <Icon className="h-3.5 w-3.5" />
-        {value}
+        {active ? "Sim" : "Não"}
       </span>
     </div>
   );
@@ -146,6 +157,26 @@ export function AdmissionProtheusBridgeSummaryPanel({
       }
     >
       <div className="space-y-4" data-testid="admission-protheus-bridge-summary-panel">
+        {/* Real-send blocked banner — shown when all safety guardrails confirm no real action */}
+        {!summary.safety.would_execute &&
+          !summary.safety.erp_send_attempted &&
+          !summary.safety.registration_routine_called ? (
+          <div
+            className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+            data-testid="real-send-blocked-banner"
+          >
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-800">
+                Envio real ao Protheus está bloqueado neste ambiente
+              </p>
+              <p className="mt-0.5 text-xs text-emerald-700">
+                Nenhuma execução real, ExecAuto ou cadastro foi realizado. Apenas simulações seguras.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <div
           className={[
             "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3",
@@ -157,26 +188,42 @@ export function AdmissionProtheusBridgeSummaryPanel({
             <p className="mt-1 text-sm font-semibold">{STATUS_LABELS[summary.status] ?? summary.status}</p>
           </div>
           <div className="text-right text-xs">
-            <p>Enabled: {summary.enabled ? "Sim" : "Não"}</p>
-            <p className="mt-1">Available: {summary.available ? "Sim" : "Não"}</p>
+            <p>Integração ativa: {summary.enabled ? "Sim" : "Não"}</p>
+            <p className="mt-1">Bridge disponível: {summary.available ? "Sim" : "Não"}</p>
           </div>
         </div>
 
+        {/* Readiness — shown prominently when it indicates a noteworthy state */}
+        {summary.readiness && summary.readiness in READINESS_LABELS ? (
+          <div
+            className={[
+              "rounded-xl border px-4 py-3",
+              summary.readiness === "dry_run_passed" || summary.readiness === "export_success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : summary.readiness === "dry_run_failed" || summary.readiness === "export_failed"
+                  ? "border-red-200 bg-red-50 text-red-800"
+                  : summary.readiness === "export_blocked_by_flag"
+                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                    : "border-border bg-surface text-text",
+            ].join(" ")}
+            data-testid="readiness-badge"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] opacity-70">Estado</p>
+            <p className="mt-1 text-sm font-semibold">{getReadinessLabel(summary.readiness)}</p>
+          </div>
+        ) : null}
+
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-border bg-surface p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">Contexto</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">Contexto técnico</p>
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <dt className="text-text-muted">Ambiente</dt>
                 <dd className="font-medium text-text">{summary.environment ?? "—"}</dd>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-text-muted">Storage mode</dt>
+                <dt className="text-text-muted">Modo de armazenamento</dt>
                 <dd className="font-medium text-text">{summary.storage_mode ?? "—"}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-text-muted">Readiness</dt>
-                <dd className="font-medium text-text">{summary.readiness ?? "—"}</dd>
               </div>
             </dl>
           </div>
@@ -197,7 +244,7 @@ export function AdmissionProtheusBridgeSummaryPanel({
                 <dd className="font-medium text-text">{latestTrace?.status ?? "—"}</dd>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-text-muted">Atualizado</dt>
+                <dt className="text-text-muted">Registrado em</dt>
                 <dd className="font-medium text-text">{formatDateTime(latestTrace?.created_at)}</dd>
               </div>
             </dl>
@@ -205,44 +252,37 @@ export function AdmissionProtheusBridgeSummaryPanel({
         </div>
 
         <div className="rounded-xl border border-border bg-surface p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">Segurança</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">Guardrails de segurança</p>
           <div className="mt-3 space-y-2">
-            <SafetyRow
-              label="would_execute"
-              active={summary.safety.would_execute}
-              value={summary.safety.would_execute ? "true" : "false"}
-            />
-            <SafetyRow
-              label="erp_send_attempted"
-              active={summary.safety.erp_send_attempted}
-              value={summary.safety.erp_send_attempted ? "true" : "false"}
-            />
-            <SafetyRow
-              label="registration_routine_called"
-              active={summary.safety.registration_routine_called}
-              value={summary.safety.registration_routine_called ? "true" : "false"}
-            />
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-muted/35 px-3 py-2">
-              <span className="text-sm text-text">protheus_registration</span>
-              <span className="text-xs font-semibold text-text-muted">
-                {summary.safety.protheus_registration ?? "null"}
-              </span>
-            </div>
+            <SafetyRow fieldKey="would_execute" active={summary.safety.would_execute} />
+            <SafetyRow fieldKey="erp_send_attempted" active={summary.safety.erp_send_attempted} />
+            <SafetyRow fieldKey="registration_routine_called" active={summary.safety.registration_routine_called} />
           </div>
         </div>
 
         {summary.message ? (
           <div className="rounded-xl border border-border bg-surface-muted/35 p-4 text-sm text-text">
-            <p className="font-semibold">Mensagem</p>
+            <p className="font-semibold">Mensagem da bridge</p>
             <p className="mt-1">{summary.message}</p>
           </div>
         ) : null}
 
         {latestTrace?.blocked_reason || latestTrace?.error_code ? (
-          <div className="rounded-xl border border-border bg-surface p-4 text-sm text-text">
-            <p className="font-semibold">Último bloqueio ou erro</p>
-            <p className="mt-2">blocked_reason: {latestTrace?.blocked_reason ?? "—"}</p>
-            <p className="mt-1">error_code: {latestTrace?.error_code ?? "—"}</p>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" data-testid="bridge-error-block">
+            <p className="font-semibold">Bloqueio ou erro na última operação</p>
+            {latestTrace?.blocked_reason ? (
+              <div className="mt-2">
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-70">Motivo do bloqueio</p>
+                <p className="mt-1">{getBlockedReasonLabel(latestTrace.blocked_reason)}</p>
+              </div>
+            ) : null}
+            {latestTrace?.error_code ? (
+              <div className="mt-2">
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-70">Código de erro</p>
+                <p className="mt-1">{getErrorCodeLabel(latestTrace.error_code)}</p>
+                <p className="mt-0.5 font-mono text-[11px] opacity-60">{latestTrace.error_code}</p>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

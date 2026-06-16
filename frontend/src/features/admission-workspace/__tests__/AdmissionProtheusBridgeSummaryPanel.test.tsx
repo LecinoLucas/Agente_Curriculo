@@ -112,8 +112,10 @@ describe("AdmissionProtheusBridgeSummaryPanel", () => {
     render(<AdmissionProtheusBridgeSummaryPanel caseId="case-1" />);
 
     expect(await screen.findByText("Bloqueada")).toBeInTheDocument();
-    expect(screen.getByText(/blocked_reason: malicious_would_execute/i)).toBeInTheDocument();
-    expect(screen.getByText(/error_code: PROTHEUS_BLOCKED/i)).toBeInTheDocument();
+    const errorBlock = screen.getByTestId("bridge-error-block");
+    expect(errorBlock).toHaveTextContent("Guardrail bloqueou execução real (would_execute ativo)");
+    expect(errorBlock).toHaveTextContent("Bloqueio de segurança Protheus");
+    expect(errorBlock).toHaveTextContent("PROTHEUS_BLOCKED");
     expect(screen.getByRole("link", { name: /Abrir cockpit técnico/i })).toHaveAttribute(
       "href",
       "http://localhost:5180",
@@ -145,6 +147,9 @@ describe("AdmissionProtheusBridgeSummaryPanel", () => {
     render(<AdmissionProtheusBridgeSummaryPanel caseId="case-1" />);
 
     await screen.findByText("Pronta");
+    const safeBanner = screen.getByTestId("real-send-blocked-banner");
+    expect(safeBanner).toHaveTextContent(/Envio real ao Protheus está bloqueado neste ambiente/i);
+    expect(safeBanner).toHaveTextContent(/Apenas simulações seguras/i);
     await user.click(screen.getByRole("button", { name: /Recarregar/i }));
 
     await waitFor(() => {

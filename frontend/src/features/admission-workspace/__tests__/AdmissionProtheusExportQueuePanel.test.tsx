@@ -171,7 +171,7 @@ describe("AdmissionProtheusExportQueuePanel", () => {
     render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
 
     expect(await screen.findByText("Solicitação enfileirada")).toBeInTheDocument();
-    expect(screen.getByText("Aguarde o processamento automático.")).toBeInTheDocument();
+    expect(screen.getByText("Aguarde o processamento automático pela fila de exportação.")).toBeInTheDocument();
     expect(screen.getByText(/Fase STUB: nenhuma gravação/i)).toBeInTheDocument();
   });
 
@@ -200,6 +200,7 @@ describe("AdmissionProtheusExportQueuePanel", () => {
     render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
 
     expect(await screen.findByText("Retry agendado")).toBeInTheDocument();
+    expect(screen.getByText("Timeout da conexão com a bridge")).toBeInTheDocument();
     expect(screen.getByText("BRIDGE_TIMEOUT")).toBeInTheDocument();
     expect(screen.getByText("[redacted: 503]")).toBeInTheDocument();
     expect(screen.getByText(/Próximo retry/i)).toBeInTheDocument();
@@ -210,10 +211,11 @@ describe("AdmissionProtheusExportQueuePanel", () => {
 
     render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
 
-    expect(await screen.findByText("Falha permanente")).toBeInTheDocument();
+    expect(await screen.findByText("Exportação falhou")).toBeInTheDocument();
+    expect(screen.getByText("Erro fatal na bridge — verifique os logs técnicos")).toBeInTheDocument();
     expect(screen.getByText("BRIDGE_FATAL")).toBeInTheDocument();
     expect(screen.getByText("[redacted: internal]")).toBeInTheDocument();
-    expect(screen.getByText(/Revise o caso antes de solicitar uma nova exportação/i)).toBeInTheDocument();
+    expect(screen.getByText(/Revise o caso e solicite uma nova exportação/i)).toBeInTheDocument();
   });
 
   it("mostra revisão técnica quando status é blocked", async () => {
@@ -221,7 +223,7 @@ describe("AdmissionProtheusExportQueuePanel", () => {
 
     render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
 
-    expect(await screen.findByText("Bloqueado por guardrail")).toBeInTheDocument();
+    expect(await screen.findByText("Bloqueado por segurança")).toBeInTheDocument();
     expect(screen.getByText(/Revisão técnica obrigatória/i)).toBeInTheDocument();
   });
 
@@ -331,7 +333,7 @@ describe("AdmissionProtheusExportQueuePanel", () => {
       { item: queuedItem, expected: "Solicitação enfileirada" },
       { item: successItem, expected: "Exportação concluída" },
       { item: retryItem, expected: "Retry agendado" },
-      { item: failedItem, expected: "Falha permanente" },
+      { item: failedItem, expected: "Exportação falhou" },
     ];
 
     for (const { item, expected } of statuses) {
@@ -348,6 +350,43 @@ describe("AdmissionProtheusExportQueuePanel", () => {
     render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
 
     expect(await screen.findByText("trace-xyz")).toBeInTheDocument();
+  });
+
+  it("mostra banner STUB quando is_stub_mode está ativo", async () => {
+    vi.mocked(admissionWorkspaceService.getLatestProtheusExportRequest).mockResolvedValue(queuedItem);
+
+    render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
+
+    await screen.findByText("Solicitação enfileirada");
+
+    const banner = screen.getByTestId("stub-mode-banner");
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveTextContent(/Envio real ao Protheus está bloqueado neste ambiente/i);
+    expect(banner).toHaveTextContent(/modo seguro \(STUB\)/i);
+  });
+
+  it("mostra banner STUB quando preflight tem is_stub_mode ativo", async () => {
+    const error = Object.assign(new Error("Not found"), { status: 404 });
+    vi.mocked(admissionWorkspaceService.getLatestProtheusExportRequest).mockRejectedValue(error);
+    vi.mocked(admissionWorkspaceService.preflightProtheusExportRequest).mockResolvedValue(readyPreflight);
+
+    render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
+
+    await screen.findByText(/Nenhuma solicitação de exportação/i);
+    expect(screen.getByTestId("stub-mode-banner")).toBeInTheDocument();
+  });
+
+  it("mostra código de erro traduzido para o RH sem jargão técnico cru", async () => {
+    vi.mocked(admissionWorkspaceService.getLatestProtheusExportRequest).mockResolvedValue(retryItem);
+
+    render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
+
+    await screen.findByText("Retry agendado");
+
+    expect(screen.getByText("Timeout da conexão com a bridge")).toBeInTheDocument();
+    const technicalCode = screen.getByText("BRIDGE_TIMEOUT");
+    expect(technicalCode).toBeInTheDocument();
+    expect(technicalCode).toHaveClass("font-mono");
   });
 
   it("mantém frontend alinhado com o snapshot de contrato", () => {

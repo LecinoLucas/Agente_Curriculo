@@ -38,14 +38,14 @@ type QueueStatusMeta = {
 export const QUEUE_STATUS_META: Record<KnownProtheusExportQueueStatus, QueueStatusMeta> = {
   queued: {
     label: "Solicitação enfileirada",
-    description: "Aguarde o processamento automático.",
+    description: "Aguarde o processamento automático pela fila de exportação.",
     tone: "border-blue-200 bg-blue-50 text-blue-700",
     active: true,
     terminal: false,
   },
   processing: {
-    label: "Aguardando processamento",
-    description: "Worker em execução. Aguarde a atualização da fila.",
+    label: "Em processamento",
+    description: "Worker em execução. Aguarde a atualização do status.",
     tone: "border-amber-200 bg-amber-50 text-amber-800",
     active: true,
     terminal: false,
@@ -65,15 +65,15 @@ export const QUEUE_STATUS_META: Record<KnownProtheusExportQueueStatus, QueueStat
     terminal: true,
   },
   failed_permanent: {
-    label: "Falha permanente",
-    description: "Falha permanente. Revise o caso antes de solicitar uma nova exportação.",
+    label: "Exportação falhou",
+    description: "Falha permanente. Revise o caso e solicite uma nova exportação após corrigir as pendências.",
     tone: "border-red-200 bg-red-50 text-red-700",
     active: false,
     terminal: true,
   },
   blocked: {
-    label: "Bloqueado por guardrail",
-    description: "Bloqueio técnico ativo. Revisão técnica obrigatória antes de nova tentativa.",
+    label: "Bloqueado por segurança",
+    description: "Envio real bloqueado por guardrail de segurança. Revisão técnica obrigatória antes de nova tentativa.",
     tone: "border-red-200 bg-red-50 text-red-700",
     active: false,
     terminal: true,
@@ -151,4 +151,54 @@ export function canShowExportButton(options: {
     return options.canEnqueue;
   }
   return options.payloadStatus === "ready" && !options.queueStatus;
+}
+
+// ── Readiness labels ──────────────────────────────────────────────────────────
+
+export const READINESS_LABELS: Record<string, string> = {
+  not_ready: "Ainda não está pronto para exportação",
+  ready_for_dry_run: "Pronto para validação",
+  dry_run_failed: "Validação encontrou pendências",
+  dry_run_passed: "Validação aprovada",
+  export_blocked_by_flag: "Envio real bloqueado por segurança",
+  export_pending: "Exportação pendente",
+  export_failed: "Exportação falhou",
+  export_success: "Exportado com sucesso",
+  ready: "Pronto para operação",
+};
+
+export function getReadinessLabel(readiness: string | null | undefined): string {
+  if (!readiness) return "—";
+  return READINESS_LABELS[readiness] ?? readiness;
+}
+
+// ── Error code / blocked reason translations ──────────────────────────────────
+
+export const ERROR_CODE_LABELS: Record<string, string> = {
+  BRIDGE_TIMEOUT: "Timeout da conexão com a bridge",
+  BRIDGE_FATAL: "Erro fatal na bridge — verifique os logs técnicos",
+  BRIDGE_VALIDATION_ERROR: "Erro de validação na bridge",
+  PROTHEUS_BLOCKED: "Bloqueio de segurança Protheus",
+  PAYLOAD_INVALID: "Payload da exportação inválido",
+  FIELD_MISSING: "Campo obrigatório ausente no payload",
+  BRANCH_NOT_FOUND: "Filial não mapeada no Protheus",
+  FUNCTION_NOT_FOUND: "Função ou cargo não encontrado no Protheus",
+  COST_CENTER_NOT_FOUND: "Centro de custo não encontrado no Protheus",
+};
+
+export const BLOCKED_REASON_LABELS: Record<string, string> = {
+  malicious_would_execute: "Guardrail bloqueou execução real (would_execute ativo)",
+  real_send_not_enabled: "Envio real não habilitado neste ambiente",
+  guardrail_active: "Guardrail de segurança ativo",
+  erp_send_blocked: "Envio ao ERP bloqueado por configuração",
+};
+
+export function getErrorCodeLabel(code: string | null | undefined): string {
+  if (!code) return "—";
+  return ERROR_CODE_LABELS[code] ?? code;
+}
+
+export function getBlockedReasonLabel(reason: string | null | undefined): string {
+  if (!reason) return "—";
+  return BLOCKED_REASON_LABELS[reason] ?? reason;
 }
