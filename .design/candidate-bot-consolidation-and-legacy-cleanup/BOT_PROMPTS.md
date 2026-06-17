@@ -170,7 +170,10 @@ Comportamento esperado do MVP:
 
 - nenhuma criação de candidatura por tool de escrita deve ocorrer sem confirmação explícita;
 - `WRITE_SAFE_WITH_CONFIRMATION` deve exigir confirmação humana ou confirmação inequívoca do candidato;
-- o runtime read-only atual ainda não executa tools de escrita.
+- o runtime read-only atual ainda não executa tools de escrita;
+- a escrita segura atual usa resumo + quick replies de confirmação + validação final em `create_candidate_application_from_bot`;
+- o draft parcial fica em `conversation.context_json["candidate_application_draft"]`;
+- dados sensíveis continuam fora do draft.
 
 ## 8. Recomendação de Centralização
 

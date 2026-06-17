@@ -17,6 +17,12 @@ from src.infrastructure.database.models.conversation_handoff_model import (
     ConversationHandoffModel,
 )
 from src.infrastructure.database.models.conversation_model import ConversationSessionModel
+from src.infrastructure.database.models.job_model import JobModel, JobUnitModel
+from src.infrastructure.database.models.operational_master_model import (
+    LocationGroupModel,
+    OperationalGroupModel,
+    OperationalUnitModel,
+)
 from src.infrastructure.security.password_service import hash_password
 
 pytestmark = pytest.mark.asyncio
@@ -44,6 +50,82 @@ async def _login(client: AsyncClient) -> None:
         json={"email": _EMAIL, "password": _PASSWORD},
     )
     assert response.status_code == 200
+
+
+async def _send_candidate_bot_message(
+    client: AsyncClient,
+    *,
+    message: str,
+    session_id: str | None = None,
+    job_id: str | None = None,
+) -> dict[str, object]:
+    response = await client.post(
+        "/api/v1/public/candidate-bot/message",
+        json={"message": message, "session_id": session_id, "job_id": job_id},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+async def _make_unit(
+    db_session: AsyncSession,
+    *,
+    name: str,
+    public_name: str | None = None,
+    city: str = "Goiânia",
+    state: str = "GO",
+) -> OperationalUnitModel:
+    suffix = uuid4().hex[:8]
+    group = OperationalGroupModel(
+        code=f"GRP-{suffix}",
+        name=f"Grupo {suffix}",
+        normalized_name=f"grupo-{suffix}",
+        is_active=True,
+    )
+    location = LocationGroupModel(
+        name=f"{city} {suffix}",
+        normalized_name=f"{city.lower()}-{suffix}",
+        state=state,
+        city=city,
+        type="city",
+        is_active=True,
+    )
+    db_session.add_all([group, location])
+    await db_session.flush()
+
+    unit = OperationalUnitModel(
+        group_id=group.id,
+        location_group_id=location.id,
+        code=f"UNIT-{suffix}",
+        name=name,
+        normalized_name=f"{name.lower().replace(' ', '-')}-{suffix}",
+        public_name=public_name,
+        type="store",
+        city=city,
+        state=state,
+        is_active=True,
+    )
+    db_session.add(unit)
+    await db_session.flush()
+    return unit
+
+
+async def _link_unit_to_job(
+    db_session: AsyncSession,
+    *,
+    job: JobModel,
+    unit: OperationalUnitModel,
+    priority: int = 0,
+) -> None:
+    db_session.add(
+        JobUnitModel(
+            job_id=job.id,
+            operational_unit_id=unit.id,
+            is_active=True,
+            priority=priority,
+        )
+    )
+    await db_session.flush()
 
 
 async def test_candidate_bot_message_creates_session_and_returns_response(
@@ -271,26 +353,24 @@ async def test_candidate_bot_unknown_returns_quick_replies(
     assert "Falar com RH" in labels
 
 
-async def test_candidate_bot_apply_to_job_starts_guided_flow_without_creating_application(
+async def test_candidate_bot_apply_to_job_starts_draft_without_creating_application(
     client: AsyncClient,
     db_session: AsyncSession,
+    published_job: JobModel,
 ):
     candidate = await _create_candidate_with_password(db_session)
     await _login(client)
 
-    response = await client.post(
-        "/api/v1/public/candidate-bot/message",
-        json={"message": "quero me candidatar"},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert "cidade ou localidade" in payload["assistant_message"].lower()
+    payload = await _send_candidate_bot_message(client, message="quero me candidatar")
+    assert "qual vaga" in payload["assistant_message"].lower() or "vagas públicas" in payload[
+        "assistant_message"
+    ].lower()
 
     session = await db_session.get(ConversationSessionModel, UUID(payload["session_id"]))
     assert session is not None
     assert session.candidate_id == candidate.id
-    assert session.current_state == "CHOOSE_LOCATION"
+    assert session.current_state == "DONE"
+    assert session.context_json["candidate_application_draft"]["status"] == "collecting"
 
     applications = (
         await db_session.execute(
@@ -300,3 +380,198 @@ async def test_candidate_bot_apply_to_job_starts_guided_flow_without_creating_ap
         )
     ).scalars().all()
     assert applications == []
+
+
+async def test_candidate_bot_single_unit_flow_creates_application_after_confirmation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job: JobModel,
+):
+    candidate = await _create_candidate_with_password(db_session)
+    await _login(client)
+
+    unit = await _make_unit(db_session, name="Loja Centro", public_name="Centro")
+    await _link_unit_to_job(db_session, job=published_job, unit=unit)
+    await db_session.commit()
+
+    start = await _send_candidate_bot_message(
+        client,
+        message="quero me candidatar",
+        job_id=str(published_job.id),
+    )
+    assert "vou usar a unidade" in start["assistant_message"].lower()
+    session_id = str(start["session_id"])
+
+    name_turn = await _send_candidate_bot_message(
+        client,
+        session_id=session_id,
+        message="Meu nome é Joana Teste",
+    )
+    assert "autoriza o uso dos seus dados" in name_turn["assistant_message"].lower()
+
+    summary_turn = await _send_candidate_bot_message(
+        client,
+        session_id=session_id,
+        message="aceito o uso dos dados",
+    )
+    assert "confira sua candidatura" in summary_turn["assistant_message"].lower()
+
+    confirm_turn = await _send_candidate_bot_message(
+        client,
+        session_id=session_id,
+        message="confirmar_candidatura",
+    )
+    assert "foi enviada com sucesso" in confirm_turn["assistant_message"].lower()
+
+    application = await db_session.scalar(
+        sa.select(CandidateApplicationModel).where(
+            CandidateApplicationModel.candidate_id == candidate.id,
+            CandidateApplicationModel.job_id == published_job.id,
+        )
+    )
+    assert application is not None
+    assert application.source == "bot"
+    assert application.preferred_unit_id == unit.id
+
+    session = await db_session.get(ConversationSessionModel, UUID(session_id))
+    assert session is not None
+    draft = session.context_json["candidate_application_draft"]
+    assert draft["status"] == "submitted"
+    assert draft["submitted_application_id"] == str(application.id)
+    assert draft["preferred_unit_id"] == str(unit.id)
+
+
+async def test_candidate_bot_multi_unit_requires_preferred_unit_before_confirmation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job: JobModel,
+):
+    await _create_candidate_with_password(db_session)
+    await _login(client)
+
+    unit_a = await _make_unit(db_session, name="Loja Norte", public_name="Norte")
+    unit_b = await _make_unit(db_session, name="Loja Sul", public_name="Sul")
+    await _link_unit_to_job(db_session, job=published_job, unit=unit_a, priority=0)
+    await _link_unit_to_job(db_session, job=published_job, unit=unit_b, priority=1)
+    await db_session.commit()
+
+    first_turn = await _send_candidate_bot_message(
+        client,
+        message=f"job:{published_job.id}",
+    )
+    assert "qual unidade" in first_turn["assistant_message"].lower()
+    labels = {item["label"] for item in first_turn["quick_replies"]}
+    assert any("Norte" in label for label in labels)
+    assert any("Sul" in label for label in labels)
+
+
+async def test_candidate_bot_sensitive_data_is_not_saved_in_draft(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job: JobModel,
+):
+    await _create_candidate_with_password(db_session)
+    await _login(client)
+
+    await _send_candidate_bot_message(
+        client,
+        message="quero me candidatar",
+        job_id=str(published_job.id),
+    )
+    session = await db_session.scalar(
+        sa.select(ConversationSessionModel).order_by(
+            ConversationSessionModel.created_at.desc()
+        )
+    )
+    assert session is not None
+
+    response = await _send_candidate_bot_message(
+        client,
+        session_id=str(session.id),
+        message="estou grávida e meu telefone é 62999998888",
+    )
+    assert "dado sensível" in response["assistant_message"].lower() or "sensível" in response[
+        "assistant_message"
+    ].lower()
+
+    session = await db_session.get(ConversationSessionModel, session.id)
+    draft = session.context_json["candidate_application_draft"]
+    assert draft["contact_phone"] is None
+
+
+async def test_candidate_bot_cancel_cancels_draft_without_creating_application(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job: JobModel,
+):
+    candidate = await _create_candidate_with_password(db_session)
+    await _login(client)
+
+    start = await _send_candidate_bot_message(
+        client,
+        message="quero me candidatar",
+        job_id=str(published_job.id),
+    )
+    cancel_turn = await _send_candidate_bot_message(
+        client,
+        session_id=str(start["session_id"]),
+        message="cancelar_candidatura",
+    )
+    assert "não foi enviada" in cancel_turn["assistant_message"].lower()
+
+    applications = (
+        await db_session.execute(
+            sa.select(CandidateApplicationModel).where(
+                CandidateApplicationModel.candidate_id == candidate.id
+            )
+        )
+    ).scalars().all()
+    assert applications == []
+
+
+async def test_candidate_bot_duplicate_application_returns_clear_message(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job: JobModel,
+):
+    candidate = await _create_candidate_with_password(db_session)
+    await _login(client)
+
+    existing = CandidateApplicationModel(
+        candidate_id=candidate.id,
+        job_id=published_job.id,
+        source="web_portal",
+        status="submitted",
+    )
+    db_session.add(existing)
+    await db_session.commit()
+
+    start = await _send_candidate_bot_message(
+        client,
+        message="quero me candidatar",
+        job_id=str(published_job.id),
+    )
+    session_id = str(start["session_id"])
+    await _send_candidate_bot_message(
+        client,
+        session_id=session_id,
+        message="Meu nome é Pessoa Teste",
+    )
+    await _send_candidate_bot_message(
+        client,
+        session_id=session_id,
+        message="pessoa.teste@example.com",
+    )
+    await _send_candidate_bot_message(
+        client,
+        session_id=session_id,
+        message="aceito o uso dos dados",
+    )
+    final_turn = await _send_candidate_bot_message(
+        client,
+        session_id=session_id,
+        message="confirmar_candidatura",
+    )
+    assert "já encontramos uma candidatura sua para essa vaga" in final_turn[
+        "assistant_message"
+    ].lower()

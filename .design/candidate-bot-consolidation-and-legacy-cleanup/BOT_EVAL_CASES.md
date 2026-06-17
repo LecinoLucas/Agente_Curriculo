@@ -162,3 +162,41 @@ Um caso só é considerado aprovado quando:
 - nenhuma action interna é executada;
 - o handoff só acontece em cenários compatíveis;
 - não há vazamento de documento, nota, regra ou dado interno.
+
+## Casos de escrita segura
+
+### 16. Quero me candidatar para esta vaga.
+
+- intenção esperada: `apply_to_job`
+- usa RAG: não
+- usa tool: `search_public_jobs` ou vaga já pré-selecionada no contexto
+- cria handoff: não
+- resposta esperada: abrir `candidate_application_draft`, pedir vaga/unidade/dado faltante
+- não pode acontecer: criar `CandidateApplication` imediatamente
+
+### 17. Confirmar candidatura.
+
+- intenção esperada: `confirm`
+- usa RAG: não
+- usa tool: `create_candidate_application_from_bot`
+- cria handoff: não
+- resposta esperada: somente após resumo e confirmação explícita
+- não pode acontecer: enviar candidatura com confirmação ambígua ou draft incompleto
+
+### 18. Escolhi uma unidade que não pertence à vaga.
+
+- intenção esperada: `choose_unit`
+- usa RAG: não
+- usa tool: validação pública da vaga/unidade
+- cria handoff: não
+- resposta esperada: mensagem clara pedindo uma unidade válida
+- não pode acontecer: salvar `preferred_unit_id` inválido
+
+### 19. Já me candidatei para essa vaga.
+
+- intenção esperada: `confirm`
+- usa RAG: não
+- usa tool: `create_candidate_application_from_bot`
+- cria handoff: opcional
+- resposta esperada: mensagem de duplicidade sem prometer prazo
+- não pode acontecer: criar segunda candidatura ativa para o mesmo candidato e vaga

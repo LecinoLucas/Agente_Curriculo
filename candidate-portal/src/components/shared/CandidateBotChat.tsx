@@ -108,15 +108,19 @@ export function CandidateBotChat({ jobId }: { jobId?: string | null }) {
     node.scrollTop = node.scrollHeight;
   }, [messages, loadingSession, sending]);
 
-  async function sendMessage(rawMessage: string) {
+  async function sendMessage(rawMessage: string, displayText?: string) {
     const message = rawMessage.trim();
+    const visibleMessage = (displayText ?? rawMessage).trim();
     if (!message || sending || message.length > MAX_MESSAGE_LENGTH) return;
 
     setError(null);
     setSending(true);
 
     const optimisticId = `candidate-local-${Date.now()}`;
-    setMessages((current) => [...current, { id: optimisticId, role: 'candidate', content: message }]);
+    setMessages((current) => [
+      ...current,
+      { id: optimisticId, role: 'candidate', content: visibleMessage || message },
+    ]);
     setInput('');
 
     try {
@@ -132,7 +136,7 @@ export function CandidateBotChat({ jobId }: { jobId?: string | null }) {
       setHandoffRequired(Boolean(turn.handoff_required));
       setMessages((current) => [
         ...current.filter((item) => item.id !== optimisticId),
-        { id: optimisticId, role: 'candidate', content: message },
+        { id: optimisticId, role: 'candidate', content: visibleMessage || message },
         {
           id: turn.message.id,
           role: 'assistant',
@@ -223,7 +227,7 @@ export function CandidateBotChat({ jobId }: { jobId?: string | null }) {
                 type="button"
                 className="rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={sending || loadingSession}
-                onClick={() => void sendMessage(option.label)}
+                onClick={() => void sendMessage(option.value, option.label)}
               >
                 {option.label}
               </button>

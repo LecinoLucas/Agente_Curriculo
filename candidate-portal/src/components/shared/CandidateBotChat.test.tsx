@@ -167,6 +167,11 @@ describe('CandidateBotChat', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Falar com RH' }));
 
     expect(await screen.findByText('Sua solicitação foi encaminhada para o RH.')).toBeTruthy();
+    expect(candidateBotService.sendMessage).toHaveBeenCalledWith({
+      session_id: null,
+      message: 'falar_com_rh',
+      job_id: null,
+    });
   });
 
   it('reusa session_id salvo quando a sessão ainda é válida', async () => {
@@ -205,5 +210,78 @@ describe('CandidateBotChat', () => {
 
     expect(await screen.findByText('Bem-vinda de volta.')).toBeTruthy();
     expect(candidateBotService.getSession).toHaveBeenCalledWith('bot-session-1');
+  });
+
+  it('renderiza resumo e confirma candidatura com quick reply seguro', async () => {
+    vi.mocked(candidateBotService.sendMessage)
+      .mockResolvedValueOnce(
+        assistantTurn({
+          assistant_message:
+            'Confira sua candidatura:\nVaga: Caixa\nUnidade: Centro\nNome: Joana\nContato: joana@example.com\n\nConfirma que deseja enviar sua candidatura com essas informações?',
+          quick_replies: [
+            { value: 'confirmar_candidatura', label: 'Confirmar candidatura' },
+            { value: 'alterar_dados', label: 'Alterar dados' },
+            { value: 'cancelar_candidatura', label: 'Cancelar' },
+          ],
+          options: [
+            { value: 'confirmar_candidatura', label: 'Confirmar candidatura' },
+            { value: 'alterar_dados', label: 'Alterar dados' },
+            { value: 'cancelar_candidatura', label: 'Cancelar' },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        assistantTurn({
+          assistant_message:
+            'Sua candidatura foi enviada com sucesso. O RH poderá acompanhar suas informações pelo sistema.',
+          message: {
+            id: 'assistant-msg-2',
+            session_id: 'bot-session-1',
+            role: 'assistant',
+            direction: 'outbound',
+            content:
+              'Sua candidatura foi enviada com sucesso. O RH poderá acompanhar suas informações pelo sistema.',
+            message_type: 'text',
+            interpreted_intent: null,
+            metadata: null,
+            created_at: '2026-06-17T12:00:00Z',
+          },
+          quick_replies: [{ value: 'acompanhar_candidatura', label: 'Acompanhar candidatura' }],
+          options: [{ value: 'acompanhar_candidatura', label: 'Acompanhar candidatura' }],
+        }),
+      );
+
+    render(<CandidateBotChat />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quero me candidatar' }));
+    expect(await screen.findByText(/Confira sua candidatura:/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar candidatura' }));
+
+    expect(await screen.findByText(/Sua candidatura foi enviada com sucesso/)).toBeTruthy();
+    expect(candidateBotService.sendMessage).toHaveBeenNthCalledWith(1, {
+      session_id: null,
+      message: 'quero_me_candidatar',
+      job_id: null,
+    });
+    expect(candidateBotService.sendMessage).toHaveBeenNthCalledWith(2, {
+      session_id: 'bot-session-1',
+      message: 'confirmar_candidatura',
+      job_id: null,
+    });
+  });
+
+  it('mostra erro de duplicidade retornado pelo backend', async () => {
+    vi.mocked(candidateBotService.sendMessage).mockResolvedValue(
+      assistantTurn({
+        assistant_message:
+          'Já encontramos uma candidatura sua para essa vaga. Se precisar de ajuda, posso encaminhar para o RH.',
+      }),
+    );
+
+    render(<CandidateBotChat />);
+    fireEvent.click(screen.getByRole('button', { name: 'Quero me candidatar' }));
+
+    expect(await screen.findByText(/Já encontramos uma candidatura sua para essa vaga/)).toBeTruthy();
   });
 });

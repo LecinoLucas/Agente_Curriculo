@@ -44,8 +44,10 @@ Estado atual:
 
 - `conversation_handoffs` já existe e o `ConversationService` já cria handoff com `talk_to_hr`;
 - `should_handoff` agora também aciona o handoff real no `ConversationService`;
-- não existe ainda uma política operacional completa de write tools do bot candidato no `ToolRuntime`;
-- o runtime atual bloqueia tools não read-only e tools com `requires_approval=True`.
+- `create_candidate_application_from_bot` agora existe no `CandidateBotRegistry` como write-safe;
+- a escrita continua fora do runtime read-only automático;
+- `ConversationService` só chama a tool de escrita após resumo + confirmação explícita;
+- o runtime read-only continua bloqueando tools não read-only e tools com `requires_approval=True`.
 
 ### FORBIDDEN_FOR_MVP
 
@@ -119,6 +121,14 @@ Ele mantém fora do escopo do candidato:
 - candidate internal summaries
 
 Mesmo assim, a política ainda não modela explicitamente o estágio futuro de writes com confirmação.
+Nesta fase, a primeira exceção controlada é a candidatura com:
+
+- vaga pública válida;
+- unidade válida para a vaga;
+- nome;
+- ao menos um contato;
+- consentimento;
+- confirmação explícita em contexto.
 
 ### 3. Falta um modelo explícito de policy tier
 
