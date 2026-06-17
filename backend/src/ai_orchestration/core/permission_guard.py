@@ -45,6 +45,16 @@ class ToolPermissionGuard:
         Returns:
             GuardResult com allowed=True se a permissão está presente.
         """
+        if context.actor_type == "candidate" and not required_permission.startswith("candidate_"):
+            return GuardResult(
+                allowed=False,
+                reason=(
+                    "Contexto de candidato só pode executar tools com permissões "
+                    f"candidate_* seguras. Permissão solicitada: '{required_permission}'. "
+                    f"Canal: {context.channel or 'unknown'}."
+                ),
+            )
+
         if context.has_permission(required_permission):
             return GuardResult(allowed=True)
         return GuardResult(

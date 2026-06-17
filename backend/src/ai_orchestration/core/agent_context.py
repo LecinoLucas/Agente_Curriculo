@@ -23,6 +23,9 @@ class AgentContext:
         session_id: UUID da sessão do assistente (pode abranger múltiplas mensagens).
         tenant_id: ID do tenant/empresa, quando aplicável em ambientes multi-tenant.
         source: Origem da execução — "assistant" | "graph" | "api" | "worker".
+        actor_type: Natureza do ator — "staff" | "candidate" | "system".
+        channel: Canal operacional — ex.: "candidate_portal", "assistant", "api".
+        audience: Público de destino — ex.: "candidate", "staff", "admin".
     """
     user_id: str
     role: str
@@ -31,6 +34,9 @@ class AgentContext:
     session_id: str
     tenant_id: str | None = None
     source: str = "assistant"
+    actor_type: str = "staff"
+    channel: str | None = None
+    audience: str | None = None
 
     def has_permission(self, permission: str) -> bool:
         """Verifica se este contexto possui uma permissão específica."""

@@ -4,6 +4,12 @@ Supervisor Agent: Roteador principal de intenções do assistente ATS/RH.
 STATUS: STUB — AI-ARCH-1
 Implementação real: AI-AGENT-1
 
+Nota de consolidação:
+    Este módulo está atualmente sem referências de runtime/roteador/testes do
+    bot de candidato. Ainda assim ele foi mantido porque serve como marcador
+    explícito da arquitetura futura em LangGraph e evita perder o ponto de
+    ancoragem planejado para AI-AGENT-1.
+
 Responsabilidade:
     - Receber mensagem do usuário com AgentContext
     - Classificar a intenção (intent routing)

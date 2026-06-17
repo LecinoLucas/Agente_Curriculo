@@ -83,7 +83,8 @@ _SYSTEM_PROMPT = (
     '  "lgpd_consent": null,\n'
     '  "confirmation": null,\n'
     '  "should_handoff": false,\n'
-    '  "safe_user_message": null\n'
+    '  "safe_user_message": null,\n'
+    '  "talk_to_hr_message": null\n'
     "}\n"
     "confidence é um número de 0.0 a 1.0. Use o intent 'unclear' com confidence "
     "baixo quando não tiver certeza. desired_shift deve ser um de: manha, tarde, "
@@ -96,6 +97,10 @@ class CandidateIntent(BaseModel):
 
     ``extra="forbid"`` makes any unexpected key a validation error, which the
     service turns into a deterministic fallback.
+
+    ``should_handoff``, ``safe_user_message`` and ``talk_to_hr_message`` são
+    sinais de saída segura controlada pelo parser. O caller ainda decide se
+    eles serão aceitos ou substituídos por fallback defensivo.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -111,6 +116,7 @@ class CandidateIntent(BaseModel):
     confirmation: str | None = None
     should_handoff: bool = False
     safe_user_message: str | None = None
+    talk_to_hr_message: str | None = None
 
     @field_validator("intent")
     @classmethod
@@ -127,6 +133,7 @@ class CandidateIntent(BaseModel):
         "desired_shift",
         "confirmation",
         "safe_user_message",
+        "talk_to_hr_message",
         mode="before",
     )
     @classmethod
@@ -158,6 +165,7 @@ class CandidateAssistantIntentService:
         allowed_intents: Sequence[str] = (),
         quick_replies: Sequence[tuple[str, str]] = (),
         min_confidence: float | None = None,
+        allow_safe_fallback: bool = False,
     ) -> CandidateIntent | None:
         sanitized = self._sanitize_message(message)
         if not sanitized:
@@ -192,6 +200,14 @@ class CandidateAssistantIntentService:
             return None
 
         if intent.confidence < threshold:
+            if allow_safe_fallback and self._can_use_safe_fallback(intent):
+                logger.info(
+                    "assistant_intent.low_confidence_safe_fallback",
+                    state=state,
+                    intent=intent.intent,
+                    confidence=round(intent.confidence, 3),
+                )
+                return intent
             logger.info(
                 "assistant_intent.low_confidence",
                 state=state,
@@ -202,6 +218,13 @@ class CandidateAssistantIntentService:
 
         if allowed_intents and intent.intent not in set(allowed_intents):
             # Intent is valid globally but not meaningful for this state.
+            if allow_safe_fallback and self._can_use_safe_fallback(intent):
+                logger.info(
+                    "assistant_intent.out_of_scope_safe_fallback",
+                    state=state,
+                    intent=intent.intent,
+                )
+                return intent
             logger.info(
                 "assistant_intent.out_of_scope",
                 state=state,
@@ -217,6 +240,14 @@ class CandidateAssistantIntentService:
             should_handoff=intent.should_handoff,
         )
         return intent
+
+    @staticmethod
+    def _can_use_safe_fallback(intent: CandidateIntent) -> bool:
+        return bool(
+            intent.should_handoff
+            or intent.safe_user_message
+            or intent.talk_to_hr_message
+        )
 
     async def _call_ai(
         self,

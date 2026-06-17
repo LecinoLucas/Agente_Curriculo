@@ -61,14 +61,24 @@ class CandidateSafeRetriever(RetrieverContract):
             min_score=query.min_score,
         )
         result = await self._inner.retrieve(safe_query)
+        safe_chunks = [
+            chunk
+            for chunk in result.chunks
+            if (
+                (chunk.chunk.metadata or {}).get("visibility") == _CANDIDATE_VISIBILITY
+                and (chunk.chunk.metadata or {}).get("audience") == _CANDIDATE_AUDIENCE
+            )
+        ]
         # Append audience marker to warnings for observability
         warnings = list(result.warnings)
         if "candidate_safe_filter_applied" not in warnings:
             warnings.append("candidate_safe_filter_applied")
+        if len(safe_chunks) != len(result.chunks):
+            warnings.append("candidate_safe_chunks_filtered")
         return RetrievalResult(
             query=result.query,
-            chunks=result.chunks,
-            total=result.total,
+            chunks=safe_chunks,
+            total=len(safe_chunks),
             warnings=warnings,
         )
 
