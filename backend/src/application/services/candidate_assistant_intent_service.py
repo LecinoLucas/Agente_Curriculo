@@ -23,13 +23,17 @@ Hard boundaries (enforced here and by the caller):
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Sequence
 
 import structlog
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIService
+from src.application.prompts.candidate_bot_prompts import (
+    CANDIDATE_ASSISTANT_RUNTIME_INTENTS,
+    build_candidate_intent_parser_system_prompt,
+    build_candidate_intent_user_prompt,
+)
 from src.application.services.admin_assistant_service import sanitise_assistant_text
 from src.core.settings import settings
 from src.infrastructure.ai.factory import AIServiceFactory
@@ -40,56 +44,14 @@ logger = structlog.get_logger(__name__)
 # Every intent the parser may ever emit. The caller maps only the subset that is
 # meaningful for the current state; anything else degrades to deterministic
 # fallback.
-ALLOWED_INTENTS: frozenset[str] = frozenset(
-    {
-        "choose_location",
-        "choose_unit",
-        "choose_any_unit",
-        "choose_function",
-        "choose_shift",
-        "skip_resume",
-        "upload_resume",
-        "accept_lgpd",
-        "reject_lgpd",
-        "confirm_application",
-        "cancel",
-        "review",
-        "talk_to_hr",
-        "help",
-        "unclear",
-    }
-)
+ALLOWED_INTENTS: frozenset[str] = frozenset(CANDIDATE_ASSISTANT_RUNTIME_INTENTS)
 
 _MAX_MESSAGE_CHARS = 500
 _MAX_HINT_CHARS = 120
 _QUEUE_NAME = "candidate_assistant_intent"
 _MAX_OUTPUT_TOKENS = 256
 
-_SYSTEM_PROMPT = (
-    "Você é um interpretador de intenção para um assistente de vagas de emprego. "
-    "Sua ÚNICA função é classificar a mensagem do candidato e extrair campos úteis. "
-    "Você NÃO decide a próxima etapa, NÃO aprova nem reprova candidatos, NÃO "
-    "promete contratação, NÃO inventa vagas e NÃO infere dados pessoais. "
-    "Responda SOMENTE com um objeto JSON válido, sem texto extra, seguindo "
-    "exatamente este formato e sem campos adicionais:\n"
-    "{\n"
-    '  "intent": "<um dos intents permitidos>",\n'
-    '  "confidence": 0.0,\n'
-    '  "location_hint": null,\n'
-    '  "unit_hint": null,\n'
-    '  "desired_function": null,\n'
-    '  "desired_shift": null,\n'
-    '  "resume_choice": null,\n'
-    '  "lgpd_consent": null,\n'
-    '  "confirmation": null,\n'
-    '  "should_handoff": false,\n'
-    '  "safe_user_message": null,\n'
-    '  "talk_to_hr_message": null\n'
-    "}\n"
-    "confidence é um número de 0.0 a 1.0. Use o intent 'unclear' com confidence "
-    "baixo quando não tiver certeza. desired_shift deve ser um de: manha, tarde, "
-    "noite, qualquer. Nunca inclua CPF, telefone ou e-mail em nenhum campo."
-)
+_SYSTEM_PROMPT = build_candidate_intent_parser_system_prompt()
 
 
 class CandidateIntent(BaseModel):
@@ -310,22 +272,9 @@ class CandidateAssistantIntentService:
         allowed_intents: Sequence[str],
         quick_replies: Sequence[tuple[str, str]],
     ) -> str:
-        intents = ", ".join(allowed_intents) if allowed_intents else ", ".join(
-            sorted(ALLOWED_INTENTS)
-        )
-        labels = (
-            "; ".join(label for _value, label in quick_replies)
-            if quick_replies
-            else "(nenhuma)"
-        )
-        payload = {
-            "estado_atual": state,
-            "mensagem": sanitized,
-            "intents_validos": intents,
-            "opcoes_rapidas": labels,
-        }
-        return (
-            "Classifique a mensagem do candidato no contexto abaixo e responda "
-            "apenas com o JSON do contrato.\n"
-            f"{json.dumps(payload, ensure_ascii=False)}"
+        return build_candidate_intent_user_prompt(
+            state=state,
+            sanitized=sanitized,
+            allowed_intents=allowed_intents or tuple(sorted(ALLOWED_INTENTS)),
+            quick_replies=quick_replies,
         )

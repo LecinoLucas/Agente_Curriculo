@@ -12,6 +12,12 @@ import json
 import pytest
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIAnalysisResponse, AIService
+from src.application.prompts.candidate_bot_prompts import (
+    CANDIDATE_BOT_SYSTEM_PROMPT,
+    CANDIDATE_INTENT_CLASSIFICATION_PROMPT,
+    CANDIDATE_SAFE_RESPONSE_PROMPT,
+    build_candidate_intent_parser_system_prompt,
+)
 from src.application.services.candidate_assistant_intent_service import (
     ALLOWED_INTENTS,
     CandidateAssistantIntentService,
@@ -284,6 +290,23 @@ async def test_context_json_never_sent_to_ai():
         "intents_validos",
         "opcoes_rapidas",
     }
+    assert isinstance(payload["intents_validos"], list)
+    assert isinstance(payload["opcoes_rapidas"], list)
+
+
+async def test_service_uses_centralized_runtime_prompts():
+    svc, ai = _service(json.dumps(_full_payload(intent="choose_location", location_hint="Goiânia")))
+    await svc.interpret(
+        state="CHOOSE_LOCATION",
+        message="goiania",
+        allowed_intents=("choose_location",),
+    )
+
+    assert len(ai.requests) == 1
+    assert ai.requests[0].system_prompt == build_candidate_intent_parser_system_prompt()
+    assert CANDIDATE_BOT_SYSTEM_PROMPT in ai.requests[0].system_prompt
+    assert CANDIDATE_INTENT_CLASSIFICATION_PROMPT in ai.requests[0].system_prompt
+    assert CANDIDATE_SAFE_RESPONSE_PROMPT in ai.requests[0].system_prompt
 
 
 def test_allowed_intents_catalogue_is_closed():

@@ -18,9 +18,14 @@ from src.ai_orchestration.rag.embedding_provider_factory import get_embedding_pr
 from src.ai_orchestration.rag.postgres_vector_retriever import PostgresVectorRetriever
 from src.ai_orchestration.rag.rag_answer_service import RagAnswerService
 from src.ai_orchestration.tools.candidate_bot_registry import CANDIDATE_BOT_REGISTRY
+from src.application.prompts.candidate_bot_prompts import (
+    DEFAULT_CANDIDATE_BOT_GENERIC_FALLBACK_MESSAGE,
+    DEFAULT_CANDIDATE_BOT_TALK_TO_HR_MESSAGE,
+)
 from src.application.services.admin_assistant_failure_service import AssistantFailureRecorder
 from src.application.services.admin_assistant_service import sanitise_assistant_text
 from src.application.services.assistant_content_provider import AssistantContentProvider
+from src.application.services.candidate_agent_router import CandidateAgentRouter
 from src.application.services.candidate_assistant_intent_service import (
     CandidateAssistantIntentService,
     CandidateIntent,
@@ -115,10 +120,7 @@ _CANDIDATE_BOT_DETAIL_PATTERN = re.compile(
     r"descri[cç][aã]o)\b",
     re.IGNORECASE,
 )
-_CANDIDATE_BOT_GENERIC_FALLBACK = (
-    "Posso te ajudar com vagas públicas, dúvidas gerais do processo, acompanhamento "
-    "da sua candidatura ou encaminhar seu atendimento para o RH."
-)
+_CANDIDATE_BOT_GENERIC_FALLBACK = DEFAULT_CANDIDATE_BOT_GENERIC_FALLBACK_MESSAGE
 _CANDIDATE_BOT_INITIAL_PROMPT = ConversationPrompt(
     state=_GUIDED_PORTAL_CHAT_STATE,
     content=(
@@ -182,10 +184,7 @@ _INVALID_WHATSAPP_MESSAGE = (
     "Não consegui identificar o número. "
     "Digite seu WhatsApp com DDD (10 ou 11 dígitos)."
 )
-_TALK_TO_HR_MESSAGE = (
-    "Certo, vou encaminhar sua solicitação para o RH. "
-    "Assim que possível, alguém continuará o atendimento."
-)
+_TALK_TO_HR_MESSAGE = DEFAULT_CANDIDATE_BOT_TALK_TO_HR_MESSAGE
 _OUTPUT_DEADLINE_PATTERN = re.compile(
     r"\b(\d+\s*(h|hora|min|dia)s?|amanh[ãa]|hoje|prazo|retorno em)\b",
     re.IGNORECASE,
@@ -333,6 +332,7 @@ class ConversationService:
         self._failure_recorder = AssistantFailureRecorder(session)
         self._content_provider = AssistantContentProvider(session)
         self._intent_service = CandidateAssistantIntentService()
+        self._candidate_agent_router = CandidateAgentRouter()
 
     async def _prompt_for(
         self,
@@ -521,7 +521,15 @@ class ConversationService:
                 prompt = await self._prompt_for(conversation.current_state, context)
 
         conversation.context_json = context
-        if conversation.current_state == "DONE" and conversation.status == "active":
+        if bool(context.get("candidate_portal_guided_chat")):
+            self._remember_candidate_portal_prompt(context, prompt)
+            if conversation.current_state == "DONE":
+                context["candidate_portal_guided_application_active"] = False
+        if (
+            conversation.current_state == "DONE"
+            and conversation.status == "active"
+            and not bool(context.get("candidate_portal_guided_chat"))
+        ):
             conversation.status = "completed"
         conversation.updated_at = datetime.now(UTC)
 
@@ -583,6 +591,15 @@ class ConversationService:
         if operational_unit_id is not None:
             context["operational_unit_id"] = str(operational_unit_id)
 
+        if self._candidate_portal_guided_flow_active(conversation):
+            conversation.context_json = context
+            conversation.updated_at = datetime.now(UTC)
+            await self._repository.update_session(conversation)
+            return await self.receive_message(
+                conversation.id,
+                ConversationMessageCreateRequest(content=content),
+            )
+
         candidate_message = await self._add_candidate_message(
             conversation,
             content=content,
@@ -590,23 +607,45 @@ class ConversationService:
         )
 
         ai_intent = await self._maybe_candidate_bot_intent(content)
-        if self._candidate_bot_should_handoff(content, ai_intent):
+        route = self._candidate_agent_router.route(
+            message=content,
+            context=context,
+            ai_intent=ai_intent,
+        )
+        candidate_message.interpreted_intent = route.intent
+
+        if route.action == "handoff":
             prompt = await self._handle_talk_to_hr(
                 conversation,
                 context,
                 candidate_message,
                 intent=ai_intent,
             )
-        else:
-            prompt = await self._handle_candidate_portal_bot_prompt(
+        elif route.action == "guided_flow":
+            prompt = route.prompt or prompt_for("CHOOSE_LOCATION", context)
+            conversation.current_state = prompt.state
+            context["candidate_portal_guided_application_active"] = True
+        elif route.action == "tool" and route.tool_name is not None:
+            result = await self._execute_candidate_bot_tool(
                 conversation=conversation,
-                context=context,
-                content=content,
-                intent=ai_intent,
+                tool_name=route.tool_name,
+                tool_args=dict(route.tool_args),
+            )
+            prompt = self._candidate_bot_prompt_from_tool_result(
+                tool_name=route.tool_name,
+                result=result,
+            )
+        else:
+            safe_message = self._safe_user_message(route.safe_message)
+            prompt = ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=safe_message or _CANDIDATE_BOT_GENERIC_FALLBACK,
+                quick_replies=route.quick_replies or _CANDIDATE_BOT_INITIAL_PROMPT.quick_replies,
             )
 
         self._remember_candidate_portal_prompt(context, prompt)
-        conversation.current_state = _GUIDED_PORTAL_CHAT_STORAGE_STATE
+        if route.action != "guided_flow":
+            conversation.current_state = _GUIDED_PORTAL_CHAT_STORAGE_STATE
         conversation.context_json = context
         conversation.updated_at = datetime.now(UTC)
         assistant_message = await self._add_assistant_message(conversation, prompt)
@@ -2066,13 +2105,31 @@ class ConversationService:
             return True
         if "@" in lowered:
             return True
-        if re.search(r"\b\d{11}\b", lowered):
-            return True
-        return False
+        return bool(re.search(r"\b\d{11}\b", lowered))
 
     @staticmethod
     def _message_looks_risky(message: str) -> bool:
         return bool(_RISKY_CANDIDATE_MESSAGE_PATTERN.search(message or ""))
+
+    @staticmethod
+    def _candidate_portal_guided_flow_active(
+        conversation: ConversationSessionModel,
+    ) -> bool:
+        if not bool((conversation.context_json or {}).get("candidate_portal_guided_chat")):
+            return False
+        return conversation.current_state in {
+            "CHOOSE_LOCATION",
+            "CHOOSE_UNIT_OR_ANY",
+            "CHOOSE_FUNCTION",
+            "CHOOSE_SHIFT",
+            "SHOW_JOBS",
+            "COLLECT_RESUME",
+            "AWAITING_RESUME_UPLOAD",
+            "COLLECT_LEAD_NAME",
+            "COLLECT_LEAD_WHATSAPP",
+            "COLLECT_LGPD_CONSENT",
+            "CONFIRM_APPLICATION",
+        }
 
     async def _maybe_candidate_bot_intent(self, message: str) -> CandidateIntent | None:
         if not settings.ASSISTANT_INTENT_AI_ENABLED:
@@ -2087,98 +2144,6 @@ class ConversationService:
             )
         except Exception:
             return None
-
-    @staticmethod
-    def _candidate_bot_should_handoff(
-        message: str,
-        intent: CandidateIntent | None,
-    ) -> bool:
-        if intent is not None and (intent.should_handoff or intent.intent == "talk_to_hr"):
-            return True
-        return bool(_CANDIDATE_BOT_HR_PATTERN.search(message or ""))
-
-    async def _handle_candidate_portal_bot_prompt(
-        self,
-        *,
-        conversation: ConversationSessionModel,
-        context: dict[str, Any],
-        content: str,
-        intent: CandidateIntent | None,
-    ) -> ConversationPrompt:
-        safe_message = self._resolve_candidate_bot_safe_message(content, intent)
-        if safe_message is not None:
-            return ConversationPrompt(
-                state=_GUIDED_PORTAL_CHAT_STATE,
-                content=safe_message,
-                quick_replies=_CANDIDATE_BOT_INITIAL_PROMPT.quick_replies,
-            )
-
-        tool_name, tool_args = self._select_candidate_bot_tool(
-            content=content,
-            context=context,
-        )
-        result = await self._execute_candidate_bot_tool(
-            conversation=conversation,
-            tool_name=tool_name,
-            tool_args=tool_args,
-        )
-        return self._candidate_bot_prompt_from_tool_result(
-            tool_name=tool_name,
-            result=result,
-        )
-
-    def _resolve_candidate_bot_safe_message(
-        self,
-        content: str,
-        intent: CandidateIntent | None,
-    ) -> str | None:
-        if intent is not None:
-            safe_message = self._safe_user_message(intent.safe_user_message)
-            if safe_message is not None and (
-                intent.intent == "unclear" or self._message_looks_risky(content)
-            ):
-                return safe_message
-        if self._message_looks_risky(content):
-            return _CANDIDATE_BOT_GENERIC_FALLBACK
-        return None
-
-    def _select_candidate_bot_tool(
-        self,
-        *,
-        content: str,
-        context: dict[str, Any],
-    ) -> tuple[str, dict[str, Any]]:
-        if _CANDIDATE_BOT_STATUS_PATTERN.search(content):
-            return "get_my_application_status", {}
-
-        job_id = self._clean_text(context.get("job_id"))
-        if job_id and _CANDIDATE_BOT_UNITS_PATTERN.search(content):
-            return "get_public_job_units", {"job_id": job_id}
-        if job_id and _CANDIDATE_BOT_DETAIL_PATTERN.search(content):
-            return "get_public_job_detail", {"job_id": job_id}
-
-        if _CANDIDATE_BOT_JOBS_PATTERN.search(content):
-            return "search_public_jobs", {
-                "query": self._candidate_bot_job_query(content),
-                "limit": 5,
-            }
-
-        return "search_candidate_knowledge", {
-            "query": content,
-            "limit": 3,
-        }
-
-    @staticmethod
-    def _candidate_bot_job_query(content: str) -> str | None:
-        cleaned = re.sub(
-            r"\b(quero|ver|buscar|procurar|me|candidatar|trabalhar|tem|vaga|vagas|"
-            r"oportunidade|oportunidades|para|uma|um|em|no|na|de|do|da)\b",
-            " ",
-            content,
-            flags=re.IGNORECASE,
-        )
-        compact = re.sub(r"\s+", " ", cleaned).strip(" .,-")
-        return compact or None
 
     async def _execute_candidate_bot_tool(
         self,
@@ -2250,6 +2215,7 @@ class ConversationService:
                 state=_GUIDED_PORTAL_CHAT_STATE,
                 content=self._candidate_bot_jobs_message(data),
                 quick_replies=(
+                    ("quero_me_candidatar", "Quero me candidatar"),
                     ("acompanhar_candidatura", "Acompanhar candidatura"),
                     ("falar_com_rh", "Falar com RH"),
                 ),
@@ -2272,6 +2238,16 @@ class ConversationService:
                     ("falar_com_rh", "Falar com RH"),
                 ),
             )
+        if tool_name == "answer_candidate_knowledge":
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=self._candidate_bot_answer_message(data),
+                quick_replies=(
+                    ("ver_vagas", "Ver vagas"),
+                    ("quero_me_candidatar", "Quero me candidatar"),
+                    ("falar_com_rh", "Falar com RH"),
+                ),
+            )
         return ConversationPrompt(
             state=_GUIDED_PORTAL_CHAT_STATE,
             content=self._candidate_bot_knowledge_message(data),
@@ -2289,8 +2265,14 @@ class ConversationService:
                 "Consigo acompanhar sua candidatura, mas antes você precisa completar "
                 "seu cadastro na sua área do candidato."
             )
-        if tool_name in {"get_public_job_detail", "get_public_job_units"} and error_code == "NOT_FOUND":
-            return "Não consegui localizar essa vaga publicada agora. Tente ver a lista de vagas novamente."
+        if (
+            tool_name in {"get_public_job_detail", "get_public_job_units"}
+            and error_code == "NOT_FOUND"
+        ):
+            return (
+                "Não consegui localizar essa vaga publicada agora. "
+                "Tente ver a lista de vagas novamente."
+            )
         return _CANDIDATE_BOT_GENERIC_FALLBACK
 
     @staticmethod
@@ -2355,6 +2337,13 @@ class ConversationService:
         if requirements:
             parts.append(f"Requisitos principais: {requirements}")
         return " ".join(parts)
+
+    @staticmethod
+    def _candidate_bot_answer_message(data: dict[str, Any]) -> str:
+        answer = ConversationService._candidate_bot_excerpt(data.get("answer"))
+        if answer:
+            return answer
+        return ConversationService._candidate_bot_knowledge_message(data)
 
     @staticmethod
     def _candidate_bot_knowledge_message(data: dict[str, Any]) -> str:
@@ -2614,6 +2603,7 @@ class ConversationService:
             "pending_resume_filename",
             "candidate_portal_last_assistant_message",
             "candidate_portal_last_quick_replies",
+            "candidate_portal_guided_application_active",
         }
         return {key: value for key, value in context.items() if key not in internal_keys}
 

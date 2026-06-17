@@ -4,6 +4,28 @@
 
 Documentar onde os prompts do bot de candidato existem hoje, quais regras já estão implícitas no código e o que ainda precisa ser centralizado antes do MVP visual do chat.
 
+## Atualização de Runtime
+
+Após a centralização em runtime desta fase, o contrato principal passou a morar em:
+
+- `backend/src/application/prompts/candidate_bot_prompts.py`
+
+O módulo central reúne:
+
+- `CANDIDATE_BOT_SYSTEM_PROMPT`
+- `CANDIDATE_INTENT_CLASSIFICATION_PROMPT`
+- `CANDIDATE_SAFE_RESPONSE_PROMPT`
+- catálogo de intents públicas permitidas;
+- catálogo de dados permitidos e proibidos;
+- regras de handoff;
+- regras de confirmação antes de escrita.
+
+Compatibilidade mantida nesta fase:
+
+- `CandidateAssistantIntentService` continua usando intents internas do fluxo guiado (`choose_location`, `choose_shift`, `confirm_application`, etc.);
+- o catálogo público de intents do bot candidato foi centralizado sem substituir o contrato interno já usado pelo fluxo determinístico;
+- `ConversationService` continua sendo a autoridade de estado, handoff e sanitização de mensagens.
+
 ## 1. System Prompt do Bot Candidato
 
 Local atual:
