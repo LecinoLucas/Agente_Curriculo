@@ -32,6 +32,7 @@ from src.application.services.protheus_export_status import (
     payload_status_label_pt_br,
     status_label_pt_br,
 )
+from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobUnitModel
 from src.infrastructure.database.models.pre_admission_model import (
@@ -43,6 +44,7 @@ from src.infrastructure.storage.pre_admission_documents import (
     write_pre_admission_document,
 )
 
+from .helpers import _auth_headers, _create_active_user
 from .test_job_multiunit_backend import _create_operational_scope
 from .test_pre_admission import _seed_pre_admission_with_item
 
@@ -216,6 +218,101 @@ class _BridgePreflightIncomplete:
                 "safe_error_message": "contract_incomplete",
             })
         raise AssertionError("Bridge não deveria enfileirar quando o preflight falha.")
+
+
+_FAILED_EXPORT = {
+    **_QUEUED_EXPORT,
+    "status": "failed_permanent",
+    "can_cancel": False,
+    "can_request_new": True,
+    "last_error_code": "BRIDGE_FATAL",
+    "last_error_message_redacted": "[redacted: fatal]",
+}
+
+_SUCCESS_EXPORT = {
+    **_QUEUED_EXPORT,
+    "status": "success",
+    "can_cancel": False,
+    "can_request_new": False,
+}
+
+
+class _BridgeRequestNewOk:
+    last_export_json: dict | None = None
+
+    def __init__(self, *a, **kw) -> None:
+        pass
+
+    async def __aenter__(self) -> "_BridgeRequestNewOk":
+        return self
+
+    async def __aexit__(self, *_) -> None:
+        pass
+
+    async def get(self, url: str, *, headers: dict | None = None) -> httpx.Response:
+        return _make_response(200, {"items": [_FAILED_EXPORT]})
+
+    async def post(self, url: str, *, json: dict | None = None, headers: dict | None = None) -> httpx.Response:
+        if url.endswith("/internal/protheus/exports/preflight"):
+            return _make_response(200, _PREFLIGHT_READY)
+        _BridgeRequestNewOk.last_export_json = json
+        return _make_response(201, {
+            "was_existing": False,
+            "export_request": {
+                **_QUEUED_EXPORT,
+                "case_id": json.get("case_id", ""),
+                "id": "exp-renewed-safe",
+            },
+        })
+
+
+class _BridgeRequestNewBlocked:
+    def __init__(self, *a, **kw) -> None:
+        pass
+
+    async def __aenter__(self) -> "_BridgeRequestNewBlocked":
+        return self
+
+    async def __aexit__(self, *_) -> None:
+        pass
+
+    async def get(self, url: str, *, headers: dict | None = None) -> httpx.Response:
+        return _make_response(200, {"items": [_SUCCESS_EXPORT]})
+
+    async def post(self, *a, **kw) -> httpx.Response:
+        raise AssertionError("Bridge não deveria ser chamada quando can_request_new=false.")
+
+
+class _BridgeRequestNewDuplicate:
+    post_attempted = False
+
+    def __init__(self, *a, **kw) -> None:
+        pass
+
+    async def __aenter__(self) -> "_BridgeRequestNewDuplicate":
+        return self
+
+    async def __aexit__(self, *_) -> None:
+        pass
+
+    async def get(self, url: str, *, headers: dict | None = None) -> httpx.Response:
+        if _BridgeRequestNewDuplicate.post_attempted:
+            return _make_response(200, {
+                "items": [
+                    {
+                        **_QUEUED_EXPORT,
+                        "id": "exp-existing-safe",
+                        "case_id": url.split("case_id=")[-1],
+                    }
+                ]
+            })
+        return _make_response(200, {"items": [_FAILED_EXPORT]})
+
+    async def post(self, url: str, *, json: dict | None = None, headers: dict | None = None) -> httpx.Response:
+        if url.endswith("/internal/protheus/exports/preflight"):
+            return _make_response(200, _PREFLIGHT_READY)
+        _BridgeRequestNewDuplicate.post_attempted = True
+        return _make_response(409, {"existing_id": "exp-existing-safe", "case_id": json.get("case_id", "")})
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -762,6 +859,130 @@ async def test_09_get_latest_returns_404_when_bridge_returns_empty(
         )
 
     assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_09a_request_new_permitido_quando_can_request_new_true(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers, _, _, case, _ = await _seed_pre_admission_with_item(client, db_session)
+    case_id = case["id"]
+    await _prepare_case_for_bridge_export(
+        db_session,
+        case_id=case_id,
+        job_id=UUID(case["job_id"]),
+        candidate_id=UUID(case["candidate_id"]),
+    )
+
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_ENABLED", True)
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_BASE_URL", "http://bridge-stub")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_INTERNAL_API_KEY", "test-key")
+    monkeypatch.setattr(settings, "PROTHEUS_REAL_SEND_ENABLED", False)
+    monkeypatch.setattr(settings, "ERP_ALLOW_REAL_SEND", False)
+
+    with patch(_MOCK_PATH, _BridgeRequestNewOk):
+        resp = await client.post(
+            f"/api/v1/pre-admission/cases/{case_id}/protheus-export-requests/request-new",
+            headers=headers,
+            json={},
+        )
+
+    assert resp.status_code == status.HTTP_201_CREATED
+    body = resp.json()
+    assert body["was_existing"] is False
+    assert body["export_request"]["status"] == "queued"
+    assert body["export_request"]["is_stub_mode"] is True
+    assert body["export_request"]["unit_name"]
+    assert _BridgeRequestNewOk.last_export_json is not None
+    assert _BridgeRequestNewOk.last_export_json["idempotency_key"].startswith(f"ats-renew-{case_id}-")
+
+
+@pytest.mark.asyncio
+async def test_09b_request_new_bloqueado_quando_can_request_new_false(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers, _, _, case, _ = await _seed_pre_admission_with_item(client, db_session)
+    case_id = case["id"]
+
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_ENABLED", True)
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_BASE_URL", "http://bridge-stub")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_INTERNAL_API_KEY", "test-key")
+
+    with patch(_MOCK_PATH, _BridgeRequestNewBlocked):
+        resp = await client.post(
+            f"/api/v1/pre-admission/cases/{case_id}/protheus-export-requests/request-new",
+            headers=headers,
+            json={},
+        )
+
+    assert resp.status_code == status.HTTP_409_CONFLICT
+    assert "Nova solicitação segura não permitida" in resp.json()["detail"]
+    assert "11144477735" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_09c_request_new_idempotente_retorna_existente_ativo(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers, _, _, case, _ = await _seed_pre_admission_with_item(client, db_session)
+    case_id = case["id"]
+    await _prepare_case_for_bridge_export(
+        db_session,
+        case_id=case_id,
+        job_id=UUID(case["job_id"]),
+        candidate_id=UUID(case["candidate_id"]),
+    )
+
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_ENABLED", True)
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_BASE_URL", "http://bridge-stub")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_INTERNAL_API_KEY", "test-key")
+    _BridgeRequestNewDuplicate.post_attempted = False
+
+    with patch(_MOCK_PATH, _BridgeRequestNewDuplicate):
+        resp = await client.post(
+            f"/api/v1/pre-admission/cases/{case_id}/protheus-export-requests/request-new",
+            headers=headers,
+            json={},
+        )
+
+    assert resp.status_code == status.HTTP_200_OK
+    body = resp.json()
+    assert body["was_existing"] is True
+    assert body["export_request"]["id"] == "exp-existing-safe"
+    assert body["export_request"]["status"] == "queued"
+    assert body["export_request"]["is_stub_mode"] is True
+
+
+@pytest.mark.asyncio
+async def test_09d_request_new_exige_permissao_de_escrita(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers_admin, _, _, case, _ = await _seed_pre_admission_with_item(client, db_session)
+    del headers_admin
+    email = f"protheus-request-new-viewer-{uuid4().hex[:8]}@example.com"
+    await _create_active_user(db_session, email, "password123", UserRole.VIEWER)
+    headers = await _auth_headers(client, email, "password123")
+
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_ENABLED", True)
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_BASE_URL", "http://bridge-stub")
+    monkeypatch.setattr(settings, "PROTHEUS_BRIDGE_INTERNAL_API_KEY", "test-key")
+
+    with patch(_MOCK_PATH, _BridgeRequestNewBlocked):
+        resp = await client.post(
+            f"/api/v1/pre-admission/cases/{case['id']}/protheus-export-requests/request-new",
+            headers=headers,
+            json={},
+        )
+
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio

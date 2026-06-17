@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { admissionWorkspaceService } from "../../../services/admissionWorkspaceService";
 import type {
+  AdmissionCaseOverview,
   ProtheusExportDashboardItem,
   ProtheusExportDashboardSummary,
 } from "../../../types/domain";
@@ -12,6 +13,7 @@ import { ProtheusExportQueueDashboardPage } from "../ProtheusExportQueueDashboar
 
 vi.mock("../../../services/admissionWorkspaceService", () => ({
   admissionWorkspaceService: {
+    getOverview: vi.fn(),
     getProtheusExportDashboard: vi.fn(),
     getProtheusExportDashboardItems: vi.fn(),
   },
@@ -106,6 +108,59 @@ const unknownItem = item({
   last_trace_id: "trace-unknown",
 });
 
+function overview(caseId: string, candidateName: string, jobTitle: string): AdmissionCaseOverview {
+  return {
+    case: {
+      id: caseId,
+      status: "ready_for_admission",
+      current_stage: "protheus",
+      created_at: "2026-06-16T09:00:00Z",
+      updated_at: "2026-06-16T10:00:00Z",
+    },
+    candidate: {
+      id: `cand-${caseId}`,
+      name: candidateName,
+      initials: candidateName
+        .split(" ")
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+      avatar_url: null,
+    },
+    job: {
+      id: `job-${caseId}`,
+      title: jobTitle,
+    },
+    status_label: "Pronto para exportacao",
+    progress: {
+      total: 4,
+      approved: 4,
+      pending: 0,
+      rejected: 0,
+      in_review: 0,
+      waived: 0,
+    },
+    main_blocker: null,
+    main_blockers: [],
+    next_action: null,
+    next_actions: [],
+    summary: {
+      responsible_name: "RH",
+      created_at: "2026-06-16T09:00:00Z",
+      last_update_at: "2026-06-16T10:00:00Z",
+      readiness_status: "ready",
+      ready_for_export: true,
+    },
+    integration_status: {
+      state: "ready",
+      label: "Pronto",
+      ready_for_export: true,
+    },
+    updated_at: "2026-06-16T10:00:00Z",
+  };
+}
+
 function mockDashboard(items: ProtheusExportDashboardItem[] = [failedItem, blockedItem, retryItem]) {
   vi.mocked(admissionWorkspaceService.getProtheusExportDashboard).mockResolvedValue(summary);
   vi.mocked(admissionWorkspaceService.getProtheusExportDashboardItems).mockResolvedValue({
@@ -114,6 +169,12 @@ function mockDashboard(items: ProtheusExportDashboardItem[] = [failedItem, block
     limit: 20,
     offset: 0,
     has_next: false,
+  });
+  vi.mocked(admissionWorkspaceService.getOverview).mockImplementation(async (caseId: string) => {
+    if (caseId === "case-failed") return overview(caseId, "Marina Souza", "Analista de RH");
+    if (caseId === "case-blocked") return overview(caseId, "Pedro Lima", "Assistente Financeiro");
+    if (caseId === "case-retry") return overview(caseId, "Ana Costa", "Enfermeira");
+    return overview(caseId, "Caso Sem Nome", "Vaga nao informada");
   });
 }
 
@@ -135,12 +196,14 @@ describe("ProtheusExportQueueDashboardPage", () => {
     renderPage();
 
     expect(await screen.findByText("Fila operacional Protheus")).toBeInTheDocument();
-    expect(screen.getByText("Total geral")).toBeInTheDocument();
-    expect(screen.getByText("Ativos")).toBeInTheDocument();
-    expect(screen.getByText("Terminais")).toBeInTheDocument();
-    expect(screen.getByText("Ação requerida")).toBeInTheDocument();
+    expect(screen.getByText("Total de solicitações")).toBeInTheDocument();
+    expect(screen.getByText("Pendentes")).toBeInTheDocument();
+    expect(screen.getAllByText("Em processamento").length).toBeGreaterThan(0);
+    expect(screen.getByText("Concluídas")).toBeInTheDocument();
     expect(await screen.findByTestId("protheus-export-dashboard-list")).toBeInTheDocument();
-    expect(screen.getByText("trace-failed")).toBeInTheDocument();
+    expect(await screen.findByText("Marina Souza")).toBeInTheDocument();
+    expect(screen.getByText("Analista de RH")).toBeInTheDocument();
+    expect(screen.getAllByText(/STUB \/ dry-run seguro/i).length).toBeGreaterThan(0);
     expect(screen.getByText("3/3")).toBeInTheDocument();
   });
 
@@ -158,6 +221,31 @@ describe("ProtheusExportQueueDashboardPage", () => {
         offset: 0,
       });
     });
+  });
+
+  it("filtra localmente por busca de candidato", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText("Marina Souza")).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText(/Buscar candidato ou caso/i), "ana costa");
+
+    expect(screen.getByText("Ana Costa")).toBeInTheDocument();
+    expect(screen.queryByText("Marina Souza")).not.toBeInTheDocument();
+    expect(admissionWorkspaceService.getProtheusExportDashboardItems).toHaveBeenCalledTimes(1);
+  });
+
+  it("aplica filtro rapido somente erros sem novo backend", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Marina Souza");
+    await user.click(screen.getByRole("button", { name: /Somente erros/i }));
+
+    expect(screen.getByText("Marina Souza")).toBeInTheDocument();
+    expect(screen.getByText("Pedro Lima")).toBeInTheDocument();
+    expect(screen.queryByText("Ana Costa")).not.toBeInTheDocument();
+    expect(admissionWorkspaceService.getProtheusExportDashboardItems).toHaveBeenCalledTimes(1);
   });
 
   it("destaca failed_permanent, blocked e retry_scheduled", async () => {
@@ -188,7 +276,8 @@ describe("ProtheusExportQueueDashboardPage", () => {
     const list = await screen.findByTestId("protheus-export-dashboard-list");
     await user.click(within(list).getAllByRole("button", { name: /Ver detalhes/i })[0]);
 
-    expect(screen.getByText("ERR_VALIDATION")).toBeInTheDocument();
+    expect(screen.getByText("Não disponível")).toBeInTheDocument();
+    expect(screen.getAllByText("ERR_VALIDATION").length).toBeGreaterThan(0);
     expect(screen.getByText("Documento [redacted] inválido")).toBeInTheDocument();
     expect(screen.queryByText(/dev-bridge-key-local/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/INTERNAL_API_KEY/i)).not.toBeInTheDocument();
@@ -221,6 +310,17 @@ describe("ProtheusExportQueueDashboardPage", () => {
     renderPage();
 
     expect(await screen.findByText("Status misterioso")).toBeInTheDocument();
-    expect(screen.getByText("trace-unknown")).toBeInTheDocument();
+    expect(screen.getByText("Caso Sem Nome")).toBeInTheDocument();
+  });
+
+  it("mostra estado vazio contextual para filtro de concluidos", async () => {
+    const user = userEvent.setup();
+    mockDashboard([failedItem]);
+    renderPage();
+
+    await screen.findByText("Marina Souza");
+    await user.click(screen.getByRole("button", { name: /Somente concluídos/i }));
+
+    expect(screen.getByText("Nenhuma solicitação concluída")).toBeInTheDocument();
   });
 });

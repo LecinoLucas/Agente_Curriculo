@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.protheus_case_payload_adapter import (
@@ -22,6 +23,9 @@ from src.application.services.protheus_export_status import (
     status_label_pt_br,
 )
 from src.core.settings import settings
+from src.infrastructure.database.models.job_model import JobUnitModel
+from src.infrastructure.database.models.operational_master_model import OperationalUnitModel
+from src.infrastructure.database.models.pre_admission_model import PreAdmissionCaseModel
 
 _STUB_DISCLAIMER = (
     "Fase STUB: nenhuma gravação no ERP é realizada. Apenas simulação segura."
@@ -79,7 +83,65 @@ class ProtheusExportQueueNotCancellableError(Exception):
         super().__init__(f"Solicitação não pode ser cancelada no estado: {status}")
 
 
-def _sanitize(raw: dict) -> dict:
+class ProtheusExportQueueRequestNewNotAllowedError(Exception):
+    def __init__(self, status: str) -> None:
+        self.status = status
+        super().__init__(f"Nova solicitação não permitida no estado: {status}")
+
+
+async def _resolve_case_unit_names(
+    session: AsyncSession,
+    case_ids: list[UUID],
+) -> dict[str, str]:
+    if not case_ids:
+        return {}
+
+    # Priority 1: cases that already have operational_unit_id set (propagated from candidate preference).
+    direct_stmt = (
+        sa.select(PreAdmissionCaseModel.id, OperationalUnitModel.name)
+        .join(OperationalUnitModel, OperationalUnitModel.id == PreAdmissionCaseModel.operational_unit_id)
+        .where(
+            PreAdmissionCaseModel.id.in_(case_ids),
+            PreAdmissionCaseModel.operational_unit_id.is_not(None),
+            OperationalUnitModel.is_active.is_(True),
+        )
+    )
+    direct_rows = (await session.execute(direct_stmt)).all()
+    resolved: dict[str, str] = {}
+    for case_id, unit_name in direct_rows:
+        if not unit_name:
+            continue
+        resolved[str(case_id)] = str(unit_name).strip()
+
+    # Priority 2: fallback to first active job_unit by priority for cases without a direct unit.
+    missing_ids = [cid for cid in case_ids if str(cid) not in resolved]
+    if missing_ids:
+        fallback_stmt = (
+            sa.select(PreAdmissionCaseModel.id, OperationalUnitModel.name)
+            .join(JobUnitModel, JobUnitModel.job_id == PreAdmissionCaseModel.job_id)
+            .join(OperationalUnitModel, OperationalUnitModel.id == JobUnitModel.operational_unit_id)
+            .where(
+                PreAdmissionCaseModel.id.in_(missing_ids),
+                JobUnitModel.is_active.is_(True),
+                OperationalUnitModel.is_active.is_(True),
+            )
+            .order_by(
+                PreAdmissionCaseModel.id.asc(),
+                JobUnitModel.priority.asc().nullslast(),
+                JobUnitModel.created_at.asc(),
+            )
+        )
+        fallback_rows = (await session.execute(fallback_stmt)).all()
+        for case_id, unit_name in fallback_rows:
+            if not unit_name:
+                continue
+            key = str(case_id)
+            resolved.setdefault(key, str(unit_name).strip())
+
+    return resolved
+
+
+def _sanitize(raw: dict, *, unit_name: str | None = None) -> dict:
     status = str(raw.get("status") or "")
     payload_status_raw = raw.get("payload_status")
     payload_status = str(payload_status_raw) if payload_status_raw is not None else None
@@ -87,9 +149,11 @@ def _sanitize(raw: dict) -> dict:
     raw_can_cancel = raw.get("can_cancel")
     resolved_can_cancel = can_cancel(status) if raw_can_cancel is None else bool(raw_can_cancel) and can_cancel(status)
     resolved_can_request_new = can_request_new(status)
+    resolved_unit_name = (str(raw.get("unit_name") or "").strip() or unit_name or None)
     return {
         "id": raw.get("id", ""),
         "case_id": raw.get("case_id", ""),
+        "unit_name": resolved_unit_name,
         "status": status,
         "status_label": status_label_pt_br(status),
         "recommended_action": recommended_action_pt_br(status),
@@ -132,8 +196,8 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _sanitize_dashboard_item(raw: dict[str, Any]) -> dict[str, Any]:
-    item = _sanitize(raw)
+def _sanitize_dashboard_item(raw: dict[str, Any], *, unit_name: str | None = None) -> dict[str, Any]:
+    item = _sanitize(raw, unit_name=unit_name)
     item.pop("pending_requirements", None)
     item.pop("can_enqueue", None)
     item.pop("disclaimer", None)
@@ -248,6 +312,7 @@ async def list_dashboard_items(
     status: str | None = None,
     limit: int = 25,
     offset: int = 0,
+    session: AsyncSession | None = None,
 ) -> dict[str, Any]:
     base_url = _guard_available()
     safe_limit = max(1, min(limit, _DASHBOARD_LIMIT_MAX))
@@ -278,11 +343,29 @@ async def list_dashboard_items(
 
     body = response.json()
     raw_items = body.get("items") if isinstance(body, dict) else []
-    items = [
-        _sanitize_dashboard_item(item)
-        for item in raw_items
-        if isinstance(item, dict)
-    ]
+    unit_names: dict[str, str] = {}
+    if session is not None:
+        case_ids = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            case_id_raw = item.get("case_id")
+            if not case_id_raw:
+                continue
+            try:
+                case_ids.append(UUID(str(case_id_raw)))
+            except (TypeError, ValueError):
+                continue
+        unit_names = await _resolve_case_unit_names(session, case_ids)
+
+    items = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        case_id_key = str(item.get("case_id") or "")
+        items.append(
+            _sanitize_dashboard_item(item, unit_name=unit_names.get(case_id_key))
+        )
     total = _safe_int(body.get("total") if isinstance(body, dict) else None, len(items))
     return {
         "items": items,
@@ -303,6 +386,7 @@ async def enqueue(
     unit_code: str = "STUB",
     protheus_group_code: str = "T01",
     protheus_branch_code: str = "01",
+    idempotency_key: str | None = None,
 ) -> tuple[bool, dict]:
     """Enqueue a Protheus export request via the bridge.
 
@@ -339,7 +423,7 @@ async def enqueue(
             safe_error_message=preflight.get("safe_error_message"),
         )
 
-    idempotency_key = f"ats-{case_id}-{uuid4().hex[:16]}"
+    request_idempotency_key = idempotency_key or f"ats-{case_id}-{uuid4().hex[:16]}"
     payload_hash = hashlib.sha256(str(adapted.redacted_preview).encode()).hexdigest()[:32]
 
     try:
@@ -351,7 +435,7 @@ async def enqueue(
                 f"{base_url}/internal/protheus/exports",
                 json={
                     "case_id": str(case_id),
-                    "idempotency_key": idempotency_key,
+                    "idempotency_key": request_idempotency_key,
                     "unit_code": unit_code,
                     "protheus_group_code": protheus_group_code,
                     "protheus_branch_code": protheus_branch_code,
@@ -407,10 +491,18 @@ async def enqueue(
         )
 
     body = response.json()
-    return bool(body.get("was_existing", False)), _sanitize(body.get("export_request", {}))
+    unit_names = await _resolve_case_unit_names(session, [case_id])
+    return bool(body.get("was_existing", False)), _sanitize(
+        body.get("export_request", {}),
+        unit_name=unit_names.get(str(case_id)),
+    )
 
 
-async def get_latest_by_case_id(case_id: UUID) -> dict | None:
+async def get_latest_by_case_id(
+    case_id: UUID,
+    *,
+    session: AsyncSession | None = None,
+) -> dict | None:
     """Return the latest export queue item for a case, or None if not found."""
     base_url = _guard_available()
     qs = urllib.parse.urlencode({"case_id": str(case_id)})
@@ -431,7 +523,13 @@ async def get_latest_by_case_id(case_id: UUID) -> dict | None:
         raise ProtheusExportQueueUnavailableError("Bridge indisponível.")
 
     items = response.json().get("items", [])
-    return _sanitize(items[0]) if items else None
+    if not items:
+        return None
+
+    unit_name: str | None = None
+    if session is not None:
+        unit_name = (await _resolve_case_unit_names(session, [case_id])).get(str(case_id))
+    return _sanitize(items[0], unit_name=unit_name)
 
 
 async def preflight_case(
@@ -539,3 +637,38 @@ async def cancel(export_id: str, cancelled_by: str) -> dict:
         )
 
     return _sanitize(response.json())
+
+
+async def request_new(
+    case_id: UUID,
+    requested_by: str,
+    session: AsyncSession,
+    *,
+    unit_code: str = "STUB",
+    protheus_group_code: str = "T01",
+    protheus_branch_code: str = "01",
+) -> tuple[bool, dict]:
+    latest = await get_latest_by_case_id(case_id, session=session)
+    if latest is None:
+        raise ProtheusExportQueueNotFoundError()
+
+    latest_status = str(latest.get("status") or "")
+    if not can_request_new(latest_status):
+        raise ProtheusExportQueueRequestNewNotAllowedError(latest_status)
+
+    retry_idempotency_key = f"ats-renew-{case_id}-{latest.get('id', 'unknown')}"
+    try:
+        return await enqueue(
+            case_id=case_id,
+            requested_by=requested_by,
+            session=session,
+            unit_code=unit_code,
+            protheus_group_code=protheus_group_code,
+            protheus_branch_code=protheus_branch_code,
+            idempotency_key=retry_idempotency_key,
+        )
+    except ProtheusExportQueueDuplicateError:
+        existing = await get_latest_by_case_id(case_id, session=session)
+        if existing is None:
+            raise
+        return True, existing

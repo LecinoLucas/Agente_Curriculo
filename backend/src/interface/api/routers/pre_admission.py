@@ -801,12 +801,14 @@ async def list_protheus_export_dashboard_items(
     status_filter: str | None = Query(default=None, alias="status", max_length=64),
     limit: int = Query(default=25, ge=1),
     offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
 ) -> ProtheusExportDashboardItemsResponse:
     try:
         result = await _pq.list_dashboard_items(
             status=status_filter,
             limit=limit,
             offset=offset,
+            session=db,
         )
     except _pq.ProtheusExportQueueDisabledError:
         raise HTTPException(
@@ -949,7 +951,7 @@ async def get_latest_protheus_export_request(
         )
 
     try:
-        item = await _pq.get_latest_by_case_id(case_id=case_id)
+        item = await _pq.get_latest_by_case_id(case_id=case_id, session=db)
     except _pq.ProtheusExportQueueDisabledError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -968,6 +970,77 @@ async def get_latest_protheus_export_request(
         )
 
     return ProtheusExportQueueStatusResponse(**item)
+
+
+@router.post(
+    "/pre-admission/cases/{case_id}/protheus-export-requests/request-new",
+    response_model=ProtheusExportQueueCreateResponse,
+)
+async def request_new_protheus_export_request(
+    case_id: UUID,
+    body: ProtheusExportQueueCreateRequest,
+    current_user: PreAdmissionWriteStaff,
+    db: AsyncSession = Depends(get_db),
+) -> ProtheusExportQueueCreateResponse:
+    from src.infrastructure.database.models.pre_admission_model import PreAdmissionCaseModel
+
+    case = await db.get(PreAdmissionCaseModel, case_id)
+    if case is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Caso de pré-admissão não encontrado.",
+        )
+
+    try:
+        was_existing, export_req = await _pq.request_new(
+            case_id=case_id,
+            requested_by=str(current_user.id),
+            session=db,
+            unit_code=body.unit_code or "STUB",
+            protheus_group_code=body.protheus_group_code or "T01",
+            protheus_branch_code=body.protheus_branch_code or "01",
+        )
+    except _pq.ProtheusExportQueueDisabledError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Integração Protheus Bridge desativada neste ambiente.",
+        )
+    except _pq.ProtheusExportQueueNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhuma solicitação anterior de exportação encontrada para este caso.",
+        )
+    except _pq.ProtheusExportQueueRequestNewNotAllowedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Nova solicitação segura não permitida no estado atual: {exc.status}",
+        )
+    except _pq.ProtheusExportQueueValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": exc.message,
+                "pending_requirements": exc.pending_requirements,
+                "payload_status": exc.payload_status,
+                "shape_debug": exc.shape_debug,
+                "safe_error_code": exc.safe_error_code,
+                "safe_error_message": exc.safe_error_message,
+            },
+        )
+    except _pq.ProtheusExportQueueUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=exc.message,
+        )
+
+    http_status = status.HTTP_200_OK if was_existing else status.HTTP_201_CREATED
+    result = ProtheusExportQueueCreateResponse(
+        was_existing=was_existing,
+        export_request=ProtheusExportQueueStatusResponse(**export_req),
+    )
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=http_status, content=result.model_dump(mode="json"))
 
 
 @router.post(

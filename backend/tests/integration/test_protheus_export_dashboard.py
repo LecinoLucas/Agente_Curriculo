@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from urllib.parse import parse_qs, urlparse
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from httpx import AsyncClient
@@ -11,8 +11,11 @@ from unittest.mock import patch
 
 from src.core.settings import settings
 from src.domain.entities.user import UserRole
+from src.infrastructure.database.models.job_model import JobUnitModel
 
 from .helpers import _auth_headers, _create_active_user
+from .test_job_multiunit_backend import _create_operational_scope
+from .test_pre_admission import _seed_pre_admission_with_item
 
 _MOCK_PATH = "src.application.services.protheus_export_queue_service.httpx.AsyncClient"
 _BRIDGE_KEY = "dev-bridge-key-local"
@@ -215,6 +218,56 @@ async def test_items_retorna_lista_segura_e_repassa_filtros(
     assert body["items"][0]["id"] == "exp-dashboard-1"
     assert body["items"][0]["last_error_message_redacted"] == "CPF [redacted] rejeitado"
     assert body["items"][0]["blocked_reason"] == "PIS [redacted] divergente"
+    _assert_safe_response(body)
+
+
+async def test_items_enriquece_unit_name_quando_disponivel_no_caso(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    headers, _, _, case, _ = await _seed_pre_admission_with_item(client, db_session)
+    _group, _location, unit = await _create_operational_scope(db_session)
+    db_session.add(
+        JobUnitModel(
+            id=uuid4(),
+            job_id=UUID(case["job_id"]),
+            operational_unit_id=unit.id,
+            priority=1,
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    class _BridgeDashboardCaseOk(_BridgeDashboardOk):
+        async def get(self, url: str, *, headers: dict | None = None) -> httpx.Response:
+            _BridgeDashboardOk.last_headers = headers
+            if url.endswith("/internal/protheus/exports/dashboard"):
+                return _response(200, _DASHBOARD_BODY)
+            item = dict(_ITEM)
+            item["case_id"] = case["id"]
+            item.pop("unit_name", None)
+            return _response(
+                200,
+                {
+                    "items": [item],
+                    "total": 1,
+                    "limit": 25,
+                    "offset": 0,
+                    "has_next": False,
+                },
+            )
+
+    _configure_bridge(monkeypatch)
+    with patch(_MOCK_PATH, _BridgeDashboardCaseOk):
+        response = await client.get(
+            "/api/v1/pre-admission/protheus-export-dashboard/items",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"][0]["unit_name"] == unit.name
     _assert_safe_response(body)
 
 

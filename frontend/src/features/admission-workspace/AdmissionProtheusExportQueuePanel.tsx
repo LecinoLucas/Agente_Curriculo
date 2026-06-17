@@ -150,6 +150,27 @@ export function AdmissionProtheusExportQueuePanel({ caseId }: Props) {
     }
   }
 
+  async function handleRequestNew() {
+    setActing(true);
+    setActionError(null);
+    try {
+      const result = await admissionWorkspaceService.requestNewProtheusExportRequest(caseId);
+      setItem(result.export_request);
+      setPreflight(null);
+      setPendingRequirements(result.export_request.pending_requirements ?? []);
+    } catch (err) {
+      setActionError(
+        formatContextError(
+          err,
+          "Não foi possível solicitar uma nova exportação segura.",
+          "Verifique se o caso ainda permite nova solicitação.",
+        ),
+      );
+    } finally {
+      setActing(false);
+    }
+  }
+
   if (loading && !item) {
     return (
       <AdmissionSectionCard
@@ -252,16 +273,30 @@ export function AdmissionProtheusExportQueuePanel({ caseId }: Props) {
                 getQueueStatusTone(item.status),
               ].join(" ")}
             >
-              <div>
+              <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em]">Status</p>
                 <p className="mt-1 text-sm font-semibold">
                   {getQueueStatusLabel(item.status, item.status_label)}
                 </p>
+                {item.unit_name ? (
+                  <p className="text-xs text-current/80">Unidade: {item.unit_name}</p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex rounded-full border border-current/20 bg-white/40 px-2.5 py-1 text-[11px] font-semibold">
+                    {item.is_stub_mode ? "STUB / dry-run seguro" : "Somente leitura"}
+                  </span>
+                  {item.payload_status ? (
+                    <span className="inline-flex rounded-full border border-current/20 bg-white/40 px-2.5 py-1 text-[11px] font-semibold">
+                      {getPayloadStatusLabel(item.payload_status, item.payload_status_label)}
+                    </span>
+                  ) : null}
+                </div>
               </div>
               <div className="text-right text-xs">
                 <p>
                   Tentativas: {item.attempt_count} / {item.max_attempts}
                 </p>
+                <p className="mt-1">Ultima tentativa: {formatDateTime(item.finished_at ?? item.updated_at)}</p>
                 {item.next_attempt_at != null ? (
                   <p className="mt-1">Próximo retry: {formatDateTime(item.next_attempt_at)}</p>
                 ) : null}
@@ -366,6 +401,17 @@ export function AdmissionProtheusExportQueuePanel({ caseId }: Props) {
               className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-50"
             >
               {acting ? "Solicitando..." : "Solicitar exportação Protheus"}
+            </button>
+          ) : null}
+
+          {item?.can_request_new ? (
+            <button
+              type="button"
+              onClick={() => void handleRequestNew()}
+              disabled={acting}
+              className="border border-[hsl(var(--primary))]/25 bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/15 transition inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-50"
+            >
+              {acting ? "Solicitando..." : "Solicitar nova exportação segura"}
             </button>
           ) : null}
 

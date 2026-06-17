@@ -20,6 +20,7 @@ vi.mock("../../../services/admissionWorkspaceService", () => ({
     getLatestProtheusExportRequest: vi.fn(),
     preflightProtheusExportRequest: vi.fn(),
     createProtheusExportRequest: vi.fn(),
+    requestNewProtheusExportRequest: vi.fn(),
     cancelProtheusExportRequest: vi.fn(),
   },
 }));
@@ -91,6 +92,7 @@ const blockedItem: ProtheusExportQueueItem = {
   recommended_action: "Bloqueio técnico ativo. Revisão técnica obrigatória antes de nova tentativa.",
   can_cancel: false,
   can_request_new: true,
+  unit_name: "Unidade Centro",
 };
 
 const unknownStatusItem: ProtheusExportQueueItem = {
@@ -225,6 +227,25 @@ describe("AdmissionProtheusExportQueuePanel", () => {
 
     expect(await screen.findByText("Bloqueado por segurança")).toBeInTheDocument();
     expect(screen.getByText(/Revisão técnica obrigatória/i)).toBeInTheDocument();
+    expect(screen.getByText(/Unidade:\s*Unidade Centro/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Solicitar nova exportação segura/i })).toBeInTheDocument();
+  });
+
+  it("permite solicitar nova exportação segura quando can_request_new=true", async () => {
+    const user = userEvent.setup();
+    vi.mocked(admissionWorkspaceService.getLatestProtheusExportRequest).mockResolvedValue(blockedItem);
+    vi.mocked(admissionWorkspaceService.requestNewProtheusExportRequest).mockResolvedValue({
+      was_existing: false,
+      export_request: queuedItem,
+    });
+
+    render(<AdmissionProtheusExportQueuePanel caseId="case-abc" />);
+
+    await screen.findByText("Bloqueado por segurança");
+    await user.click(screen.getByRole("button", { name: /Solicitar nova exportação segura/i }));
+
+    expect(await screen.findByText("Solicitação enfileirada")).toBeInTheDocument();
+    expect(admissionWorkspaceService.requestNewProtheusExportRequest).toHaveBeenCalledWith("case-abc");
   });
 
   it("solicita exportação ao clicar no botão e atualiza estado", async () => {

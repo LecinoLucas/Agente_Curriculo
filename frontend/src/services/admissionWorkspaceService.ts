@@ -99,6 +99,13 @@ async function createProtheusExportRequest(caseId: string): Promise<ProtheusExpo
   );
 }
 
+async function requestNewProtheusExportRequest(caseId: string): Promise<ProtheusExportQueueCreateResponse> {
+  return httpRequest<ProtheusExportQueueCreateResponse>(
+    `/api/v1/pre-admission/cases/${caseId}/protheus-export-requests/request-new`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
 async function preflightProtheusExportRequest(caseId: string): Promise<ProtheusExportQueuePreflight> {
   return httpRequest<ProtheusExportQueuePreflight>(
     `/api/v1/pre-admission/cases/${caseId}/protheus-export-requests/preflight`,
@@ -137,6 +144,7 @@ export const admissionWorkspaceService = {
   markCaseReadyForExport,
   preflightProtheusExportRequest,
   createProtheusExportRequest,
+  requestNewProtheusExportRequest,
   getLatestProtheusExportRequest,
   cancelProtheusExportRequest,
 };
