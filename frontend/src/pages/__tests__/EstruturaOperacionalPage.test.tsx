@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EstruturaOperacionalPage } from "../EstruturaOperacionalPage";
+import { HttpError } from "../../services/http";
 import { operationalMasterService } from "../../services/operationalMasterService";
 import type { UserRole } from "../../types/auth";
 
@@ -73,13 +74,13 @@ const location = {
   updated_at: "2026-05-02T10:00:00Z",
 };
 
-const unit = {
+const baseUnit = {
   id: "unit-1",
   group_id: "group-1",
   location_group_id: "location-1",
   branch_code: "4201",
   name: "NOVA CRIXÁS",
-  normalized_name: "posto-4301",
+  normalized_name: "nova-crixas",
   public_name: "Posto Peritoro",
   type: "gas_station" as const,
   reference_point: "BR",
@@ -89,26 +90,31 @@ const unit = {
   is_active: true,
   created_at: "2026-05-01T10:00:00Z",
   updated_at: "2026-05-02T10:00:00Z",
+  group,
 };
 
-function mockLists() {
+function mockLists(options?: {
+  groups?: typeof group[];
+  locations?: typeof location[];
+  units?: typeof baseUnit[];
+}) {
   vi.mocked(operationalMasterService.listOperationalGroups).mockResolvedValue({
-    data: [group],
-    total: 1,
+    data: options?.groups ?? [group],
+    total: (options?.groups ?? [group]).length,
     page: 1,
     page_size: 100,
     total_pages: 1,
   });
   vi.mocked(operationalMasterService.listLocationGroups).mockResolvedValue({
-    data: [location],
-    total: 1,
+    data: options?.locations ?? [location],
+    total: (options?.locations ?? [location]).length,
     page: 1,
     page_size: 100,
     total_pages: 1,
   });
   vi.mocked(operationalMasterService.listOperationalUnits).mockResolvedValue({
-    data: [unit],
-    total: 1,
+    data: options?.units ?? [baseUnit],
+    total: (options?.units ?? [baseUnit]).length,
     page: 1,
     page_size: 100,
     total_pages: 1,
@@ -124,43 +130,22 @@ describe("EstruturaOperacionalPage", () => {
     vi.mocked(operationalMasterService.updateOperationalGroup).mockResolvedValue(group);
     vi.mocked(operationalMasterService.createLocationGroup).mockResolvedValue(location);
     vi.mocked(operationalMasterService.updateLocationGroup).mockResolvedValue(location);
-    vi.mocked(operationalMasterService.createOperationalUnit).mockResolvedValue(unit);
-    vi.mocked(operationalMasterService.updateOperationalUnit).mockResolvedValue(unit);
+    vi.mocked(operationalMasterService.createOperationalUnit).mockResolvedValue(baseUnit);
+    vi.mocked(operationalMasterService.updateOperationalUnit).mockResolvedValue(baseUnit);
   });
 
-  it("abre com filiais/postos em foco e mantem grupos como aba de apoio", async () => {
-    const user = userEvent.setup();
-
+  it("abre em unidades operacionais com hierarquia e preview do candidato", async () => {
     render(<EstruturaOperacionalPage />);
 
-    expect(await screen.findByText("4201")).toBeInTheDocument();
-    expect(screen.getByText("NOVA CRIXÁS")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /filiais\/postos/i })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("columnheader", { name: "Grupo" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Filial" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Nome" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Localidade" })).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Ponto de referência" })).not.toBeInTheDocument();
-    expect(screen.getByText(/O candidato verá localidade/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /nova filial\/posto/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: /localidades/i }));
-    expect((await screen.findAllByText("Peritoro")).length).toBeGreaterThan(0);
-
-    await user.click(screen.getByRole("tab", { name: /grupos/i }));
-    expect(await screen.findByText("Postos")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Grupo" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Nome" })).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Filial" })).not.toBeInTheDocument();
-    expect(screen.queryByText("4201")).not.toBeInTheDocument();
-    expect(screen.queryByText("NOVA CRIXÁS")).not.toBeInTheDocument();
-    expect(screen.queryByText(/O candidato verá localidade/i)).not.toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(operationalMasterService.listOperationalGroups).toHaveBeenCalled();
-      expect(operationalMasterService.listLocationGroups).toHaveBeenCalled();
-      expect(operationalMasterService.listOperationalUnits).toHaveBeenCalled();
-    });
+    expect(await screen.findByText("NOVA CRIXÁS")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /unidades operacionais/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("columnheader", { name: "Grupo operacional" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Código interno" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Unidade operacional" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Como o candidato verá" })).toBeInTheDocument();
+    expect(screen.getByText("Posto Peritoro — Peritoro/MA — BR")).toBeInTheDocument();
+    expect(screen.getByText(/preview exibido ao candidato no portal/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /nova unidade operacional/i })).toBeInTheDocument();
   });
 
   it("mantem recruiter em modo somente leitura", async () => {
@@ -170,23 +155,23 @@ describe("EstruturaOperacionalPage", () => {
 
     expect(await screen.findByText("NOVA CRIXÁS")).toBeInTheDocument();
     expect(screen.getByText(/pode visualizar, mas não criar ou editar/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /nova filial\/posto/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /nova unidade operacional/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /editar/i })).not.toBeInTheDocument();
     expect(screen.getByText("Somente leitura")).toBeInTheDocument();
   });
 
-  it("cria grupo operacional como admin", async () => {
+  it("cria grupo operacional como admin com labels revisados", async () => {
     const user = userEvent.setup();
 
     render(<EstruturaOperacionalPage />);
 
     await screen.findByText("NOVA CRIXÁS");
-    await user.click(screen.getByRole("tab", { name: /grupos/i }));
-    await user.click(screen.getByRole("button", { name: /novo grupo/i }));
+    await user.click(screen.getByRole("tab", { name: /grupos operacionais/i }));
+    await user.click(screen.getByRole("button", { name: /novo grupo operacional/i }));
 
-    const dialog = screen.getByRole("dialog", { name: /novo grupo/i });
-    await user.type(within(dialog).getByLabelText("Grupo"), "03");
-    await user.type(within(dialog).getByLabelText("Nome"), "Escritorio");
+    const dialog = screen.getByRole("dialog", { name: /novo grupo operacional/i });
+    await user.type(within(dialog).getByLabelText("Código do grupo operacional"), "03");
+    await user.type(within(dialog).getByLabelText("Nome do grupo operacional"), "Escritorio");
     await user.type(within(dialog).getByLabelText("Descrição"), "Grupo corporativo");
     await user.click(within(dialog).getByRole("button", { name: /criar grupo/i }));
 
@@ -200,19 +185,108 @@ describe("EstruturaOperacionalPage", () => {
     expect(toastMock.success).toHaveBeenCalledWith("Grupo criado.");
   });
 
-  it("inativa e reativa registros via PATCH sem delete", async () => {
+  it("mostra preview do candidato no formulario da unidade e alerta quando nome publico esta vazio", async () => {
     const user = userEvent.setup();
 
     render(<EstruturaOperacionalPage />);
 
     await screen.findByText("NOVA CRIXÁS");
-    await user.click(screen.getByRole("tab", { name: /grupos/i }));
-    await user.click(screen.getByRole("button", { name: /inativar/i }));
+    await user.click(screen.getByRole("button", { name: /nova unidade operacional/i }));
+
+    const dialog = screen.getByRole("dialog", { name: /nova unidade operacional/i });
+    expect(within(dialog).getByText(/nome público não informado/i)).toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText("Nome público exibido ao candidato"), "Posto Marajo Centro");
+    await user.type(within(dialog).getByLabelText("Cidade"), "Goiania");
+    await user.type(within(dialog).getByLabelText("UF"), "GO");
+    await user.type(within(dialog).getByLabelText("Ponto de referência"), "Próximo à Av. X");
+
+    expect(within(dialog).getByText("Posto Marajo Centro — Goiania/GO — Próximo à Av. X")).toBeInTheDocument();
+  });
+
+  it("pede confirmação antes de inativar unidade operacional", async () => {
+    const user = userEvent.setup();
+
+    render(<EstruturaOperacionalPage />);
+
+    await screen.findByText("NOVA CRIXÁS");
+    await user.click(screen.getByRole("button", { name: /^inativar$/i }));
+
+    const dialog = screen.getByRole("dialog", { name: /inativar unidade operacional/i });
+    expect(within(dialog).getByText(/pode estar vinculada a vagas, candidaturas, pipeline ou pré-admissão/i)).toBeInTheDocument();
+    expect(operationalMasterService.updateOperationalUnit).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: /confirmar inativação/i }));
 
     await waitFor(() => {
-      expect(operationalMasterService.updateOperationalGroup).toHaveBeenCalledWith("group-1", {
+      expect(operationalMasterService.updateOperationalUnit).toHaveBeenCalledWith("unit-1", {
         is_active: false,
       });
     });
+    expect(toastMock.success).toHaveBeenCalledWith("Unidade operacional inativada.");
+  });
+
+  it("pede confirmação antes de reativar unidade operacional", async () => {
+    const user = userEvent.setup();
+    mockLists({
+      units: [
+        {
+          ...baseUnit,
+          is_active: false,
+        },
+      ],
+    });
+    vi.mocked(operationalMasterService.updateOperationalUnit).mockResolvedValue({
+      ...baseUnit,
+      is_active: false,
+    });
+
+    render(<EstruturaOperacionalPage />);
+
+    await screen.findByText("NOVA CRIXÁS");
+    await user.click(screen.getByRole("button", { name: /^reativar$/i }));
+
+    const dialog = screen.getByRole("dialog", { name: /reativar unidade operacional/i });
+    expect(within(dialog).getByText(/volta a ficar disponível para novas vagas e candidaturas/i)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: /confirmar reativação/i }));
+
+    await waitFor(() => {
+      expect(operationalMasterService.updateOperationalUnit).toHaveBeenCalledWith("unit-1", {
+        is_active: true,
+      });
+    });
+  });
+
+  it("mostra detalhe útil do backend em vez de toast genérico", async () => {
+    const user = userEvent.setup();
+    vi.mocked(operationalMasterService.createOperationalUnit).mockRejectedValue(
+      new HttpError(400, "Grupo operacional é obrigatório.", undefined, {
+        detail: "Grupo operacional é obrigatório.",
+      }, "Grupo operacional é obrigatório."),
+    );
+
+    render(<EstruturaOperacionalPage />);
+
+    await screen.findByText("NOVA CRIXÁS");
+    await user.click(screen.getByRole("button", { name: /nova unidade operacional/i }));
+
+    const dialog = screen.getByRole("dialog", { name: /nova unidade operacional/i });
+    await user.type(within(dialog).getByLabelText("Código interno da unidade"), "5501");
+    await user.type(within(dialog).getByLabelText("Nome interno da unidade operacional"), "Posto Teste");
+    await user.click(within(dialog).getByRole("button", { name: /criar unidade operacional/i }));
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith("Grupo operacional é obrigatório.");
+    });
+  });
+
+  it("mantem estado vazio de unidades operacionais", async () => {
+    mockLists({ units: [] });
+
+    render(<EstruturaOperacionalPage />);
+
+    expect(await screen.findByText("Nenhuma unidade operacional encontrada")).toBeInTheDocument();
+    expect(screen.getByText(/cadastre unidades reais somente depois de ter grupo operacional e localidade/i)).toBeInTheDocument();
   });
 });

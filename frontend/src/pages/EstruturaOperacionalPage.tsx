@@ -26,6 +26,7 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { useAuth } from "../features/auth/useAuth";
 import { useAsyncState } from "../hooks/useAsyncState";
 import { isAdmin } from "../shared/auth/roles";
+import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
 import { toast } from "../shared/utils/toast";
 import {
   operationalMasterService,
@@ -46,12 +47,17 @@ type ModalState =
   | { type: "location"; item?: LocationGroup }
   | { type: "unit"; item?: OperationalUnit }
   | null;
+type ToggleState =
+  | { type: "group"; item: OperationalGroup }
+  | { type: "location"; item: LocationGroup }
+  | { type: "unit"; item: OperationalUnit }
+  | null;
 
 const TABS: Array<{ key: TabKey; label: string; description: string }> = [
   {
     key: "units",
-    label: "Filiais/Postos",
-    description: "Cadastro principal das unidades reais usadas na operação.",
+    label: "Unidades operacionais",
+    description: "Postos, filiais e locais reais onde a vaga acontece.",
   },
   {
     key: "locations",
@@ -60,8 +66,8 @@ const TABS: Array<{ key: TabKey; label: string; description: string }> = [
   },
   {
     key: "groups",
-    label: "Grupos",
-    description: "Grupos internos usados por RH e Protheus.",
+    label: "Grupos operacionais",
+    description: "Agrupadores administrativos usados para organizar as unidades.",
   },
 ];
 
@@ -113,15 +119,15 @@ function optionLabel(value: string | null | undefined, fallback = "-") {
 }
 
 function createButtonLabel(activeTab: TabKey) {
-  if (activeTab === "groups") return "Novo grupo";
+  if (activeTab === "groups") return "Novo grupo operacional";
   if (activeTab === "locations") return "Nova localidade";
-  return "Nova filial/posto";
+  return "Nova unidade operacional";
 }
 
 function titleDescription(activeTab: TabKey) {
-  if (activeTab === "groups") return "Grupos internos usados por RH e Protheus.";
+  if (activeTab === "groups") return "Agrupadores administrativos que organizam as unidades operacionais.";
   if (activeTab === "locations") return "Base de localidades usada para orientar operação e candidato.";
-  return "Cadastro principal das unidades reais usadas na operação.";
+  return "Hierarquia principal da operação: grupo operacional -> unidade operacional.";
 }
 
 function findGroup(groups: OperationalGroup[], id: string) {
@@ -133,8 +139,78 @@ function unitGroupLabel(unit: OperationalUnit, groups: OperationalGroup[]) {
   return group ? group.group_code : "-";
 }
 
+function resolveUnitGroup(unit: OperationalUnit, groups: OperationalGroup[]) {
+  return unit.group ?? findGroup(groups, unit.group_id);
+}
+
 function findLocation(locations: LocationGroup[], id: string) {
   return locations.find((location) => location.id === id);
+}
+
+function compactText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatLocationSummary(city?: string | null, state?: string | null) {
+  const safeCity = compactText(city);
+  const safeState = compactText(state);
+  if (safeCity && safeState) return `${safeCity}/${safeState}`;
+  if (safeCity) return safeCity;
+  if (safeState) return safeState;
+  return null;
+}
+
+function buildCandidatePreview(input: {
+  publicName?: string | null;
+  city?: string | null;
+  state?: string | null;
+  referencePoint?: string | null;
+  address?: string | null;
+}) {
+  const name = compactText(input.publicName);
+  const location = formatLocationSummary(input.city, input.state);
+  const reference = compactText(input.referencePoint) ?? compactText(input.address);
+  const parts = [name, location, reference].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(" — ") : null;
+}
+
+function actionErrorMessage(error: unknown, fallback: string) {
+  const friendly = handleApiError(error);
+  return formatErrorDetails(friendly)[0] ?? friendly.message ?? fallback;
+}
+
+function confirmModalTitle(toggle: ToggleState) {
+  if (!toggle) return "";
+  if (toggle.type === "group") {
+    return toggle.item.is_active ? "Inativar grupo operacional" : "Reativar grupo operacional";
+  }
+  if (toggle.type === "location") {
+    return toggle.item.is_active ? "Inativar localidade" : "Reativar localidade";
+  }
+  return toggle.item.is_active ? "Inativar unidade operacional" : "Reativar unidade operacional";
+}
+
+function confirmModalMessage(toggle: ToggleState) {
+  if (!toggle) return "";
+  if (toggle.type === "group") {
+    return toggle.item.is_active
+      ? "Este grupo operacional pode concentrar unidades usadas em vagas, candidaturas e pré-admissão. Ao inativar, novas configurações operacionais não devem usá-lo. Deseja continuar?"
+      : "Ao reativar, o grupo operacional volta a ficar disponível para organizar unidades operacionais. Deseja continuar?";
+  }
+  if (toggle.type === "location") {
+    return toggle.item.is_active
+      ? "Esta localidade orienta o RH e o candidato sobre a região da operação. Ao inativar, novas unidades não devem depender dela. Deseja continuar?"
+      : "Ao reativar, a localidade volta a poder ser vinculada a novas unidades operacionais. Deseja continuar?";
+  }
+  return toggle.item.is_active
+    ? "Esta unidade operacional pode estar vinculada a vagas, candidaturas, pipeline ou pré-admissão. Ao inativar, ela não deve aparecer para novas candidaturas. Deseja continuar?"
+    : "Ao reativar, a unidade operacional volta a ficar disponível para novas vagas e candidaturas quando vinculada pela operação. Deseja continuar?";
+}
+
+function confirmActionLabel(toggle: ToggleState) {
+  if (!toggle) return "Confirmar";
+  return toggle.item.is_active ? "Confirmar inativação" : "Confirmar reativação";
 }
 
 function SummaryTile({
@@ -254,11 +330,11 @@ function GroupForm({
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="grid gap-4 overflow-y-auto px-6 py-5">
         <label className="grid gap-1.5 text-sm font-medium text-text">
-          Grupo
+          Código do grupo operacional
           <Input required value={groupCode} onChange={(event) => setGroupCode(event.target.value)} maxLength={50} />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
-          Nome
+          Nome do grupo operacional
           <Input required value={name} onChange={(event) => setName(event.target.value)} maxLength={255} />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
@@ -269,6 +345,9 @@ function GroupForm({
             maxLength={1000}
           />
         </label>
+        <p className="rounded-xl border border-border/70 bg-surface-muted px-3 py-2 text-sm text-text-muted">
+          Use grupo operacional para o agrupador administrativo. O candidato não vê esse campo no portal.
+        </p>
       </div>
       <FormActions saving={saving} onCancel={onCancel} submitLabel={item ? "Salvar grupo" : "Criar grupo"} />
     </form>
@@ -368,6 +447,14 @@ function UnitForm({
   const [address, setAddress] = useState(item?.address ?? "");
   const [city, setCity] = useState(item?.city ?? "");
   const [state, setState] = useState(item?.state ?? "");
+  const selectedLocation = findLocation(locations, locationGroupId);
+  const candidatePreview = buildCandidatePreview({
+    publicName,
+    city: city || selectedLocation?.city,
+    state: state || selectedLocation?.state,
+    referencePoint,
+    address,
+  });
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -391,7 +478,7 @@ function UnitForm({
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="grid gap-4 overflow-y-auto px-6 py-5 sm:grid-cols-2">
         <label className="grid gap-1.5 text-sm font-medium text-text">
-          Grupo
+          Grupo operacional
           <Select required value={groupId} onChange={(event) => setGroupId(event.target.value)}>
             <option value="" disabled>
               Selecione
@@ -404,23 +491,23 @@ function UnitForm({
           </Select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
-          Filial
+          Código interno da unidade
           <Input
             required
             value={branchCode}
             onChange={(event) => setBranchCode(event.target.value)}
             maxLength={50}
-            placeholder="Código da filial"
+            placeholder="Código interno usado pela operação"
           />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text sm:col-span-2">
-          Nome
+          Nome interno da unidade operacional
           <Input
             required
             value={name}
             onChange={(event) => setName(event.target.value)}
             maxLength={255}
-            placeholder="Nome da empresa ou unidade"
+            placeholder="Nome técnico usado por RH e operação"
           />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text">
@@ -447,7 +534,7 @@ function UnitForm({
           </Select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text sm:col-span-2">
-          Nome público
+          Nome público exibido ao candidato
           <Input value={publicName} onChange={(event) => setPublicName(event.target.value)} maxLength={255} />
         </label>
         <label className="grid gap-1.5 text-sm font-medium text-text sm:col-span-2">
@@ -476,16 +563,33 @@ function UnitForm({
             className="uppercase"
           />
         </label>
+        <div className="rounded-xl border border-border/70 bg-surface-muted px-4 py-3 sm:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
+            Como o candidato verá
+          </p>
+          <p className="mt-2 text-sm font-medium text-text">
+            {candidatePreview ?? "Nome público não informado. O candidato pode ver um nome técnico ou incompleto."}
+          </p>
+          {!compactText(publicName) ? (
+            <p className="mt-2 text-sm text-amber-700">
+              Nome público não informado. Preencha este campo para evitar exposição de nome técnico no portal.
+            </p>
+          ) : null}
+          <p className="mt-2 text-xs text-text-muted">
+            Grupo operacional e código interno ficam para uso administrativo. O portal usa nome público, cidade/UF e
+            referência/endereço resumido.
+          </p>
+        </div>
         {!canSubmit ? (
           <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:col-span-2">
-            Cadastre pelo menos um grupo e uma localidade antes de criar filial/posto.
+            Cadastre pelo menos um grupo operacional e uma localidade antes de criar a unidade operacional.
           </p>
         ) : null}
       </div>
       <FormActions
         saving={saving}
         onCancel={onCancel}
-        submitLabel={item ? "Salvar filial/posto" : "Criar filial/posto"}
+        submitLabel={item ? "Salvar unidade operacional" : "Criar unidade operacional"}
         disabled={!canSubmit}
       />
     </form>
@@ -526,6 +630,7 @@ export function EstruturaOperacionalPage() {
   const [unitGroupId, setUnitGroupId] = useState("");
   const [unitLocationId, setUnitLocationId] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
+  const [toggleState, setToggleState] = useState<ToggleState>(null);
   const [saving, setSaving] = useState(false);
 
   const groupsState = useAsyncState<{ data: OperationalGroup[]; total: number }>();
@@ -615,8 +720,8 @@ export function EstruturaOperacionalPage() {
       }
       setModal(null);
       reloadAll();
-    } catch {
-      toast.error("Não foi possível salvar o grupo.");
+    } catch (error) {
+      toast.error(actionErrorMessage(error, "Não foi possível salvar o grupo operacional."));
     } finally {
       setSaving(false);
     }
@@ -634,8 +739,8 @@ export function EstruturaOperacionalPage() {
       }
       setModal(null);
       reloadAll();
-    } catch {
-      toast.error("Não foi possível salvar a localidade.");
+    } catch (error) {
+      toast.error(actionErrorMessage(error, "Não foi possível salvar a localidade."));
     } finally {
       setSaving(false);
     }
@@ -646,15 +751,15 @@ export function EstruturaOperacionalPage() {
     try {
       if (modal?.type === "unit" && modal.item) {
         await operationalMasterService.updateOperationalUnit(modal.item.id, payload);
-        toast.success("Filial/posto atualizado.");
+        toast.success("Unidade operacional atualizada.");
       } else {
         await operationalMasterService.createOperationalUnit(payload);
-        toast.success("Filial/posto criado.");
+        toast.success("Unidade operacional criada.");
       }
       setModal(null);
       reloadAll();
-    } catch {
-      toast.error("Não foi possível salvar a filial/posto.");
+    } catch (error) {
+      toast.error(actionErrorMessage(error, "Não foi possível salvar a unidade operacional."));
     } finally {
       setSaving(false);
     }
@@ -663,10 +768,10 @@ export function EstruturaOperacionalPage() {
   async function toggleGroup(item: OperationalGroup) {
     try {
       await operationalMasterService.updateOperationalGroup(item.id, { is_active: !item.is_active });
-      toast.success(item.is_active ? "Grupo inativado." : "Grupo reativado.");
+      toast.success(item.is_active ? "Grupo operacional inativado." : "Grupo operacional reativado.");
       reloadAll();
-    } catch {
-      toast.error("Não foi possível alterar o grupo.");
+    } catch (error) {
+      toast.error(actionErrorMessage(error, "Não foi possível alterar o grupo operacional."));
     }
   }
 
@@ -675,26 +780,41 @@ export function EstruturaOperacionalPage() {
       await operationalMasterService.updateLocationGroup(item.id, { is_active: !item.is_active });
       toast.success(item.is_active ? "Localidade inativada." : "Localidade reativada.");
       reloadAll();
-    } catch {
-      toast.error("Não foi possível alterar a localidade.");
+    } catch (error) {
+      toast.error(actionErrorMessage(error, "Não foi possível alterar a localidade."));
     }
   }
 
   async function toggleUnit(item: OperationalUnit) {
     try {
       await operationalMasterService.updateOperationalUnit(item.id, { is_active: !item.is_active });
-      toast.success(item.is_active ? "Filial/posto inativado." : "Filial/posto reativado.");
+      toast.success(item.is_active ? "Unidade operacional inativada." : "Unidade operacional reativada.");
       reloadAll();
-    } catch {
-      toast.error("Não foi possível alterar a filial/posto.");
+    } catch (error) {
+      toast.error(actionErrorMessage(error, "Não foi possível alterar a unidade operacional."));
     }
+  }
+
+  async function confirmToggle() {
+    if (!toggleState) return;
+    const current = toggleState;
+    setToggleState(null);
+    if (current.type === "group") {
+      await toggleGroup(current.item);
+      return;
+    }
+    if (current.type === "location") {
+      await toggleLocation(current.item);
+      return;
+    }
+    await toggleUnit(current.item);
   }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 pb-12 sm:px-6">
       <PageHeader
         title="Estrutura Operacional"
-        subtitle="Cadastros mestres de grupos, localidades e filiais/postos usados pela operação."
+        subtitle="Cadastre a hierarquia da operação com clareza: grupo operacional organiza as unidades operacionais, e o nome público define o que o candidato verá no portal."
         actions={
           <Button
             type="button"
@@ -709,9 +829,9 @@ export function EstruturaOperacionalPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryTile label="Filiais/Postos" value={units.length} icon={<Store className="h-4 w-4" />} />
+        <SummaryTile label="Unidades operacionais" value={units.length} icon={<Store className="h-4 w-4" />} />
         <SummaryTile label="Localidades" value={locations.length} icon={<MapPin className="h-4 w-4" />} />
-        <SummaryTile label="Grupos" value={groups.length} icon={<Building2 className="h-4 w-4" />} />
+        <SummaryTile label="Grupos operacionais" value={groups.length} icon={<Building2 className="h-4 w-4" />} />
       </div>
 
       <Tabs
@@ -774,7 +894,7 @@ export function EstruturaOperacionalPage() {
               ? "Buscar por grupo ou nome"
               : activeTab === "locations"
                 ? "Buscar por localidade, cidade ou UF"
-                : "Buscar por grupo, filial, nome ou referência"
+                : "Buscar por grupo, código interno, nome ou referência"
           }
           activeFilter={activeFilter}
           setActiveFilter={setActiveFilter}
@@ -800,12 +920,12 @@ export function EstruturaOperacionalPage() {
           {activeTab === "units" ? (
             <>
               <Select
-                aria-label="Grupo da filial"
+                aria-label="Grupo operacional da unidade"
                 value={unitGroupId}
                 onChange={(event) => setUnitGroupId(event.target.value)}
                 className="h-9 min-w-[148px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
               >
-                <option value="">Grupo</option>
+                <option value="">Grupo operacional</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.group_code} - {group.name}
@@ -813,7 +933,7 @@ export function EstruturaOperacionalPage() {
                 ))}
               </Select>
               <Select
-                aria-label="Localidade da filial"
+                aria-label="Localidade da unidade"
                 value={unitLocationId}
                 onChange={(event) => setUnitLocationId(event.target.value)}
                 className="h-9 min-w-[156px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
@@ -826,7 +946,7 @@ export function EstruturaOperacionalPage() {
                 ))}
               </Select>
               <Select
-                aria-label="Tipo de filial"
+                aria-label="Tipo de unidade"
                 value={unitType}
                 onChange={(event) => setUnitType(event.target.value as "" | OperationalUnitType)}
                 className="h-9 min-w-[120px] rounded-lg border-border/80 bg-surface px-2.5 text-sm shadow-none"
@@ -846,8 +966,8 @@ export function EstruturaOperacionalPage() {
         {activeTab === "groups" ? (
           <DataTable
             columns={[
-              { header: "Grupo" },
-              { header: "Nome" },
+              { header: "Código" },
+              { header: "Grupo operacional" },
               { header: "Status" },
               { header: "Atualizado" },
               { header: "Ações", className: "text-right" },
@@ -864,7 +984,10 @@ export function EstruturaOperacionalPage() {
             renderRow={(item) => (
               <TableRow>
                 <TableCell className="font-mono text-sm font-semibold text-text">{item.group_code}</TableCell>
-                <TableCell className="font-medium text-text">{item.name}</TableCell>
+                <TableCell>
+                  <div className="font-medium text-text">{item.name}</div>
+                  <div className="text-xs text-text-muted">{optionLabel(item.description, "Agrupador administrativo")}</div>
+                </TableCell>
                 <TableCell>{statusBadge(item.is_active)}</TableCell>
                 <TableCell className="text-text-muted">{formatDate(item.updated_at)}</TableCell>
                 <TableCell>
@@ -872,7 +995,7 @@ export function EstruturaOperacionalPage() {
                     canWrite={canWrite}
                     isActive={item.is_active}
                     onEdit={() => setModal({ type: "group", item })}
-                    onToggle={() => void toggleGroup(item)}
+                    onToggle={() => setToggleState({ type: "group", item })}
                   />
                 </TableCell>
               </TableRow>
@@ -912,7 +1035,7 @@ export function EstruturaOperacionalPage() {
                     canWrite={canWrite}
                     isActive={item.is_active}
                     onEdit={() => setModal({ type: "location", item })}
-                    onToggle={() => void toggleLocation(item)}
+                    onToggle={() => setToggleState({ type: "location", item })}
                   />
                 </TableCell>
               </TableRow>
@@ -921,49 +1044,80 @@ export function EstruturaOperacionalPage() {
         ) : null}
 
         {activeTab === "units" ? (
-          <DataTable
-            columns={[
-              { header: "Grupo" },
-              { header: "Filial" },
-              { header: "Nome" },
-              { header: "Localidade" },
-              { header: "Status" },
-              { header: "Atualizado" },
-              { header: "Ações", className: "text-right" },
-            ]}
-            items={units}
-            loading={unitsState.loading}
-            error={unitsState.error}
-            empty={{
-              icon: "⛽",
-              title: "Nenhuma filial ou posto encontrado",
-              description: "Cadastre unidades reais somente depois de ter grupo e localidade.",
-            }}
-            rowKey={(item) => item.id}
-            renderRow={(item) => {
-              const location = findLocation(locations, item.location_group_id);
-              return (
-                <TableRow>
-                  <TableCell className="font-mono text-sm font-semibold text-text">
-                    {unitGroupLabel(item, groups)}
-                  </TableCell>
-                  <TableCell className="font-mono text-sm font-semibold text-text">{item.branch_code}</TableCell>
-                  <TableCell className="font-medium text-text">{item.name}</TableCell>
-                  <TableCell>{location ? `${location.name} / ${location.state}` : "-"}</TableCell>
-                  <TableCell>{statusBadge(item.is_active)}</TableCell>
-                  <TableCell className="text-text-muted">{formatDate(item.updated_at)}</TableCell>
-                  <TableCell>
-                    <RowActions
-                      canWrite={canWrite}
-                      isActive={item.is_active}
-                      onEdit={() => setModal({ type: "unit", item })}
-                      onToggle={() => void toggleUnit(item)}
-                    />
-                  </TableCell>
-                </TableRow>
-              );
-            }}
-          />
+          <>
+            <div className="rounded-xl border border-border bg-surface px-4 py-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Hierarquia operacional</p>
+              <p className="mt-2 text-sm text-text">
+                Grupo operacional organiza as unidades operacionais. Nome público, cidade/UF e referência definem o
+                preview exibido ao candidato no portal.
+              </p>
+            </div>
+            <DataTable
+              columns={[
+                { header: "Grupo operacional" },
+                { header: "Código interno" },
+                { header: "Unidade operacional" },
+                { header: "Como o candidato verá" },
+                { header: "Status" },
+                { header: "Atualizado" },
+                { header: "Ações", className: "text-right" },
+              ]}
+              items={units}
+              loading={unitsState.loading}
+              error={unitsState.error}
+              empty={{
+                icon: "⛽",
+                title: "Nenhuma unidade operacional encontrada",
+                description: "Cadastre unidades reais somente depois de ter grupo operacional e localidade.",
+              }}
+              rowKey={(item) => item.id}
+              renderRow={(item) => {
+                const location = findLocation(locations, item.location_group_id);
+                const group = resolveUnitGroup(item, groups);
+                const preview = buildCandidatePreview({
+                  publicName: item.public_name,
+                  city: item.city ?? location?.city,
+                  state: item.state ?? location?.state,
+                  referencePoint: item.reference_point,
+                  address: item.address,
+                });
+
+                return (
+                  <TableRow>
+                    <TableCell>
+                      <div className="font-mono text-sm font-semibold text-text">{unitGroupLabel(item, groups)}</div>
+                      <div className="text-xs text-text-muted">{optionLabel(group?.name, "Grupo não encontrado")}</div>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm font-semibold text-text">{item.branch_code}</TableCell>
+                    <TableCell>
+                      <div className="font-medium text-text">{item.name}</div>
+                      <div className="text-xs text-text-muted">
+                        {UNIT_TYPE_LABELS[item.type]}{location ? ` • ${location.name} / ${location.state}` : ""}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium text-text">
+                        {preview ?? "Nome público não informado. O candidato pode ver um nome técnico ou incompleto."}
+                      </div>
+                      {!compactText(item.public_name) ? (
+                        <div className="text-xs text-amber-700">Preencha o nome público para o portal do candidato.</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>{statusBadge(item.is_active)}</TableCell>
+                    <TableCell className="text-text-muted">{formatDate(item.updated_at)}</TableCell>
+                    <TableCell>
+                      <RowActions
+                        canWrite={canWrite}
+                        isActive={item.is_active}
+                        onEdit={() => setModal({ type: "unit", item })}
+                        onToggle={() => setToggleState({ type: "unit", item })}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              }}
+            />
+          </>
         ) : null}
       </section>
 
@@ -974,8 +1128,8 @@ export function EstruturaOperacionalPage() {
             Contrato operacional
           </div>
           <p>
-            O candidato verá localidade, nome público e ponto de referência. Grupo e filial são dados internos
-            para RH e Protheus.
+            O candidato verá nome público, cidade/UF e ponto de referência ou endereço resumido. Grupo operacional e
+            código interno da unidade ficam para uso do RH.
           </p>
         </div>
       ) : null}
@@ -985,15 +1139,15 @@ export function EstruturaOperacionalPage() {
           title={
             modal.type === "group"
               ? modal.item
-                ? "Editar grupo"
-                : "Novo grupo"
+                ? "Editar grupo operacional"
+                : "Novo grupo operacional"
               : modal.type === "location"
                 ? modal.item
                   ? "Editar localidade"
                   : "Nova localidade"
                 : modal.item
-                  ? "Editar filial/posto"
-                  : "Nova filial/posto"
+                  ? "Editar unidade operacional"
+                  : "Nova unidade operacional"
           }
           onClose={() => setModal(null)}
           contentClassName={modal.type === "unit" ? "sm:max-w-[720px]" : undefined}
@@ -1024,6 +1178,33 @@ export function EstruturaOperacionalPage() {
               onSubmit={saveUnit}
             />
           ) : null}
+        </Modal>
+      ) : null}
+
+      {toggleState ? (
+        <Modal title={confirmModalTitle(toggleState)} onClose={() => setToggleState(null)}>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="grid gap-4 px-6 py-5">
+              <div className="rounded-xl border border-border/70 bg-surface-muted px-4 py-3">
+                <p className="text-sm font-medium text-text">
+                  {toggleState.type === "group"
+                    ? toggleState.item.name
+                    : toggleState.type === "location"
+                      ? `${toggleState.item.name} / ${toggleState.item.state}`
+                      : toggleState.item.name}
+                </p>
+                <p className="mt-1 text-sm text-text-muted">{confirmModalMessage(toggleState)}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border bg-surface-muted px-6 py-4 sm:flex-row sm:justify-end">
+              <Button type="button" variant="secondary" onClick={() => setToggleState(null)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void confirmToggle()}>
+                {confirmActionLabel(toggleState)}
+              </Button>
+            </div>
+          </div>
         </Modal>
       ) : null}
     </div>
