@@ -76,6 +76,9 @@ from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
 )
+from src.infrastructure.database.models.conversation_handoff_model import (
+    ConversationHandoffModel,
+)
 from src.infrastructure.database.models.conversation_otp_model import (
     ConversationOtpModel,
 )
@@ -210,6 +213,7 @@ __all__ = [
     "CommunicationDeliveryAttemptModel",
     "ConversationSessionModel",
     "ConversationMessageModel",
+    "ConversationHandoffModel",
     "ConversationOtpModel",
     "CollaborationCommentModel",
     "CandidateNoteModel",

@@ -35,6 +35,9 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.conversation_handoff_model import (
+    ConversationHandoffModel,
+)
 from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
@@ -115,6 +118,11 @@ _INVALID_WHATSAPP_MESSAGE = (
     "Não consegui identificar o número. "
     "Digite seu WhatsApp com DDD (10 ou 11 dígitos)."
 )
+_TALK_TO_HR_MESSAGE = (
+    "Certo, vou encaminhar sua solicitação para o RH. "
+    "Assim que possível, alguém continuará o atendimento."
+)
+
 _SAFE_RESUME_CONTEXT_KEYS = frozenset(
     {
         "location_hint",
@@ -299,6 +307,16 @@ class ConversationService:
                 content,
                 candidate_message,
             )
+
+        if content == "talk_to_hr":
+            prompt = await self._handle_talk_to_hr(conversation, context, candidate_message)
+            conversation.context_json = context
+            conversation.updated_at = datetime.now(UTC)
+            message = await self._add_assistant_message(conversation, prompt)
+            await self._repository.update_session(conversation)
+            turn = self._turn_response(conversation, message, prompt)
+            turn.handoff_required = True
+            return turn
 
         if body.message_type == "event" and content == "resume_uploaded":
             context["resume_uploaded"] = True
@@ -1107,6 +1125,8 @@ class ConversationService:
                 return "confirm"
             if name == "review":
                 return "review"
+        if name == "talk_to_hr":
+            return "talk_to_hr"
         return None
 
     # ------------------------------------------------------------------
@@ -1659,6 +1679,46 @@ class ConversationService:
         letters = sum(1 for char in stripped if char.isalpha())
         return letters >= 3
 
+    async def _handle_talk_to_hr(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        candidate_message: ConversationMessageModel,
+    ) -> ConversationPrompt:
+        """Cria um registro de handoff rastreável e retorna mensagem ao candidato.
+
+        Não promete prazo. Não muda o status da sessão (permanece ativa).
+        Idempotente: não cria duplicata se já houver handoff pendente para a sessão.
+        """
+        existing = await self._session.scalar(
+            sa.select(ConversationHandoffModel).where(
+                ConversationHandoffModel.session_id == conversation.id,
+                ConversationHandoffModel.status == "pending",
+            )
+        )
+        if existing is None:
+            handoff = ConversationHandoffModel(
+                session_id=conversation.id,
+                candidate_id=conversation.candidate_id,
+                reason="candidate_requested",
+                status="pending",
+                metadata_json={
+                    "state_at_request": conversation.current_state,
+                    "message_id": str(candidate_message.id),
+                },
+            )
+            self._session.add(handoff)
+            await self._session.flush()
+
+        context["handoff_requested"] = True
+        candidate_message.interpreted_intent = "talk_to_hr"
+
+        return ConversationPrompt(
+            state=conversation.current_state,
+            content=_TALK_TO_HR_MESSAGE,
+            quick_replies=(),
+        )
+
     @staticmethod
     def _classification_for_text(content: str, fallback: str) -> str:
         normalized = content.strip().casefold()
@@ -1754,6 +1814,7 @@ class ConversationService:
         prompt: ConversationPrompt,
     ) -> ConversationTurnResponse:
         quick_replies = self._quick_replies(prompt)
+        context = conversation.context_json or {}
         return ConversationTurnResponse(
             session_id=conversation.id,
             current_state=conversation.current_state,
@@ -1762,6 +1823,7 @@ class ConversationService:
             session=self._session_response(conversation, prompt),
             message=self._message_response(message),
             options=quick_replies,
+            handoff_required=bool(context.get("handoff_requested")),
         )
 
     def _session_response(

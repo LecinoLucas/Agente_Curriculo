@@ -79,3 +79,4 @@ class ConversationTurnResponse(APISchemaModel):
     session: ConversationSessionResponse
     message: ConversationMessageResponse
     options: list[ConversationQuickReplyResponse]
+    handoff_required: bool = False

@@ -113,4 +113,10 @@ class InMemoryRetriever(RetrieverContract):
         source_type = filters.get("source_type")
         if source_type and chunk.metadata.get("source_type") != source_type:
             return False
+        visibility = filters.get("visibility")
+        if visibility and chunk.metadata.get("visibility") != visibility:
+            return False
+        audience = filters.get("audience")
+        if audience and chunk.metadata.get("audience") != audience:
+            return False
         return True
