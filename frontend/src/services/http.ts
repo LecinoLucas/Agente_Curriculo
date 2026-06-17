@@ -1,4 +1,5 @@
 import { tokenStorage } from "../utils/storage";
+import { redactSensitivePayload } from "../shared/utils/sensitiveDataMasking";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 
@@ -166,7 +167,7 @@ function resolveError(response: Response, payload: unknown): HttpError {
 
   if (typeof payload === "object" && payload !== null) {
     if (status === 422) {
-      console.error("[422 Validation Error]", JSON.stringify(payload, null, 2));
+      console.error("[422 Validation Error]", JSON.stringify(redactSensitivePayload(payload), null, 2));
     }
 
     const payloadRecord = payload as Record<string, unknown>;

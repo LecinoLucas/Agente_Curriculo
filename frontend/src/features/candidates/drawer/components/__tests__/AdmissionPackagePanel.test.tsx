@@ -92,6 +92,12 @@ describe("AdmissionPackagePanel", () => {
     await waitFor(() => {
       expect(screen.getByText("João Silva")).toBeInTheDocument();
     });
+    expect(screen.getByText("j***@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Telefone ***55")).toBeInTheDocument();
+    expect(screen.getByText("***.***.***-23")).toBeInTheDocument();
+    expect(screen.getByText("Informado")).toBeInTheDocument();
+    expect(screen.queryByText("joao@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("10000")).not.toBeInTheDocument();
   });
 
   it("shows approve button when ready_for_review", async () => {

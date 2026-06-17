@@ -1,32 +1,19 @@
 "use client";
 
 import type { ErpDryRunPayloadPreview } from "../../../../types/domain";
+import {
+  maskCpf,
+  maskEmail,
+  redactSensitivePayload,
+  summarizeSensitiveValue,
+} from "../../../../shared/utils/sensitiveDataMasking";
 
 interface ErpPayloadPreviewProps {
   payload: ErpDryRunPayloadPreview;
 }
 
-function maskEmail(value?: string | null): string {
-  if (!value) return "-";
-  const [localPart, domain] = value.split("@");
-  if (!domain) return "Informado";
-  const visible = localPart.slice(0, 1) || "*";
-  return `${visible}***@${domain}`;
-}
-
-function maskCpf(value?: string | null): string {
-  if (!value) return "-";
-  const digits = value.replace(/\D/g, "");
-  const suffix = digits.slice(-2);
-  return suffix ? `***.***.***-${suffix.padStart(2, "*")}` : "Informado";
-}
-
-function summarizeSensitiveValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "-";
-  return "Informado";
-}
-
 export function ErpPayloadPreview({ payload }: ErpPayloadPreviewProps) {
+  const technicalPayload = redactSensitivePayload(payload);
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-muted/35 p-4">
       <div className="text-sm font-semibold text-text">Preview do Payload Protheus (dry-run)</div>
@@ -52,7 +39,7 @@ export function ErpPayloadPreview({ payload }: ErpPayloadPreviewProps) {
           data-testid="erp-payload-raw-json"
           className="mt-3 max-h-64 overflow-auto rounded border border-amber-100 bg-white p-3 text-xs text-slate-800"
         >
-          {JSON.stringify(payload, null, 2)}
+          {JSON.stringify(technicalPayload, null, 2)}
         </pre>
       </details>
     </div>

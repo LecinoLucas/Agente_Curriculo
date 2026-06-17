@@ -182,11 +182,14 @@ describe("ErpDryRunPanel", () => {
 
     expect(await screen.findByText(/Preview do Payload Protheus/i)).toBeInTheDocument();
     expect(screen.getByText(/Nome:/i)).toBeInTheDocument();
-    expect(screen.getByText(/c\*\*\*@example.com/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/c\*\*\*@example.com/i)).toHaveLength(2);
     expect(screen.getByText(/Informação técnica. Não compartilhe externamente./i)).toBeInTheDocument();
 
     const rawPayload = await screen.findByTestId("erp-payload-raw-json");
     expect(rawPayload).toHaveTextContent('"name": "Candidate ERP"');
+    expect(rawPayload).toHaveTextContent('"email": "c***@example.com"');
+    expect(rawPayload).toHaveTextContent('"cpf": "***.***.***-90"');
+    expect(rawPayload).not.toHaveTextContent('"salary_offer": 8500');
     expect(rawPayload).not.toBeVisible();
 
     await user.click(screen.getByText(/Ver payload técnico/i));

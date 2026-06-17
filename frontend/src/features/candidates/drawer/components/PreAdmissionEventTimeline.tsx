@@ -1,6 +1,7 @@
 import { History } from "lucide-react";
 
 import type { PreAdmissionEvent } from "../../../../types/domain";
+import { redactSensitivePayload } from "../../../../shared/utils/sensitiveDataMasking";
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -49,7 +50,7 @@ export function PreAdmissionEventTimeline({ events }: PreAdmissionEventTimelineP
               </div>
               {event.payload_json ? (
                 <pre className="mt-2 max-h-28 overflow-auto rounded-md bg-white/80 p-2 text-xs text-text-muted">
-                  {JSON.stringify(event.payload_json, null, 2)}
+                  {JSON.stringify(redactSensitivePayload(event.payload_json), null, 2)}
                 </pre>
               ) : null}
             </div>

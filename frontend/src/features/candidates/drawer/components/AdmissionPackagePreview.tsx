@@ -1,4 +1,10 @@
 import type { AdmissionPackagePayload } from "../../../../types/domain";
+import {
+  maskCpf,
+  maskEmail,
+  maskPhone,
+  summarizeSensitiveValue,
+} from "../../../../shared/utils/sensitiveDataMasking";
 
 interface Props {
   payload: AdmissionPackagePayload;
@@ -22,15 +28,15 @@ export function AdmissionPackagePreview({ payload, readOnly = false }: Props) {
           </div>
           <div className="flex justify-between">
             <dt className="text-sm font-medium text-text-muted">Email:</dt>
-            <dd className="text-sm text-text">{payload.candidate.email || "—"}</dd>
+            <dd className="text-sm text-text">{maskEmail(payload.candidate.email)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-sm font-medium text-text-muted">Telefone:</dt>
-            <dd className="text-sm text-text">{payload.candidate.phone || "—"}</dd>
+            <dd className="text-sm text-text">{maskPhone(payload.candidate.phone)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-sm font-medium text-text-muted">CPF:</dt>
-            <dd className="text-sm text-text">{payload.candidate.cpf || "—"}</dd>
+            <dd className="text-sm text-text">{maskCpf(payload.candidate.cpf)}</dd>
           </div>
         </dl>
       </section>
@@ -63,12 +69,7 @@ export function AdmissionPackagePreview({ payload, readOnly = false }: Props) {
           <div className="flex justify-between">
             <dt className="text-sm font-medium text-text-muted">Salário Ofertado:</dt>
             <dd className="text-sm text-text">
-              {payload.pre_admission.salary_offer
-                ? new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(payload.pre_admission.salary_offer)
-                : "—"}
+              {summarizeSensitiveValue(payload.pre_admission.salary_offer)}
             </dd>
           </div>
           <div className="flex justify-between">

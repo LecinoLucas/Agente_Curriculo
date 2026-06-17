@@ -119,7 +119,7 @@ async def test_mock_failure_saves_failed_and_retry_works(
     failed = failed_resp.json()
     assert failed["status"] == "failed"
     assert failed["response_payload_json"]["success"] is False
-    assert failed["response_payload_json"]["error_code"] == "PROTHEUS_MOCK_VALIDATION_ERROR"
+    assert failed["response_payload_json"]["error"]["code"] == "PROTHEUS_MOCK_VALIDATION_ERROR"
 
     retry_resp = await client.post(
         f"/api/v1/erp-integration-attempts/{failed['id']}/retry",
@@ -205,7 +205,9 @@ async def test_mock_send_registers_events_and_persists_request_response(
     )
     events = list((await db_session.scalars(events_stmt)).all())
     event_types = [event.event_type for event in events]
-    assert "erp_mock_sent" in event_types
+    assert "erp_export_requested" in event_types
+    assert "erp_export_started" in event_types
+    assert "erp_export_succeeded" in event_types
 
 
 @pytest.mark.asyncio
