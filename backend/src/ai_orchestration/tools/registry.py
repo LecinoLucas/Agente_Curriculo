@@ -1,7 +1,7 @@
 """
 Default Tool Registry: Registro pré-populado com todas as tools read-only.
 
-Tools registradas (17 total, todas read_only=True, requires_approval=False):
+Tools registradas (19 total, todas read_only=True, requires_approval=False):
 
   Jobs (4):
     get_job_summary, search_jobs, get_job_requirements, get_job_ai_draft_context
@@ -20,6 +20,10 @@ Tools registradas (17 total, todas read_only=True, requires_approval=False):
 
   Protheus (1):
     get_protheus_export_status
+
+Observação:
+    Este registry representa o conjunto read-only interno do assistente ATS/RH.
+    Ele NÃO é, por si só, a política final do bot do candidato no portal.
 """
 from src.ai_orchestration.core.tool_registry import ToolDefinition, ToolRegistry
 from src.ai_orchestration.tools import (
