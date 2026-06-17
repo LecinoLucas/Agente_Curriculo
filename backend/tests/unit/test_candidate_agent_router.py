@@ -70,7 +70,5 @@ def test_router_apply_to_job_starts_guided_flow() -> None:
     decision = router.route(message="quero me candidatar nessa vaga")
 
     assert decision.intent == "apply_to_job"
-    assert decision.action == "guided_flow"
-    assert decision.prompt is not None
-    assert decision.prompt.state == "CHOOSE_LOCATION"
-    assert "cidade ou localidade" in decision.prompt.content.casefold()
+    assert decision.action == "application_draft"
+    assert decision.tool_name == "search_public_jobs"

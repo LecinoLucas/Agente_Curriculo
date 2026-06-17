@@ -6,12 +6,20 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from src.application.services.candidate_assistant_intent_service import CandidateIntent
-from src.application.services.conversation_state_machine import (
-    ConversationPrompt,
-    prompt_for,
-)
+from src.application.services.conversation_state_machine import ConversationPrompt
 
-RouteAction = Literal["handoff", "tool", "guided_flow", "safe_response"]
+RouteAction = Literal["handoff", "tool", "guided_flow", "safe_response", "application_draft"]
+
+_QUICK_REPLY_TO_INTENT: dict[str, str] = {
+    "ver_vagas": "see_jobs",
+    "quero_me_candidatar": "apply_to_job",
+    "acompanhar_candidatura": "check_status",
+    "falar_com_rh": "talk_to_hr",
+    "confirmar_candidatura": "confirm",
+    "cancelar_candidatura": "cancel",
+    "alterar_dados": "provide_candidate_data",
+    "aceito_uso_dos_dados": "provide_candidate_data",
+}
 
 _GREETING_PATTERN = re.compile(
     r"\b(oi|olá|ola|bom dia|boa tarde|boa noite|e aí|ei)\b",
@@ -85,15 +93,6 @@ _SENSITIVE_TOPIC_MESSAGE = (
     "Esse tipo de informação sensível não deve ser usado para avaliar sua candidatura por aqui. "
     "Se você quiser, posso seguir com informações públicas ou encaminhar seu atendimento para o RH."
 )
-_DATA_COLLECTION_MESSAGE = (
-    "Posso seguir com informações públicas e iniciar o fluxo guiado de candidatura. "
-    "Qualquer dado só deve ser confirmado antes de um registro futuro."
-)
-_UPLOAD_RESUME_MESSAGE = (
-    "Posso iniciar sua candidatura guiada e, no momento certo, seguir para o envio do currículo."
-)
-
-
 @dataclass(frozen=True)
 class CandidateAgentRouteDecision:
     intent: str
@@ -129,26 +128,7 @@ class CandidateAgentRouter:
                 tool_args={"query": self._job_query(text) or "", "limit": 5},
             )
         if intent == "choose_unit":
-            job_id = self._text(ctx.get("job_id"))
-            if job_id is not None:
-                return CandidateAgentRouteDecision(
-                    intent=intent,
-                    action="tool",
-                    tool_name="get_public_job_units",
-                    tool_args={"job_id": job_id},
-                )
-            return CandidateAgentRouteDecision(
-                intent=intent,
-                action="safe_response",
-                safe_message=(
-                    "Posso te mostrar as vagas publicadas primeiro e, depois, "
-                    "as unidades públicas da vaga que você escolher."
-                ),
-                quick_replies=(
-                    ("ver_vagas", "Ver vagas"),
-                    ("falar_com_rh", "Falar com RH"),
-                ),
-            )
+            return CandidateAgentRouteDecision(intent=intent, action="application_draft")
         if intent == "ask_question":
             return CandidateAgentRouteDecision(
                 intent=intent,
@@ -163,18 +143,11 @@ class CandidateAgentRouter:
                 tool_name="get_my_application_status",
             )
         if intent in {"apply_to_job", "upload_resume"}:
-            prompt = prompt_for("CHOOSE_LOCATION")
-            intro = _UPLOAD_RESUME_MESSAGE if intent == "upload_resume" else None
-            if intro:
-                prompt = ConversationPrompt(
-                    state=prompt.state,
-                    content=f"{intro} {prompt.content}",
-                    quick_replies=prompt.quick_replies,
-                )
             return CandidateAgentRouteDecision(
                 intent=intent,
-                action="guided_flow",
-                prompt=prompt,
+                action="application_draft",
+                tool_name="search_public_jobs",
+                tool_args={"query": self._job_query(text) or "", "limit": 5},
             )
         if intent == "greeting":
             return CandidateAgentRouteDecision(
@@ -187,35 +160,11 @@ class CandidateAgentRouter:
                 quick_replies=_UNKNOWN_QUICK_REPLIES,
             )
         if intent == "provide_candidate_data":
-            return CandidateAgentRouteDecision(
-                intent=intent,
-                action="safe_response",
-                safe_message=_DATA_COLLECTION_MESSAGE,
-                quick_replies=(
-                    ("quero_me_candidatar", "Quero me candidatar"),
-                    ("falar_com_rh", "Falar com RH"),
-                ),
-            )
+            return CandidateAgentRouteDecision(intent=intent, action="application_draft")
         if intent == "confirm":
-            return CandidateAgentRouteDecision(
-                intent=intent,
-                action="safe_response",
-                safe_message=(
-                    "Posso te ajudar a iniciar a candidatura guiada, consultar vagas públicas "
-                    "ou encaminhar seu atendimento para o RH."
-                ),
-                quick_replies=_UNKNOWN_QUICK_REPLIES,
-            )
+            return CandidateAgentRouteDecision(intent=intent, action="application_draft")
         if intent == "cancel":
-            return CandidateAgentRouteDecision(
-                intent=intent,
-                action="safe_response",
-                safe_message=(
-                    "Sem problema. Se quiser, posso voltar a mostrar vagas públicas, "
-                    "acompanhar sua candidatura ou chamar o RH."
-                ),
-                quick_replies=_UNKNOWN_QUICK_REPLIES,
-            )
+            return CandidateAgentRouteDecision(intent=intent, action="application_draft")
 
         safe_message = self._safe_message_for_unknown(text, ai_intent)
         return CandidateAgentRouteDecision(
@@ -231,7 +180,14 @@ class CandidateAgentRouter:
         context: dict[str, object],
         ai_intent: CandidateIntent | None,
     ) -> str:
+        quick_reply_intent = _QUICK_REPLY_TO_INTENT.get(message.strip().casefold())
+        if quick_reply_intent is not None:
+            return quick_reply_intent
         lowered = message.casefold()
+        if lowered.startswith("job:"):
+            return "apply_to_job"
+        if lowered.startswith("unit:"):
+            return "choose_unit"
         if ai_intent is not None and (ai_intent.should_handoff or ai_intent.intent == "talk_to_hr"):
             return "talk_to_hr"
         if _SENSITIVE_TOPIC_PATTERN.search(message):

@@ -11,9 +11,9 @@ from src.ai_orchestration.core.permission_guard import ToolPermissionGuard
 from src.ai_orchestration.core.tool_execution_context import ToolExecutionContext
 from src.ai_orchestration.core.tool_runtime import ToolRuntime
 from src.ai_orchestration.tools.candidate_bot_registry import (
+    _EXPECTED_CANDIDATE_TOOL_COUNT,
     CANDIDATE_BOT_REGISTRY,
     FORBIDDEN_FOR_CANDIDATE_MVP,
-    _EXPECTED_CANDIDATE_TOOL_COUNT,
 )
 
 
@@ -54,13 +54,16 @@ def test_candidate_registry_contains_only_safe_allowlisted_tools() -> None:
         "search_candidate_knowledge",
         "answer_candidate_knowledge",
         "get_my_application_status",
+        "create_candidate_application_from_bot",
     }
     assert "search_candidates" not in CANDIDATE_BOT_REGISTRY
     assert "get_candidate_pipeline_history" not in CANDIDATE_BOT_REGISTRY
     assert "get_protheus_export_status" not in CANDIDATE_BOT_REGISTRY
 
 
-def test_candidate_registry_logs_blocked_internal_tool_request(caplog: pytest.LogCaptureFixture) -> None:
+def test_candidate_registry_logs_blocked_internal_tool_request(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.WARNING)
     tool = CANDIDATE_BOT_REGISTRY.get("search_candidates")
     assert tool is None
@@ -129,3 +132,15 @@ async def test_candidate_runtime_blocks_when_permission_missing() -> None:
 
     assert result.ok is False
     assert result.error_code == "PERMISSION_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_candidate_runtime_blocks_write_tool_in_read_only_mode() -> None:
+    ctx = _candidate_context("candidate_write_safe_application")
+    runtime = ToolRuntime(CANDIDATE_BOT_REGISTRY, read_only=True)
+    execution_context = ToolExecutionContext(agent_context=ctx, services={}, read_only=True)
+
+    result = await runtime.execute("create_candidate_application_from_bot", {}, execution_context)
+
+    assert result.ok is False
+    assert result.error_code == "TOOL_NOT_ALLOWED"

@@ -57,7 +57,7 @@ from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
 )
-from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.job_model import JobModel, JobUnitModel
 from src.infrastructure.database.models.operational_master_model import (
     LocationGroupModel,
     OperationalUnitModel,
@@ -96,6 +96,7 @@ _CANDIDATE_BOT_PERMISSIONS = [
     "candidate_read_public_jobs",
     "candidate_read_public_knowledge",
     "candidate_read_application_status",
+    "candidate_write_safe_application",
 ]
 _CANDIDATE_BOT_HR_PATTERN = re.compile(
     r"\b(falar com (o )?rh|quero falar com (o )?rh|atendente humano|"
@@ -121,6 +122,36 @@ _CANDIDATE_BOT_DETAIL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _CANDIDATE_BOT_GENERIC_FALLBACK = DEFAULT_CANDIDATE_BOT_GENERIC_FALLBACK_MESSAGE
+_CANDIDATE_APPLICATION_DRAFT_KEY = "candidate_application_draft"
+_CANDIDATE_APPLICATION_ACTIVE_STATUSES = frozenset({"collecting", "awaiting_confirmation"})
+_CANDIDATE_APPLICATION_CONFIRM_TOKENS = frozenset(
+    {"confirmar", "sim confirmar", "confirmo", "confirmar candidatura", "confirmar_candidatura"}
+)
+_CANDIDATE_APPLICATION_CANCEL_TOKENS = frozenset(
+    {"cancelar", "cancelar candidatura", "cancelar_candidatura", "desistir"}
+)
+_CANDIDATE_APPLICATION_EDIT_TOKENS = frozenset({"alterar dados", "alterar_dados", "revisar"})
+_CANDIDATE_APPLICATION_EMAIL_PATTERN = re.compile(
+    r"([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})",
+    re.IGNORECASE,
+)
+_CANDIDATE_APPLICATION_PHONE_PATTERN = re.compile(r"(\+?55\s*)?(\(?\d{2}\)?\s*)?\d{4,5}[-\s]?\d{4}")
+_CANDIDATE_APPLICATION_NAME_PATTERN = re.compile(
+    r"(?:meu nome [ée]|me chamo|sou)\s+([a-zà-ÿ][a-zà-ÿ\s'-]{2,})",
+    re.IGNORECASE,
+)
+_CANDIDATE_APPLICATION_CONSENT_PATTERN = re.compile(
+    r"\b("
+    r"aceito|autorizo|concordo|pode usar meus dados|"
+    r"sim, autorizo|sim autorizo|aceito o uso dos dados"
+    r")\b",
+    re.IGNORECASE,
+)
+_CANDIDATE_APPLICATION_SENSITIVE_PATTERN = re.compile(
+    r"\b(gr[aá]vida|gravidez|sa[uú]de|religi[aã]o|pol[ií]tica|ra[cç]a|cor|"
+    r"orienta[cç][aã]o sexual|fam[ií]lia|filho|filhos|banco|banc[aá]ri|cpf|rg|documento)\b",
+    re.IGNORECASE,
+)
 _CANDIDATE_BOT_INITIAL_PROMPT = ConversationPrompt(
     state=_GUIDED_PORTAL_CHAT_STATE,
     content=(
@@ -314,6 +345,15 @@ class _ApplicationResumeDecision:
     state: str
     content: str
     quick_replies: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class _CandidateApplicationDraftExtraction:
+    candidate_name: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    consent_given: bool | None = None
+    contains_sensitive_data: bool = False
 
 
 class ConversationService:
@@ -621,6 +661,13 @@ class ConversationService:
                 candidate_message,
                 intent=ai_intent,
             )
+        elif self._should_route_to_candidate_application_draft(context, route):
+            prompt = await self._handle_candidate_application_draft_turn(
+                conversation=conversation,
+                context=context,
+                content=content,
+                route=route,
+            )
         elif route.action == "guided_flow":
             prompt = route.prompt or prompt_for("CHOOSE_LOCATION", context)
             conversation.current_state = prompt.state
@@ -634,6 +681,7 @@ class ConversationService:
             prompt = self._candidate_bot_prompt_from_tool_result(
                 tool_name=route.tool_name,
                 result=result,
+                context=context,
             )
         else:
             safe_message = self._safe_user_message(route.safe_message)
@@ -2131,6 +2179,180 @@ class ConversationService:
             "CONFIRM_APPLICATION",
         }
 
+    @staticmethod
+    def _should_route_to_candidate_application_draft(
+        context: dict[str, Any],
+        route,
+    ) -> bool:
+        if route.action == "application_draft":
+            return True
+        if route.action == "tool" and route.intent in {"see_jobs", "ask_question", "check_status"}:
+            return False
+        draft = context.get(_CANDIDATE_APPLICATION_DRAFT_KEY)
+        if not isinstance(draft, dict):
+            return False
+        return str(draft.get("status") or "") in _CANDIDATE_APPLICATION_ACTIVE_STATUSES
+
+    @staticmethod
+    def _empty_candidate_application_draft() -> dict[str, Any]:
+        return {
+            "status": "collecting",
+            "job_id": None,
+            "job_title": None,
+            "preferred_unit_id": None,
+            "unit_name": None,
+            "candidate_name": None,
+            "contact_email": None,
+            "contact_phone": None,
+            "consent_given": False,
+            "confirmation_requested_at": None,
+            "submitted_application_id": None,
+        }
+
+    async def _candidate_application_draft(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        draft = context.get(_CANDIDATE_APPLICATION_DRAFT_KEY)
+        if not isinstance(draft, dict):
+            draft = self._empty_candidate_application_draft()
+            context[_CANDIDATE_APPLICATION_DRAFT_KEY] = draft
+        if draft.get("status") not in {
+            "collecting",
+            "awaiting_confirmation",
+            "submitted",
+            "cancelled",
+        }:
+            context[_CANDIDATE_APPLICATION_DRAFT_KEY] = self._empty_candidate_application_draft()
+            draft = context[_CANDIDATE_APPLICATION_DRAFT_KEY]
+
+        candidate = await self._session.scalar(
+            sa.select(CandidateModel).where(
+                CandidateModel.id == conversation.candidate_id,
+                CandidateModel.deleted_at.is_(None),
+            )
+        )
+        if candidate is not None:
+            if not draft.get("candidate_name"):
+                draft["candidate_name"] = self._clean_text(candidate.full_name)
+            if not draft.get("contact_email"):
+                draft["contact_email"] = self._clean_text(candidate.email)
+            if not draft.get("contact_phone"):
+                draft["contact_phone"] = self._clean_text(candidate.phone)
+            if draft.get("consent_given") is not True and candidate.lgpd_consent_at is not None:
+                draft["consent_given"] = True
+
+        return draft
+
+    async def _handle_candidate_application_draft_turn(
+        self,
+        *,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+        route,
+    ) -> ConversationPrompt:
+        draft = await self._candidate_application_draft(conversation, context)
+        normalized = self._normalize(content) or ""
+
+        if draft.get("status") in {"cancelled", "submitted"} and route.intent == "apply_to_job":
+            context[_CANDIDATE_APPLICATION_DRAFT_KEY] = self._empty_candidate_application_draft()
+            draft = await self._candidate_application_draft(conversation, context)
+
+        if normalized in _CANDIDATE_APPLICATION_CANCEL_TOKENS or route.intent == "cancel":
+            draft["status"] = "cancelled"
+            draft["confirmation_requested_at"] = None
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content="Certo, sua candidatura não foi enviada. Posso te ajudar com outra coisa?",
+                quick_replies=_CANDIDATE_BOT_INITIAL_PROMPT.quick_replies,
+            )
+
+        if route.intent == "upload_resume":
+            next_prompt = await self._candidate_application_prompt_for_next_step(
+                conversation=conversation,
+                context=context,
+                draft=draft,
+                intro=(
+                    "Nesta fase eu ainda não vou pedir currículo. "
+                    "Primeiro preciso confirmar os dados mínimos da sua candidatura."
+                ),
+            )
+            return next_prompt
+
+        if normalized in _CANDIDATE_APPLICATION_EDIT_TOKENS:
+            draft["status"] = "collecting"
+            draft["confirmation_requested_at"] = None
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content="Certo. O que você quer alterar: vaga, unidade, nome ou contato?",
+                quick_replies=(
+                    ("ver_vagas", "Escolher outra vaga"),
+                    ("cancelar_candidatura", "Cancelar"),
+                ),
+            )
+
+        if (
+            route.intent == "apply_to_job"
+            or normalized.startswith("job:")
+            or draft.get("job_id") is None
+        ):
+            selection_prompt = await self._candidate_application_handle_job_selection(
+                conversation=conversation,
+                context=context,
+                content=content,
+                route=route,
+                draft=draft,
+            )
+            if selection_prompt is not None:
+                return selection_prompt
+
+        if draft.get("job_id"):
+            unit_prompt = await self._candidate_application_handle_unit_selection(
+                conversation=conversation,
+                context=context,
+                content=content,
+                draft=draft,
+            )
+            if unit_prompt is not None:
+                return unit_prompt
+
+        extraction = self._extract_candidate_application_data(content)
+        if extraction.contains_sensitive_data:
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=(
+                    "Esse tipo de dado sensível não deve ser enviado por aqui. "
+                    "Se precisar, posso encaminhar seu atendimento para o RH."
+                ),
+                quick_replies=(
+                    ("falar_com_rh", "Falar com RH"),
+                    ("cancelar_candidatura", "Cancelar"),
+                ),
+            )
+
+        self._apply_candidate_application_extraction(draft, extraction)
+
+        if (
+            route.intent == "confirm" or normalized in _CANDIDATE_APPLICATION_CONFIRM_TOKENS
+        ) and await self._candidate_application_draft_is_complete(draft):
+            if draft.get("status") != "awaiting_confirmation":
+                return self._candidate_application_confirmation_prompt(draft)
+            return await self._submit_candidate_application_from_draft(
+                conversation=conversation,
+                draft=draft,
+            )
+
+        if await self._candidate_application_draft_is_complete(draft):
+            return self._candidate_application_confirmation_prompt(draft)
+
+        return await self._candidate_application_prompt_for_next_step(
+            conversation=conversation,
+            context=context,
+            draft=draft,
+        )
+
     async def _maybe_candidate_bot_intent(self, message: str) -> CandidateIntent | None:
         if not settings.ASSISTANT_INTENT_AI_ENABLED:
             return None
@@ -2151,8 +2373,9 @@ class ConversationService:
         conversation: ConversationSessionModel,
         tool_name: str,
         tool_args: dict[str, Any],
+        read_only: bool = True,
     ):
-        runtime = ToolRuntime(CANDIDATE_BOT_REGISTRY, read_only=True)
+        runtime = ToolRuntime(CANDIDATE_BOT_REGISTRY, read_only=read_only)
         execution_context = ToolExecutionContext(
             agent_context=AgentContext(
                 user_id=str(conversation.candidate_id),
@@ -2166,7 +2389,7 @@ class ConversationService:
                 audience="candidate",
             ),
             services=self._candidate_bot_services(),
-            read_only=True,
+            read_only=read_only,
         )
         return await runtime.execute(tool_name, tool_args, execution_context)
 
@@ -2187,12 +2410,442 @@ class ConversationService:
             "candidate_portal_service": CandidatePortalService(self._session),
         }
 
+    async def _candidate_application_handle_job_selection(
+        self,
+        *,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+        route,
+        draft: dict[str, Any],
+    ) -> ConversationPrompt | None:
+        selected_job_id = self._candidate_application_job_id_from_message(content)
+        if selected_job_id is None and draft.get("job_id") is None:
+            preset_job_id = self._uuid_from_context(context.get("job_id"))
+            if route.intent == "apply_to_job" and preset_job_id is not None:
+                selected_job_id = preset_job_id
+
+        if selected_job_id is not None:
+            detail_result = await self._execute_candidate_bot_tool(
+                conversation=conversation,
+                tool_name="get_public_job_detail",
+                tool_args={"job_id": str(selected_job_id)},
+            )
+            if not detail_result.ok:
+                return ConversationPrompt(
+                    state=_GUIDED_PORTAL_CHAT_STATE,
+                    content=(
+                        "Não consegui localizar essa vaga publicada agora. "
+                        "Escolha uma vaga disponível."
+                    ),
+                    quick_replies=(
+                        ("ver_vagas", "Ver vagas"),
+                        ("cancelar_candidatura", "Cancelar"),
+                    ),
+                )
+            detail = detail_result.data if isinstance(detail_result.data, dict) else {}
+            draft["job_id"] = detail.get("id")
+            draft["job_title"] = self._clean_text(detail.get("title"))
+            draft["preferred_unit_id"] = None
+            draft["unit_name"] = None
+            unit_prompt = await self._candidate_application_handle_unit_selection(
+                conversation=conversation,
+                context=context,
+                content=content,
+                draft=draft,
+            )
+            if unit_prompt is not None:
+                return unit_prompt
+            return await self._candidate_application_prompt_for_next_step(
+                conversation=conversation,
+                context=context,
+                draft=draft,
+            )
+
+        if draft.get("job_id") is not None:
+            return None
+
+        if (
+            route.intent != "apply_to_job"
+            and not self._candidate_application_looks_like_job_query(content)
+        ):
+            return await self._candidate_application_prompt_for_next_step(
+                conversation=conversation,
+                context=context,
+                draft=draft,
+            )
+
+        result = await self._execute_candidate_bot_tool(
+            conversation=conversation,
+            tool_name=route.tool_name or "search_public_jobs",
+            tool_args=(
+                dict(route.tool_args)
+                if route.tool_args
+                else {"query": content.strip(), "limit": 5}
+            ),
+        )
+        return self._candidate_bot_prompt_from_tool_result(
+            tool_name="search_public_jobs",
+            result=result,
+            context=context,
+        )
+
+    async def _candidate_application_handle_unit_selection(
+        self,
+        *,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+        draft: dict[str, Any],
+    ) -> ConversationPrompt | None:
+        job_id = self._uuid_from_context(draft.get("job_id"))
+        if job_id is None:
+            return None
+
+        units_result = await self._execute_candidate_bot_tool(
+            conversation=conversation,
+            tool_name="get_public_job_units",
+            tool_args={"job_id": str(job_id)},
+        )
+        if not units_result.ok:
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=(
+                    "Não consegui consultar as unidades dessa vaga agora. "
+                    "Tente escolher a vaga novamente."
+                ),
+                quick_replies=(
+                    ("ver_vagas", "Ver vagas"),
+                    ("cancelar_candidatura", "Cancelar"),
+                ),
+            )
+
+        data = units_result.data if isinstance(units_result.data, dict) else {}
+        units = data.get("job_units") if isinstance(data.get("job_units"), list) else []
+        if len(units) == 1:
+            if draft.get("preferred_unit_id"):
+                return None
+            unit = units[0]
+            draft["preferred_unit_id"] = unit.get("id")
+            draft["unit_name"] = self._candidate_application_unit_label(unit)
+            next_prompt = await self._candidate_application_prompt_for_next_step(
+                conversation=conversation,
+                context=context,
+                draft=draft,
+            )
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=(
+                    f"Vou usar a unidade {draft['unit_name']} para essa vaga. "
+                    f"{next_prompt.content}"
+                ),
+                quick_replies=next_prompt.quick_replies,
+            )
+
+        if len(units) >= 2 and not draft.get("preferred_unit_id"):
+            selected_unit = self._candidate_application_match_unit(content, units)
+            if selected_unit is not None:
+                draft["preferred_unit_id"] = selected_unit.get("id")
+                draft["unit_name"] = self._candidate_application_unit_label(selected_unit)
+                return None
+            return self._candidate_bot_prompt_from_tool_result(
+                tool_name="get_public_job_units",
+                result=units_result,
+                context=context,
+            )
+
+        if draft.get("preferred_unit_id"):
+            valid_unit = next(
+                (unit for unit in units if unit.get("id") == draft.get("preferred_unit_id")),
+                None,
+            )
+            if valid_unit is None:
+                draft["preferred_unit_id"] = None
+                draft["unit_name"] = None
+                return ConversationPrompt(
+                    state=_GUIDED_PORTAL_CHAT_STATE,
+                    content=(
+                        "Essa unidade não está vinculada à vaga selecionada. "
+                        "Escolha uma das unidades disponíveis."
+                    ),
+                    quick_replies=tuple(
+                        (
+                            "unit:" + str(unit.get("id")),
+                            self._candidate_application_unit_label(unit),
+                        )
+                        for unit in units[:3]
+                        if isinstance(unit, dict) and unit.get("id")
+                    ) + (("cancelar_candidatura", "Cancelar"),),
+                )
+        return None
+
+    async def _candidate_application_prompt_for_next_step(
+        self,
+        *,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        draft: dict[str, Any],
+        intro: str | None = None,
+    ) -> ConversationPrompt:
+        missing_field = await self._candidate_application_next_missing_field(draft)
+        if missing_field == "job":
+            content = "Qual vaga você deseja?"
+            quick_replies = (("ver_vagas", "Ver vagas"), ("cancelar_candidatura", "Cancelar"))
+        elif missing_field == "unit":
+            content = "Qual unidade você deseja?"
+            quick_replies = (("cancelar_candidatura", "Cancelar"),)
+        elif missing_field == "candidate_name":
+            content = "Para continuar, preciso do seu nome."
+            quick_replies = (("cancelar_candidatura", "Cancelar"),)
+        elif missing_field == "contact":
+            content = "Para continuar, preciso do seu telefone ou e-mail."
+            quick_replies = (("cancelar_candidatura", "Cancelar"),)
+        else:
+            content = "Você autoriza o uso dos seus dados para essa candidatura?"
+            quick_replies = (
+                ("aceito_uso_dos_dados", "Aceito o uso dos dados"),
+                ("cancelar_candidatura", "Cancelar"),
+            )
+        if intro:
+            content = f"{intro} {content}"
+        return ConversationPrompt(
+            state=_GUIDED_PORTAL_CHAT_STATE,
+            content=content,
+            quick_replies=quick_replies,
+        )
+
+    @staticmethod
+    def _candidate_application_job_id_from_message(content: str) -> UUID | None:
+        normalized = (content or "").strip().casefold()
+        if not normalized.startswith("job:"):
+            return None
+        raw_id = content.split(":", 1)[1].strip()
+        with suppress(ValueError):
+            return UUID(raw_id)
+        return None
+
+    @staticmethod
+    def _candidate_application_match_unit(
+        content: str,
+        units: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        normalized = ConversationService._normalize(content) or ""
+        if normalized.startswith("unit:"):
+            raw_id = content.split(":", 1)[1].strip()
+            return next((unit for unit in units if str(unit.get("id")) == raw_id), None)
+        for unit in units:
+            label = ConversationService._normalize(
+                ConversationService._candidate_application_unit_label(unit)
+            )
+            if label and normalized and (label in normalized or normalized in label):
+                return unit
+        return None
+
+    @staticmethod
+    def _candidate_application_looks_like_job_query(content: str) -> bool:
+        if _CANDIDATE_APPLICATION_NAME_PATTERN.search(content or ""):
+            return False
+        if _CANDIDATE_APPLICATION_EMAIL_PATTERN.search(content or ""):
+            return False
+        if _CANDIDATE_APPLICATION_PHONE_PATTERN.search(content or ""):
+            return False
+        if _CANDIDATE_APPLICATION_CONSENT_PATTERN.search(content or ""):
+            return False
+        normalized = ConversationService._normalize(content) or ""
+        return bool(normalized and len(normalized) >= 3)
+
+    @staticmethod
+    def _candidate_application_unit_label(unit: dict[str, Any]) -> str:
+        label = ConversationService._clean_text(unit.get("public_name")) or "Unidade"
+        city = ConversationService._clean_text(unit.get("city"))
+        state = ConversationService._clean_text(unit.get("state"))
+        suffix = "/".join(part for part in (city, state) if part)
+        return f"{label} ({suffix})" if suffix else label
+
+    @staticmethod
+    def _extract_candidate_application_data(content: str) -> _CandidateApplicationDraftExtraction:
+        if _CANDIDATE_APPLICATION_SENSITIVE_PATTERN.search(content or ""):
+            return _CandidateApplicationDraftExtraction(contains_sensitive_data=True)
+
+        name_match = _CANDIDATE_APPLICATION_NAME_PATTERN.search(content or "")
+        email_match = _CANDIDATE_APPLICATION_EMAIL_PATTERN.search(content or "")
+        phone_match = _CANDIDATE_APPLICATION_PHONE_PATTERN.search(content or "")
+        normalized = ConversationService._normalize(content) or ""
+        consent = normalized == "aceito_uso_dos_dados" or bool(
+            _CANDIDATE_APPLICATION_CONSENT_PATTERN.search(content or "")
+        )
+        return _CandidateApplicationDraftExtraction(
+            candidate_name=(
+                ConversationService._clean_text(name_match.group(1)) if name_match else None
+            ),
+            contact_email=(
+                ConversationService._clean_text(email_match.group(1)) if email_match else None
+            ),
+            contact_phone=(
+                ConversationService._clean_text(phone_match.group(0)) if phone_match else None
+            ),
+            consent_given=True if consent else None,
+        )
+
+    @staticmethod
+    def _apply_candidate_application_extraction(
+        draft: dict[str, Any],
+        extraction: _CandidateApplicationDraftExtraction,
+    ) -> None:
+        if extraction.candidate_name:
+            draft["candidate_name"] = extraction.candidate_name
+        if extraction.contact_email:
+            draft["contact_email"] = extraction.contact_email
+        if extraction.contact_phone:
+            draft["contact_phone"] = extraction.contact_phone
+        if extraction.consent_given is True:
+            draft["consent_given"] = True
+
+    async def _candidate_application_draft_is_complete(self, draft: dict[str, Any]) -> bool:
+        missing_field = await self._candidate_application_next_missing_field(draft)
+        return missing_field is None
+
+    async def _candidate_application_next_missing_field(
+        self,
+        draft: dict[str, Any],
+    ) -> str | None:
+        if not draft.get("job_id"):
+            return "job"
+
+        active_units = await self._session.execute(
+            sa.select(sa.func.count(JobUnitModel.id)).where(
+                JobUnitModel.job_id == self._uuid_from_context(draft.get("job_id")),
+                JobUnitModel.is_active.is_(True),
+            )
+        )
+        unit_count = int(active_units.scalar_one() or 0)
+        if unit_count >= 2 and not draft.get("preferred_unit_id"):
+            return "unit"
+        if not draft.get("candidate_name"):
+            return "candidate_name"
+        if not draft.get("contact_email") and not draft.get("contact_phone"):
+            return "contact"
+        if draft.get("consent_given") is not True:
+            return "consent"
+        return None
+
+    def _candidate_application_confirmation_prompt(
+        self,
+        draft: dict[str, Any],
+    ) -> ConversationPrompt:
+        draft["status"] = "awaiting_confirmation"
+        draft["confirmation_requested_at"] = datetime.now(UTC).isoformat()
+        contact = draft.get("contact_phone") or draft.get("contact_email") or "-"
+        unit_name = draft.get("unit_name") or "Não informada"
+        return ConversationPrompt(
+            state=_GUIDED_PORTAL_CHAT_STATE,
+            content=(
+                "Confira sua candidatura:\n"
+                f"Vaga: {draft.get('job_title') or '-'}\n"
+                f"Unidade: {unit_name}\n"
+                f"Nome: {draft.get('candidate_name') or '-'}\n"
+                f"Contato: {contact}\n\n"
+                "Confirma que deseja enviar sua candidatura com essas informações?"
+            ),
+            quick_replies=(
+                ("confirmar_candidatura", "Confirmar candidatura"),
+                ("alterar_dados", "Alterar dados"),
+                ("cancelar_candidatura", "Cancelar"),
+            ),
+        )
+
+    async def _submit_candidate_application_from_draft(
+        self,
+        *,
+        conversation: ConversationSessionModel,
+        draft: dict[str, Any],
+    ) -> ConversationPrompt:
+        result = await self._execute_candidate_bot_tool(
+            conversation=conversation,
+            tool_name="create_candidate_application_from_bot",
+            tool_args={
+                "job_id": draft.get("job_id"),
+                "preferred_unit_id": draft.get("preferred_unit_id"),
+                "candidate_name": draft.get("candidate_name"),
+                "contact_email": draft.get("contact_email"),
+                "contact_phone": draft.get("contact_phone"),
+                "consent_given": bool(draft.get("consent_given")),
+                "explicit_confirmation": True,
+                "confirmation_requested_at": draft.get("confirmation_requested_at"),
+            },
+            read_only=False,
+        )
+        if not result.ok:
+            if result.error_code == "DUPLICATE_APPLICATION":
+                return ConversationPrompt(
+                    state=_GUIDED_PORTAL_CHAT_STATE,
+                    content=(
+                        "Já encontramos uma candidatura sua para essa vaga. "
+                        "Se precisar de ajuda, posso encaminhar para o RH."
+                    ),
+                    quick_replies=(
+                        ("falar_com_rh", "Falar com RH"),
+                        ("ver_vagas", "Ver vagas"),
+                    ),
+                )
+            if result.error_code == "INVALID_UNIT":
+                draft["preferred_unit_id"] = None
+                draft["unit_name"] = None
+                return ConversationPrompt(
+                    state=_GUIDED_PORTAL_CHAT_STATE,
+                    content=(
+                        "Essa unidade não está vinculada à vaga selecionada. "
+                        "Escolha uma das unidades disponíveis."
+                    ),
+                    quick_replies=(("cancelar_candidatura", "Cancelar"),),
+                )
+            if result.error_code in {"MISSING_REQUIRED_DATA", "CONSENT_REQUIRED", "UNIT_REQUIRED"}:
+                return await self._candidate_application_prompt_for_next_step(
+                    conversation=conversation,
+                    context={},
+                    draft=draft,
+                    intro="Para continuar, preciso completar os dados faltantes.",
+                )
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=(
+                    "Não consegui enviar sua candidatura agora. "
+                    "Tente novamente ou fale com o RH."
+                ),
+                quick_replies=(("falar_com_rh", "Falar com RH"),),
+            )
+
+        data = result.data if isinstance(result.data, dict) else {}
+        draft["status"] = "submitted"
+        draft["submitted_application_id"] = data.get("application_id")
+        if data.get("preferred_unit_id"):
+            draft["preferred_unit_id"] = data.get("preferred_unit_id")
+        if data.get("unit_name"):
+            draft["unit_name"] = data.get("unit_name")
+        return ConversationPrompt(
+            state=_GUIDED_PORTAL_CHAT_STATE,
+            content=(
+                "Sua candidatura foi enviada com sucesso. "
+                "O RH poderá acompanhar suas informações pelo sistema."
+            ),
+            quick_replies=(
+                ("acompanhar_candidatura", "Acompanhar candidatura"),
+                ("falar_com_rh", "Falar com RH"),
+            ),
+        )
+
     def _candidate_bot_prompt_from_tool_result(
         self,
         *,
         tool_name: str,
         result,
+        context: dict[str, Any] | None = None,
     ) -> ConversationPrompt:
+        draft = context.get(_CANDIDATE_APPLICATION_DRAFT_KEY) if isinstance(context, dict) else None
+        draft_active = isinstance(draft, dict) and str(draft.get("status") or "") in {
+            "collecting",
+            "awaiting_confirmation",
+        }
         if not result.ok:
             return ConversationPrompt(
                 state=_GUIDED_PORTAL_CHAT_STATE,
@@ -2211,23 +2864,49 @@ class ConversationService:
                 ),
             )
         if tool_name == "search_public_jobs":
+            jobs = data.get("jobs") if isinstance(data.get("jobs"), list) else []
+            quick_replies = (
+                tuple(
+                    (
+                        "job:" + str(job.get("id")),
+                        self._candidate_application_job_quick_reply_label(job),
+                    )
+                    for job in jobs[:3]
+                    if isinstance(job, dict) and job.get("id")
+                )
+                + (
+                    ("falar_com_rh", "Falar com RH"),
+                    ("cancelar_candidatura", "Cancelar"),
+                )
+            ) if draft_active else (
+                ("quero_me_candidatar", "Quero me candidatar"),
+                ("acompanhar_candidatura", "Acompanhar candidatura"),
+                ("falar_com_rh", "Falar com RH"),
+            )
             return ConversationPrompt(
                 state=_GUIDED_PORTAL_CHAT_STATE,
-                content=self._candidate_bot_jobs_message(data),
-                quick_replies=(
-                    ("quero_me_candidatar", "Quero me candidatar"),
-                    ("acompanhar_candidatura", "Acompanhar candidatura"),
-                    ("falar_com_rh", "Falar com RH"),
-                ),
+                content=self._candidate_bot_jobs_message(data, draft_active=draft_active),
+                quick_replies=quick_replies,
             )
         if tool_name == "get_public_job_units":
+            units = data.get("job_units") if isinstance(data.get("job_units"), list) else []
+            quick_replies = (
+                tuple(
+                    ("unit:" + str(unit.get("id")), self._candidate_application_unit_label(unit))
+                    for unit in units[:3]
+                    if isinstance(unit, dict) and unit.get("id")
+                )
+                + (
+                    ("cancelar_candidatura", "Cancelar"),
+                )
+            ) if draft_active else (
+                ("ver_vagas", "Ver vagas"),
+                ("falar_com_rh", "Falar com RH"),
+            )
             return ConversationPrompt(
                 state=_GUIDED_PORTAL_CHAT_STATE,
-                content=self._candidate_bot_units_message(data),
-                quick_replies=(
-                    ("ver_vagas", "Ver vagas"),
-                    ("falar_com_rh", "Falar com RH"),
-                ),
+                content=self._candidate_bot_units_message(data, draft_active=draft_active),
+                quick_replies=quick_replies,
             )
         if tool_name == "get_public_job_detail":
             return ConversationPrompt(
@@ -2289,7 +2968,17 @@ class ConversationService:
         return "No momento não encontrei uma candidatura ativa para acompanhar por aqui."
 
     @staticmethod
-    def _candidate_bot_jobs_message(data: dict[str, Any]) -> str:
+    def _candidate_application_job_quick_reply_label(job: dict[str, Any]) -> str:
+        title = ConversationService._clean_text(job.get("title")) or "Vaga"
+        location = ConversationService._clean_text(job.get("location"))
+        return f"{title} ({location})" if location else title
+
+    @staticmethod
+    def _candidate_bot_jobs_message(
+        data: dict[str, Any],
+        *,
+        draft_active: bool = False,
+    ) -> str:
         jobs = data.get("jobs")
         if not isinstance(jobs, list) or not jobs:
             return (
@@ -2304,6 +2993,8 @@ class ConversationService:
             location = ConversationService._clean_text(job.get("location")) or "local a confirmar"
             lines.append(f"- {title} — {location}")
         summary = "\n".join(lines)
+        if draft_active:
+            return "Encontrei estas vagas públicas. Qual vaga você deseja?\n" + summary
         return (
             "Encontrei estas vagas públicas para você:\n"
             f"{summary}\n"
@@ -2311,7 +3002,11 @@ class ConversationService:
         )
 
     @staticmethod
-    def _candidate_bot_units_message(data: dict[str, Any]) -> str:
+    def _candidate_bot_units_message(
+        data: dict[str, Any],
+        *,
+        draft_active: bool = False,
+    ) -> str:
         units = data.get("job_units")
         if not isinstance(units, list) or not units:
             return "Esta vaga não tem unidades públicas detalhadas no momento."
@@ -2324,7 +3019,10 @@ class ConversationService:
             state = ConversationService._clean_text(unit.get("state"))
             location = "/".join(part for part in (city, state) if part)
             lines.append(f"- {label}{f' — {location}' if location else ''}")
-        return "Estas são as unidades públicas dessa vaga:\n" + "\n".join(lines)
+        prefix = "Estas são as unidades públicas dessa vaga. Qual unidade você deseja?\n"
+        if not draft_active:
+            prefix = "Estas são as unidades públicas dessa vaga:\n"
+        return prefix + "\n".join(lines)
 
     @staticmethod
     def _candidate_bot_job_detail_message(data: dict[str, Any]) -> str:

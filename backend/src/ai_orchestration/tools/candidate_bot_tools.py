@@ -6,6 +6,7 @@ consultas públicas/candidato e operam com permissões ``candidate_*``.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from time import perf_counter
 from uuid import UUID
 
@@ -18,18 +19,28 @@ from src.ai_orchestration.rag.answer_schemas import RagAnswerRequest
 from src.ai_orchestration.rag.rag_answer_service import RagAnswerService
 from src.ai_orchestration.rag.retriever_contract import RetrieverContract
 from src.ai_orchestration.rag.schemas import RetrievalQuery
+from src.application.services.candidate_application_service import CandidateApplicationService
 from src.application.services.candidate_portal_service import (
     CandidatePortalIncompleteProfileError,
     CandidatePortalProfileConflictError,
     CandidatePortalService,
 )
+from src.domain.exceptions import ConflictException, NotFoundException, ValidationException
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, JobUnitModel
 from src.infrastructure.database.models.operational_master_model import OperationalUnitModel
+from src.infrastructure.repositories.sqlalchemy_candidate_application_repository import (
+    SQLAlchemyCandidateApplicationRepository,
+)
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+from src.interface.api.schemas.candidate_application_schemas import (
+    CandidateApplicationCreateRequest,
+)
 
 PUBLIC_JOBS_PERMISSION = "candidate_read_public_jobs"
 PUBLIC_KNOWLEDGE_PERMISSION = "candidate_read_public_knowledge"
 APPLICATION_STATUS_PERMISSION = "candidate_read_application_status"
+APPLICATION_WRITE_PERMISSION = "candidate_write_safe_application"
 
 _LIMIT_MAX = 20
 
@@ -318,6 +329,176 @@ async def get_my_application_status(
                     "status_public": active_application.status_public,
                 }
                 if active_application is not None
+                else None
+            ),
+        }
+    )
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _normalize_phone(phone: str | None) -> str | None:
+    if phone is None:
+        return None
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if not digits:
+        return None
+    if len(digits) < 10 or len(digits) > 11:
+        raise ValidationException("Telefone inválido")
+    return digits
+
+
+async def create_candidate_application_from_bot(
+    context: AgentContext,
+    db_session,
+    job_id: str,
+    preferred_unit_id: str | None = None,
+    candidate_name: str | None = None,
+    contact_email: str | None = None,
+    contact_phone: str | None = None,
+    consent_given: bool = False,
+    explicit_confirmation: bool = False,
+    confirmation_requested_at: str | None = None,
+) -> ToolResult:
+    if denied := ToolPermissionGuard.enforce(context, APPLICATION_WRITE_PERMISSION):
+        return denied
+
+    if not explicit_confirmation or not confirmation_requested_at:
+        return ToolResult.error(
+            "CONFIRMATION_REQUIRED",
+            "A candidatura só pode ser criada após confirmação explícita no contexto.",
+        )
+
+    try:
+        candidate_id = UUID(context.user_id)
+        job_uuid = UUID(job_id)
+        preferred_unit_uuid = UUID(preferred_unit_id) if preferred_unit_id else None
+    except ValueError:
+        return ToolResult.error("INVALID_INPUT", "IDs informados são inválidos.")
+
+    candidate = await db_session.scalar(
+        sa.select(CandidateModel).where(
+            CandidateModel.id == candidate_id,
+            CandidateModel.deleted_at.is_(None),
+        )
+    )
+    if candidate is None:
+        return ToolResult.error("NOT_FOUND", "Candidato não encontrado.")
+
+    resolved_name = _clean_optional_text(candidate_name) or _clean_optional_text(
+        candidate.full_name
+    )
+    resolved_email = _clean_optional_text(contact_email) or _clean_optional_text(candidate.email)
+    try:
+        resolved_phone = _normalize_phone(contact_phone) or _normalize_phone(candidate.phone)
+    except ValidationException as exc:
+        return ToolResult.error("INVALID_INPUT", str(exc))
+
+    if resolved_name is None:
+        return ToolResult.error("MISSING_REQUIRED_DATA", "Nome é obrigatório.")
+    if resolved_email is None and resolved_phone is None:
+        return ToolResult.error(
+            "MISSING_REQUIRED_DATA",
+            "Telefone ou e-mail é obrigatório.",
+        )
+    if not consent_given:
+        return ToolResult.error(
+            "CONSENT_REQUIRED",
+            "O uso dos dados precisa ser autorizado antes do envio.",
+        )
+
+    job = await db_session.scalar(
+        sa.select(JobModel).where(
+            JobModel.id == job_uuid,
+            JobModel.status == "published",
+            JobModel.deleted_at.is_(None),
+        )
+    )
+    if job is None:
+        return ToolResult.error("JOB_UNAVAILABLE", "Esta vaga não está mais disponível.")
+
+    units_result = await db_session.execute(
+        sa.select(OperationalUnitModel)
+        .select_from(JobUnitModel)
+        .join(OperationalUnitModel, OperationalUnitModel.id == JobUnitModel.operational_unit_id)
+        .where(
+            JobUnitModel.job_id == job_uuid,
+            JobUnitModel.is_active.is_(True),
+            OperationalUnitModel.is_active.is_(True),
+        )
+        .order_by(JobUnitModel.priority.asc().nullslast(), JobUnitModel.created_at.asc())
+    )
+    units = list(units_result.scalars().all())
+    unit_by_id = {unit.id: unit for unit in units}
+    selected_unit = unit_by_id.get(preferred_unit_uuid) if preferred_unit_uuid else None
+
+    if len(units) >= 2 and selected_unit is None:
+        return ToolResult.error(
+            "UNIT_REQUIRED",
+            "Essa vaga possui mais de uma unidade e exige uma escolha explícita.",
+        )
+    if len(units) == 1 and selected_unit is None:
+        selected_unit = units[0]
+    if preferred_unit_uuid is not None and selected_unit is None:
+        return ToolResult.error(
+            "INVALID_UNIT",
+            "A unidade informada não está vinculada à vaga selecionada.",
+        )
+
+    candidate.full_name = resolved_name
+    candidate.email = resolved_email
+    candidate.phone = resolved_phone
+    candidate.application_source = "bot"
+    if candidate.lgpd_consent_at is None:
+        candidate.lgpd_consent_at = datetime.now(UTC)
+        candidate.lgpd_consent_version = "v1.0"
+
+    application_service = CandidateApplicationService(
+        db_session,
+        SQLAlchemyCandidateApplicationRepository(db_session),
+    )
+    try:
+        application = await application_service.create_application(
+            CandidateApplicationCreateRequest(
+                candidate_id=candidate_id,
+                job_id=job_uuid,
+                source="bot",
+                status="submitted",
+                preferred_location_group_id=(
+                    selected_unit.location_group_id if selected_unit else None
+                ),
+                preferred_unit_id=selected_unit.id if selected_unit else None,
+                accepts_any_unit_in_location=False,
+                lgpd_consent_at=datetime.now(UTC),
+                lgpd_consent_version="v1.0",
+            )
+        )
+    except ConflictException:
+        return ToolResult.error(
+            "DUPLICATE_APPLICATION",
+            "Já existe candidatura ativa para essa vaga.",
+        )
+    except NotFoundException as exc:
+        return ToolResult.error("NOT_FOUND", str(exc))
+    except ValidationException as exc:
+        return ToolResult.error("INVALID_INPUT", str(exc))
+
+    await db_session.flush()
+    return ToolResult.success(
+        data={
+            "application_id": str(application.id),
+            "job_id": str(job_uuid),
+            "job_title": job.title,
+            "preferred_unit_id": str(selected_unit.id) if selected_unit else None,
+            "unit_name": (
+                selected_unit.public_name
+                or selected_unit.name
+                if selected_unit is not None
                 else None
             ),
         }

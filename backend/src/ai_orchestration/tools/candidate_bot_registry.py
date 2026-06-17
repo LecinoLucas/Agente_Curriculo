@@ -11,9 +11,11 @@ import logging
 from src.ai_orchestration.core.tool_registry import ToolDefinition, ToolRegistry
 from src.ai_orchestration.tools.candidate_bot_tools import (
     APPLICATION_STATUS_PERMISSION,
+    APPLICATION_WRITE_PERMISSION,
     PUBLIC_JOBS_PERMISSION,
     PUBLIC_KNOWLEDGE_PERMISSION,
     answer_candidate_knowledge,
+    create_candidate_application_from_bot,
     get_my_application_status,
     get_public_job_detail,
     get_public_job_units,
@@ -77,6 +79,15 @@ _ALLOWED_TOOL_DEFINITIONS: list[ToolDefinition] = [
         read_only=True,
         requires_approval=False,
         fn=get_my_application_status,
+    ),
+    ToolDefinition(
+        name="create_candidate_application_from_bot",
+        domain="candidate_portal",
+        description="Cria candidatura do candidato após confirmação explícita do draft.",
+        required_permissions=[APPLICATION_WRITE_PERMISSION],
+        read_only=False,
+        requires_approval=False,
+        fn=create_candidate_application_from_bot,
     ),
 ]
 
