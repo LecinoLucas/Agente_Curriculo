@@ -22,9 +22,12 @@ from src.ai_orchestration.rag.schemas import (
     KnowledgeChunk,
     KnowledgeDocument,
     RetrievalQuery,
+    RetrievalResult,
+    RetrievedChunk,
 )
 from src.application.services.candidate_assistant_intent_service import CandidateIntent
 from src.application.services.conversation_service import ConversationService
+from src.core.settings import settings
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.conversation_handoff_model import (
     ConversationHandoffModel,
@@ -33,6 +36,7 @@ from src.infrastructure.database.models.conversation_model import (
     ConversationMessageModel,
     ConversationSessionModel,
 )
+from src.infrastructure.database.models.operational_master_model import LocationGroupModel
 from src.infrastructure.repositories.sqlalchemy_candidate_application_repository import (
     SQLAlchemyCandidateApplicationRepository,
 )
@@ -160,6 +164,33 @@ async def test_candidate_safe_retriever_adds_warning():
     safe = CandidateSafeRetriever(inner)
     result = await safe.retrieve(RetrievalQuery(query="benefícios"))
     assert "candidate_safe_filter_applied" in result.warnings
+
+
+@pytest.mark.asyncio
+async def test_candidate_safe_retriever_filters_unsafe_chunks_even_if_inner_ignores_filters():
+    """Mesmo se o retriever interno ignorar filtros, o wrapper remove chunks inseguros."""
+
+    class UnsafeInnerRetriever:
+        async def retrieve(self, query: RetrievalQuery) -> RetrievalResult:
+            return RetrievalResult(
+                query=query.query,
+                chunks=[
+                    RetrievedChunk(chunk=_CHUNK_PUBLIC, score=0.9),
+                    RetrievedChunk(chunk=_CHUNK_INTERNAL_RH, score=0.8),
+                ],
+                total=2,
+                warnings=[],
+            )
+
+        async def get_document(self, document_id: str):
+            return None
+
+    safe = CandidateSafeRetriever(UnsafeInnerRetriever())
+    result = await safe.retrieve(RetrievalQuery(query="benefícios"))
+
+    chunk_ids = [r.chunk.id for r in result.chunks]
+    assert chunk_ids == ["pub"]
+    assert "candidate_safe_chunks_filtered" in result.warnings
 
 
 @pytest.mark.asyncio
@@ -363,3 +394,207 @@ async def test_talk_to_hr_handoff_is_idempotent_for_same_pending_session(db_sess
     assert pending_count == 1
     assert first_turn.handoff_required is True
     assert second_turn.handoff_required is True
+
+
+@pytest.mark.asyncio
+async def test_should_handoff_signal_creates_real_pending_handoff(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_INTENT_AI_ENABLED", True)
+    candidate = CandidateModel(full_name="Pessoa Candidata")
+    db_session.add(candidate)
+    await db_session.flush()
+    service = _conversation_service(db_session)
+
+    async def _fake_interpret(**kwargs):
+        return CandidateIntent(
+            intent="unclear",
+            confidence=0.4,
+            should_handoff=True,
+            talk_to_hr_message="Vou encaminhar seu atendimento para o RH.",
+        )
+
+    monkeypatch.setattr(service._intent_service, "interpret", _fake_interpret)
+
+    started = await service.create_session(
+        ConversationCreateRequest(channel="web", candidate_id=candidate.id)
+    )
+    await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="cpf"),
+    )
+    turn = await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="preciso falar com uma pessoa"),
+    )
+
+    pending_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(ConversationHandoffModel).where(
+            ConversationHandoffModel.session_id == started.session_id,
+            ConversationHandoffModel.status == "pending",
+        )
+    )
+    assert pending_count == 1
+    assert turn.handoff_required is True
+    assert turn.assistant_message == "Vou encaminhar seu atendimento para o RH."
+
+
+@pytest.mark.asyncio
+async def test_should_handoff_signal_is_idempotent(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_INTENT_AI_ENABLED", True)
+    candidate = CandidateModel(full_name="Pessoa Candidata")
+    db_session.add(candidate)
+    await db_session.flush()
+    service = _conversation_service(db_session)
+
+    async def _fake_interpret(**kwargs):
+        return CandidateIntent(
+            intent="talk_to_hr",
+            confidence=0.8,
+            should_handoff=True,
+            talk_to_hr_message="Vou encaminhar seu atendimento para o RH.",
+        )
+
+    monkeypatch.setattr(service._intent_service, "interpret", _fake_interpret)
+
+    started = await service.create_session(
+        ConversationCreateRequest(channel="web", candidate_id=candidate.id)
+    )
+    await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="cpf"),
+    )
+    await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="falar com rh"),
+    )
+    second_turn = await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="ainda preciso de ajuda"),
+    )
+
+    pending_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(ConversationHandoffModel).where(
+            ConversationHandoffModel.session_id == started.session_id,
+            ConversationHandoffModel.status == "pending",
+        )
+    )
+    assert pending_count == 1
+    assert second_turn.handoff_required is True
+
+
+@pytest.mark.asyncio
+async def test_talk_to_hr_unsafe_message_is_replaced_with_fallback(db_session, monkeypatch):
+    from src.application.services.conversation_service import _TALK_TO_HR_MESSAGE
+
+    monkeypatch.setattr(settings, "ASSISTANT_INTENT_AI_ENABLED", True)
+    candidate = CandidateModel(full_name="Pessoa Candidata")
+    db_session.add(candidate)
+    await db_session.flush()
+    service = _conversation_service(db_session)
+
+    async def _fake_interpret(**kwargs):
+        return CandidateIntent(
+            intent="talk_to_hr",
+            confidence=0.9,
+            should_handoff=True,
+            talk_to_hr_message="Em 24 horas o RH aprova sua candidatura. Envie seu CPF.",
+        )
+
+    monkeypatch.setattr(service._intent_service, "interpret", _fake_interpret)
+
+    started = await service.create_session(
+        ConversationCreateRequest(channel="web", candidate_id=candidate.id)
+    )
+    await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="cpf"),
+    )
+    turn = await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="preciso do rh"),
+    )
+
+    assert turn.assistant_message == _TALK_TO_HR_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_safe_user_message_is_used_for_unclear_fallback(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_INTENT_AI_ENABLED", True)
+    location = LocationGroupModel(
+        name="Goiânia",
+        normalized_name="goiânia".casefold(),
+        state="GO",
+        city="Goiânia",
+        type="city",
+    )
+    candidate = CandidateModel(full_name="Pessoa Candidata")
+    db_session.add_all([location, candidate])
+    await db_session.flush()
+    service = _conversation_service(db_session)
+
+    async def _fake_interpret(**kwargs):
+        return CandidateIntent(
+            intent="unclear",
+            confidence=0.4,
+            safe_user_message="Posso te ajudar melhor se você me disser a cidade desejada.",
+        )
+
+    monkeypatch.setattr(service._intent_service, "interpret", _fake_interpret)
+
+    started = await service.create_session(
+        ConversationCreateRequest(channel="web", candidate_id=candidate.id)
+    )
+    await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="cpf"),
+    )
+    turn = await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="não sei explicar"),
+    )
+
+    assert turn.current_state == "CHOOSE_LOCATION"
+    assert turn.assistant_message == (
+        "Posso te ajudar melhor se você me disser a cidade desejada."
+    )
+
+
+@pytest.mark.asyncio
+async def test_unsafe_safe_user_message_falls_back_to_normal_flow(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_INTENT_AI_ENABLED", True)
+    location = LocationGroupModel(
+        name="Goiânia",
+        normalized_name="goiânia".casefold(),
+        state="GO",
+        city="Goiânia",
+        type="city",
+    )
+    candidate = CandidateModel(full_name="Pessoa Candidata")
+    db_session.add_all([location, candidate])
+    await db_session.flush()
+    service = _conversation_service(db_session)
+
+    async def _fake_interpret(**kwargs):
+        return CandidateIntent(
+            intent="unclear",
+            confidence=0.4,
+            safe_user_message="Me envie seu CPF e salário que aprovo hoje.",
+        )
+
+    monkeypatch.setattr(service._intent_service, "interpret", _fake_interpret)
+
+    started = await service.create_session(
+        ConversationCreateRequest(channel="web", candidate_id=candidate.id)
+    )
+    await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="cpf"),
+    )
+    turn = await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="não sei explicar"),
+    )
+
+    assert turn.current_state == "CHOOSE_LOCATION"
+    assert "cpf" not in turn.assistant_message.lower()
+    assert "aprovo hoje" not in turn.assistant_message.lower()
+    assert "não encontrei essa localidade" in turn.assistant_message.lower()

@@ -48,6 +48,7 @@ def _intent_json(intent: str, *, confidence: float = 0.9, **fields) -> str:
         "confirmation": None,
         "should_handoff": False,
         "safe_user_message": None,
+        "talk_to_hr_message": None,
     }
     payload.update(fields)
     return json.dumps(payload)

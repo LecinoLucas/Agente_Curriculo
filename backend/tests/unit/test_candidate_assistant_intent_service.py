@@ -34,6 +34,7 @@ def _full_payload(**overrides) -> dict:
         "confirmation": None,
         "should_handoff": False,
         "safe_user_message": None,
+        "talk_to_hr_message": None,
     }
     payload.update(overrides)
     return payload
@@ -133,6 +134,27 @@ async def test_low_confidence_returns_none():
     assert result is None
 
 
+async def test_low_confidence_safe_fallback_returns_intent_when_enabled():
+    svc, _ = _service(
+        json.dumps(
+            _full_payload(
+                intent="unclear",
+                confidence=0.4,
+                safe_user_message="Posso te orientar melhor se você reformular sua dúvida.",
+            )
+        )
+    )
+    result = await svc.interpret(
+        state="CHOOSE_LOCATION",
+        message="sei lá",
+        allowed_intents=("choose_location", "unclear"),
+        allow_safe_fallback=True,
+    )
+    assert result is not None
+    assert result.intent == "unclear"
+    assert result.safe_user_message is not None
+
+
 async def test_invalid_json_returns_none():
     svc, _ = _service("this is not json at all")
     result = await svc.interpret(
@@ -174,6 +196,28 @@ async def test_out_of_scope_intent_returns_none():
         allowed_intents=("choose_location", "unclear"),
     )
     assert result is None
+
+
+async def test_out_of_scope_handoff_returns_intent_when_safe_fallback_enabled():
+    svc, _ = _service(
+        json.dumps(
+            _full_payload(
+                intent="talk_to_hr",
+                confidence=0.7,
+                should_handoff=True,
+                talk_to_hr_message="Vou encaminhar seu atendimento para o RH.",
+            )
+        )
+    )
+    result = await svc.interpret(
+        state="CHOOSE_LOCATION",
+        message="preciso falar com alguém",
+        allowed_intents=("choose_location", "unclear"),
+        allow_safe_fallback=True,
+    )
+    assert result is not None
+    assert result.should_handoff is True
+    assert result.talk_to_hr_message == "Vou encaminhar seu atendimento para o RH."
 
 
 async def test_empty_message_returns_none_without_calling_ai():
