@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
+from src.application.services.conversation_service import ConversationService
 from src.application.services.candidate_google_auth_service import (
     CandidateGoogleAuthConflictError,
     CandidateGoogleAuthEmailNotVerifiedError,
@@ -51,8 +52,17 @@ from src.infrastructure.database.models.operational_master_model import Operatio
 from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
     SQLAlchemyBehavioralAssignmentRepository,
 )
+from src.infrastructure.repositories.sqlalchemy_candidate_application_repository import (
+    SQLAlchemyCandidateApplicationRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_conversation_repository import (
+    SQLAlchemyConversationRepository,
+)
 from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import (
     SQLAlchemyPreAdmissionRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_resume_repository import (
+    SQLAlchemyResumeRepository,
 )
 from src.infrastructure.security.google_identity_verifier import (
     GoogleIdentityConfigurationError,
@@ -84,6 +94,11 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidatePasswordSetupRequest,
     CandidatePasswordSetupResponse,
     CandidateSessionResponse,
+)
+from src.interface.api.schemas.conversation_schemas import (
+    CandidateBotMessageRequest,
+    CandidateBotSessionResponse,
+    ConversationTurnResponse,
 )
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionDocumentUploadResponse,
@@ -433,6 +448,52 @@ async def get_candidate_session(
     except Exception:
         # Session invalid, expired, or DB error — always return unauthenticated.
         return CandidateSessionResponse(authenticated=False, candidate_name=None)
+
+
+def _conversation_service(db: AsyncSession) -> ConversationService:
+    return ConversationService(
+        SQLAlchemyConversationRepository(db),
+        db,
+        SQLAlchemyCandidateApplicationRepository(db),
+        SQLAlchemyResumeRepository(db),
+    )
+
+
+@router.get(
+    "/candidate-bot/sessions/{session_id}",
+    response_model=CandidateBotSessionResponse,
+    summary="[Alias] Recuperar sessão do chat guiado do candidato",
+)
+async def get_candidate_bot_session(
+    session_id: UUID,
+    candidate_session: CurrentCandidateSession,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateBotSessionResponse:
+    return await _conversation_service(db).get_candidate_portal_bot_session(
+        candidate_id=candidate_session.candidate_id,
+        session_id=session_id,
+    )
+
+
+@router.post(
+    "/candidate-bot/message",
+    response_model=ConversationTurnResponse,
+    summary="[Alias] Enviar mensagem no chat guiado do candidato",
+)
+async def post_candidate_bot_message(
+    body: CandidateBotMessageRequest,
+    candidate_session: CurrentCandidateSession,
+    db: AsyncSession = Depends(get_db),
+) -> ConversationTurnResponse:
+    turn = await _conversation_service(db).receive_candidate_portal_bot_message(
+        candidate_id=candidate_session.candidate_id,
+        session_id=body.session_id,
+        message=body.message,
+        job_id=body.job_id,
+        operational_unit_id=body.operational_unit_id,
+    )
+    await db.commit()
+    return turn
 
 
 # ──────────────────────────────────────────────────────────────────────────────

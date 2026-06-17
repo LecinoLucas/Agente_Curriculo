@@ -10,6 +10,7 @@ ConversationChannel = Literal["web", "whatsapp"]
 ConversationState = Literal[
     "IDENTIFY",
     "VERIFY_OTP",
+    "GUIDED_PORTAL_CHAT",
     "CHOOSE_LOCATION",
     "CHOOSE_UNIT_OR_ANY",
     "CHOOSE_FUNCTION",
@@ -79,4 +80,17 @@ class ConversationTurnResponse(APISchemaModel):
     session: ConversationSessionResponse
     message: ConversationMessageResponse
     options: list[ConversationQuickReplyResponse]
+    handoff_required: bool = False
+
+
+class CandidateBotMessageRequest(APISchemaModel):
+    session_id: UUID | None = None
+    message: str = Field(..., min_length=1, max_length=1000)
+    job_id: UUID | None = None
+    operational_unit_id: UUID | None = None
+
+
+class CandidateBotSessionResponse(APISchemaModel):
+    session: ConversationSessionResponse
+    messages: list[ConversationMessageResponse]
     handoff_required: bool = False

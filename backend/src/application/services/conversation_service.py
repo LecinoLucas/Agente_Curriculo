@@ -10,6 +10,14 @@ from uuid import UUID, uuid4
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai_orchestration.core.agent_context import AgentContext
+from src.ai_orchestration.core.tool_execution_context import ToolExecutionContext
+from src.ai_orchestration.core.tool_runtime import ToolRuntime
+from src.ai_orchestration.rag.candidate_safe_retriever import CandidateSafeRetriever
+from src.ai_orchestration.rag.embedding_provider_factory import get_embedding_provider
+from src.ai_orchestration.rag.postgres_vector_retriever import PostgresVectorRetriever
+from src.ai_orchestration.rag.rag_answer_service import RagAnswerService
+from src.ai_orchestration.tools.candidate_bot_registry import CANDIDATE_BOT_REGISTRY
 from src.application.services.admin_assistant_failure_service import AssistantFailureRecorder
 from src.application.services.admin_assistant_service import sanitise_assistant_text
 from src.application.services.assistant_content_provider import AssistantContentProvider
@@ -17,6 +25,7 @@ from src.application.services.candidate_assistant_intent_service import (
     CandidateAssistantIntentService,
     CandidateIntent,
 )
+from src.application.services.candidate_portal_service import CandidatePortalService
 from src.application.services.conversation_otp_service import ConversationOtpService
 from src.application.services.conversation_state_machine import (
     ConversationPrompt,
@@ -27,6 +36,7 @@ from src.application.services.conversation_state_machine import (
 from src.core.settings import settings
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.infrastructure.database.models.assistant_failure_model import AssistantFailureModel
+from src.infrastructure.database.models.assistant_settings_model import AssistantSettingModel
 from src.infrastructure.database.models.candidate_application_model import (
     APPLICATION_ACTIVE_STATUSES,
     CandidateApplicationModel,
@@ -48,11 +58,16 @@ from src.infrastructure.database.models.operational_master_model import (
     OperationalUnitModel,
 )
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.repositories.postgres_vector_store import PostgresVectorStore
 from src.infrastructure.repositories.sqlalchemy_candidate_application_repository import (
     SQLAlchemyCandidateApplicationRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_conversation_repository import (
     SQLAlchemyConversationRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+from src.infrastructure.repositories.sqlalchemy_knowledge_document_repository import (
+    SQLAlchemyKnowledgeDocumentRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import (
     SQLAlchemyResumeRepository,
@@ -60,6 +75,7 @@ from src.infrastructure.repositories.sqlalchemy_resume_repository import (
 from src.infrastructure.security.cpf_identity import derive_cpf_identity
 from src.infrastructure.storage.resume_files import write_resume_file
 from src.interface.api.schemas.conversation_schemas import (
+    CandidateBotSessionResponse,
     ConversationCreateRequest,
     ConversationMessageCreateRequest,
     ConversationMessageResponse,
@@ -68,6 +84,54 @@ from src.interface.api.schemas.conversation_schemas import (
     ConversationTurnResponse,
 )
 from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
+
+_GUIDED_PORTAL_CHAT_STATE = "GUIDED_PORTAL_CHAT"
+_GUIDED_PORTAL_CHAT_STORAGE_STATE = "DONE"
+_CANDIDATE_BOT_PERMISSIONS = [
+    "candidate_read_public_jobs",
+    "candidate_read_public_knowledge",
+    "candidate_read_application_status",
+]
+_CANDIDATE_BOT_HR_PATTERN = re.compile(
+    r"\b(falar com (o )?rh|quero falar com (o )?rh|atendente humano|"
+    r"pessoa do rh|recrutador|recrutadora|humano)\b",
+    re.IGNORECASE,
+)
+_CANDIDATE_BOT_STATUS_PATTERN = re.compile(
+    r"\b(acompanh|minha candidatura|minha vaga|status do processo|"
+    r"como est[aá] minha candidatura|etapa do processo)\b",
+    re.IGNORECASE,
+)
+_CANDIDATE_BOT_JOBS_PATTERN = re.compile(
+    r"\b(vaga|vagas|oportunidade|oportunidades|me candidatar|candidatar|trabalhar)\b",
+    re.IGNORECASE,
+)
+_CANDIDATE_BOT_UNITS_PATTERN = re.compile(
+    r"\b(unidade|unidades|posto|postos|filial|filiais|endere[cç]o|enderecos|local)\b",
+    re.IGNORECASE,
+)
+_CANDIDATE_BOT_DETAIL_PATTERN = re.compile(
+    r"\b(detalhe|detalhes|benef[ií]cios|beneficios|requisitos|responsabilidades|"
+    r"descri[cç][aã]o)\b",
+    re.IGNORECASE,
+)
+_CANDIDATE_BOT_GENERIC_FALLBACK = (
+    "Posso te ajudar com vagas públicas, dúvidas gerais do processo, acompanhamento "
+    "da sua candidatura ou encaminhar seu atendimento para o RH."
+)
+_CANDIDATE_BOT_INITIAL_PROMPT = ConversationPrompt(
+    state=_GUIDED_PORTAL_CHAT_STATE,
+    content=(
+        "Olá! Sou o assistente de recrutamento. Posso te ajudar a ver vagas, "
+        "tirar dúvidas ou falar com o RH."
+    ),
+    quick_replies=(
+        ("ver_vagas", "Ver vagas"),
+        ("quero_me_candidatar", "Quero me candidatar"),
+        ("acompanhar_candidatura", "Acompanhar candidatura"),
+        ("falar_com_rh", "Falar com RH"),
+    ),
+)
 
 # Context keys that signal the candidate has started providing real intake data.
 # The CandidateApplication is only created once at least one is present, so a bare
@@ -121,6 +185,33 @@ _INVALID_WHATSAPP_MESSAGE = (
 _TALK_TO_HR_MESSAGE = (
     "Certo, vou encaminhar sua solicitação para o RH. "
     "Assim que possível, alguém continuará o atendimento."
+)
+_OUTPUT_DEADLINE_PATTERN = re.compile(
+    r"\b(\d+\s*(h|hora|min|dia)s?|amanh[ãa]|hoje|prazo|retorno em)\b",
+    re.IGNORECASE,
+)
+_OUTPUT_SENSITIVE_PATTERN = re.compile(
+    r"\b(cpf|rg|pis|pasep|ctps|dados banc[aá]rios|conta banc[aá]ria|"
+    r"n[úu]mero do cart[aã]o|senha|sal[aá]rio|remunera(?:ç|c)[aã]o|"
+    r"endere[cç]o completo|nome da m[aã]e|nome do pai)\b",
+    re.IGNORECASE,
+)
+_OUTPUT_APPROVAL_PATTERN = re.compile(
+    r"\b(aprovad[oa]?|reprovad[oa]?|rejeitad[oa]?|contratad[oa]?|selecionad[oa]?)\b",
+    re.IGNORECASE,
+)
+_OUTPUT_INTERNAL_PATTERN = re.compile(
+    r"\b(interno|pipeline|triagem|rh\s+(deve|precisa|vai analisar|vai aprovar))\b",
+    re.IGNORECASE,
+)
+_OUTPUT_UNSUPPORTED_ASSERTION_PATTERN = re.compile(
+    r"\b(sal[aá]rio|remunera(?:ç|c)[aã]o|benef[ií]cios?)\b",
+    re.IGNORECASE,
+)
+_RISKY_CANDIDATE_MESSAGE_PATTERN = re.compile(
+    r"\b(ignore|admin|documentos internos|crit[eé]rio secreto|aprova direto|"
+    r"rejeite|gr[aá]vida|problema de sa[uú]de|dados banc[aá]rios|sal[aá]rio interno)\b",
+    re.IGNORECASE,
 )
 
 _SAFE_RESUME_CONTEXT_KEYS = frozenset(
@@ -296,20 +387,27 @@ class ConversationService:
         )
 
         context = dict(conversation.context_json or {})
+        raw_content = content
+        ai_intent: CandidateIntent | None = None
 
         # OP-7A — interpret free-text input with AI BEFORE the deterministic
         # dispatch. The parser only canonicalizes the message into a token the
         # state machine already understands; it never changes the state itself.
         if body.message_type != "event":
-            content = await self._maybe_ai_canonicalize(
+            content, ai_intent = await self._maybe_ai_canonicalize(
                 conversation,
                 context,
                 content,
                 candidate_message,
             )
 
-        if content == "talk_to_hr":
-            prompt = await self._handle_talk_to_hr(conversation, context, candidate_message)
+        if content == "talk_to_hr" or (ai_intent is not None and ai_intent.should_handoff):
+            prompt = await self._handle_talk_to_hr(
+                conversation,
+                context,
+                candidate_message,
+                intent=ai_intent,
+            )
             conversation.context_json = context
             conversation.updated_at = datetime.now(UTC)
             message = await self._add_assistant_message(conversation, prompt)
@@ -317,6 +415,21 @@ class ConversationService:
             turn = self._turn_response(conversation, message, prompt)
             turn.handoff_required = True
             return turn
+
+        if body.message_type != "event" and ai_intent is not None:
+            safe_prompt = await self._maybe_safe_user_message_prompt(
+                conversation,
+                context,
+                raw_content=raw_content,
+                resolved_content=content,
+                intent=ai_intent,
+            )
+            if safe_prompt is not None:
+                conversation.context_json = context
+                conversation.updated_at = datetime.now(UTC)
+                message = await self._add_assistant_message(conversation, safe_prompt)
+                await self._repository.update_session(conversation)
+                return self._turn_response(conversation, message, safe_prompt)
 
         if body.message_type == "event" and content == "resume_uploaded":
             context["resume_uploaded"] = True
@@ -425,10 +538,153 @@ class ConversationService:
         messages = await self._repository.list_messages(session_id)
         return [self._message_response(message) for message in messages]
 
+    async def get_candidate_portal_bot_session(
+        self,
+        *,
+        candidate_id: UUID,
+        session_id: UUID,
+    ) -> CandidateBotSessionResponse:
+        conversation = await self._get_candidate_portal_bot_session_record(
+            candidate_id=candidate_id,
+            session_id=session_id,
+        )
+        messages = await self._repository.list_messages(conversation.id)
+        return CandidateBotSessionResponse(
+            session=self._session_response(conversation),
+            messages=[self._message_response(message) for message in messages],
+            handoff_required=bool((conversation.context_json or {}).get("handoff_requested")),
+        )
+
+    async def receive_candidate_portal_bot_message(
+        self,
+        *,
+        candidate_id: UUID,
+        session_id: UUID | None,
+        message: str,
+        job_id: UUID | None = None,
+        operational_unit_id: UUID | None = None,
+    ) -> ConversationTurnResponse:
+        content = message.strip()
+        if not content:
+            raise ValidationException("Mensagem vazia não é permitida.")
+
+        conversation = await self._resolve_candidate_portal_bot_session(
+            candidate_id=candidate_id,
+            session_id=session_id,
+            job_id=job_id,
+            operational_unit_id=operational_unit_id,
+        )
+        if conversation.status != "active":
+            raise ValidationException("Sessão do assistente do candidato não está ativa.")
+
+        context = dict(conversation.context_json or {})
+        if job_id is not None:
+            context["job_id"] = str(job_id)
+        if operational_unit_id is not None:
+            context["operational_unit_id"] = str(operational_unit_id)
+
+        candidate_message = await self._add_candidate_message(
+            conversation,
+            content=content,
+            message_type="text",
+        )
+
+        ai_intent = await self._maybe_candidate_bot_intent(content)
+        if self._candidate_bot_should_handoff(content, ai_intent):
+            prompt = await self._handle_talk_to_hr(
+                conversation,
+                context,
+                candidate_message,
+                intent=ai_intent,
+            )
+        else:
+            prompt = await self._handle_candidate_portal_bot_prompt(
+                conversation=conversation,
+                context=context,
+                content=content,
+                intent=ai_intent,
+            )
+
+        self._remember_candidate_portal_prompt(context, prompt)
+        conversation.current_state = _GUIDED_PORTAL_CHAT_STORAGE_STATE
+        conversation.context_json = context
+        conversation.updated_at = datetime.now(UTC)
+        assistant_message = await self._add_assistant_message(conversation, prompt)
+        await self._repository.update_session(conversation)
+        return self._turn_response(conversation, assistant_message, prompt)
+
     async def _get_session(self, session_id: UUID) -> ConversationSessionModel:
         conversation = await self._repository.get_session(session_id)
         if conversation is None:
             raise NotFoundException("Sessão de conversa não encontrada.")
+        return conversation
+
+    async def _resolve_candidate_portal_bot_session(
+        self,
+        *,
+        candidate_id: UUID,
+        session_id: UUID | None,
+        job_id: UUID | None,
+        operational_unit_id: UUID | None,
+    ) -> ConversationSessionModel:
+        if session_id is not None:
+            return await self._get_candidate_portal_bot_session_record(
+                candidate_id=candidate_id,
+                session_id=session_id,
+            )
+        return await self._create_candidate_portal_bot_session(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            operational_unit_id=operational_unit_id,
+        )
+
+    async def _create_candidate_portal_bot_session(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID | None,
+        operational_unit_id: UUID | None,
+    ) -> ConversationSessionModel:
+        now = datetime.now(UTC)
+        context: dict[str, Any] = {
+            "candidate_portal_guided_chat": True,
+            "candidate_portal_last_assistant_message": _CANDIDATE_BOT_INITIAL_PROMPT.content,
+            "candidate_portal_last_quick_replies": self._quick_replies_dicts(
+                _CANDIDATE_BOT_INITIAL_PROMPT
+            ),
+        }
+        if job_id is not None:
+            context["job_id"] = str(job_id)
+        if operational_unit_id is not None:
+            context["operational_unit_id"] = str(operational_unit_id)
+
+        conversation = ConversationSessionModel(
+            candidate_id=candidate_id,
+            channel="web",
+            current_state=_GUIDED_PORTAL_CHAT_STORAGE_STATE,
+            status="active",
+            context_json=context,
+            last_message_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        conversation = await self._repository.create_session(conversation)
+        await self._add_assistant_message(conversation, _CANDIDATE_BOT_INITIAL_PROMPT)
+        return conversation
+
+    async def _get_candidate_portal_bot_session_record(
+        self,
+        *,
+        candidate_id: UUID,
+        session_id: UUID,
+    ) -> ConversationSessionModel:
+        conversation = await self._get_session(session_id)
+        context = conversation.context_json or {}
+        if (
+            conversation.candidate_id != candidate_id
+            or not bool(context.get("candidate_portal_guided_chat"))
+        ):
+            raise NotFoundException("Sessão do assistente do candidato não encontrada.")
         return conversation
 
     async def _ensure_candidate_exists(self, candidate_id: UUID) -> None:
@@ -1051,15 +1307,15 @@ class ConversationService:
         context: dict[str, Any],
         content: str,
         candidate_message: ConversationMessageModel,
-    ) -> str:
+    ) -> tuple[str, CandidateIntent | None]:
         if not settings.ASSISTANT_INTENT_AI_ENABLED:
-            return content
+            return content, None
         state = conversation.current_state
         allowed_intents = _AI_INTENTS_BY_STATE.get(state)
         if not allowed_intents:
-            return content
+            return content, None
         if self._is_ai_control_token(content):
-            return content
+            return content, None
 
         prompt = prompt_for(state, context)
         try:
@@ -1068,22 +1324,23 @@ class ConversationService:
                 message=content,
                 allowed_intents=allowed_intents,
                 quick_replies=prompt.quick_replies,
+                allow_safe_fallback=True,
             )
         except Exception:
             # Defensive: the service already swallows provider errors, but never
             # let intent parsing break the conversation.
-            return content
+            return content, None
 
         if intent is None:
-            return content
+            return content, None
 
         # Observability only (no PII): record which intent the AI resolved.
         candidate_message.interpreted_intent = intent.intent
 
         token = self._intent_to_token(state, intent)
         if token is None:
-            return content
-        return token
+            return content, intent
+        return token, intent
 
     @staticmethod
     def _is_ai_control_token(content: str) -> bool:
@@ -1684,6 +1941,7 @@ class ConversationService:
         conversation: ConversationSessionModel,
         context: dict[str, Any],
         candidate_message: ConversationMessageModel,
+        intent: CandidateIntent | None = None,
     ) -> ConversationPrompt:
         """Cria um registro de handoff rastreável e retorna mensagem ao candidato.
 
@@ -1712,11 +1970,427 @@ class ConversationService:
 
         context["handoff_requested"] = True
         candidate_message.interpreted_intent = "talk_to_hr"
+        handoff_message = await self._resolve_talk_to_hr_message(intent)
 
         return ConversationPrompt(
             state=conversation.current_state,
-            content=_TALK_TO_HR_MESSAGE,
+            content=handoff_message,
             quick_replies=(),
+        )
+
+    async def _resolve_talk_to_hr_message(
+        self,
+        intent: CandidateIntent | None,
+    ) -> str:
+        candidate_message = self._safe_talk_to_hr_message(
+            intent.talk_to_hr_message if intent is not None else None
+        )
+        if candidate_message is not None:
+            return candidate_message
+
+        try:
+            configured = await self._session.get(AssistantSettingModel, "talk_to_hr_message")
+        except Exception:
+            configured = None
+        configured_value = configured.value_json if configured is not None else None
+        if isinstance(configured_value, str):
+            safe_configured = self._safe_talk_to_hr_message(configured_value)
+            if safe_configured is not None:
+                return safe_configured
+        return _TALK_TO_HR_MESSAGE
+
+    async def _maybe_safe_user_message_prompt(
+        self,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        *,
+        raw_content: str,
+        resolved_content: str,
+        intent: CandidateIntent,
+    ) -> ConversationPrompt | None:
+        if resolved_content != raw_content:
+            return None
+        if intent.should_handoff or intent.intent == "talk_to_hr":
+            return None
+
+        safe_message = self._safe_user_message(intent.safe_user_message)
+        if safe_message is None:
+            return None
+
+        min_confidence = float(settings.ASSISTANT_INTENT_AI_MIN_CONFIDENCE)
+        should_use = (
+            intent.intent == "unclear"
+            or intent.confidence < min_confidence
+            or self._message_looks_risky(raw_content)
+        )
+        if not should_use:
+            return None
+
+        base_prompt = await self._prompt_for(conversation.current_state, context)
+        return ConversationPrompt(
+            state=conversation.current_state,
+            content=safe_message,
+            quick_replies=base_prompt.quick_replies,
+        )
+
+    @staticmethod
+    def _safe_talk_to_hr_message(message: str | None) -> str | None:
+        cleaned = ConversationService._clean_text(message)
+        if cleaned is None:
+            return None
+        if ConversationService._unsafe_candidate_output(cleaned, allow_generic_help=True):
+            return None
+        return cleaned
+
+    @staticmethod
+    def _safe_user_message(message: str | None) -> str | None:
+        cleaned = ConversationService._clean_text(message)
+        if cleaned is None:
+            return None
+        if ConversationService._unsafe_candidate_output(cleaned, allow_generic_help=False):
+            return None
+        return cleaned
+
+    @staticmethod
+    def _unsafe_candidate_output(message: str, *, allow_generic_help: bool) -> bool:
+        lowered = message.lower()
+        if _OUTPUT_DEADLINE_PATTERN.search(lowered):
+            return True
+        if _OUTPUT_SENSITIVE_PATTERN.search(lowered):
+            return True
+        if _OUTPUT_APPROVAL_PATTERN.search(lowered):
+            return True
+        if _OUTPUT_INTERNAL_PATTERN.search(lowered):
+            return True
+        if not allow_generic_help and _OUTPUT_UNSUPPORTED_ASSERTION_PATTERN.search(lowered):
+            return True
+        if "@" in lowered:
+            return True
+        if re.search(r"\b\d{11}\b", lowered):
+            return True
+        return False
+
+    @staticmethod
+    def _message_looks_risky(message: str) -> bool:
+        return bool(_RISKY_CANDIDATE_MESSAGE_PATTERN.search(message or ""))
+
+    async def _maybe_candidate_bot_intent(self, message: str) -> CandidateIntent | None:
+        if not settings.ASSISTANT_INTENT_AI_ENABLED:
+            return None
+        try:
+            return await self._intent_service.interpret(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                message=message,
+                allowed_intents=("talk_to_hr", "help", "unclear"),
+                quick_replies=_CANDIDATE_BOT_INITIAL_PROMPT.quick_replies,
+                allow_safe_fallback=True,
+            )
+        except Exception:
+            return None
+
+    @staticmethod
+    def _candidate_bot_should_handoff(
+        message: str,
+        intent: CandidateIntent | None,
+    ) -> bool:
+        if intent is not None and (intent.should_handoff or intent.intent == "talk_to_hr"):
+            return True
+        return bool(_CANDIDATE_BOT_HR_PATTERN.search(message or ""))
+
+    async def _handle_candidate_portal_bot_prompt(
+        self,
+        *,
+        conversation: ConversationSessionModel,
+        context: dict[str, Any],
+        content: str,
+        intent: CandidateIntent | None,
+    ) -> ConversationPrompt:
+        safe_message = self._resolve_candidate_bot_safe_message(content, intent)
+        if safe_message is not None:
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=safe_message,
+                quick_replies=_CANDIDATE_BOT_INITIAL_PROMPT.quick_replies,
+            )
+
+        tool_name, tool_args = self._select_candidate_bot_tool(
+            content=content,
+            context=context,
+        )
+        result = await self._execute_candidate_bot_tool(
+            conversation=conversation,
+            tool_name=tool_name,
+            tool_args=tool_args,
+        )
+        return self._candidate_bot_prompt_from_tool_result(
+            tool_name=tool_name,
+            result=result,
+        )
+
+    def _resolve_candidate_bot_safe_message(
+        self,
+        content: str,
+        intent: CandidateIntent | None,
+    ) -> str | None:
+        if intent is not None:
+            safe_message = self._safe_user_message(intent.safe_user_message)
+            if safe_message is not None and (
+                intent.intent == "unclear" or self._message_looks_risky(content)
+            ):
+                return safe_message
+        if self._message_looks_risky(content):
+            return _CANDIDATE_BOT_GENERIC_FALLBACK
+        return None
+
+    def _select_candidate_bot_tool(
+        self,
+        *,
+        content: str,
+        context: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        if _CANDIDATE_BOT_STATUS_PATTERN.search(content):
+            return "get_my_application_status", {}
+
+        job_id = self._clean_text(context.get("job_id"))
+        if job_id and _CANDIDATE_BOT_UNITS_PATTERN.search(content):
+            return "get_public_job_units", {"job_id": job_id}
+        if job_id and _CANDIDATE_BOT_DETAIL_PATTERN.search(content):
+            return "get_public_job_detail", {"job_id": job_id}
+
+        if _CANDIDATE_BOT_JOBS_PATTERN.search(content):
+            return "search_public_jobs", {
+                "query": self._candidate_bot_job_query(content),
+                "limit": 5,
+            }
+
+        return "search_candidate_knowledge", {
+            "query": content,
+            "limit": 3,
+        }
+
+    @staticmethod
+    def _candidate_bot_job_query(content: str) -> str | None:
+        cleaned = re.sub(
+            r"\b(quero|ver|buscar|procurar|me|candidatar|trabalhar|tem|vaga|vagas|"
+            r"oportunidade|oportunidades|para|uma|um|em|no|na|de|do|da)\b",
+            " ",
+            content,
+            flags=re.IGNORECASE,
+        )
+        compact = re.sub(r"\s+", " ", cleaned).strip(" .,-")
+        return compact or None
+
+    async def _execute_candidate_bot_tool(
+        self,
+        *,
+        conversation: ConversationSessionModel,
+        tool_name: str,
+        tool_args: dict[str, Any],
+    ):
+        runtime = ToolRuntime(CANDIDATE_BOT_REGISTRY, read_only=True)
+        execution_context = ToolExecutionContext(
+            agent_context=AgentContext(
+                user_id=str(conversation.candidate_id),
+                role="candidate",
+                permissions=list(_CANDIDATE_BOT_PERMISSIONS),
+                request_id=str(uuid4()),
+                session_id=str(conversation.id),
+                source="api",
+                actor_type="candidate",
+                channel="candidate_portal",
+                audience="candidate",
+            ),
+            services=self._candidate_bot_services(),
+            read_only=True,
+        )
+        return await runtime.execute(tool_name, tool_args, execution_context)
+
+    def _candidate_bot_services(self) -> dict[str, Any]:
+        embedding_provider = get_embedding_provider()
+        candidate_retriever = CandidateSafeRetriever(
+            PostgresVectorRetriever(
+                vector_store=PostgresVectorStore(self._session),
+                embedding_provider=embedding_provider,
+                document_repository=SQLAlchemyKnowledgeDocumentRepository(self._session),
+            )
+        )
+        return {
+            "job_repository": SQLAlchemyJobRepository(self._session),
+            "db_session": self._session,
+            "candidate_retriever": candidate_retriever,
+            "answer_service": RagAnswerService(usage_session=self._session),
+            "candidate_portal_service": CandidatePortalService(self._session),
+        }
+
+    def _candidate_bot_prompt_from_tool_result(
+        self,
+        *,
+        tool_name: str,
+        result,
+    ) -> ConversationPrompt:
+        if not result.ok:
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=self._candidate_bot_error_message(tool_name, result.error_code),
+                quick_replies=_CANDIDATE_BOT_INITIAL_PROMPT.quick_replies,
+            )
+
+        data = result.data if isinstance(result.data, dict) else {}
+        if tool_name == "get_my_application_status":
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=self._candidate_bot_status_message(data),
+                quick_replies=(
+                    ("ver_vagas", "Ver vagas"),
+                    ("falar_com_rh", "Falar com RH"),
+                ),
+            )
+        if tool_name == "search_public_jobs":
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=self._candidate_bot_jobs_message(data),
+                quick_replies=(
+                    ("acompanhar_candidatura", "Acompanhar candidatura"),
+                    ("falar_com_rh", "Falar com RH"),
+                ),
+            )
+        if tool_name == "get_public_job_units":
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=self._candidate_bot_units_message(data),
+                quick_replies=(
+                    ("ver_vagas", "Ver vagas"),
+                    ("falar_com_rh", "Falar com RH"),
+                ),
+            )
+        if tool_name == "get_public_job_detail":
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=self._candidate_bot_job_detail_message(data),
+                quick_replies=(
+                    ("ver_vagas", "Ver vagas"),
+                    ("falar_com_rh", "Falar com RH"),
+                ),
+            )
+        return ConversationPrompt(
+            state=_GUIDED_PORTAL_CHAT_STATE,
+            content=self._candidate_bot_knowledge_message(data),
+            quick_replies=(
+                ("ver_vagas", "Ver vagas"),
+                ("acompanhar_candidatura", "Acompanhar candidatura"),
+                ("falar_com_rh", "Falar com RH"),
+            ),
+        )
+
+    @staticmethod
+    def _candidate_bot_error_message(tool_name: str, error_code: str | None) -> str:
+        if tool_name == "get_my_application_status" and error_code == "PROFILE_INCOMPLETE":
+            return (
+                "Consigo acompanhar sua candidatura, mas antes você precisa completar "
+                "seu cadastro na sua área do candidato."
+            )
+        if tool_name in {"get_public_job_detail", "get_public_job_units"} and error_code == "NOT_FOUND":
+            return "Não consegui localizar essa vaga publicada agora. Tente ver a lista de vagas novamente."
+        return _CANDIDATE_BOT_GENERIC_FALLBACK
+
+    @staticmethod
+    def _candidate_bot_status_message(data: dict[str, Any]) -> str:
+        active_application = data.get("active_application") or {}
+        job_title = ConversationService._clean_text(active_application.get("job_title"))
+        public_status = ConversationService._clean_text(
+            data.get("current_process_status_label") or data.get("status_public")
+        )
+        if job_title and public_status:
+            return f"Sua candidatura em {job_title} está com o status: {public_status}."
+        if public_status:
+            return f"O status público da sua candidatura é: {public_status}."
+        return "No momento não encontrei uma candidatura ativa para acompanhar por aqui."
+
+    @staticmethod
+    def _candidate_bot_jobs_message(data: dict[str, Any]) -> str:
+        jobs = data.get("jobs")
+        if not isinstance(jobs, list) or not jobs:
+            return (
+                "No momento não encontrei vagas com esse filtro. Se quiser, me diga "
+                "a cidade ou a função que você procura."
+            )
+        lines = []
+        for job in jobs[:3]:
+            if not isinstance(job, dict):
+                continue
+            title = ConversationService._clean_text(job.get("title")) or "Vaga"
+            location = ConversationService._clean_text(job.get("location")) or "local a confirmar"
+            lines.append(f"- {title} — {location}")
+        summary = "\n".join(lines)
+        return (
+            "Encontrei estas vagas públicas para você:\n"
+            f"{summary}\n"
+            "Se quiser, posso continuar te ajudando com dúvidas gerais ou encaminhar você ao RH."
+        )
+
+    @staticmethod
+    def _candidate_bot_units_message(data: dict[str, Any]) -> str:
+        units = data.get("job_units")
+        if not isinstance(units, list) or not units:
+            return "Esta vaga não tem unidades públicas detalhadas no momento."
+        lines = []
+        for unit in units[:3]:
+            if not isinstance(unit, dict):
+                continue
+            label = ConversationService._clean_text(unit.get("public_name")) or "Unidade"
+            city = ConversationService._clean_text(unit.get("city"))
+            state = ConversationService._clean_text(unit.get("state"))
+            location = "/".join(part for part in (city, state) if part)
+            lines.append(f"- {label}{f' — {location}' if location else ''}")
+        return "Estas são as unidades públicas dessa vaga:\n" + "\n".join(lines)
+
+    @staticmethod
+    def _candidate_bot_job_detail_message(data: dict[str, Any]) -> str:
+        title = ConversationService._clean_text(data.get("title")) or "Vaga"
+        description = ConversationService._candidate_bot_excerpt(data.get("description"))
+        requirements = ConversationService._candidate_bot_excerpt(data.get("requirements"))
+        parts = [f"Sobre a vaga {title}:"]
+        if description:
+            parts.append(description)
+        if requirements:
+            parts.append(f"Requisitos principais: {requirements}")
+        return " ".join(parts)
+
+    @staticmethod
+    def _candidate_bot_knowledge_message(data: dict[str, Any]) -> str:
+        chunks = data.get("chunks")
+        if not isinstance(chunks, list) or not chunks:
+            return (
+                "Não encontrei uma resposta pública confiável para isso agora. "
+                "Se quiser, posso buscar vagas ou encaminhar seu atendimento para o RH."
+            )
+        top_chunk = chunks[0] if isinstance(chunks[0], dict) else {}
+        source_title = ConversationService._clean_text(top_chunk.get("source_title"))
+        excerpt = ConversationService._candidate_bot_excerpt(top_chunk.get("content"))
+        if source_title and excerpt:
+            return f"Encontrei isto na base pública ({source_title}): {excerpt}"
+        if excerpt:
+            return excerpt
+        return _CANDIDATE_BOT_GENERIC_FALLBACK
+
+    @staticmethod
+    def _candidate_bot_excerpt(value: Any, *, limit: int = 240) -> str | None:
+        cleaned = ConversationService._clean_text(value)
+        if cleaned is None:
+            return None
+        compact = re.sub(r"\s+", " ", cleaned)
+        if len(compact) <= limit:
+            return compact
+        return compact[: limit - 1].rstrip() + "…"
+
+    @staticmethod
+    def _remember_candidate_portal_prompt(
+        context: dict[str, Any],
+        prompt: ConversationPrompt,
+    ) -> None:
+        context["candidate_portal_last_assistant_message"] = prompt.content
+        context["candidate_portal_last_quick_replies"] = ConversationService._quick_replies_dicts(
+            prompt
         )
 
     @staticmethod
@@ -1817,7 +2491,7 @@ class ConversationService:
         context = conversation.context_json or {}
         return ConversationTurnResponse(
             session_id=conversation.id,
-            current_state=conversation.current_state,
+            current_state=self._public_state(conversation),
             assistant_message=message.content,
             quick_replies=quick_replies,
             session=self._session_response(conversation, prompt),
@@ -1831,15 +2505,12 @@ class ConversationService:
         conversation: ConversationSessionModel,
         prompt: ConversationPrompt | None = None,
     ) -> ConversationSessionResponse:
-        current_prompt = prompt or prompt_for(
-            conversation.current_state,
-            conversation.context_json or {},
-        )
+        current_prompt = prompt or self._session_prompt(conversation)
         return ConversationSessionResponse(
             id=conversation.id,
             session_id=conversation.id,
             channel=conversation.channel,
-            current_state=conversation.current_state,
+            current_state=self._public_state(conversation),
             status=conversation.status,
             context=self._public_context(conversation.context_json or {}),
             assistant_message=current_prompt.content,
@@ -1848,6 +2519,39 @@ class ConversationService:
             created_at=conversation.created_at,
             updated_at=conversation.updated_at,
         )
+
+    @staticmethod
+    def _public_state(conversation: ConversationSessionModel) -> str:
+        context = conversation.context_json or {}
+        if bool(context.get("candidate_portal_guided_chat")):
+            return _GUIDED_PORTAL_CHAT_STATE
+        return conversation.current_state
+
+    @staticmethod
+    def _session_prompt(conversation: ConversationSessionModel) -> ConversationPrompt:
+        context = conversation.context_json or {}
+        if bool(context.get("candidate_portal_guided_chat")):
+            last_message = ConversationService._clean_text(
+                context.get("candidate_portal_last_assistant_message")
+            ) or _CANDIDATE_BOT_INITIAL_PROMPT.content
+            quick_reply_rows = context.get("candidate_portal_last_quick_replies")
+            quick_replies: tuple[tuple[str, str], ...] | None = None
+            if isinstance(quick_reply_rows, list):
+                quick_replies = tuple(
+                    (str(item.get("value")), str(item.get("label")))
+                    for item in quick_reply_rows
+                    if isinstance(item, dict)
+                    and isinstance(item.get("value"), str)
+                    and isinstance(item.get("label"), str)
+                )
+            if quick_replies is None:
+                quick_replies = _CANDIDATE_BOT_INITIAL_PROMPT.quick_replies
+            return ConversationPrompt(
+                state=_GUIDED_PORTAL_CHAT_STATE,
+                content=last_message,
+                quick_replies=quick_replies,
+            )
+        return prompt_for(conversation.current_state, context)
 
     @staticmethod
     def _message_response(message: ConversationMessageModel) -> ConversationMessageResponse:
@@ -1908,6 +2612,8 @@ class ConversationService:
             "lead_cpf",
             "pending_resume_path",
             "pending_resume_filename",
+            "candidate_portal_last_assistant_message",
+            "candidate_portal_last_quick_replies",
         }
         return {key: value for key, value in context.items() if key not in internal_keys}
 
