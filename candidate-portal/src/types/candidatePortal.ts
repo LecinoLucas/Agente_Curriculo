@@ -33,6 +33,15 @@ export type ApplicationStatus =
 
 export type DocumentStatus = 'pendente' | 'enviado' | 'aprovado' | 'rejeitado';
 
+export interface PublicJobUnit {
+  id: string;
+  public_name: string;
+  city: string | null;
+  state: string | null;
+  address: string | null;
+  reference_point: string | null;
+}
+
 export interface PublicJob {
   id: string;
   slug: string;
@@ -51,6 +60,7 @@ export interface PublicJob {
   image_url?: string;
   published_at: string;
   applicants_count?: number;
+  job_units?: PublicJobUnit[];
 }
 
 export interface ApplicationFormStep1 {

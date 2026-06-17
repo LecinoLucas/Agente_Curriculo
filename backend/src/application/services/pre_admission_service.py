@@ -166,11 +166,19 @@ class PreAdmissionService:
         template = await PreAdmissionChecklistTemplateService(self._repository).resolve_template_for_case(
             template_id=body.checklist_template_id
         )
+
+        operational_unit_id = (
+            active_pipeline.operational_unit_id
+            if active_pipeline is not None
+            else None
+        )
+
         now = datetime.now(UTC)
         case = PreAdmissionCaseModel(
             candidate_id=candidate_id,
             job_id=job_id,
             hiring_decision_id=decision.id,
+            operational_unit_id=operational_unit_id,
             checklist_template_id=template.id,
             checklist_template_name=template.name,
             status="draft",

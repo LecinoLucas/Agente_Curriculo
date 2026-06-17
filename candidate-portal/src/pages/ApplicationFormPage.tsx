@@ -48,6 +48,7 @@ interface FormState {
   lgpd_consent: boolean;
   password?: string;
   confirm_password?: string;
+  preferred_unit_id: string | null;
 }
 
 const INITIAL_FORM: FormState = {
@@ -64,9 +65,10 @@ const INITIAL_FORM: FormState = {
   lgpd_consent: false,
   password: '',
   confirm_password: '',
+  preferred_unit_id: null,
 };
 
-function validateStep1(f: FormState): string | null {
+function validateStep1(f: FormState, jobUnitsCount: number): string | null {
   if (!f.full_name.trim()) return 'Nome completo é obrigatório.';
   if (!f.cpf.replace(/\D/g, '')) return 'CPF é obrigatório.';
   if (!f.email.trim()) return 'E-mail é obrigatório.';
@@ -77,6 +79,8 @@ function validateStep1(f: FormState): string | null {
   if (salaryError) return salaryError;
 
   if (!f.desired_contract_type) return 'Regime de contratação é obrigatório.';
+  if (jobUnitsCount >= 2 && !f.preferred_unit_id)
+    return 'Selecione um posto/unidade de preferência.';
   if (!f.password) return 'Senha é obrigatória para concluir o cadastro.';
   if (f.password.length < 8) return 'A senha deve ter no mínimo 8 caracteres.';
   if (f.password !== f.confirm_password) return 'A confirmação de senha não confere.';
@@ -135,8 +139,10 @@ export function ApplicationFormPage() {
     setStep(nextStep);
   }
 
+  const jobUnitsCount = job?.job_units?.length ?? 0;
+
   async function handleSubmit() {
-    const step1Error = validateStep1(form);
+    const step1Error = validateStep1(form, jobUnitsCount);
     if (step1Error) { setStep(1); setStepError(step1Error); return; }
     const step2Error = validateStep2(form);
     if (step2Error) { setStep(2); setStepError(step2Error); return; }
@@ -164,6 +170,7 @@ export function ApplicationFormPage() {
         resume_file: form.resume_file,
         password: form.password,
         confirm_password: form.confirm_password,
+        preferred_unit_id: form.preferred_unit_id,
       });
       navigate('/sucesso', {
         state: {
@@ -411,6 +418,65 @@ export function ApplicationFormPage() {
                 </div>
               </div>
 
+              {/* Posto/unidade de preferência — 1 unit: informative; 2+ units: mandatory selector */}
+              {jobUnitsCount === 1 && job?.job_units?.[0] && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-sm font-medium text-blue-800">
+                    Posto/unidade:{' '}
+                    <span className="font-semibold">{job.job_units[0].public_name}</span>
+                  </p>
+                  {(job.job_units[0].city || job.job_units[0].state) && (
+                    <p className="mt-0.5 text-xs text-blue-600">
+                      {[job.job_units[0].city, job.job_units[0].state].filter(Boolean).join(', ')}
+                    </p>
+                  )}
+                  {job.job_units[0].reference_point && (
+                    <p className="mt-0.5 text-xs text-blue-500">{job.job_units[0].reference_point}</p>
+                  )}
+                </div>
+              )}
+
+              {jobUnitsCount >= 2 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Posto/unidade de preferência <span className="text-red-500">*</span>
+                  </label>
+                  <div className="space-y-2">
+                    {job?.job_units?.map((unit) => (
+                      <label
+                        key={unit.id}
+                        className={[
+                          'flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors',
+                          form.preferred_unit_id === unit.id
+                            ? 'border-primary-700 bg-primary-50'
+                            : 'border-gray-200 bg-white hover:border-primary-700/40',
+                        ].join(' ')}
+                      >
+                        <input
+                          type="radio"
+                          name="preferred_unit"
+                          value={unit.id}
+                          checked={form.preferred_unit_id === unit.id}
+                          onChange={() => update({ preferred_unit_id: unit.id })}
+                          className="mt-0.5 h-4 w-4 text-primary-700 focus:ring-primary-700/20"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{unit.public_name}</p>
+                          {(unit.city || unit.state) && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {[unit.city, unit.state].filter(Boolean).join(', ')}
+                            </p>
+                          )}
+                          {unit.reference_point && (
+                            <p className="text-xs text-gray-400 mt-0.5">{unit.reference_point}</p>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Grupo Marajó */}
               <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
                 <input
@@ -432,7 +498,7 @@ export function ApplicationFormPage() {
               )}
 
               <div className="flex justify-end pt-2">
-                <Button onClick={() => advance(2, validateStep1)}>
+                <Button onClick={() => advance(2, (f) => validateStep1(f, jobUnitsCount))}>
                   Próximo
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -520,6 +586,14 @@ export function ApplicationFormPage() {
                   <ReviewRow label="Pretensão" value={form.salary_expectation} />
                 )}
                 <ReviewRow label="Regime" value={form.desired_contract_type} />
+                {form.preferred_unit_id && (
+                  <ReviewRow
+                    label="Posto/unidade"
+                    value={
+                      job?.job_units?.find((u) => u.id === form.preferred_unit_id)?.public_name ?? '—'
+                    }
+                  />
+                )}
                 <ReviewRow
                   label="Grupo Marajó"
                   value={form.works_at_marajo_group ? 'Sim' : 'Não'}

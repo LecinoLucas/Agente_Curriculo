@@ -23,6 +23,7 @@ from src.infrastructure.database.models.hiring_decision_model import CandidateJo
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.operational_master_model import OperationalUnitModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionChecklistItemModel,
@@ -345,6 +346,7 @@ class SQLAlchemyPipelineRepository:
         entered_to: datetime | None = None,
         updated_from: datetime | None = None,
         updated_to: datetime | None = None,
+        operational_unit_id: UUID | None = None,
         limit: int | None = None,
     ) -> list[dict]:
         # Non-correlated scalar — runs once, resolved before the main query.
@@ -525,6 +527,8 @@ class SQLAlchemyPipelineRepository:
             conditions.append(CandidateJobPipelineModel.updated_at >= updated_from)
         if updated_to is not None:
             conditions.append(CandidateJobPipelineModel.updated_at <= updated_to)
+        if operational_unit_id is not None:
+            conditions.append(CandidateJobPipelineModel.operational_unit_id == operational_unit_id)
 
         result = await self._session.execute(
             sa.select(
@@ -548,6 +552,10 @@ class SQLAlchemyPipelineRepository:
                 latest_interview_cte.c.interview_status,
                 next_interview_cte.c.interview_scheduled_start,
                 latest_scorecard_cte.c.interview_scorecard_status,
+                sa.func.coalesce(
+                    OperationalUnitModel.public_name, OperationalUnitModel.name
+                ).label("unit_name"),
+                CandidateJobPipelineModel.operational_unit_id,
             )
             .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
@@ -596,6 +604,13 @@ class SQLAlchemyPipelineRepository:
                 latest_scorecard_cte,
                 latest_scorecard_cte.c.pipeline_id
                 == CandidateJobPipelineModel.candidate_job_pipeline_id,
+            )
+            .outerjoin(
+                OperationalUnitModel,
+                sa.and_(
+                    OperationalUnitModel.id == CandidateJobPipelineModel.operational_unit_id,
+                    OperationalUnitModel.is_active.is_(True),
+                ),
             )
             .where(
                 *conditions,
@@ -781,6 +796,7 @@ class SQLAlchemyPipelineRepository:
         current_analysis_id: UUID | None = None,
         source: str = "manual",
         application_id: UUID | None = None,
+        operational_unit_id: UUID | None = None,
     ) -> dict:
         pipeline_status = "terminal" if status in _TERMINAL_LINK_STATUSES else "active"
         relationship_values = _relationship_update_values(
@@ -805,6 +821,7 @@ class SQLAlchemyPipelineRepository:
                 resume_version_id=resume_version_id,
                 current_analysis_id=current_analysis_id,
                 application_id=application_id,
+                operational_unit_id=operational_unit_id,
                 entered_at=updated_at,
                 last_moved_by=moved_by,
                 created_at=updated_at,
@@ -867,6 +884,7 @@ class SQLAlchemyPipelineRepository:
         moved_by: UUID | None,
         updated_at: datetime,
         resume_version_id: UUID | None = None,
+        operational_unit_id: UUID | None = None,
     ) -> dict | None:
         update_values = {
             "candidate_job_pipeline_id": uuid4(),
@@ -885,6 +903,8 @@ class SQLAlchemyPipelineRepository:
         }
         if resume_version_id is not None:
             update_values["resume_version_id"] = resume_version_id
+        if operational_unit_id is not None:
+            update_values["operational_unit_id"] = operational_unit_id
         result = await self._session.execute(
             sa.update(CandidateJobPipelineModel)
             .where(

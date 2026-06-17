@@ -105,7 +105,11 @@ class ProtheusCasePayloadAdapter:
         docs = self._index_approved_documents(checklist_items)
         doc_flags = self._checklist_presence(checklist_items)
         rg_structured = self._extract_structured_rg(docs.get("rg"))
-        unit_code = await self._resolve_unit_code(job.id, fallback_unit_code)
+        unit_code = await self._resolve_unit_code(
+            job.id,
+            fallback_unit_code,
+            operational_unit_id=case.operational_unit_id,
+        )
 
         pending = self._collect_pending(case=case, candidate=candidate, job=job, doc_flags=doc_flags, unit_code=unit_code, rg_structured=rg_structured)
 
@@ -180,7 +184,28 @@ class ProtheusCasePayloadAdapter:
         )
         return list(await self._session.scalars(stmt))
 
-    async def _resolve_unit_code(self, job_id: UUID, fallback_unit_code: str | None) -> str | None:
+    async def _resolve_unit_code(
+        self,
+        job_id: UUID,
+        fallback_unit_code: str | None,
+        *,
+        operational_unit_id: UUID | None = None,
+    ) -> str | None:
+        # Priority 1: use the unit stored on the case (set from candidate's preferred_unit_id).
+        if operational_unit_id is not None:
+            direct_stmt = (
+                sa.select(OperationalUnitModel.code)
+                .where(
+                    OperationalUnitModel.id == operational_unit_id,
+                    OperationalUnitModel.is_active.is_(True),
+                )
+            )
+            direct_code = await self._session.scalar(direct_stmt)
+            normalized_direct = (direct_code or "").strip()
+            if normalized_direct:
+                return normalized_direct
+
+        # Priority 2: fall back to the first active job_unit by priority (legacy behaviour).
         stmt = (
             sa.select(OperationalUnitModel.code)
             .join(JobUnitModel, JobUnitModel.operational_unit_id == OperationalUnitModel.id)

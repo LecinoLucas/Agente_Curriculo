@@ -363,6 +363,15 @@ export const KanbanCard = memo(function KanbanCard({
           </div>
         )}
 
+        {candidate.unit_name && (
+          <div
+            className="flex items-center gap-1.5 text-[10px] font-medium text-text-muted"
+            data-testid="kanban-card-unit"
+          >
+            <span className="truncate">Unidade: {candidate.unit_name}</span>
+          </div>
+        )}
+
         {nextAction && (
           <div
             className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-surface-muted/50 px-2 py-1 text-[10px] font-semibold text-text-muted"

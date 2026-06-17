@@ -13,6 +13,17 @@ class PublicJobResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PublicJobUnitResponse(BaseModel):
+    """Unidade/posto público de uma vaga — campos seguros para exibição ao candidato."""
+
+    id: UUID
+    public_name: str
+    city: str | None = None
+    state: str | None = None
+    address: str | None = None
+    reference_point: str | None = None
+
+
 class PublicJobDetailResponse(BaseModel):
     """Detalhe público de uma vaga — apenas campos seguros para exibição ao candidato.
 
@@ -33,6 +44,7 @@ class PublicJobDetailResponse(BaseModel):
     benefits: list = Field(default_factory=list)
     working_hours: str | None = None
     published_at: datetime | None = None
+    job_units: list[PublicJobUnitResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

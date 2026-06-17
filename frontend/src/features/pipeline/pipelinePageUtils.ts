@@ -61,6 +61,7 @@ export function readPipelineBoardFilters(searchParams: URLSearchParams): Pipelin
     entered_to: read("entered_to"),
     updated_from: read("updated_from"),
     updated_to: read("updated_to"),
+    operational_unit_id: read("operational_unit_id"),
   };
 }
 

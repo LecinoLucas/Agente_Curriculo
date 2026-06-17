@@ -41,6 +41,11 @@ class CandidatePipelineModel(Base):
     match_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
     # Set once when the candidate first enters the pipeline; never overwritten.
     entered_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    operational_unit_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("operational_units.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     # NULL when the move was triggered by the system (auto_match); set to the recruiter's id on manual moves.
     last_moved_by: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
@@ -67,6 +72,7 @@ class CandidatePipelineModel(Base):
         sa.Index("idx_candidate_pipeline_job_stage", "job_id", "stage"),
         sa.Index("idx_candidate_pipeline_job_score", "job_id", "match_score"),
         sa.Index("idx_candidate_pipeline_last_moved_by", "last_moved_by"),
+        sa.Index("idx_candidate_pipeline_unit", "job_id", "operational_unit_id"),
     )
 
 
@@ -95,6 +101,10 @@ class PipelineStageTransitionModel(Base):
     moved_by: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
         sa.ForeignKey("users.id", ondelete="SET NULL"),
+    )
+    operational_unit_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        nullable=True,
     )
     moved_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),

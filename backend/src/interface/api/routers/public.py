@@ -117,6 +117,7 @@ async def apply(
     password: str = Form(default=""),
     confirm_password: str = Form(default=""),
     lgpd_consent: bool = Form(...),
+    preferred_unit_id: UUID | None = Form(default=None),
     resume_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     _rl: None = Depends(rate_limit_public_apply),
@@ -180,6 +181,7 @@ async def apply(
             file_content_type=file_content_type,
             lgpd_consent=lgpd_consent,
             authenticated_candidate_id=candidate_session.candidate_id if candidate_session else None,
+            preferred_unit_id=preferred_unit_id,
         )
 
         auth_service = CandidatePortalAuthService(db)

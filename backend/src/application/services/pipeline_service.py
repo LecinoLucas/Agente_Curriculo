@@ -20,6 +20,7 @@ from src.application.services.pipeline_gate_evaluator import (
     can_force_transition,
 )
 from src.application.services.strict_payload import require_key
+from src.infrastructure.database.models.candidate_application_model import CandidateApplicationModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
     CandidateJobPipelineEventModel,
@@ -383,6 +384,30 @@ class PipelineCandidateReconsiderationNotAllowedError(Exception):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+async def _lookup_preferred_unit_id(
+    session: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> UUID | None:
+    """Return the preferred_unit_id from the candidate's active application, if any."""
+    stmt = (
+        sa.select(CandidateApplicationModel.preferred_unit_id)
+        .where(
+            CandidateApplicationModel.candidate_id == candidate_id,
+            CandidateApplicationModel.job_id == job_id,
+            CandidateApplicationModel.deleted_at.is_(None),
+        )
+        .limit(1)
+    )
+    return await session.scalar(stmt)
+
+
+# ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
 
@@ -412,6 +437,7 @@ class PipelineService:
             entered_to=normalized_filters.entered_to,
             updated_from=normalized_filters.updated_from,
             updated_to=normalized_filters.updated_to,
+            operational_unit_id=normalized_filters.operational_unit_id,
             limit=max_rows,
         )
         return [self._row_to_match_response(row) for row in rows]
@@ -885,6 +911,13 @@ class PipelineService:
 
         existing_entry = await self._repository.find_any_entry(candidate_id, body.job_id)
 
+        db_session = self._session or self._repository._session
+        preferred_unit_id = await _lookup_preferred_unit_id(
+            db_session,
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+        )
+
         now = datetime.now(UTC)
         if existing_entry is not None:
             saved_row = await self._repository.reactivate_entry(
@@ -894,6 +927,7 @@ class PipelineService:
                 status="active",
                 moved_by=moved_by,
                 updated_at=now,
+                operational_unit_id=preferred_unit_id,
             )
             if saved_row is None:
                 raise PipelineConcurrentModificationError(
@@ -907,6 +941,7 @@ class PipelineService:
                 status="active",
                 moved_by=moved_by,
                 updated_at=now,
+                operational_unit_id=preferred_unit_id,
             )
         pipeline_id = saved_row["pipeline_id"]
         _added_from_stage = existing_entry.pipeline_stage if existing_entry else None
@@ -927,6 +962,7 @@ class PipelineService:
                 from_stage=_added_from_stage,
                 to_stage=body.initial_stage,
                 actor_id=moved_by,
+                operational_unit_id=preferred_unit_id,
                 idempotency_key=_build_event_idempotency_key(
                     pipeline_id, "candidate_added",
                     _added_from_stage,
@@ -1462,4 +1498,6 @@ class PipelineService:
             interview_status=row.get("interview_status"),
             interview_scheduled_start=row.get("interview_scheduled_start"),
             interview_scorecard_status=row.get("interview_scorecard_status"),
+            unit_name=row.get("unit_name"),
+            operational_unit_id=row.get("operational_unit_id"),
         )

@@ -590,6 +590,8 @@ export type JobCandidate = {
   interview_status?: string | null;
   interview_scheduled_start?: string | null;
   interview_scorecard_status?: string | null;
+  unit_name?: string | null;
+  operational_unit_id?: string | null;
 };
 
 export type PipelineStage =
@@ -633,6 +635,7 @@ export type PipelineBoardFilters = {
   entered_to?: string;
   updated_from?: string;
   updated_to?: string;
+  operational_unit_id?: string;
 };
 
 export type PipelineTrigger = "manual" | "auto_match" | "system";
@@ -1517,6 +1520,7 @@ export type AdmissionWorkspaceCandidate = {
 export type AdmissionWorkspaceJob = {
   id: string;
   title: string;
+  unit_name?: string | null;
 };
 
 export type AdmissionWorkspaceChecklistItem = {
@@ -1988,6 +1992,7 @@ export type ProtheusExportQueueStatus = KnownProtheusExportQueueStatus | (string
 export type ProtheusExportQueueItem = {
   id: string;
   case_id: string;
+  unit_name?: string | null;
   status: ProtheusExportQueueStatus;
   status_label: string;
   recommended_action: string;

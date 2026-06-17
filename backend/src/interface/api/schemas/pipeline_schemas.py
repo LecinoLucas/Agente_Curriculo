@@ -76,6 +76,8 @@ class JobMatchCandidateResponse(BaseModel):
     interview_status: str | None = None
     interview_scheduled_start: datetime | None = None
     interview_scorecard_status: str | None = None
+    unit_name: str | None = None
+    operational_unit_id: UUID | None = None
 
 
 class PipelineColumnResponse(BaseModel):
@@ -96,6 +98,7 @@ class PipelineBoardFilters(BaseModel):
     entered_to: datetime | None = None
     updated_from: datetime | None = None
     updated_to: datetime | None = None
+    operational_unit_id: UUID | None = None
 
 
 # ---------------------------------------------------------------------------

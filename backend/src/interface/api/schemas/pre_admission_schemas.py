@@ -402,6 +402,7 @@ class AdmissionCandidateSummarySchema(BaseModel):
 class AdmissionJobSummarySchema(BaseModel):
     id: UUID
     title: str
+    unit_name: str | None = None
 
 
 class AdmissionChecklistItemSchema(BaseModel):
@@ -583,6 +584,7 @@ class ProtheusExportQueuePreflightResponse(BaseModel):
 class ProtheusExportQueueStatusResponse(BaseModel):
     id: str
     case_id: str
+    unit_name: str | None = None
     status: str
     status_label: str
     recommended_action: str
@@ -647,6 +649,7 @@ class ProtheusExportDashboardSummaryResponse(BaseModel):
 class ProtheusExportDashboardItemResponse(BaseModel):
     id: str
     case_id: str
+    unit_name: str | None = None
     status: str
     status_label: str
     payload_status: str | None = None

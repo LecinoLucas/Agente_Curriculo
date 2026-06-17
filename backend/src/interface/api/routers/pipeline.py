@@ -225,6 +225,7 @@ async def get_pipeline_board(
     entered_to: datetime | None = Query(default=None),
     updated_from: datetime | None = Query(default=None),
     updated_to: datetime | None = Query(default=None),
+    operational_unit_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PipelineBoardResponse:
     try:
@@ -235,6 +236,7 @@ async def get_pipeline_board(
                 entered_to=entered_to,
                 updated_from=updated_from,
                 updated_to=updated_to,
+                operational_unit_id=operational_unit_id,
             ),
         )
     except Exception as exc:

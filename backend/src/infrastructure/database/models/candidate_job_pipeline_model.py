@@ -78,6 +78,11 @@ class CandidateJobPipelineModel(Base):
         sa.ForeignKey("candidate_applications.id", ondelete="SET NULL"),
         nullable=True,
     )
+    operational_unit_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("operational_units.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     entered_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     last_moved_by: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
@@ -164,6 +169,11 @@ class CandidateJobPipelineModel(Base):
             "application_id",
         ),
         sa.Index(
+            "idx_candidate_job_pipeline_unit",
+            "job_id",
+            "operational_unit_id",
+        ),
+        sa.Index(
             "uq_candidate_job_pipeline_row_id",
             "candidate_job_pipeline_id",
             unique=True,
@@ -198,6 +208,10 @@ class CandidateJobPipelineEventModel(Base):
     actor_id: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
         sa.ForeignKey("users.id", ondelete="SET NULL"),
+    )
+    operational_unit_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        nullable=True,
     )
     idempotency_key: Mapped[str | None] = mapped_column(sa.String(255), unique=True)
     metadata_payload: Mapped[dict | None] = mapped_column("metadata", sa.JSON)

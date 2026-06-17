@@ -1,5 +1,5 @@
 import { publicApiClient, HttpError } from './publicApiClient';
-import type { PublicJob, JobArea, WorkModel, SeniorityLevel } from '../types/candidatePortal';
+import type { PublicJob, PublicJobUnit, JobArea, WorkModel, SeniorityLevel } from '../types/candidatePortal';
 
 // ── API response shapes (snake_case, as returned by the backend) ──────────────
 
@@ -8,6 +8,15 @@ interface ApiJobListItem {
   title: string;
   location: string | null;
   job_area: string | null;
+}
+
+interface ApiJobUnitItem {
+  id: string;
+  public_name: string;
+  city: string | null;
+  state: string | null;
+  address: string | null;
+  reference_point: string | null;
 }
 
 interface ApiJobDetail {
@@ -23,6 +32,7 @@ interface ApiJobDetail {
   benefits: string[];
   working_hours: string | null;
   published_at: string | null;
+  job_units?: ApiJobUnitItem[];
 }
 
 // ── Mappers ───────────────────────────────────────────────────────────────────
@@ -49,6 +59,17 @@ function formatPublishedAt(iso: string | null): string {
   }
 }
 
+function mapJobUnit(item: ApiJobUnitItem): PublicJobUnit {
+  return {
+    id: item.id,
+    public_name: item.public_name,
+    city: item.city,
+    state: item.state,
+    address: item.address,
+    reference_point: item.reference_point,
+  };
+}
+
 // Maps a list-endpoint item to the internal PublicJob shape.
 // Fields not available from the list endpoint are set to safe empty defaults.
 function mapListItem(item: ApiJobListItem): PublicJob {
@@ -69,6 +90,7 @@ function mapListItem(item: ApiJobListItem): PublicJob {
     requirements: [],
     benefits: [],
     published_at: '',
+    job_units: [],
   };
 }
 
@@ -89,6 +111,7 @@ function mapDetail(item: ApiJobDetail): PublicJob {
     requirements: splitTextBlock(item.requirements),
     benefits: Array.isArray(item.benefits) ? item.benefits : splitTextBlock(item.benefits as unknown as string | null),
     published_at: formatPublishedAt(item.published_at),
+    job_units: Array.isArray(item.job_units) ? item.job_units.map(mapJobUnit) : [],
   };
 }
 

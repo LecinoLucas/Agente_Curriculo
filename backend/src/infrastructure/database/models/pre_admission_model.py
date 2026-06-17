@@ -174,6 +174,11 @@ class PreAdmissionCaseModel(Base):
         sa.ForeignKey("candidate_job_hiring_decisions.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    operational_unit_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("operational_units.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     checklist_template_id: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
         sa.ForeignKey("pre_admission_checklist_templates.id", ondelete="SET NULL"),
@@ -232,6 +237,7 @@ class PreAdmissionCaseModel(Base):
         sa.Index("idx_pre_admission_cases_job_candidate", "job_id", "candidate_id"),
         sa.Index("idx_pre_admission_cases_status", "status"),
         sa.Index("idx_pre_admission_cases_ready_for_export", "ready_for_export"),
+        sa.Index("idx_pre_admission_cases_unit", "operational_unit_id"),
     )
 
 

@@ -282,6 +282,7 @@ export async function getJobPipeline(
   appendDateFilter(params, "entered_to", filters?.entered_to, "end");
   appendDateFilter(params, "updated_from", filters?.updated_from, "start");
   appendDateFilter(params, "updated_to", filters?.updated_to, "end");
+  if (filters?.operational_unit_id) params.set("operational_unit_id", filters.operational_unit_id);
 
   const query = params.toString();
   const response = await httpRequest<JobPipelineBoard>(
@@ -316,6 +317,8 @@ export async function getJobPipeline(
             interview_status: item.interview_status ?? null,
             interview_scheduled_start: item.interview_scheduled_start ?? null,
             interview_scorecard_status: item.interview_scorecard_status ?? null,
+            unit_name: item.unit_name ?? null,
+            operational_unit_id: item.operational_unit_id ?? null,
           }))
         : [],
     })),

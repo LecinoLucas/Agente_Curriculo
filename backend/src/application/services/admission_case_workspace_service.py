@@ -22,6 +22,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.operational_master_model import OperationalUnitModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionChecklistItemModel,
@@ -71,12 +72,14 @@ class AdmissionCaseWorkspaceService:
         user_names = await self._repository.get_user_names(
             {case.created_by} if case.created_by is not None else set()
         )
+        unit_name = await self._resolve_unit_name(case)
         return self._overview_response(
             case=case,
             pipeline=pipeline,
             candidate=candidate,
             job=job,
             responsible_name=user_names.get(case.created_by) if case.created_by else None,
+            unit_name=unit_name,
         )
 
     async def get_documents(self, *, case_id: UUID) -> AdmissionCaseDocumentsResponse:
@@ -374,6 +377,14 @@ class AdmissionCaseWorkspaceService:
         await self._load_workspace_context(case.id)
         return case, item
 
+    async def _resolve_unit_name(self, case: PreAdmissionCaseModel) -> str | None:
+        if case.operational_unit_id is None:
+            return None
+        unit = await self._repository._session.get(OperationalUnitModel, case.operational_unit_id)
+        if unit is None or not unit.is_active:
+            return None
+        return (unit.name or "").strip() or None
+
     async def _workspace_response(
         self,
         *,
@@ -386,6 +397,7 @@ class AdmissionCaseWorkspaceService:
         user_names = await self._user_names_for(case=case, events=events)
         blockers = self._readiness_blockers(case=case, pipeline_is_active=True)
         ready_for_export = not blockers
+        unit_name = await self._resolve_unit_name(case)
         return AdmissionCaseWorkspaceResponse(
             case=AdmissionCaseSummarySchema(
                 id=case.id,
@@ -400,7 +412,7 @@ class AdmissionCaseWorkspaceService:
                 initials=self._initials(candidate.full_name),
                 avatar_url=candidate.google_picture_url,
             ),
-            job=AdmissionJobSummarySchema(id=job.id, title=job.title),
+            job=AdmissionJobSummarySchema(id=job.id, title=job.title, unit_name=unit_name),
             checklist=self._checklist_summary(case=case, events=events, user_names=user_names),
             documents=self._document_summaries(case=case, user_names=user_names),
             main_blockers=blockers,
@@ -539,6 +551,7 @@ class AdmissionCaseWorkspaceService:
         candidate: CandidateModel,
         job: JobModel,
         responsible_name: str | None,
+        unit_name: str | None = None,
     ) -> AdmissionCaseOverviewResponse:
         progress = self._progress_summary(case=case)
         blockers = self._overview_blockers(case=case, pipeline_is_active=True)
@@ -558,7 +571,7 @@ class AdmissionCaseWorkspaceService:
                 initials=self._initials(candidate.full_name),
                 avatar_url=candidate.google_picture_url,
             ),
-            job=AdmissionJobSummarySchema(id=job.id, title=job.title),
+            job=AdmissionJobSummarySchema(id=job.id, title=job.title, unit_name=unit_name),
             status_label=self._case_status_label(case.status),
             progress=progress,
             main_blocker=blockers[0] if blockers else None,

@@ -73,6 +73,9 @@ export function AdmissionCaseHeader({
               <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               {job.title}
             </p>
+            <p className="mt-0.5 text-xs text-text-muted/70" data-testid="admission-unit-name">
+              {job.unit_name ? `Unidade: ${job.unit_name}` : "Unidade não definida"}
+            </p>
           </div>
         </div>
 

@@ -46,7 +46,8 @@ from src.application.services.pre_admission_service import (
 from src.core.settings import settings
 from src.domain.exceptions import ConflictException, NotFoundException, ValidationException
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.job_model import JobModel, JobUnitModel
+from src.infrastructure.database.models.operational_master_model import OperationalUnitModel
 from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
     SQLAlchemyBehavioralAssignmentRepository,
 )
@@ -88,7 +89,7 @@ from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionDocumentUploadResponse,
     CandidatePortalPreAdmissionEnvelopeResponse,
 )
-from src.interface.api.schemas.public_schemas import PublicJobDetailResponse
+from src.interface.api.schemas.public_schemas import PublicJobDetailResponse, PublicJobUnitResponse
 
 router = APIRouter(prefix="/public", tags=["public"])
 logger = structlog.get_logger(__name__)
@@ -125,6 +126,37 @@ async def get_public_job_detail(
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada.")
+
+    units_result = await db.execute(
+        sa.select(
+            OperationalUnitModel.id,
+            sa.func.coalesce(OperationalUnitModel.public_name, OperationalUnitModel.name).label("public_name"),
+            OperationalUnitModel.city,
+            OperationalUnitModel.state,
+            OperationalUnitModel.address,
+            OperationalUnitModel.reference_point,
+        )
+        .select_from(JobUnitModel)
+        .join(OperationalUnitModel, OperationalUnitModel.id == JobUnitModel.operational_unit_id)
+        .where(
+            JobUnitModel.job_id == job_id,
+            JobUnitModel.is_active.is_(True),
+            OperationalUnitModel.is_active.is_(True),
+        )
+        .order_by(JobUnitModel.priority.asc().nullslast(), JobUnitModel.created_at.asc())
+    )
+    job_units = [
+        PublicJobUnitResponse(
+            id=row.id,
+            public_name=row.public_name,
+            city=row.city,
+            state=row.state,
+            address=row.address,
+            reference_point=row.reference_point,
+        )
+        for row in units_result.mappings().all()
+    ]
+
     return PublicJobDetailResponse(
         id=job.id,
         title=job.title,
@@ -138,6 +170,7 @@ async def get_public_job_detail(
         benefits=job.benefits or [],
         working_hours=job.working_hours,
         published_at=job.published_at,
+        job_units=job_units,
     )
 
 

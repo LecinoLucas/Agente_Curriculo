@@ -693,6 +693,7 @@ export function PipelinePage() {
       next.delete("entered_to");
       next.delete("updated_from");
       next.delete("updated_to");
+      next.delete("operational_unit_id");
       return next;
     }, { replace: true });
   }, [setSearchParams]);
@@ -903,11 +904,25 @@ export function PipelinePage() {
     [activeJobId, canUse, rejectionCandidate, syncAfterStageMutation],
   );
 
+  const boardUnits = useMemo(() => {
+    if (!board) return [];
+    const seen = new Map<string, string>();
+    for (const col of board.columns) {
+      for (const c of col.candidates) {
+        if (c.operational_unit_id && c.unit_name && !seen.has(c.operational_unit_id)) {
+          seen.set(c.operational_unit_id, c.unit_name);
+        }
+      }
+    }
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [board]);
+
   const activeFiltersCount =
     (urlBoardFilters.entered_from ? 1 : 0) +
     (urlBoardFilters.entered_to ? 1 : 0) +
     (urlBoardFilters.updated_from ? 1 : 0) +
     (urlBoardFilters.updated_to ? 1 : 0) +
+    (urlBoardFilters.operational_unit_id ? 1 : 0) +
     (searchTerm.trim() ? 1 : 0) +
     (onlyPending ? 1 : 0);
   const hasActiveFilters = activeFiltersCount > 0;
@@ -1361,7 +1376,7 @@ export function PipelinePage() {
                       {/* Order By */}
                       <div className="flex items-center gap-2.5">
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Ordenar por</span>
-                        <select 
+                        <select
                           value={sortOrder}
                           onChange={(e) => setSortOrder(e.target.value as any)}
                           className="rounded-lg bg-white py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 shadow-sm border border-slate-200 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
@@ -1370,6 +1385,23 @@ export function PipelinePage() {
                           <option value="name_az">A-Z</option>
                         </select>
                       </div>
+
+                      {/* Unit filter — only shown when board has candidates from multiple units */}
+                      {boardUnits.length >= 2 && (
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Unidade</span>
+                          <select
+                            value={urlBoardFilters.operational_unit_id ?? ""}
+                            onChange={(e) => handleBoardDateFilterChange("operational_unit_id", e.target.value)}
+                            className="rounded-lg bg-white py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 shadow-sm border border-slate-200 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                          >
+                            <option value="">Todas</option>
+                            {boardUnits.map((u) => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -23,8 +23,12 @@ from src.core.settings import settings
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
 from src.domain.exceptions import ValidationException
+from src.infrastructure.database.models.candidate_application_model import (
+    APPLICATION_ACTIVE_STATUSES,
+    CandidateApplicationModel,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.job_model import JobModel, JobUnitModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
@@ -160,6 +164,7 @@ class PublicApplicationService:
         file_content_type: str | None = None,
         lgpd_consent: bool = False,
         authenticated_candidate_id: UUID | None = None,
+        preferred_unit_id: UUID | None = None,
     ) -> PublicApplyResponse:
         """
         Processo completo de candidatura pública:
@@ -245,6 +250,28 @@ class PublicApplicationService:
                 logger.info("unavailable_job_accessed", job_id=str(job_id))
                 raise PublicApplicationJobUnavailableError(
                     "Esta vaga não está mais disponível"
+                )
+
+            # 6a. Validar preferred_unit_id para vagas com unidades estruturadas
+            active_unit_ids_result = await self.db.execute(
+                sa.select(JobUnitModel.operational_unit_id)
+                .where(
+                    JobUnitModel.job_id == job_id,
+                    JobUnitModel.is_active.is_(True),
+                )
+                .order_by(JobUnitModel.priority.asc().nullslast(), JobUnitModel.created_at.asc())
+            )
+            active_unit_ids = active_unit_ids_result.scalars().all()
+
+            if len(active_unit_ids) >= 2 and preferred_unit_id is None:
+                raise ValidationException(
+                    "Selecione um posto/unidade de preferência para esta vaga."
+                )
+            if len(active_unit_ids) == 1 and preferred_unit_id is None:
+                preferred_unit_id = active_unit_ids[0]
+            if preferred_unit_id is not None and preferred_unit_id not in set(active_unit_ids):
+                raise ValidationException(
+                    "A unidade selecionada não pertence a esta vaga."
                 )
 
         created_new_candidate = existing_candidate is None
@@ -368,6 +395,31 @@ class PublicApplicationService:
         analysis_status: str = "not_requested"
         if job_model:
             now = datetime.now(UTC)
+
+            # Persist CandidateApplicationModel with preferred_unit_id
+            existing_app = await self.db.scalar(
+                sa.select(CandidateApplicationModel).where(
+                    CandidateApplicationModel.candidate_id == candidate.id,
+                    CandidateApplicationModel.job_id == job_id,
+                    CandidateApplicationModel.deleted_at.is_(None),
+                    CandidateApplicationModel.status.in_(APPLICATION_ACTIVE_STATUSES),
+                )
+            )
+            if existing_app is not None:
+                existing_app.preferred_unit_id = preferred_unit_id
+                existing_app.updated_at = now
+            else:
+                self.db.add(CandidateApplicationModel(
+                    candidate_id=candidate.id,
+                    job_id=job_id,
+                    source="web_portal",
+                    status="linked_to_pipeline",
+                    preferred_unit_id=preferred_unit_id,
+                    lgpd_consent_at=now,
+                    lgpd_consent_version="1.0",
+                ))
+            await self.db.flush()
+
             existing_entry = await self._pipeline_repo.find_any_entry(candidate.id, job_id)
             if existing_entry is not None:
                 reactivated_pipeline = await self._pipeline_repo.reactivate_entry(
@@ -378,6 +430,7 @@ class PublicApplicationService:
                     moved_by=None,
                     updated_at=now,
                     resume_version_id=version.id,
+                    operational_unit_id=preferred_unit_id,
                 )
                 if reactivated_pipeline is None:
                     raise PublicApplicationDuplicateJobError(
@@ -419,6 +472,7 @@ class PublicApplicationService:
                     updated_at=now,
                     resume_version_id=version.id,
                     source="manual",
+                    operational_unit_id=preferred_unit_id,
                 )
                 pipeline_id = created_pipeline.get("pipeline_id")
                 logger.info(
