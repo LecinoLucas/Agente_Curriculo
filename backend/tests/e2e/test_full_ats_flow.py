@@ -2,16 +2,213 @@ import pytest
 import json
 import io
 from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient
+import sqlalchemy as sa
 
 from tests.integration.helpers import _create_active_user, _auth_headers
 from src.domain.entities.user import UserRole
+from src.infrastructure.database.models.behavioral_assignment_model import (
+    BehavioralAssessmentAIEvaluationModel,
+    BehavioralAssessmentAssignmentModel,
+)
+from src.infrastructure.database.models.behavioral_template_model import (
+    BehavioralAssessmentTemplateModel,
+    BehavioralTemplateCompetencyModel,
+    BehavioralTemplateQuestionModel,
+)
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+)
+from src.infrastructure.database.models.pre_admission_model import (
+    PreAdmissionChecklistTemplateItemModel,
+    PreAdmissionChecklistTemplateModel,
+)
 
 pytestmark = pytest.mark.asyncio
 
 # Valid PDF for testing
 PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
+
+
+async def _create_active_behavioral_template(db_session) -> str:
+    template = BehavioralAssessmentTemplateModel(
+        id=uuid4(),
+        name=f"Template ATS {uuid4().hex[:6]}",
+        status="active",
+        created_by=uuid4(),
+    )
+    db_session.add(template)
+    await db_session.flush()
+
+    competency = BehavioralTemplateCompetencyModel(
+        id=uuid4(),
+        template_id=template.id,
+        name="Comunicação",
+        display_order=1,
+    )
+    db_session.add(competency)
+    await db_session.flush()
+
+    db_session.add(
+        BehavioralTemplateQuestionModel(
+            id=uuid4(),
+            competency_id=competency.id,
+            question_text="Descreva uma situação em que você precisou alinhar expectativas.",
+            answer_type="text",
+            display_order=1,
+        )
+    )
+    await db_session.commit()
+    return str(template.id)
+
+
+async def _mark_behavioral_assignment_submitted(
+    db_session,
+    *,
+    candidate_id: str | UUID,
+    job_id: str | UUID,
+    template_id: str | UUID,
+) -> None:
+    candidate_uuid = UUID(str(candidate_id))
+    job_uuid = UUID(str(job_id))
+    template_uuid = UUID(str(template_id))
+    now = datetime.now(UTC)
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_uuid,
+            CandidateJobPipelineModel.job_id == job_uuid,
+        )
+    )
+    assert pipeline_id is not None
+
+    assignment = await db_session.scalar(
+        sa.select(BehavioralAssessmentAssignmentModel).where(
+            BehavioralAssessmentAssignmentModel.candidate_id == candidate_uuid,
+            BehavioralAssessmentAssignmentModel.job_id == job_uuid,
+            BehavioralAssessmentAssignmentModel.template_id == template_uuid,
+            BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id,
+        )
+    )
+    assert assignment is not None
+    assignment.status = "submitted"
+    assignment.started_at = assignment.started_at or now
+    assignment.submitted_at = now
+    await db_session.commit()
+
+
+async def _mark_behavioral_ai_completed(
+    db_session,
+    *,
+    candidate_id: str | UUID,
+    job_id: str | UUID,
+    template_id: str | UUID,
+) -> None:
+    candidate_uuid = UUID(str(candidate_id))
+    job_uuid = UUID(str(job_id))
+    template_uuid = UUID(str(template_id))
+    assignment = await db_session.scalar(
+        sa.select(BehavioralAssessmentAssignmentModel).where(
+            BehavioralAssessmentAssignmentModel.candidate_id == candidate_uuid,
+            BehavioralAssessmentAssignmentModel.job_id == job_uuid,
+            BehavioralAssessmentAssignmentModel.template_id == template_uuid,
+        )
+    )
+    assert assignment is not None
+
+    now = datetime.now(UTC)
+    evaluation = await db_session.scalar(
+        sa.select(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.assignment_id == assignment.id
+        )
+    )
+    if evaluation is None:
+        evaluation = BehavioralAssessmentAIEvaluationModel(
+            id=uuid4(),
+            assignment_id=assignment.id,
+            candidate_id=candidate_uuid,
+            job_id=job_uuid,
+            template_id=template_uuid,
+            status="completed",
+            provider="test",
+            model="test-model",
+            prompt_version=1,
+            confidence="medium",
+            summary="Avaliacao comportamental concluida para liberar o fluxo.",
+            completed_at=now,
+        )
+        db_session.add(evaluation)
+    else:
+        evaluation.status = "completed"
+        evaluation.confidence = "medium"
+        evaluation.summary = "Avaliacao comportamental concluida para liberar o fluxo."
+        evaluation.completed_at = now
+        evaluation.failed_at = None
+        evaluation.error_message = None
+    await db_session.commit()
+
+
+async def _move_pipeline_to_hired(
+    db_session,
+    *,
+    candidate_id: str | UUID,
+    job_id: str | UUID,
+) -> None:
+    candidate_uuid = UUID(str(candidate_id))
+    job_uuid = UUID(str(job_id))
+    pipeline = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_uuid,
+            CandidateJobPipelineModel.job_id == job_uuid,
+        )
+    )
+    assert pipeline is not None
+    pipeline.pipeline_stage = "hired"
+    await db_session.commit()
+
+
+async def _ensure_default_checklist_template(db_session) -> str:
+    existing = await db_session.scalar(
+        sa.select(PreAdmissionChecklistTemplateModel).where(
+            PreAdmissionChecklistTemplateModel.is_default.is_(True),
+            PreAdmissionChecklistTemplateModel.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        return str(existing.id)
+
+    now = datetime.now(UTC)
+    template = PreAdmissionChecklistTemplateModel(
+        id=uuid4(),
+        name="Checklist padrão de testes",
+        description="Template padrão para testes de pré-admissão.",
+        is_active=True,
+        is_default=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(template)
+    await db_session.flush()
+
+    db_session.add(
+        PreAdmissionChecklistTemplateItemModel(
+            id=uuid4(),
+            template_id=template.id,
+            document_key="cpf",
+            title="CPF",
+            candidate_description="Envie o CPF.",
+            is_required=True,
+            accepted_file_types=["application/pdf", "image/jpeg", "image/png"],
+            max_file_size_mb=10,
+            display_order=0,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+    return str(template.id)
 
 
 async def test_full_ats_flow_21_steps(client: AsyncClient, db_session):
@@ -565,6 +762,8 @@ async def test_admission_package_validation_blocks_with_pending_docs(
     """
     admin = await _create_active_user(db_session, "admin@test.com", "password", UserRole.ADMIN)
     admin_headers = await _auth_headers(client, "admin@test.com", "password")
+    template_id = await _create_active_behavioral_template(db_session)
+    await _ensure_default_checklist_template(db_session)
 
     # Criar vaga em draft
     resp = await client.post(
@@ -577,6 +776,7 @@ async def test_admission_package_validation_blocks_with_pending_docs(
             "seniority_level": "senior",
             "minimum_years_experience": 5,
             "responsibilities": "Build and maintain backend systems using Python and FastAPI",
+            "behavioral_template_id": template_id,
         },
         headers=admin_headers,
     )
@@ -629,6 +829,18 @@ async def test_admission_package_validation_blocks_with_pending_docs(
         headers=admin_headers,
     )
     assert resp.status_code == 200, f"Failed to add candidate to job: {resp.status_code} {resp.text}"
+    await _mark_behavioral_assignment_submitted(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        template_id=template_id,
+    )
+    await _mark_behavioral_ai_completed(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        template_id=template_id,
+    )
 
     # Criar e submeter scorecard exigido pela política standard
     resp = await client.post(
@@ -705,6 +917,7 @@ async def test_admission_package_validation_blocks_with_pending_docs(
         headers=admin_headers,
     )
     assert resp.status_code == 201, f"Failed to create hiring decision: {resp.status_code} {resp.text}"
+    await _move_pipeline_to_hired(db_session, candidate_id=candidate_id, job_id=job_id)
 
     # Criar pré-admissão
     resp = await client.post(
@@ -724,12 +937,20 @@ async def test_admission_package_validation_blocks_with_pending_docs(
     assert resp.status_code == 201, f"Failed to create checklist item: {resp.status_code} {resp.text}"
     item_id = resp.json()["id"]
 
-    # Marcar como ready sem aprovar documento → tentativa de gerar pacote falha
-    await client.patch(
+    # Avançar o caso pela sequência válida até ready, sem aprovar o documento obrigatório.
+    resp = await client.patch(
+        f"/api/v1/pre-admission/{case_id}",
+        json={"status": "documents_pending"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200, f"Failed to mark documents_pending: {resp.status_code} {resp.text}"
+
+    resp = await client.patch(
         f"/api/v1/pre-admission/{case_id}",
         json={"status": "ready_for_admission"},
         headers=admin_headers,
     )
+    assert resp.status_code == 200, f"Failed to mark ready_for_admission: {resp.status_code} {resp.text}"
 
     resp = await client.post(
         f"/api/v1/pre-admission/{case_id}/admission-package",

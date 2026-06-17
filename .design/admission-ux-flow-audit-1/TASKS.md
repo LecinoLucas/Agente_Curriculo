@@ -304,6 +304,41 @@ Proibido:
 ### Artefatos
 
 - Relatório final: `.design/admission-ux-flow-audit-1/FINAL_REVIEW.md`
+
+---
+
+## ADMISSION-CLEANUP-VALIDATION-1
+
+**Status:** Concluído  
+**Data:** 2026-06-16  
+**Resultado final:** PASS_WITH_NOTES
+
+### Resultado
+
+- `PreAdmissionChecklist.tsx` confirmado como 100% órfão e removido com segurança.
+- Frontend validado após remoção:
+  - `npx tsc --noEmit` → sem erros
+  - `AdmissionCasePage.test.tsx` → passando
+  - `PreAdmissionChecklistsPage.test.tsx` → passando
+- Teste backend focado da área principal executado com sucesso:
+  - `cd backend && .venv/bin/python -m pytest tests/integration/test_admission_case_workspace.py`
+  - Resultado: `19 passed`
+- Suíte ampla `admission/pre_admission` executada com ambiente correto e documentada:
+  - Resultado: `225 passed, 3 failed, 3163 deselected`
+  - Falhas ficaram concentradas em `test_full_ats_flow.py` e `test_communication_event_integrations.py`, fora do escopo direto da limpeza de UX.
+- Revisão visual desta sessão ficou `SKIPPED` por ausência de browser/screenshot tool.
+
+### Ambiente
+
+- O erro anterior de backend não era de código; faltava executar os testes com `cwd=backend` para o carregamento de `backend/.env`.
+- Variáveis ausentes na tentativa anterior:
+  - `APP_SECRET_KEY`
+  - `DATABASE_URL`
+  - `JWT_SECRET_KEY`
+
+### Artefatos
+
+- Relatório de cleanup: `.design/admission-ux-flow-audit-1/CLEANUP_VALIDATION_REPORT.md`
 - Criar testes em `backend/tests/integration/`
 
 ### Arquivos prováveis
@@ -537,3 +572,41 @@ candidate-portal:
 - Protheus: não tocado
 - `review_notes`: nunca exposto ao candidato
 - Docker: nenhuma alteração
+
+---
+
+## ADMISSION-REGRESSION-FAILURES-1
+
+**Data:** 2026-06-16  
+**Resultado:** CORRIGIDO
+
+### Causa de cada falha
+
+- `tests/e2e/test_full_ats_flow.py::test_admission_package_validation_blocks_with_pending_docs`
+  Causa: teste desatualizado após mudanças legítimas de contrato no fluxo de admissão. O cenário passou a exigir: `behavioral_template_id` ativo na vaga, assignment comportamental submetido, avaliação AI concluída, pipeline em `hired`, checklist padrão ativo de pré-admissão e transição válida de status do caso antes de `ready_for_admission`.
+- `tests/integration/test_communication_event_integrations.py::test_pre_admission_and_document_events_create_safe_communications`
+  Causa: teste/fixture desatualizado. O cenário montava a pré-admissão e os documentos por um caminho antigo, incompatível com o fluxo atual de portal do candidato, aprovações/rejeições e permissões operacionais.
+- `tests/integration/test_communication_event_integrations.py::test_admission_package_approved_creates_communication`
+  Causa: mesma classe de desatualização do teste anterior, com fluxo de pré-admissão/documentos e transições de status fora do contrato operacional atual.
+
+### Correção aplicada
+
+- E2E de admissão: incluído seed mínimo de template comportamental ativo, conclusão artificial controlada do assignment/evaluation comportamental, ajuste do pipeline para `hired`, seed de checklist padrão ativo e avanço do caso pela sequência válida `documents_pending -> ready_for_admission`.
+- Integrações de comunicação: testes reescritos para usar o fluxo atual de pré-admissão, portal do candidato, upload real de documento, aprovação/rejeição real e transições válidas até o pacote aprovado, preservando a checagem de comunicação segura sem expor `review_notes`.
+
+### Testes executados
+
+- `cd backend && .venv/bin/python -m pytest tests/e2e/test_full_ats_flow.py::test_admission_package_validation_blocks_with_pending_docs -vv`
+- `cd backend && .venv/bin/python -m pytest tests/integration/test_communication_event_integrations.py -vv`
+- `cd backend && .venv/bin/python -m pytest tests -k "admission or pre_admission"`
+
+### Resultado final
+
+- `tests/e2e/test_full_ats_flow.py::test_admission_package_validation_blocks_with_pending_docs` → `PASSED`
+- `tests/integration/test_communication_event_integrations.py` → `4 passed`
+- `tests -k "admission or pre_admission"` → `228 passed, 3163 deselected`
+
+### Riscos restantes
+
+- O teste E2E continua acoplado ao contrato operacional completo de contratação e pré-admissão; mudanças futuras em gates comportamentais, pipeline ou checklist padrão exigirão atualização coordenada da fixture.
+- As integrações de comunicação continuam dependendo de templates/event keys seedados em fixture; mudanças nessas chaves ou na audiência dos eventos exigirão ajuste sincronizado dos testes.

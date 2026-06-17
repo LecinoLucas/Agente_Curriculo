@@ -14,13 +14,13 @@ from src.infrastructure.database.models import CandidateCommunicationModel, Comm
 
 from .test_interview_operational_flow import (
     _create_interview,
-    _recruiter_headers,
     _seed_candidate_job,
 )
+from .test_hiring_decisions import _admin_headers
 from .test_pre_admission import (
-    _create_checklist_item,
-    _create_hire_decision,
-    _create_pre_admission,
+    _create_portal_session,
+    _pdf_upload,
+    _seed_pre_admission_with_item,
 )
 
 
@@ -119,7 +119,7 @@ async def test_interview_events_create_communications(
     db_session: AsyncSession,
     communication_event_templates,
 ) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     start = datetime.now(UTC) + timedelta(days=12)
 
@@ -185,9 +185,7 @@ async def test_pre_admission_and_document_events_create_safe_communications(
     db_session: AsyncSession,
     communication_event_templates,
 ) -> None:
-    headers = await _recruiter_headers(client, db_session)
-    job_id, candidate_id = await _seed_candidate_job(db_session)
-    await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
     decision_comms = await _communications(
         db_session,
         candidate_id,
@@ -197,28 +195,19 @@ async def test_pre_admission_and_document_events_create_safe_communications(
     assert "strong_fit" not in decision_comms[0].body
     assert "Decisão humana" not in decision_comms[0].body
 
-    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
     assert await _communications(db_session, candidate_id, template_key="pre_admission_created")
-
-    item = await _create_checklist_item(client, headers, case["id"], title="CPF")
-    from src.infrastructure.database.models.pre_admission_model import PreAdmissionDocumentModel
-
-    document = PreAdmissionDocumentModel(
-        case_id=UUID(case["id"]),
-        checklist_item_id=UUID(item["id"]),
-        candidate_id=candidate_id,
-        original_filename="cpf.pdf",
-        stored_filename="doc.pdf",
-        storage_key="test/doc.pdf",
-        mime_type="application/pdf",
-        size_bytes=12,
-        status="uploaded",
-    )
-    db_session.add(document)
-    await db_session.commit()
+    await _create_portal_session(db_session, candidate_id, "portal-comm-reject")
+    client.cookies.set("candidate_portal_token", "portal-comm-reject")
+    document = (
+        await client.post(
+            f"/api/v1/candidate-portal/pre-admission/{case['id']}/checklist-items/{item['id']}/documents",
+            files=_pdf_upload(),
+        )
+    ).json()
+    client.cookies.clear()
 
     response = await client.post(
-        f"/api/v1/pre-admission/documents/{document.id}/reject",
+        f"/api/v1/pre-admission/documents/{document['id']}/reject",
         headers=headers,
         json={"review_notes": "Arquivo ilegível."},
     )
@@ -235,24 +224,30 @@ async def test_admission_package_approved_creates_communication(
     db_session: AsyncSession,
     communication_event_templates,
 ) -> None:
-    headers = await _recruiter_headers(client, db_session)
-    job_id, candidate_id = await _seed_candidate_job(db_session)
-    await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
-    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
-    item = await _create_checklist_item(client, headers, case["id"], title="CPF")
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+    await _create_portal_session(db_session, candidate_id, "portal-comm-approve")
+    client.cookies.set("candidate_portal_token", "portal-comm-approve")
+    document = (
+        await client.post(
+            f"/api/v1/candidate-portal/pre-admission/{case['id']}/checklist-items/{item['id']}/documents",
+            files=_pdf_upload(),
+        )
+    ).json()
+    client.cookies.clear()
 
-    ready = await client.patch(
-        f"/api/v1/pre-admission/{case['id']}",
+    approve_document = await client.post(
+        f"/api/v1/pre-admission/documents/{document['id']}/approve",
         headers=headers,
-        json={"status": "ready_for_admission"},
     )
-    assert ready.status_code == status.HTTP_200_OK, ready.text
-    approved_item = await client.patch(
-        f"/api/v1/pre-admission/{case['id']}/checklist-items/{item['id']}",
-        headers=headers,
-        json={"status": "approved"},
-    )
-    assert approved_item.status_code == status.HTTP_200_OK, approved_item.text
+    assert approve_document.status_code == status.HTTP_200_OK, approve_document.text
+
+    for next_status in ("documents_pending", "documents_received", "ready_for_admission"):
+        update = await client.patch(
+            f"/api/v1/pre-admission/{case['id']}",
+            headers=headers,
+            json={"status": next_status},
+        )
+        assert update.status_code == status.HTTP_200_OK, update.text
 
     package_response = await client.post(
         f"/api/v1/pre-admission/{case['id']}/admission-package",
@@ -282,7 +277,7 @@ async def test_notify_failure_does_not_break_main_flow(
 
     monkeypatch.setattr(CommunicationService, "notify_event", fail_notify)
 
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
 
     response = await client.post(
