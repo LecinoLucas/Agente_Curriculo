@@ -65,6 +65,7 @@ class ConversationHandoffModel(Base):
     )
     assigned_to_user_id: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
+        sa.ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     metadata_json: Mapped[dict | None] = mapped_column(JSONB_COMPAT, nullable=True)

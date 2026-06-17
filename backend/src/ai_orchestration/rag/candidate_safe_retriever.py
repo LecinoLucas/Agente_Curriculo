@@ -23,6 +23,16 @@ _CANDIDATE_VISIBILITY = "public"
 _CANDIDATE_AUDIENCE = "candidate"
 
 
+def _is_candidate_safe_document(document: KnowledgeDocument | None) -> bool:
+    if document is None:
+        return False
+    metadata = document.metadata or {}
+    return (
+        metadata.get("visibility") == _CANDIDATE_VISIBILITY
+        and metadata.get("audience") == _CANDIDATE_AUDIENCE
+    )
+
+
 class CandidateSafeRetriever(RetrieverContract):
     """Wrapper de segurança que restringe retrieval a documentos públicos para candidatos.
 
@@ -63,5 +73,8 @@ class CandidateSafeRetriever(RetrieverContract):
         )
 
     async def get_document(self, document_id: str) -> KnowledgeDocument | None:
-        """Delega ao retriever interno — acesso por ID não é filtrado por visibility."""
-        return await self._inner.get_document(document_id)
+        """Retorna o documento apenas se ele também for público e voltado ao candidato."""
+        document = await self._inner.get_document(document_id)
+        if not _is_candidate_safe_document(document):
+            return None
+        return document

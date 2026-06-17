@@ -14,14 +14,38 @@ Validates:
 from __future__ import annotations
 
 import pytest
+import sqlalchemy as sa
 
 from src.ai_orchestration.rag.candidate_safe_retriever import CandidateSafeRetriever
 from src.ai_orchestration.rag.in_memory_retriever import InMemoryRetriever
 from src.ai_orchestration.rag.schemas import (
     KnowledgeChunk,
+    KnowledgeDocument,
     RetrievalQuery,
 )
 from src.application.services.candidate_assistant_intent_service import CandidateIntent
+from src.application.services.conversation_service import ConversationService
+from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.conversation_handoff_model import (
+    ConversationHandoffModel,
+)
+from src.infrastructure.database.models.conversation_model import (
+    ConversationMessageModel,
+    ConversationSessionModel,
+)
+from src.infrastructure.repositories.sqlalchemy_candidate_application_repository import (
+    SQLAlchemyCandidateApplicationRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_conversation_repository import (
+    SQLAlchemyConversationRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_resume_repository import (
+    SQLAlchemyResumeRepository,
+)
+from src.interface.api.schemas.conversation_schemas import (
+    ConversationCreateRequest,
+    ConversationMessageCreateRequest,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,6 +78,35 @@ _CHUNK_PUBLIC = _chunk("pub", "benefícios vale refeição", visibility="public"
 _CHUNK_INTERNAL_RH = _chunk("rh", "critérios de descarte por histórico criminal", visibility="internal", source_type="rh_policy")
 _CHUNK_ADMIN = _chunk("adm", "política salarial interna admin", visibility="internal", source_type="internal_guide")
 _CHUNK_NO_VISIBILITY = _chunk("noviz", "algo sem visibilidade definida")
+
+
+def _document(
+    document_id: str,
+    *,
+    visibility: str | None = None,
+    audience: str | None = None,
+) -> KnowledgeDocument:
+    metadata: dict[str, str] = {}
+    if visibility is not None:
+        metadata["visibility"] = visibility
+    if audience is not None:
+        metadata["audience"] = audience
+    return KnowledgeDocument(
+        id=document_id,
+        title=f"Document {document_id}",
+        source_type="faq",
+        content=f"content for {document_id}",
+        metadata=metadata,
+    )
+
+
+def _conversation_service(session) -> ConversationService:
+    return ConversationService(
+        repository=SQLAlchemyConversationRepository(session),
+        session=session,
+        application_repository=SQLAlchemyCandidateApplicationRepository(session),
+        resume_repository=SQLAlchemyResumeRepository(session),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +160,29 @@ async def test_candidate_safe_retriever_adds_warning():
     safe = CandidateSafeRetriever(inner)
     result = await safe.retrieve(RetrievalQuery(query="benefícios"))
     assert "candidate_safe_filter_applied" in result.warnings
+
+
+@pytest.mark.asyncio
+async def test_candidate_safe_retriever_get_document_blocks_unsafe_direct_lookup():
+    """Lookup direto por document_id também respeita o filtro público/candidato."""
+    inner = InMemoryRetriever(
+        chunks=[_CHUNK_PUBLIC],
+        documents={
+            "pub-doc": _document("pub-doc", visibility="public", audience="candidate"),
+            "rh-doc": _document("rh-doc", visibility="internal"),
+            "adm-doc": _document("adm-doc", visibility="public", audience="admin"),
+            "noviz-doc": _document("noviz-doc"),
+        },
+    )
+    safe = CandidateSafeRetriever(inner)
+
+    public_document = await safe.get_document("pub-doc")
+
+    assert public_document is not None
+    assert public_document.id == "pub-doc"
+    assert await safe.get_document("rh-doc") is None
+    assert await safe.get_document("adm-doc") is None
+    assert await safe.get_document("noviz-doc") is None
 
 
 # ---------------------------------------------------------------------------
@@ -198,3 +274,92 @@ def test_conversation_handoff_model_defaults():
     assert handoff.assigned_to_user_id is None
     assert "pending" in HANDOFF_STATUSES
     assert "resolved" in HANDOFF_STATUSES
+
+
+@pytest.mark.asyncio
+async def test_talk_to_hr_creates_pending_handoff_and_persists_intent(db_session):
+    """ConversationService cria handoff rastreável e persiste o intent no inbound."""
+    candidate = CandidateModel(full_name="Pessoa Candidata")
+    db_session.add(candidate)
+    await db_session.flush()
+    service = _conversation_service(db_session)
+
+    started = await service.create_session(
+        ConversationCreateRequest(channel="web", candidate_id=candidate.id)
+    )
+    turn = await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="talk_to_hr"),
+    )
+
+    handoff = await db_session.scalar(
+        sa.select(ConversationHandoffModel).where(
+            ConversationHandoffModel.session_id == started.session_id
+        )
+    )
+    assert handoff is not None
+    assert handoff.status == "pending"
+    assert handoff.candidate_id == candidate.id
+    assert handoff.reason == "candidate_requested"
+    assert handoff.metadata_json["state_at_request"] == "IDENTIFY"
+    assert handoff.metadata_json["message_id"]
+
+    persisted_session = await db_session.scalar(
+        sa.select(ConversationSessionModel).where(
+            ConversationSessionModel.id == started.session_id
+        )
+    )
+    assert persisted_session is not None
+    assert persisted_session.context_json["handoff_requested"] is True
+
+    candidate_messages = (
+        await db_session.execute(
+            sa.select(ConversationMessageModel)
+            .where(
+                ConversationMessageModel.session_id == started.session_id,
+                ConversationMessageModel.role == "candidate",
+            )
+            .order_by(
+                ConversationMessageModel.created_at.asc(),
+                ConversationMessageModel.id.asc(),
+            )
+        )
+    ).scalars().all()
+    assert len(candidate_messages) == 1
+    assert candidate_messages[0].interpreted_intent == "talk_to_hr"
+
+    assert turn.handoff_required is True
+    assert turn.current_state == "IDENTIFY"
+    assert "prazo" not in turn.assistant_message.lower()
+
+
+@pytest.mark.asyncio
+async def test_talk_to_hr_handoff_is_idempotent_for_same_pending_session(db_session):
+    """Segundo pedido talk_to_hr na mesma sessão não duplica handoff pendente."""
+    candidate = CandidateModel(full_name="Pessoa Candidata")
+    db_session.add(candidate)
+    await db_session.flush()
+    service = _conversation_service(db_session)
+
+    started = await service.create_session(
+        ConversationCreateRequest(channel="web", candidate_id=candidate.id)
+    )
+
+    first_turn = await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="talk_to_hr"),
+    )
+    second_turn = await service.receive_message(
+        started.session_id,
+        ConversationMessageCreateRequest(content="talk_to_hr"),
+    )
+
+    pending_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(ConversationHandoffModel).where(
+            ConversationHandoffModel.session_id == started.session_id,
+            ConversationHandoffModel.status == "pending",
+        )
+    )
+    assert pending_count == 1
+    assert first_turn.handoff_required is True
+    assert second_turn.handoff_required is True

@@ -55,7 +55,12 @@ def upgrade() -> None:
             server_default=sa.text("NOW()"),
         ),
         sa.Column("resolved_at", sa.TIMESTAMP(timezone=True), nullable=True),
-        sa.Column("assigned_to_user_id", sa.UUID(as_uuid=True), nullable=True),
+        sa.Column(
+            "assigned_to_user_id",
+            sa.UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column(
             "metadata_json",
             sa.JSON(),
