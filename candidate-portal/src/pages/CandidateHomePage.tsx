@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { CandidateBotChat } from '../components/shared/CandidateBotChat';
 import {
   candidatePortalService,
   getAnalysisStatusInfo,
@@ -356,7 +357,7 @@ function renderAreaSection({
           {currentTab === 'applications' && <CandidateApplicationsList applications={applications} />}
           {currentTab === 'assessments' && <CandidateAssessmentsSection pendingActions={pendingActions} />}
           {currentTab === 'documents' && <HonestPlaceholder title="Nenhum documento solicitado no momento." />}
-          {currentTab === 'messages' && <HonestPlaceholder title="Você não possui mensagens no momento." />}
+          {currentTab === 'messages' && <CandidateBotChat jobId={featuredApplication?.jobId ?? null} />}
           {currentTab === 'profile' && <CandidateProfileSummaryCard profile={profile} expanded />}
         </div>
       </div>

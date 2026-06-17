@@ -65,6 +65,7 @@ export interface ConversationTurn {
   session: ConversationSession;
   message: ConversationMessage;
   options: ConversationOption[];
+  handoff_required?: boolean;
 }
 
 export type ConversationMessageType = 'text' | 'quick_reply' | 'system' | 'event';
