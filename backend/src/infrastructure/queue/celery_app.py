@@ -17,6 +17,7 @@ celery_app = Celery(
         "src.interface.workers.document_ai_tasks",
         "src.interface.workers.resume_extraction_tasks",
         "src.interface.workers.behavioral_ai_tasks",
+        "src.interface.workers.resume_extraction_cleanup_tasks",
     ],
 )
 
@@ -71,6 +72,7 @@ celery_app.conf.update(
         "src.interface.workers.matching_tasks.*": {"queue": "matching"},
         "src.interface.workers.document_ai_tasks.*": {"queue": "document_ai"},
         "src.interface.workers.resume_extraction_tasks.*": {"queue": "extraction"},
+        "src.interface.workers.resume_extraction_cleanup_tasks.*": {"queue": "extraction"},
         "src.interface.workers.behavioral_ai_tasks.*": {"queue": "behavioral_ai"},
         "behavioral_ai.detect_stuck_evaluations": {"queue": "behavioral_ai"},
     },
@@ -125,6 +127,10 @@ celery_app.conf.update(
         "behavioral-ai-stuck-detection-every-15min": {
             "task": "behavioral_ai.detect_stuck_evaluations",
             "schedule": crontab(minute="*/15"),
+        },
+        "resume-extraction-stuck-cleanup-every-5min": {
+            "task": "src.interface.workers.resume_extraction_cleanup_tasks.cleanup_stuck_extractions",
+            "schedule": crontab(minute="*/5"),
         },
     },
 

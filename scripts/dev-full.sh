@@ -619,6 +619,17 @@ if [ "$INCLUDE_CELERY" = "true" ]; then
   CELERY_PID=$!
   CHILD_PIDS+=("$CELERY_PID")
   print_ok "Worker Celery iniciado (PID $CELERY_PID)"
+
+  print_info "Subindo Celery beat (tarefas periodicas)..."
+  (
+    cd "$BACKEND_DIR"
+    .venv/bin/celery -A src.infrastructure.queue.celery_app beat \
+      --loglevel=warning \
+      --scheduler celery.beat.PersistentScheduler
+  ) &
+  CELERY_BEAT_PID=$!
+  CHILD_PIDS+=("$CELERY_BEAT_PID")
+  print_ok "Celery beat iniciado (PID $CELERY_BEAT_PID)"
 else
   print_info "Worker Celery omitido. Use DEV_FULL_WITH_WORKER=1 para habilitar."
 fi
