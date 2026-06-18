@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.analysis_service import AnalysisService
 from src.application.services.resume_service import (
     MAX_PDF_UPLOAD_BYTES,
+    ExtractionAlreadyProcessingError,
+    ExtractionFileNotFoundError,
     InvalidResumeFileError,
     InvalidResumeTextError,
     ResumeDetails,
@@ -14,11 +16,13 @@ from src.application.services.resume_service import (
     ResumeService,
     ResumeUploadCandidateNotFoundError,
     ResumeUploadCandidateRequiredError,
+    extraction_retry_eligibility,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.interface.api.dependencies import CurrentUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.resume_schemas import (
+    ResumeExtractionRetryResponse,
     ResumeExtractionStatusResponse,
     ResumeFileUploadResponse,
     ResumeResponse,
@@ -203,6 +207,7 @@ async def get_resume_extraction_status(
 ) -> ResumeExtractionStatusResponse:
     try:
         extraction = await _resume_service(db).get_extraction_status(resume_id, current_user)
+        can_retry, reason, label = extraction_retry_eligibility(extraction.version)
         return ResumeExtractionStatusResponse(
             resume_id=extraction.resume.id,
             version_id=extraction.version.id,
@@ -211,8 +216,49 @@ async def get_resume_extraction_status(
             original_file_name=extraction.version.original_file_name,
             page_count=extraction.version.page_count,
             word_count=extraction.version.word_count,
+            can_retry_extraction=can_retry,
+            retry_extraction_reason=reason,
+            extraction_status_label=label,
         )
     except Exception as exc:
+        _handle_resume_service_error(exc)
+        raise
+
+
+@router.post(
+    "/{resume_id}/retry-extraction",
+    response_model=ResumeExtractionRetryResponse,
+)
+async def retry_resume_extraction(
+    resume_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ResumeExtractionRetryResponse:
+    try:
+        result = await _resume_service(db).retry_extraction(resume_id, current_user)
+        if result.queued:
+            await db.commit()
+            enqueue_resume_extraction(result.version.id)
+        return ResumeExtractionRetryResponse(
+            resume_id=result.resume.id,
+            version_id=result.version.id,
+            extraction_status=result.version.extraction_status,
+            queued=result.queued,
+            can_retry_extraction=result.can_retry,
+            message=result.message,
+        )
+    except ExtractionAlreadyProcessingError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Extração em andamento. Aguarde a conclusão antes de reprocessar.",
+        )
+    except ExtractionFileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Arquivo do currículo não encontrado. Faça o upload novamente.",
+        )
+    except Exception as exc:
+        await db.rollback()
         _handle_resume_service_error(exc)
         raise
 

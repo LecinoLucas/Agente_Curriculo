@@ -1,5 +1,6 @@
 import {
   Resume,
+  ResumeExtractionRetryResponse,
   ResumeExtractionStatusResponse,
   ResumeFileUploadResponse,
   ResumeSummary,
@@ -55,6 +56,9 @@ function normalizeResumeExtractionStatus(
     original_file_name: item.original_file_name ?? "",
     page_count: item.page_count ?? null,
     word_count: item.word_count ?? null,
+    can_retry_extraction: item.can_retry_extraction ?? false,
+    retry_extraction_reason: item.retry_extraction_reason ?? null,
+    extraction_status_label: item.extraction_status_label ?? null,
   };
 }
 
@@ -90,6 +94,11 @@ export const resumeService = {
     httpRequest<ResumeExtractionStatusResponse>(`/api/v1/resumes/${id}/extraction-status`).then(
       normalizeResumeExtractionStatus,
     ),
+
+  retryExtraction: (id: string) =>
+    httpRequest<ResumeExtractionRetryResponse>(`/api/v1/resumes/${id}/retry-extraction`, {
+      method: "POST",
+    }),
 
   update: (id: string, payload: { title?: string; status?: "active" | "archived" }) =>
     httpRequest<Resume>(`/api/v1/resumes/${id}`, { method: "PATCH", body: payload }),

@@ -15,6 +15,7 @@ from src.application.services.candidate_score_status_deriver import (
     derive_candidate_score_status,
 )
 from src.application.services.pipeline_gate_evaluator import PipelineGateEvaluator
+from src.application.services.resume_service import extraction_retry_eligibility_from_values
 from src.core.pipeline_stages import is_post_hiring_active_stage, is_success_terminal_stage
 from src.domain.entities.user import User
 from src.infrastructure.database.models.analysis_model import AnalysisModel
@@ -557,12 +558,34 @@ class CandidateService:
                         for g in gate_result.missing_gates
                     ]
 
+        def _build_resume_summary(row: dict) -> CandidateResumeSummaryResponse:
+            uploaded_at = row.get("uploaded_at")
+            can_retry, reason, label = (
+                extraction_retry_eligibility_from_values(
+                    extraction_status=row.get("extraction_status"),
+                    uploaded_at=uploaded_at,
+                    word_count=row.get("word_count"),
+                )
+                if uploaded_at is not None
+                else (False, None, None)
+            )
+            return CandidateResumeSummaryResponse(
+                resume_id=row["resume_id"],
+                title=row["title"],
+                status=row["status"],
+                current_version=row["current_version"],
+                current_version_id=row.get("current_version_id"),
+                current_file_name=row.get("current_file_name"),
+                extraction_status=row.get("extraction_status"),
+                can_retry_extraction=can_retry,
+                retry_extraction_reason=reason,
+                extraction_status_label=label,
+                updated_at=row["updated_at"],
+            )
+
         return CandidateOverviewResponse(
             candidate=CandidateResponse.model_validate(candidate),
-            resumes=[
-                CandidateResumeSummaryResponse(**row)
-                for row in resume_rows
-            ],
+            resumes=[_build_resume_summary(row) for row in resume_rows],
             latest_analysis=latest_analysis,
             latest_analysis_pipeline=latest_analysis_pipeline,
             top_matches=[

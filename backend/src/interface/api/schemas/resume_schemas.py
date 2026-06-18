@@ -77,6 +77,18 @@ class ResumeExtractionStatusResponse(BaseModel):
     original_file_name: str
     page_count: int | None = None
     word_count: int | None = None
+    can_retry_extraction: bool = False
+    retry_extraction_reason: str | None = None
+    extraction_status_label: str | None = None
+
+
+class ResumeExtractionRetryResponse(BaseModel):
+    resume_id: UUID
+    version_id: UUID
+    extraction_status: str
+    queued: bool
+    can_retry_extraction: bool
+    message: str
 
 
 class UpdateResumeRequest(BaseModel):

@@ -209,6 +209,9 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
           ...resume,
           resume_url: resume.resume_url ?? null,
           document_url: resume.document_url ?? null,
+          can_retry_extraction: resume.can_retry_extraction ?? false,
+          retry_extraction_reason: resume.retry_extraction_reason ?? null,
+          extraction_status_label: resume.extraction_status_label ?? null,
         }))
       : [],
     latest_analysis: item.latest_analysis ? normalizeLatestAnalysis(item.latest_analysis) : null,

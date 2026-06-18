@@ -48,6 +48,9 @@ class CandidateResumeSummaryResponse(BaseModel):
     current_version_id: UUID | None = None
     current_file_name: str | None = None
     extraction_status: str | None = None
+    can_retry_extraction: bool = False
+    retry_extraction_reason: str | None = None
+    extraction_status_label: str | None = None
     updated_at: datetime
 
 

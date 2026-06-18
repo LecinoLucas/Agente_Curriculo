@@ -705,6 +705,8 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 ResumeVersionModel.id.label("current_version_id"),
                 ResumeVersionModel.original_file_name.label("current_file_name"),
                 ResumeVersionModel.extraction_status,
+                ResumeVersionModel.uploaded_at,
+                ResumeVersionModel.word_count,
                 ResumeModel.updated_at,
             )
             .join(

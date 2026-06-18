@@ -114,6 +114,9 @@ export type CandidateResumeOverview = {
   current_version_id: string | null;
   current_file_name: string | null;
   extraction_status: string | null;
+  can_retry_extraction?: boolean;
+  retry_extraction_reason?: string | null;
+  extraction_status_label?: string | null;
   updated_at: string;
   resume_url?: string | null;
   document_url?: string | null;
@@ -396,6 +399,18 @@ export type ResumeExtractionStatusResponse = {
   original_file_name: string;
   page_count: number | null;
   word_count: number | null;
+  can_retry_extraction: boolean;
+  retry_extraction_reason: string | null;
+  extraction_status_label: string | null;
+};
+
+export type ResumeExtractionRetryResponse = {
+  resume_id: string;
+  version_id: string;
+  extraction_status: string;
+  queued: boolean;
+  can_retry_extraction: boolean;
+  message: string;
 };
 
 export type ResumeSummary = {

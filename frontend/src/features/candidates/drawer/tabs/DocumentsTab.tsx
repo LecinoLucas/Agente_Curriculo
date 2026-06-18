@@ -76,8 +76,10 @@ export function DocumentsTab(props: DocumentsTabProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [analyzingResumeId, setAnalyzingResumeId] = useState<string | null>(null);
   const [downloadingResume, setDownloadingResume] = useState(false);
+  const [retryingResumeId, setRetryingResumeId] = useState<string | null>(null);
 
   const canDownloadResume = canDownloadCandidateResume(userRole);
+  const canManageExtraction = canDownloadCandidateResume(userRole);
 
   const handleDownloadResume = async () => {
     if (!overview.candidate?.id || downloadingResume) return;
@@ -88,6 +90,24 @@ export function DocumentsTab(props: DocumentsTabProps) {
       toast.error("Não foi possível baixar o currículo. Tente novamente.");
     } finally {
       setDownloadingResume(false);
+    }
+  };
+
+  const handleRetryExtraction = async (resumeId: string) => {
+    if (retryingResumeId) return;
+    setRetryingResumeId(resumeId);
+    try {
+      const result = await resumeService.retryExtraction(resumeId);
+      if (result.queued) {
+        toast.success("Extração reenfileirada. Atualizando...");
+        await refreshCandidateOverview();
+      } else {
+        toast.info(result.message);
+      }
+    } catch {
+      toast.error("Não foi possível reprocessar a extração. Tente novamente.");
+    } finally {
+      setRetryingResumeId(null);
     }
   };
 
@@ -391,6 +411,39 @@ export function DocumentsTab(props: DocumentsTabProps) {
                       >
                         {resume.status === "active" ? "Arquivar" : "Reativar"}
                       </button>
+
+                      {canManageExtraction && resume.can_retry_extraction ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleRetryExtraction(resume.resume_id)}
+                          disabled={retryingResumeId === resume.resume_id}
+                          className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-40"
+                          title={
+                            resume.retry_extraction_reason === "extraction_failed"
+                              ? "Falha na extração. Clique para reprocessar."
+                              : resume.retry_extraction_reason === "extraction_stuck"
+                                ? "Extração travada. Clique para reprocessar."
+                                : resume.retry_extraction_reason === "extraction_stale_pending"
+                                  ? "Extração pendente. Clique para reprocessar."
+                                  : "Reprocessamento disponível."
+                          }
+                        >
+                          {retryingResumeId === resume.resume_id
+                            ? "Reenfileirando…"
+                            : "Reprocessar extração"}
+                        </button>
+                      ) : canManageExtraction && resume.extraction_status_label ? (
+                        <span
+                          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-text-muted"
+                          title={resume.extraction_status_label}
+                        >
+                          {resume.extraction_status_label === "Extraindo..."
+                            ? "Extração em andamento"
+                            : resume.extraction_status_label === "Na fila"
+                              ? "Na fila de extração"
+                              : null}
+                        </span>
+                      ) : null}
 
                       <button
                         type="button"

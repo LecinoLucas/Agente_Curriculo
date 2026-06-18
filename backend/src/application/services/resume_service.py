@@ -14,7 +14,7 @@ from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
-from src.infrastructure.storage.resume_files import write_resume_file
+from src.infrastructure.storage.resume_files import resolve_resume_storage_path, write_resume_file
 from src.interface.api.schemas.resume_schemas import UpdateResumeRequest
 
 
@@ -38,7 +38,17 @@ class InvalidResumeFileError(Exception):
     pass
 
 
+class ExtractionFileNotFoundError(Exception):
+    pass
+
+
+class ExtractionAlreadyProcessingError(Exception):
+    pass
+
+
 MAX_PDF_UPLOAD_BYTES = settings.max_upload_size_bytes
+
+_RETRY_STALE_SECONDS = 300  # matches _STUCK_THRESHOLD_SECONDS in cleanup task
 
 
 @dataclass(frozen=True)
@@ -67,6 +77,61 @@ class ResumeDetails:
 class ResumeExtractionStatus:
     resume: ResumeModel
     version: ResumeVersionModel
+
+
+@dataclass(frozen=True)
+class ExtractionRetryResult:
+    resume: ResumeModel
+    version: ResumeVersionModel
+    queued: bool
+    can_retry: bool
+    message: str
+
+
+def extraction_retry_eligibility(
+    version: ResumeVersionModel,
+) -> tuple[bool, str | None, str]:
+    """Return (can_retry, reason, status_label) for a resume version ORM object."""
+    return extraction_retry_eligibility_from_values(
+        extraction_status=version.extraction_status,
+        uploaded_at=version.uploaded_at,
+        word_count=version.word_count,
+    )
+
+
+def extraction_retry_eligibility_from_values(
+    *,
+    extraction_status: str | None,
+    uploaded_at: datetime,
+    word_count: int | None,
+) -> tuple[bool, str | None, str]:
+    """Return (can_retry, reason, status_label) from plain field values.
+
+    Uses word_count as the canonical signal for whether a completed extraction
+    produced usable content (word_count is always populated when extracted_text is).
+    """
+    if extraction_status is None:
+        return False, None, "Sem arquivo"
+
+    if uploaded_at.tzinfo is None:
+        uploaded_at = uploaded_at.replace(tzinfo=UTC)
+    age = (datetime.now(UTC) - uploaded_at).total_seconds()
+
+    if extraction_status == "failed":
+        return True, "extraction_failed", "Falha na extração"
+    if extraction_status == "processing":
+        if age > _RETRY_STALE_SECONDS:
+            return True, "extraction_stuck", "Extração travada"
+        return False, None, "Extraindo..."
+    if extraction_status == "pending":
+        if age > _RETRY_STALE_SECONDS:
+            return True, "extraction_stale_pending", "Extração pendente"
+        return False, None, "Na fila"
+    if extraction_status == "completed":
+        if (word_count or 0) == 0:
+            return True, "extraction_empty", "Extração vazia"
+        return False, None, "Extraído"
+    return False, None, extraction_status
 
 
 class ResumeService:
@@ -207,6 +272,62 @@ class ResumeService:
             version=version,
             candidate=candidate,
             prefilled_fields=[],
+        )
+
+    async def retry_extraction(
+        self,
+        resume_id: UUID,
+        current_user: User,
+    ) -> ExtractionRetryResult:
+        resume = await self._get_authorized_resume(resume_id, current_user)
+        version = await self._repository.find_version(resume.id, resume.current_version)
+        if version is None:
+            raise ResumeNotFoundError
+
+        file_path = resolve_resume_storage_path(version.s3_key)
+        if not file_path.exists():
+            raise ExtractionFileNotFoundError
+
+        can_retry, reason, _label = extraction_retry_eligibility(version)
+
+        status = version.extraction_status
+        uploaded_at = version.uploaded_at
+        if uploaded_at.tzinfo is None:
+            uploaded_at = uploaded_at.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - uploaded_at).total_seconds()
+
+        if status == "processing" and age <= _RETRY_STALE_SECONDS:
+            raise ExtractionAlreadyProcessingError
+
+        if not can_retry:
+            if status == "completed":
+                return ExtractionRetryResult(
+                    resume=resume,
+                    version=version,
+                    queued=False,
+                    can_retry=False,
+                    message="Extração já concluída com sucesso.",
+                )
+            return ExtractionRetryResult(
+                resume=resume,
+                version=version,
+                queued=False,
+                can_retry=False,
+                message="Extração já está na fila, aguardando processamento.",
+            )
+
+        version.extraction_status = "pending"
+        version.extraction_error = None
+        resume.updated_at = datetime.now(UTC)
+        await self._repository.save_version(version)
+        await self._repository.save_resume(resume)
+
+        return ExtractionRetryResult(
+            resume=resume,
+            version=version,
+            queued=True,
+            can_retry=True,
+            message="Extração reenfileirada. Aguarde o processamento.",
         )
 
     async def update(
