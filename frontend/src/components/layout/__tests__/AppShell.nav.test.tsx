@@ -22,7 +22,7 @@ vi.mock("../../../features/pipeline/PipelineContext", () => ({
   usePipeline: mockUsePipeline,
 }));
 vi.mock("../../../hooks/useTheme", () => ({ useTheme: mockUseTheme }));
-vi.mock("../VisualThemeSwitcher", () => ({ VisualThemeSwitcher: () => null }));
+vi.mock("../SidebarUserMenu", () => ({ SidebarUserMenu: () => null }));
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return { ...actual, Outlet: () => null };

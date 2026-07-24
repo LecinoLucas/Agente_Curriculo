@@ -362,6 +362,8 @@ export function AppShell() {
         mobileMenuOpen={mobileMenuOpen}
         sidebarExpanded={sidebarExpanded}
         theme={theme}
+        userName={user?.full_name ?? ""}
+        userEmail={user?.email ?? ""}
         onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
         onToggleSidebarExpanded={toggleSidebarExpanded}
         onLogout={() => void logout()}

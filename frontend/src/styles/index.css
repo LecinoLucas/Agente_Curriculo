@@ -55,41 +55,41 @@
 
   :root {
     /* -----------------------------------------------------------------------
-       Brand colors — Electric Amethyst
+       Brand colors — Crimson Ruby Marajó (Tema 1 Executivo Refinado)
        ----------------------------------------------------------------------- */
 
-    /* Cor principal da marca: roxo elétrico vibrante. */
-    --brand:           263 85% 58%;
+    /* Cor principal da marca: vermelho rubí carmim vibrante e nobre. */
+    --brand:           354 84% 48%;
     /* Versão mais escura da marca para hover e profundidade. */
-    --brand-dark:      263 78% 42%;
+    --brand-dark:      354 86% 38%;
     /* Versão suave da marca para fundos de badges e highlights. */
-    --brand-soft:      263 88% 95%;
+    --brand-soft:      354 90% 95%;
     /* Tom luminoso da marca para glows e gradientes. */
-    --brand-glow:      263 90% 70%;
+    --brand-glow:      354 92% 64%;
 
     /* -----------------------------------------------------------------------
-       Core surfaces — Light
+       Core surfaces — Clean White Porcelain
        ----------------------------------------------------------------------- */
 
-    /* Fundo principal: gelo levemente violeta. */
-    --bg:             250 30% 96%;
-    /* Superfície de cards e painéis: branco quase puro. */
-    --surface:        250 20% 99%;
+    /* Fundo principal: branco porcelana limpo e nítido (#F8FAFC). */
+    --bg:             210 40% 98%;
+    /* Superfície de cards e painéis: branco puro cristalino. */
+    --surface:        0 0% 100%;
     /* Superfície secundária: gelo levemente acinzentado. */
-    --surface-muted:  248 22% 92%;
-    /* Borda padrão: frio e sutil. */
-    --border:         248 18% 84%;
+    --surface-muted:  214 20% 94%;
+    /* Borda padrão: limpa e nítida. */
+    --border:         220 14% 84%;
     /* Borda forte: mais definida para separação visual. */
-    --border-strong:  248 16% 70%;
+    --border-strong:  220 14% 72%;
 
     /* -----------------------------------------------------------------------
        Typography
        ----------------------------------------------------------------------- */
 
-    /* Texto principal: grafite frio escuro. */
-    --text:           240 18% 12%;
-    /* Texto secundário: slate médio. */
-    --text-muted:     240 10% 44%;
+    /* Texto principal: grafite escuro charcoal. */
+    --text:           222 47% 11%;
+    /* Texto secundário: slate neutro sênior. */
+    --text-muted:     215 16% 44%;
 
     /* -----------------------------------------------------------------------
        Semantic colors
@@ -105,108 +105,108 @@
     /* Fundo suave de alerta. */
     --warning-soft:   44 88% 92%;
 
-    /* Erro/risco: vermelho vivo (diferenciado do primary). */
-    --danger:         4 80% 48%;
+    /* Erro/risco: vermelho vivo. */
+    --danger:         354 84% 48%;
     /* Fundo suave de erro. */
-    --danger-soft:    4 74% 95%;
+    --danger-soft:    354 90% 95%;
 
     /* -----------------------------------------------------------------------
        Accent
        ----------------------------------------------------------------------- */
 
-    /* Fundo de destaque suave violeta. */
-    --accent-soft:     263 88% 95%;
+    /* Fundo de destaque suave carmim. */
+    --accent-soft:     354 90% 95%;
     /* Texto sobre destaque suave. */
-    --accent-contrast: 240 18% 12%;
+    --accent-contrast: 222 47% 11%;
 
     /* -----------------------------------------------------------------------
        shadcn/radix token contract
        ----------------------------------------------------------------------- */
 
     /* Fundo geral. */
-    --background:          250 30% 96%;
+    --background:          220 18% 94%;
     /* Texto principal. */
-    --foreground:          240 18% 12%;
+    --foreground:          222 47% 11%;
 
     /* Fundo de cards. */
-    --card:                250 20% 99%;
+    --card:                0 0% 100%;
     /* Texto dentro de cards. */
-    --card-foreground:     240 18% 12%;
+    --card-foreground:     222 47% 11%;
 
     /* Fundo de popovers/dropdowns. */
-    --popover:             250 20% 99%;
+    --popover:             0 0% 100%;
     /* Texto em popovers. */
-    --popover-foreground:  240 18% 12%;
+    --popover-foreground:  222 47% 11%;
 
-    /* Cor principal de ação: roxo elétrico. */
-    --primary:             263 85% 58%;
+    /* Cor principal de ação: vermelho carmim. */
+    --primary:             354 84% 48%;
     /* Texto sobre primary. */
     --primary-foreground:  0 0% 100%;
 
     /* Áreas secundárias. */
-    --secondary:           248 22% 92%;
+    --secondary:           220 14% 90%;
     /* Texto sobre secundário. */
-    --secondary-foreground:240 18% 12%;
+    --secondary-foreground:222 47% 11%;
 
     /* Fundos discretos. */
-    --muted:               248 22% 92%;
+    --muted:               220 14% 90%;
     /* Texto discreto. */
-    --muted-foreground:    240 10% 44%;
+    --muted-foreground:    215 16% 44%;
 
     /* Área de destaque. */
-    --accent:              263 88% 95%;
+    --accent:              354 90% 95%;
     /* Texto sobre accent. */
-    --accent-foreground:   263 75% 38%;
+    --accent-foreground:   354 84% 38%;
 
     /* Ações destrutivas. */
-    --destructive:         4 80% 48%;
+    --destructive:         354 84% 48%;
     /* Texto sobre destructive. */
     --destructive-foreground: 0 0% 100%;
 
     /* Base de inputs. */
-    --input:               248 18% 84%;
+    --input:               220 14% 84%;
     /* Anel de foco. */
-    --ring:                263 85% 58%;
+    --ring:                354 84% 48%;
     /* Raio padrão. */
-    --radius:              1rem;
+    --radius:              0.75rem;
 
     /* -----------------------------------------------------------------------
-       Navbar — Midnight deep purple
+       Navbar / Sidebar — Pure Snow White (Branco Neve)
        ----------------------------------------------------------------------- */
 
-    /* Fundo da navbar: midnight profundo. */
-    --nav-bg:              268 60% 10%;
-    /* Texto da navbar. */
-    --nav-text:            0 0% 100%;
-    /* Texto secundário da navbar. */
-    --nav-muted:           263 40% 74%;
-    /* Fundo do item ativo. */
-    --nav-active-bg:       263 72% 28%;
+    /* Fundo da navbar/sidebar: branco neve puro (#FFFFFF). */
+    --nav-bg:              0 0% 100%;
+    /* Texto da navbar: grafite escuro charcoal. */
+    --nav-text:            222 47% 11%;
+    /* Texto secundário da navbar (escuro e nítido). */
+    --nav-muted:           215 25% 25%;
+    /* Fundo do item ativo: vermelho carmim. */
+    --nav-active-bg:       354 84% 48%;
     /* Texto do item ativo. */
     --nav-active-text:     0 0% 100%;
     /* Borda da navbar. */
-    --nav-border:          268 50% 16%;
+    --nav-border:          214 20% 90%;
 
     /* -----------------------------------------------------------------------
        Layout accents
        ----------------------------------------------------------------------- */
 
     /* Gradiente sidebar. */
-    --sidebar-start:       250 28% 96%;
-    --sidebar-end:         248 22% 92%;
+    --sidebar-start:       0 0% 100%;
+    --sidebar-end:         0 0% 100%;
     /* Destaque sidebar. */
-    --sidebar-accent:      263 85% 58%;
+    --sidebar-accent:      354 84% 48%;
 
-    /* Gradiente hero: roxo para ciano. */
-    --hero-start:          263 85% 58%;
-    --hero-end:            192 90% 46%;
+    /* Gradiente hero. */
+    --hero-start:          354 84% 48%;
+    --hero-end:            224 82% 54%;
 
     /* Glows de fundo. */
-    --page-glow-start:     263 88% 94%;
-    --page-glow-end:       192 78% 92%;
+    --page-glow-start:     354 90% 94%;
+    --page-glow-end:       220 18% 92%;
     /* Gradiente base da página. */
-    --page-gradient-start: 250 30% 96%;
-    --page-gradient-end:   248 22% 92%;
+    --page-gradient-start: 220 18% 94%;
+    --page-gradient-end:   220 14% 90%;
   }
 
   /* ==========================================================================
@@ -374,92 +374,76 @@
 
   :root[data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 — Vermelho Marajó
+       Visual Theme 1 — Crimson Ruby & Warm Slate (Executivo Refinado)
        -----------------------------------------------------------------------
        Direção:
-       - Forte, corporativo e firme.
-       - Vermelho Marajó fechado para ação e foco.
-       - Base cinza neutro discreta com texto grafite.
-       - Navbar vinho profundo para presença institucional.
+       - Vermelho Rubí Carmim para marca, botões e destaque principal.
+       - Fundo Warm Slate Peróxido com cartões em branco aveludado.
+       - Sidebar e Navbar Deep Slate Midnight para contraste sênior imponente.
        ----------------------------------------------------------------------- */
 
-    /* Cor principal da marca no tema atual. */
-    --brand:               356 78% 42%;
-    /* Versão mais escura da marca, usada em bordas, hover e profundidade. */
-    --brand-dark:          356 64% 24%;
-    /* Versão suave da marca, usada em fundos leves e badges. */
-    --brand-soft:          356 80% 94%;
-    /* Tom luminoso da marca, usado em brilhos e gradientes. */
-    --brand-glow:          356 82% 56%;
+    /* Cor principal da marca no tema atual: Crimson Ruby. */
+    --brand:               354 84% 48%;
+    --brand-dark:          354 86% 38%;
+    --brand-soft:          354 90% 95%;
+    --brand-glow:          354 92% 64%;
 
     /* Fundo principal da aplicação. */
-    --bg:                  220 4% 98%;
+    --bg:                  210 40% 98%;
     --surface:             0 0% 100%;
-    --surface-muted:       220 4% 94%;
-    --border:              220 4% 88%;
-    --border-strong:       220 4% 75%;
+    --surface-muted:       214 20% 94%;
+    --border:              214 20% 88%;
+    --border-strong:       214 16% 75%;
 
-    --background:          220 4% 98%;
-    --foreground:          220 8% 15%;
+    --background:          210 40% 98%;
+    --foreground:          222 47% 11%;
     --card:                0 0% 100%;
-    --card-foreground:     220 8% 15%;
+    --card-foreground:     222 47% 11%;
     --popover:             0 0% 100%;
-    --popover-foreground:  220 8% 15%;
-    --secondary:           220 4% 94%;
-    --secondary-foreground:220 8% 15%;
-    --muted:               220 4% 94%;
-    --muted-foreground:    220 8% 45%;
+    --popover-foreground:  222 47% 11%;
+    --secondary:           220 14% 90%;
+    --secondary-foreground:222 47% 11%;
+    --muted:               220 14% 90%;
+    --muted-foreground:    215 16% 44%;
 
-    --text:                220 8% 15%;
-    --text-muted:          220 8% 45%;
+    --text:                222 47% 11%;
+    --text-muted:          215 16% 44%;
 
-    /* Cor principal de ação: botões, foco e CTA. */
-    --primary:             356 76% 42%;
-    /* Variação da cor principal para hover. */
-    --primary-hover:       356 68% 34%;
-    /* Fundo suave baseado na cor principal. */
-    --primary-soft:        356 80% 94%;
-    /* Texto usado sobre a cor primary. */
+    /* Cor principal de ação: vermelho carmim rubí. */
+    --primary:             354 84% 48%;
+    --primary-hover:       354 86% 38%;
+    --primary-soft:        354 90% 95%;
     --primary-foreground:  0 0% 100%;
-    /* Cor do anel de foco acessível. */
-    --ring:                356 76% 42%;
+    --ring:                354 84% 48%;
 
-    /* Token shadcn/Radix para área de destaque. */
-    --accent:              356 80% 94%;
-    /* Texto usado sobre o accent. */
-    --accent-foreground:   356 62% 28%;
-    /* Fundo de destaque suave. */
-    --accent-soft:         356 80% 94%;
-    /* Texto usado sobre áreas de destaque suave. */
-    --accent-contrast:     22 28% 12%;
+    --accent:              354 90% 95%;
+    --accent-foreground:   354 84% 38%;
+    --accent-soft:         354 90% 95%;
+    --accent-contrast:     222 47% 11%;
 
-    /* Cor semântica para erro/risco, separada do vermelho da marca. */
-    --danger:              344 68% 36%;
-    /* Fundo suave para estados de erro/risco. */
-    --danger-soft:         344 58% 94%;
-    /* Token shadcn/Radix para ações destrutivas. */
-    --destructive:         344 68% 36%;
-    /* Texto usado sobre destructive. */
+    --danger:              354 84% 48%;
+    --danger-soft:         354 90% 95%;
+    --destructive:         354 84% 48%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Borda/fundo base de inputs. */
-    --input:               220 8% 85%;
+    --input:               220 14% 84%;
 
-    --nav-bg:              220 12% 16%;
-    --nav-text:            220 8% 98%;
-    --nav-muted:           220 8% 65%;
-    --nav-active-bg:       356 76% 42%;
+    --nav-bg:              0 0% 100%;
+    --nav-text:            222 47% 11%;
+    --nav-muted:           215 25% 25%;
+    --nav-active-bg:       354 84% 48%;
     --nav-active-text:     0 0% 100%;
-    --nav-border:          220 12% 12%;
+    --nav-border:          214 20% 90%;
 
-    --sidebar-accent:      356 76% 42%;
-    --hero-start:          356 76% 42%;
-    --hero-end:            220 12% 16%;
+    --sidebar-accent:      354 84% 48%;
 
-    --page-glow-start:     220 8% 98%;
-    --page-glow-end:       220 8% 94%;
-    --page-gradient-start: 220 8% 98%;
-    --page-gradient-end:   220 8% 94%;
+    --hero-start:          354 84% 48%;
+    --hero-end:            224 82% 54%;
+
+    --page-glow-start:     354 90% 94%;
+    --page-glow-end:       220 18% 92%;
+    --page-gradient-start: 220 18% 94%;
+    --page-gradient-end:   220 14% 90%;
   }
 
   :root[data-visual-theme="theme-2"] {
@@ -1810,6 +1794,128 @@
     align-items: center;
     justify-content: center;
     color: hsl(var(--primary));
+  }
+
+  /* --------------------------------------------------------------------------
+     Sidebar user menu (perfil, tema, logout unificados)
+     -------------------------------------------------------------------------- */
+
+  .sidebar-user-menu {
+    position: relative;
+  }
+
+  .sidebar-user-menu-trigger {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 0.375rem 0.5rem;
+    text-align: left;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .sidebar-user-menu-trigger:hover,
+  .sidebar-user-menu-trigger[aria-expanded="true"] {
+    background: hsl(var(--surface-muted));
+    border-color: hsl(var(--nav-border) / 0.7);
+  }
+
+  .sidebar-user-menu-avatar {
+    display: flex;
+    height: 2rem;
+    width: 2rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: hsl(var(--primary) / 0.12);
+    color: hsl(var(--primary));
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+
+  .sidebar-user-menu-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    line-height: 1.15;
+  }
+
+  .sidebar-user-menu-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: hsl(var(--nav-text));
+  }
+
+  .sidebar-user-menu-email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: hsl(var(--nav-muted));
+  }
+
+  .sidebar-user-menu-popover {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 0.5rem);
+    z-index: 50;
+    width: 15rem;
+    border-radius: 0.9rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--surface));
+    padding: 0.4rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  }
+
+  .sidebar-user-menu-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.45rem 0.2rem;
+    color: hsl(var(--text-muted));
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .sidebar-user-menu-row {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 0.6rem;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 0.4rem 0.5rem;
+    color: hsl(var(--text));
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: left;
+    transition: background-color 120ms ease;
+  }
+
+  .sidebar-user-menu-row:hover {
+    background: hsl(var(--accent-soft));
+  }
+
+  .sidebar-user-menu-row.is-danger {
+    color: hsl(var(--danger));
+  }
+
+  .sidebar-user-menu-divider {
+    margin: 0.35rem 0.2rem;
+    height: 1px;
+    background: hsl(var(--border));
   }
 
   @keyframes visual-theme-playground-spin {

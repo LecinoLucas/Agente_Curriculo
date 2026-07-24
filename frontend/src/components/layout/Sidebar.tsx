@@ -1,16 +1,18 @@
 import { ReactNode, useState } from "react";
-import { ChevronDown, X, LogOut, Moon, Sun, UserRound, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronDown, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 import { TopNavGroup } from "./TopNavDropdown";
-import { VisualThemeSwitcher } from "./VisualThemeSwitcher";
+import { SidebarUserMenu } from "./SidebarUserMenu";
 
 type SidebarProps = {
   groups: TopNavGroup[];
   mobileMenuOpen: boolean;
   sidebarExpanded: boolean;
   theme: string;
+  userName: string;
+  userEmail: string;
   onToggleMobileMenu: () => void;
   onToggleSidebarExpanded: () => void;
   onLogout: () => void;
@@ -25,6 +27,8 @@ export function Sidebar({
   mobileMenuOpen,
   sidebarExpanded,
   theme,
+  userName,
+  userEmail,
   onToggleMobileMenu,
   onToggleSidebarExpanded,
   onLogout,
@@ -286,50 +290,20 @@ export function Sidebar({
             })}
           </nav>
 
-          {/* Footer — Controls & Logout */}
-          <div className="shrink-0 border-t border-[hsl(var(--nav-border))] p-2 flex flex-col gap-1">
-            {isExpanded && (
-              <div className="flex items-center justify-between px-2 py-1">
-                <VisualThemeSwitcher />
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={onToggleTheme}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--nav-text))]"
-                    title={theme === "light" ? "Modo escuro" : "Modo claro"}
-                  >
-                    {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (mobileMenuOpen) onToggleMobileMenu();
-                      navigate("/perfil");
-                    }}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--nav-text))]"
-                    title="Meu perfil"
-                  >
-                    <UserRound className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Logout button */}
-            <button
-              type="button"
-              onClick={onLogout}
-              className={cn(
-                "group/logout relative flex items-center transition-all duration-150 outline-none w-full py-1.5 rounded-lg text-[hsl(var(--nav-muted))] hover:bg-rose-500/10 hover:text-rose-600",
-                isExpanded ? "justify-start px-2.5" : "justify-center px-0"
-              )}
-              title="Sair"
-            >
-              <div className="flex shrink-0 items-center justify-center w-9 h-9">
-                <LogOut className="h-4 w-4" />
-              </div>
-              {isExpanded && <span className="truncate text-[13px] font-semibold ml-2.5">Sair</span>}
-            </button>
+          {/* Footer — Menu de usuário (perfil, tema, logout) */}
+          <div className="shrink-0 border-t border-[hsl(var(--nav-border))] p-2">
+            <SidebarUserMenu
+              userName={userName}
+              userEmail={userEmail}
+              isExpanded={isExpanded}
+              theme={theme}
+              onToggleTheme={onToggleTheme}
+              onLogout={onLogout}
+              onNavigateProfile={() => {
+                if (mobileMenuOpen) onToggleMobileMenu();
+                navigate("/perfil");
+              }}
+            />
           </div>
         </div>
       </aside>
