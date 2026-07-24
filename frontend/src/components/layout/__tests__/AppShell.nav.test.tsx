@@ -78,12 +78,35 @@ function expectTopNavMissing(labels: string[]) {
   }
 }
 
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => {
+      store[key] = value.toString();
+    },
+    clear: () => {
+      store = {};
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+  };
+})();
+
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "localStorage", {
+    value: localStorageMock,
+    writable: true,
+  });
+}
+
 describe("AppShell — Sidebar Nav", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     closeCandidateMock.mockClear();
-    localStorage.clear();
+    window.localStorage.clear();
   });
 
   describe("renderização por role", () => {
@@ -195,7 +218,7 @@ describe("AppShell — Sidebar Nav", () => {
 
   describe("permissões dinâmicas", () => {
     it("preserva filtro por app_screens_config para roles não-admin", () => {
-      localStorage.setItem(
+      window.localStorage.setItem(
         "app_screens_config",
         JSON.stringify([
           { path: "/rh", roles: ["recruiter"] },
@@ -222,7 +245,7 @@ describe("AppShell — Sidebar Nav", () => {
     });
 
     it("consegue ocultar Pipeline via app_screens_config sem esconder Dashboard permitido", () => {
-      localStorage.setItem(
+      window.localStorage.setItem(
         "app_screens_config",
         JSON.stringify([
           { path: "/rh", roles: ["recruiter"] },
@@ -272,6 +295,15 @@ describe("AppShell — Sidebar Nav", () => {
       fireEvent.click(within(topNav()).getByRole("link", { name: "Pipeline" }));
 
       expect(closeCandidateMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("controle de recolher sidebar", () => {
+    it("existe apenas um botão de recolher/expandir menu (sem duplicidade)", () => {
+      renderShell("admin");
+
+      const toggles = screen.getAllByRole("button", { name: /recolher menu/i });
+      expect(toggles).toHaveLength(1);
     });
   });
 });

@@ -29,6 +29,7 @@ import {
 import { useAuth } from "../../features/auth/useAuth";
 import { usePipeline } from "../../features/pipeline/PipelineContext";
 import { useTheme } from "../../hooks/useTheme";
+import { cn } from "../../lib/utils";
 import {
   ADMIN_ONLY_ROLES,
   AGENDA_ACCESS_ROLES,
@@ -80,111 +81,110 @@ function buildNavigationConfig(): NavGroup[] {
   const candidatePortalPrototypeUrl = getCandidatePortalPrototypeUrl();
 
   return [
-  {
-    label: "Central RH",
-    caption: "Pendências do dia",
-    roles: RH_DASHBOARD_ROLES,
-    isDropdown: false,
-    items: [
-      { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: RH_DASHBOARD_ROLES }
-    ],
-  },
-
-  {
-    label: "Recrutamento",
-    caption: "Processo Seletivo",
-    roles: STAFF_ROLES,
-    isDropdown: true,
-    items: [
-      { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: STAFF_ROLES },
-      { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: STAFF_ROLES },
-      { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: STAFF_ROLES },
-      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: CANDIDATES_ACCESS_ROLES },
-      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: AGENDA_ACCESS_ROLES },
-      { to: "/admin/assistente-candidato", label: "Assistente do Candidato", caption: "Conversas Portal 2", roles: INTERNAL_STAFF_ROLES },
-    ],
-  },
-  {
-    label: "Avaliações",
-    caption: "Gestão Comportamental e IA",
-    roles: ANALYSIS_ROLES,
-    isDropdown: true,
-    items: [
-      { to: "/analises-ia", label: "Análises IA", caption: "Currículos e matching", roles: ANALYSIS_ROLES },
-      { to: "/analises-ia/comportamental", label: "Avaliação comportamental", caption: "Fila e avaliações", roles: ANALYSIS_ROLES },
-      { to: "/admin/behavioral-templates", label: "Templates comportamentais", caption: "Templates de testes", roles: ANALYSIS_ROLES },
-    ],
-  },
-  {
-    label: "Admissão",
-    caption: "Checklists e casos",
-    roles: PRE_ADMISSION_AREA_ROLES,
-    isDropdown: true,
-    items: [
-      { to: "/admitidos", label: "Admitidos", caption: "Casos de pré-admissão", roles: PRE_ADMISSION_AREA_ROLES },
-      { to: "/admissao/checklists", label: "Checklists admissionais", caption: "Templates de documentos", roles: PRE_ADMISSION_AREA_ROLES },
-      { to: "/admissao/protheus-export-dashboard", label: "Fila Protheus", caption: "Operação e bloqueios", roles: PRE_ADMISSION_AREA_ROLES },
-    ],
-  },
-  {
-    label: "Gestores",
-    caption: "Revisão e Decisão",
-    roles: MANAGER_AREA_ROLES,
-    isDropdown: true,
-    items: [
-      { to: "/manager", label: "Painel do gestor", caption: "Revisões pendentes", roles: MANAGER_AREA_ROLES },
-    ],
-  },
-  {
-    label: "Administração",
-    caption: "Hub de Governança",
-    roles: OPERATIONAL_MASTER_ROLES,
-    isDropdown: true,
-    items: [
-      { to: "/admin", label: "Painel Admin", caption: "Hub de governança e abas", roles: ADMIN_ONLY_ROLES },
-      { to: "/admin/estrutura-operacional", label: "Estrutura operacional", caption: "Grupos e filiais", roles: OPERATIONAL_MASTER_ROLES },
-      { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ADMIN_ONLY_ROLES },
-      { to: "/admin/ia/uso", label: "Uso de IA", caption: "Tokens, custos e eventos", roles: ADMIN_ONLY_ROLES },
-      { to: "/admin/bi", label: "BI", caption: "Indicadores e métricas", roles: ADMIN_ONLY_ROLES },
-      { to: "/importar", label: "Importação", caption: "Carga de candidatos", roles: JOB_MANAGEMENT_ROLES },
-    ],
-  },
-  {
-    label: "Portal do Candidato",
-    caption: "Sua candidatura",
-    roles: CANDIDATE_PORTAL_ROLES,
-    isDropdown: false,
-    items: [
-      { to: "/candidato/portal", label: "Portal do Candidato", caption: "Sua candidatura", roles: CANDIDATE_PORTAL_ROLES }
-    ],
-  },
-  {
-    label: "Outros",
-    caption: "Ferramentas extras",
-    roles: JOB_MANAGEMENT_ROLES,
-    isDropdown: true,
-    items: [
-      { to: "/candidato/portal", label: "Rota antiga do candidato", caption: "Tela de transição", roles: JOB_MANAGEMENT_ROLES },
-      {
-        to: standaloneCandidatePortalUrl || "/candidato",
-        label: "Novo portal do candidato",
-        caption: "Frontend separado",
-        roles: JOB_MANAGEMENT_ROLES,
-        external: Boolean(standaloneCandidatePortalUrl),
-        iconKey: "Novo portal do candidato",
-      },
-      {
-        to: candidatePortalPrototypeUrl || "/candidato",
-        label: "Protótipo do portal",
-        caption: "Mock visual separado",
-        roles: JOB_MANAGEMENT_ROLES,
-        external: Boolean(candidatePortalPrototypeUrl),
-        iconKey: "Protótipo do portal",
-      },
-      { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: JOB_MANAGEMENT_ROLES },
-      { to: "/demo-2", label: "Demo 2", caption: "Apresentação RH IA", roles: JOB_MANAGEMENT_ROLES },
-    ],
-  },
+    {
+      label: "Central RH",
+      caption: "Pendências do dia",
+      roles: RH_DASHBOARD_ROLES,
+      isDropdown: false,
+      items: [
+        { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: RH_DASHBOARD_ROLES }
+      ],
+    },
+    {
+      label: "Recrutamento",
+      caption: "Processo Seletivo",
+      roles: STAFF_ROLES,
+      isDropdown: true,
+      items: [
+        { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: STAFF_ROLES },
+        { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: STAFF_ROLES },
+        { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: STAFF_ROLES },
+        { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: CANDIDATES_ACCESS_ROLES },
+        { to: "/agenda", label: "Agenda", caption: "Calendário", roles: AGENDA_ACCESS_ROLES },
+        { to: "/admin/assistente-candidato", label: "Assistente do Candidato", caption: "Conversas Portal 2", roles: INTERNAL_STAFF_ROLES },
+      ],
+    },
+    {
+      label: "Avaliações",
+      caption: "Gestão Comportamental e IA",
+      roles: ANALYSIS_ROLES,
+      isDropdown: true,
+      items: [
+        { to: "/analises-ia", label: "Análises IA", caption: "Currículos e matching", roles: ANALYSIS_ROLES },
+        { to: "/analises-ia/comportamental", label: "Avaliação comportamental", caption: "Fila e avaliações", roles: ANALYSIS_ROLES },
+        { to: "/admin/behavioral-templates", label: "Templates comportamentais", caption: "Templates de testes", roles: ANALYSIS_ROLES },
+      ],
+    },
+    {
+      label: "Admissão",
+      caption: "Checklists e casos",
+      roles: PRE_ADMISSION_AREA_ROLES,
+      isDropdown: true,
+      items: [
+        { to: "/admitidos", label: "Admitidos", caption: "Casos de pré-admissão", roles: PRE_ADMISSION_AREA_ROLES },
+        { to: "/admissao/checklists", label: "Checklists admissionais", caption: "Templates de documentos", roles: PRE_ADMISSION_AREA_ROLES },
+        { to: "/admissao/protheus-export-dashboard", label: "Fila Protheus", caption: "Operação e bloqueios", roles: PRE_ADMISSION_AREA_ROLES },
+      ],
+    },
+    {
+      label: "Gestores",
+      caption: "Revisão e Decisão",
+      roles: MANAGER_AREA_ROLES,
+      isDropdown: true,
+      items: [
+        { to: "/manager", label: "Painel do gestor", caption: "Revisões pendentes", roles: MANAGER_AREA_ROLES },
+      ],
+    },
+    {
+      label: "Administração",
+      caption: "Hub de Governança",
+      roles: OPERATIONAL_MASTER_ROLES,
+      isDropdown: true,
+      items: [
+        { to: "/admin", label: "Painel Admin", caption: "Hub de governança e abas", roles: ADMIN_ONLY_ROLES },
+        { to: "/admin/estrutura-operacional", label: "Estrutura operacional", caption: "Grupos e filiais", roles: OPERATIONAL_MASTER_ROLES },
+        { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ADMIN_ONLY_ROLES },
+        { to: "/admin/ia/uso", label: "Uso de IA", caption: "Tokens, custos e eventos", roles: ADMIN_ONLY_ROLES },
+        { to: "/admin/bi", label: "BI", caption: "Indicadores e métricas", roles: ADMIN_ONLY_ROLES },
+        { to: "/importar", label: "Importação", caption: "Carga de candidatos", roles: JOB_MANAGEMENT_ROLES },
+      ],
+    },
+    {
+      label: "Portal do Candidato",
+      caption: "Sua candidatura",
+      roles: CANDIDATE_PORTAL_ROLES,
+      isDropdown: false,
+      items: [
+        { to: "/candidato/portal", label: "Portal do Candidato", caption: "Sua candidatura", roles: CANDIDATE_PORTAL_ROLES }
+      ],
+    },
+    {
+      label: "Outros",
+      caption: "Ferramentas extras",
+      roles: JOB_MANAGEMENT_ROLES,
+      isDropdown: true,
+      items: [
+        { to: "/candidato/portal", label: "Rota antiga do candidato", caption: "Tela de transição", roles: JOB_MANAGEMENT_ROLES },
+        {
+          to: standaloneCandidatePortalUrl || "/candidato",
+          label: "Novo portal do candidato",
+          caption: "Frontend separado",
+          roles: JOB_MANAGEMENT_ROLES,
+          external: Boolean(standaloneCandidatePortalUrl),
+          iconKey: "Novo portal do candidato",
+        },
+        {
+          to: candidatePortalPrototypeUrl || "/candidato",
+          label: "Protótipo do portal",
+          caption: "Mock visual separado",
+          roles: JOB_MANAGEMENT_ROLES,
+          external: Boolean(candidatePortalPrototypeUrl),
+          iconKey: "Protótipo do portal",
+        },
+        { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: JOB_MANAGEMENT_ROLES },
+        { to: "/demo-2", label: "Demo 2", caption: "Apresentação RH IA", roles: JOB_MANAGEMENT_ROLES },
+      ],
+    },
   ];
 }
 
@@ -281,10 +281,32 @@ export function AppShell() {
   const { isAllowed, version } = usePathAllowed();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
+    try {
+      if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+        const stored = window.localStorage.getItem("resume_ai_sidebar_expanded");
+        if (stored !== null) return JSON.parse(stored);
+      }
+    } catch {}
+    return true;
+  });
+
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantSessionHistory, setAssistantSessionHistory] = useState<
     AiAssistantHistoryItem[]
   >([]);
+
+  const toggleSidebarExpanded = () => {
+    setSidebarExpanded((prev) => {
+      const next = !prev;
+      try {
+        if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+          window.localStorage.setItem("resume_ai_sidebar_expanded", JSON.stringify(next));
+        }
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -331,12 +353,17 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
+      {/* Spacer matching fixed sidebar width */}
+      <div className={cn("hidden lg:block shrink-0 transition-all duration-300", sidebarExpanded ? "lg:w-56" : "lg:w-16")} />
+
       {/* ── Sidebar Navigation ── */}
       <Sidebar
         groups={visibleGroups as any}
         mobileMenuOpen={mobileMenuOpen}
+        sidebarExpanded={sidebarExpanded}
         theme={theme}
         onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
+        onToggleSidebarExpanded={toggleSidebarExpanded}
         onLogout={() => void logout()}
         onToggleTheme={toggleTheme}
         isItemActive={isItemActive}
@@ -348,6 +375,7 @@ export function AppShell() {
       <div className="flex flex-1 flex-col min-w-0 overflow-y-auto">
         <TopNavbar
           mobileMenuOpen={mobileMenuOpen}
+          sidebarExpanded={sidebarExpanded}
           theme={theme}
           onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)}
           onLogout={() => void logout()}
@@ -362,7 +390,7 @@ export function AppShell() {
           </div>
         </main>
 
-        <footer className="w-full border-t border-border bg-surface py-4 text-center text-sm text-[hsl(var(--nav-muted))]">
+        <footer className="w-full border-t border-[hsl(var(--border))] bg-[hsl(var(--surface))] py-4 text-center text-xs font-semibold text-[hsl(var(--text-muted))]">
           <div className="w-full px-4 sm:px-6">
             @LecinoLucas Developer 2026 Rede Marajo RH IA
           </div>
