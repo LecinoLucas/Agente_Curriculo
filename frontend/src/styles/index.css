@@ -1072,12 +1072,10 @@
      O radial gradient traz vida sem pesar a interface.
      -------------------------------------------------------------------------- */
 
-  /* Fundo global da aplicação, tipografia e suavização de texto. */
+  /* Fundo global da aplicação, tipografia e suavização de texto.
+     Funcionalista: sem glow decorativo, fundo neutro sólido. */
   body {
-    background:
-      radial-gradient(circle at top left, hsl(var(--page-glow-start) / 0.62), transparent 34rem),
-      radial-gradient(circle at top right, hsl(var(--page-glow-end) / 0.56), transparent 30rem),
-      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
+    background: hsl(var(--bg));
     color: hsl(var(--text));
     font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -1087,52 +1085,12 @@
   /* --------------------------------------------------------------------------
      Body — tema escuro
      --------------------------------------------------------------------------
-     Dark vivo com reflexo vermelho.
+     Dark vivo com reflexo vermelho, sem glow decorativo.
      Não use preto puro; ele deixa a interface pesada e sem identidade.
      -------------------------------------------------------------------------- */
 
   :root[data-theme="dark"] body {
-    background:
-      radial-gradient(circle at top left, hsl(var(--page-glow-start) / 0.28), transparent 34rem),
-      radial-gradient(circle at top right, hsl(var(--page-glow-end) / 0.20), transparent 30rem),
-      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
-    color: hsl(var(--text));
-  }
-
-  :root[data-theme="dark"][data-visual-theme="theme-1"] body {
-    background:
-      radial-gradient(circle at 12% 12%, hsl(var(--page-glow-start) / 0.14), transparent 32rem),
-      radial-gradient(circle at 88% 15%, hsl(var(--page-glow-end) / 0.12), transparent 30rem),
-      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end))) !important;
-    color: hsl(var(--text));
-  }
-  :root[data-visual-theme="theme-2"] body {
-    background:
-      radial-gradient(circle at 10% 10%, hsl(var(--page-glow-start) / 0.16), transparent 28rem),
-      radial-gradient(circle at 88% 14%, hsl(var(--page-glow-end) / 0.14), transparent 30rem),
-      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
-    color: hsl(var(--text));
-  }
-  :root[data-theme="dark"][data-visual-theme="theme-2"] body {
-    background:
-      radial-gradient(circle at 10% 10%, hsl(var(--page-glow-start) / 0.16), transparent 28rem),
-      radial-gradient(circle at 88% 14%, hsl(var(--page-glow-end) / 0.14), transparent 30rem),
-      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
-    color: hsl(var(--text));
-  }
-
-  :root[data-visual-theme="theme-3"] body {
-    background:
-      radial-gradient(circle at top left, hsl(var(--page-glow-start)), transparent 40rem),
-      radial-gradient(circle at top right, hsl(var(--page-glow-end)), transparent 35rem),
-      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
-    color: hsl(var(--text));
-  }
-  :root[data-theme="dark"][data-visual-theme="theme-3"] body {
-    background:
-      radial-gradient(circle at top left, hsl(var(--page-glow-start) / 0.1), transparent 30rem),
-      radial-gradient(circle at top right, hsl(var(--page-glow-end) / 0.1), transparent 30rem),
-      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
+    background: hsl(var(--bg));
     color: hsl(var(--text));
   }
 
