@@ -34,20 +34,9 @@ function getInitials(name: string): string {
   return parts[0][0].toUpperCase();
 }
 
-// Generate deterministically consistent warm/brand colors based on the candidate's name
-function getAvatarStyles(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % 4;
-  const classes = [
-    "bg-[hsl(var(--primary)/0.08)] text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.15)]",
-    "bg-[hsl(var(--accent-soft))] text-[hsl(var(--accent-foreground))] border-[hsl(var(--accent-soft))/80]",
-    "bg-warning-soft text-warning border-[hsl(var(--warning-soft))/80]",
-    "bg-surface-muted text-text-muted border-[hsl(var(--border))/20]"
-  ];
-  return classes[index];
+// Estilo único de avatar, alinhado ao tom de marca (sem variação por nome).
+function getAvatarStyles(): string {
+  return "bg-[hsl(var(--primary)/0.10)] text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.20)]";
 }
 
 function getAiProcessingState(candidate: JobCandidate): { label: string; tone: "pending" | "processing" } | null {
@@ -76,11 +65,12 @@ function getAiProcessingState(candidate: JobCandidate): { label: string; tone: "
 }
 
 const BADGE_TONE_CLASS: Record<PipelineCardBadgeTone, string> = {
-  danger: "border border-rose-200/80 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/22 dark:text-rose-200",
-  warning: "border border-amber-200/80 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/22 dark:text-amber-200",
-  progress: "border border-cyan-200/80 bg-cyan-50 text-cyan-700 dark:border-cyan-900/40 dark:bg-cyan-950/22 dark:text-cyan-200",
-  success: "border border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/22 dark:text-emerald-200",
-  neutral: "border border-slate-200 bg-slate-100/90 text-slate-600 dark:border-border dark:bg-surface-muted dark:text-text-muted",
+  danger: "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200",
+  warning: "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200",
+  orange: "border border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/30 dark:text-orange-200",
+  progress: "border border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-200",
+  success: "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200",
+  neutral: "border border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
 
 function buildProfessionalContext(candidate: JobCandidate, aiProcessingState: ReturnType<typeof getAiProcessingState>): string | null {
@@ -210,7 +200,7 @@ export const KanbanCard = memo(function KanbanCard({
 }: KanbanCardProps) {
   const name = candidate.candidate_name || "Sem Nome";
   const initials = getInitials(name);
-  const avatarClass = getAvatarStyles(name);
+  const avatarClass = getAvatarStyles();
 
   const jobFitScore = candidate.job_fit_score;
 
@@ -248,16 +238,16 @@ export const KanbanCard = memo(function KanbanCard({
     const score = Math.round(jobFitScore);
     if (score >= 80) {
       scoreColorClass = "text-emerald-600 dark:text-emerald-300";
-      borderAccentClass = "border-l-emerald-400 dark:border-l-emerald-700";
+      borderAccentClass = "border-l-emerald-300 dark:border-l-emerald-700";
     } else if (score >= 60) {
       scoreColorClass = "text-cyan-700 dark:text-cyan-300";
-      borderAccentClass = "border-l-cyan-400 dark:border-l-cyan-700";
+      borderAccentClass = "border-l-cyan-200 dark:border-l-cyan-700";
     } else if (score >= 40) {
       scoreColorClass = "text-amber-600 dark:text-amber-300";
-      borderAccentClass = "border-l-amber-400 dark:border-l-amber-700";
+      borderAccentClass = "border-l-amber-200 dark:border-l-amber-700";
     } else {
       scoreColorClass = "text-rose-500 dark:text-rose-300";
-      borderAccentClass = "border-l-rose-300 dark:border-l-rose-700";
+      borderAccentClass = "border-l-rose-200 dark:border-l-rose-700";
     }
   } else if (isTopMatch) {
     borderAccentClass = "border-l-emerald-400 dark:border-l-emerald-700";

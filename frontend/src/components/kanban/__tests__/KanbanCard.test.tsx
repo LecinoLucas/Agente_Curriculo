@@ -255,4 +255,22 @@ describe("KanbanCard", () => {
       expect(screen.getAllByTestId("kanban-card-primary-badge")).toHaveLength(1);
     });
   });
+
+  describe("identidade visual do avatar", () => {
+    it("usa o mesmo estilo de avatar independente do nome do candidato", () => {
+      const names = ["Ana Beatriz", "Zeca Roberto", "Maria Clara", "João Pedro", "Carlos Eduardo"];
+
+      const classNames = names.map((name) => {
+        const { container, unmount } = render(
+          <KanbanCard candidate={candidate({ candidate_name: name })} isSaving={false} enterDelay={0} />,
+        );
+        const className = container.querySelector(".pipeline-candidate-card__avatar")?.className;
+        unmount();
+        return className;
+      });
+
+      expect(new Set(classNames).size).toBe(1);
+      expect(classNames[0]).toContain("hsl(var(--primary)");
+    });
+  });
 });
