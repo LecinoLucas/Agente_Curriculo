@@ -63,65 +63,62 @@ export function Sidebar({
       {/* ── Sidebar Fixed Container ── */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-[60] flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] shadow-md transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]",
+          "fixed inset-y-0 left-0 z-[60] flex flex-col bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] transition-all duration-300 ease-in-out border-r border-[hsl(var(--nav-border))]",
           mobileMenuOpen
             ? "translate-x-0 w-56"
             : "-translate-x-full lg:translate-x-0",
           !mobileMenuOpen && (sidebarExpanded ? "lg:w-56" : "lg:w-16")
         )}
       >
-        {/* Toggle flutuante — único controle de recolher/expandir, sempre visível no desktop */}
-        <button
-          type="button"
-          onClick={onToggleSidebarExpanded}
-          aria-label={sidebarExpanded ? "Recolher menu" : "Expandir menu"}
-          title={sidebarExpanded ? "Recolher menu" : "Expandir menu"}
-          className="hidden lg:flex absolute top-14 -right-3 z-10 h-6 w-6 items-center justify-center rounded-full border border-[hsl(var(--nav-border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] shadow-sm transition-all hover:scale-110 hover:border-[hsl(var(--primary)/0.4)] hover:text-[hsl(var(--primary))]"
-        >
-          {sidebarExpanded ? <PanelLeftClose className="h-3 w-3" /> : <PanelLeftOpen className="h-3 w-3" />}
-        </button>
-
         <div className="flex flex-col flex-1 min-w-0">
-          {/* Header / Logo + Dedicated Toggle Button */}
+          {/* Header / Logo + Toggle */}
           <div
             className={cn(
               "flex h-13 shrink-0 items-center justify-between border-b border-[hsl(var(--nav-border))] px-3",
-              !isExpanded && "lg:px-0 lg:justify-center"
+              !isExpanded && "lg:justify-center lg:px-0"
             )}
           >
-            <button
-              type="button"
-              onClick={() => {
-                navigate("/pipeline");
-                onPipelineClick();
-                if (mobileMenuOpen) onToggleMobileMenu();
-              }}
-              className={cn(
-                "flex items-center overflow-hidden text-left outline-none rounded-lg transition-transform hover:scale-[1.01]",
-                !isExpanded ? "justify-center w-auto" : "flex-1 min-w-0"
-              )}
-              title="Ir para Pipeline"
-            >
-              <div className="flex h-8 px-2 shrink-0 items-center justify-center rounded-lg bg-rose-600 text-[10.5px] font-extrabold text-white shadow-xs">
-                RH IA
-              </div>
-              {isExpanded && (
+            {isExpanded && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigate("/pipeline");
+                  onPipelineClick();
+                  if (mobileMenuOpen) onToggleMobileMenu();
+                }}
+                className="flex flex-1 min-w-0 items-center overflow-hidden text-left outline-none rounded-lg"
+                title="Ir para Pipeline"
+              >
+                <div className="flex h-8 px-2 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))] text-[11px] font-bold text-[hsl(var(--primary-foreground))]">
+                  RH IA
+                </div>
                 <div className="flex flex-col min-w-0 ml-2">
-                  <span className="truncate text-[12.5px] font-extrabold tracking-tight text-slate-900 dark:text-white">
+                  <span className="truncate text-[13px] font-bold tracking-tight text-[hsl(var(--nav-text))]">
                     ATS Marajó
                   </span>
-                  <span className="truncate text-[9.5px] font-medium text-slate-500 dark:text-text-muted">
+                  <span className="truncate text-[11px] font-medium text-[hsl(var(--nav-muted))]">
                     ATS & Recrutamento IA
                   </span>
                 </div>
-              )}
+              </button>
+            )}
+
+            {/* Toggle — único controle de recolher/expandir */}
+            <button
+              type="button"
+              onClick={onToggleSidebarExpanded}
+              aria-label={sidebarExpanded ? "Recolher menu" : "Expandir menu"}
+              title={sidebarExpanded ? "Recolher menu" : "Expandir menu"}
+              className="hidden lg:flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[hsl(var(--nav-muted))] transition-colors hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--nav-text))]"
+            >
+              {sidebarExpanded ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
             </button>
 
             {/* Mobile Close Button */}
             <button
               type="button"
               onClick={onToggleMobileMenu}
-              className="lg:hidden p-1 rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              className="lg:hidden p-1 rounded-lg text-[hsl(var(--nav-muted))] transition-colors hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--nav-text))]"
             >
               <X className="h-4.5 w-4.5" aria-hidden="true" />
             </button>
@@ -139,7 +136,7 @@ export function Sidebar({
                 const content = (
                   <>
                     {active && (
-                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-rose-600 rounded-r-sm" />
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[hsl(var(--primary))] rounded-r-sm" />
                     )}
                     <div
                       className={cn(
@@ -150,7 +147,7 @@ export function Sidebar({
                       {renderIcon(item.iconKey ?? item.to)}
                     </div>
                     {isExpanded && (
-                      <span className="truncate text-[12px] font-semibold ml-2">
+                      <span className="truncate text-[13px] font-semibold ml-2">
                         {item.label}
                       </span>
                     )}
@@ -161,8 +158,8 @@ export function Sidebar({
                   "group relative flex items-center transition-all duration-150 outline-none w-full py-1 rounded-lg",
                   isExpanded ? "justify-start px-2" : "justify-center px-0",
                   active
-                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] font-semibold shadow-xs"
-                    : "text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 hover:text-slate-950 dark:hover:bg-slate-800/80 dark:hover:text-white"
+                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] font-semibold"
+                    : "text-[hsl(var(--nav-text))] hover:bg-[hsl(var(--surface-muted))]"
                 );
 
                 return item.external ? (
@@ -204,8 +201,8 @@ export function Sidebar({
                 "group relative flex items-center transition-all duration-150 outline-none w-full py-1 rounded-lg",
                 isExpanded ? "justify-start px-2" : "justify-center px-0",
                 isGroupActive && !isOpen
-                  ? "bg-slate-100 text-slate-900 font-semibold dark:bg-slate-800 dark:text-white"
-                  : "text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 hover:text-slate-950 dark:hover:bg-slate-800/80 dark:hover:text-white"
+                  ? "bg-[hsl(var(--surface-muted))] text-[hsl(var(--nav-text))] font-semibold"
+                  : "text-[hsl(var(--nav-text))] hover:bg-[hsl(var(--surface-muted))]"
               );
 
               return (
@@ -217,7 +214,7 @@ export function Sidebar({
                     title={group.label}
                   >
                     {isGroupActive && !isOpen && (
-                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-rose-600 rounded-r-sm" />
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[hsl(var(--primary))] rounded-r-sm" />
                     )}
                     <div
                       className={cn(
@@ -229,7 +226,7 @@ export function Sidebar({
                     </div>
                     {isExpanded && (
                       <>
-                        <span className="truncate text-[12px] font-semibold ml-2">
+                        <span className="truncate text-[13px] font-semibold ml-2">
                           {group.label}
                         </span>
                         <ChevronDown
@@ -248,10 +245,10 @@ export function Sidebar({
                       {group.items.map((item) => {
                         const active = isItemActive(item.to);
                         const subClasses = cn(
-                          "relative flex items-center py-1 px-2.5 text-[11.5px] font-medium rounded-md transition-all duration-150 outline-none",
+                          "relative flex items-center py-1 px-2.5 text-[12px] font-medium rounded-md transition-all duration-150 outline-none",
                           active
-                            ? "bg-[hsl(var(--nav-active-bg))]/50 text-slate-900 font-bold shadow-2xs dark:text-white"
-                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-100/80 hover:text-slate-900 dark:hover:bg-slate-800/80 dark:hover:text-white"
+                            ? "bg-[hsl(var(--nav-active-bg))]/50 text-[hsl(var(--nav-text))] font-bold"
+                            : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--nav-text))]"
                         );
 
                         return item.external ? (

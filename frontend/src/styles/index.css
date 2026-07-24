@@ -1827,11 +1827,11 @@
     bottom: calc(100% + 0.5rem);
     z-index: 50;
     width: 15rem;
-    border-radius: 0.9rem;
+    border-radius: 0.75rem;
     border: 1px solid hsl(var(--border));
     background: hsl(var(--surface));
     padding: 0.4rem;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.12);
   }
 
   .sidebar-user-menu-section-title {

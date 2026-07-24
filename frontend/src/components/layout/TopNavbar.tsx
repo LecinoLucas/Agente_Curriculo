@@ -19,7 +19,7 @@ export function TopNavbar({
   onOpenAssistant,
 }: TopNavbarProps) {
   return (
-    <header className="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between bg-[hsl(var(--surface))]/80 backdrop-blur-md border-b border-[hsl(var(--border))] px-3 sm:px-4 shadow-sm">
+    <header className="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between bg-[hsl(var(--surface))]/80 backdrop-blur-md border-b border-[hsl(var(--border))] px-3 sm:px-4">
       <div className="flex items-center gap-3">
         {/* Mobile Hamburger Button */}
         <button
@@ -42,7 +42,7 @@ export function TopNavbar({
               Marajó <span className="text-[hsl(var(--primary))]">RH IA</span>
             </span>
           </div>
-          <span className="hidden md:inline text-[11px] font-semibold text-slate-500 dark:text-text-muted tracking-tight">
+          <span className="hidden md:inline text-[11px] font-semibold text-[hsl(var(--text-muted))] tracking-tight">
             Gestão Estratégica de Talentos & ATS
           </span>
         </div>
