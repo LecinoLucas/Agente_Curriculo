@@ -125,16 +125,19 @@ Em `KanbanCard.tsx`:
 - `BADGE_TONE_CLASS` (badges semânticos: pendência, sucesso, etc.): mantém
   como está — já são pastéis discretos, não fazem parte do problema relatado.
 
-### 4. Tema 1 — tokens (`styles/index.css`)
+### 4. Tema 1 — tokens (`styles/index.css`) — adiado desta rodada
 
-Sem reescrever a paleta (já é consistente: carmim + porcelana/grafite). Ajustes
-pontuais de higiene, aplicados só dentro dos blocos `[data-visual-theme="theme-1"]`
-(light e dark):
-- Revisar sombras/glows usados em `.glass`/`.ui-card` e nos cards do Kanban
-  para uma escala única (sutil / média), removendo sombras coloridas ou glow
-  de brand fora de estados de foco/hover.
-- Nenhuma mudança nos valores HSL de `--brand`, `--primary`, `--nav-*` — a
-  identidade de cor já está definida e aprovada pelo usuário.
+Sem reescrever a paleta (já é consistente: carmim + porcelana/grafite).
+Nenhuma mudança nos valores HSL de `--brand`, `--primary`, `--nav-*` — a
+identidade de cor já está definida e aprovada pelo usuário.
+
+Uma auditoria geral de sombras/glows (`.glass`/`.ui-card`) foi considerada,
+mas fica **fora do plano de implementação** desta rodada: é uma mudança
+difusa (toca dezenas de seletores sem um critério objetivo de "antes/depois"
+testável) e as 3 mudanças concretas acima (seções 1-3) já resolvem os pontos
+de poluição relatados pelo usuário. Se depois de implementadas ainda sobrar
+alguma sombra/glow específica incômoda, tratar como um ajuste pontual
+separado, não como reescrita geral de tokens.
 
 ## Testes
 
