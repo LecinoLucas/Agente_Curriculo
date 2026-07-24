@@ -14,119 +14,35 @@ type KanbanColumnData = PipelineColumn & {
 
 const DEFAULT_THEME = {
   accentBar: "bg-slate-300/90 dark:bg-slate-500/55",
-  headerGlow: "from-slate-100/90 via-transparent to-transparent dark:from-slate-900/30 dark:via-transparent dark:to-transparent",
-  badge: "border border-slate-200 bg-slate-100/90 text-slate-700 dark:border-border dark:bg-surface dark:text-text-muted",
-  textEmpty: "text-slate-500 dark:text-text-muted",
-  bgEmpty: "bg-slate-50 border-slate-200 text-slate-400 dark:bg-surface dark:border-border dark:text-text-muted",
-  emptyIcon: ClipboardList,
-  emptySub: "Aguardando candidatos.",
 };
 
-const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, any>> = {
-  entrada: {
-    accentBar: "bg-emerald-400/80 dark:bg-emerald-500/55",
-    headerGlow: "from-emerald-100/80 via-emerald-50/20 to-transparent dark:from-emerald-950/22 dark:via-transparent dark:to-transparent",
-    badge: "border border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/24 dark:text-emerald-200",
-    textEmpty: "text-slate-500 dark:text-text-muted",
-    bgEmpty: "bg-emerald-50/80 border-emerald-100 text-emerald-500 dark:bg-emerald-950/18 dark:border-emerald-900/35 dark:text-emerald-200",
-    emptyIcon: Plus,
-    emptySub: "Aguardando novos perfis.",
-  },
-  analise: {
-    accentBar: "bg-amber-400/85 dark:bg-amber-500/55",
-    headerGlow: "from-amber-100/90 via-amber-50/20 to-transparent dark:from-amber-950/20 dark:via-transparent dark:to-transparent",
-    badge: "border border-amber-200/80 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/22 dark:text-amber-200",
-    textEmpty: "text-slate-500 dark:text-text-muted",
-    bgEmpty: "bg-amber-50/80 border-amber-100 text-amber-500 dark:bg-amber-950/16 dark:border-amber-900/35 dark:text-amber-200",
-    emptyIcon: Search,
-    emptySub: "Os candidatos avançam após a triagem inicial.",
-  },
-  avaliacao: {
-    accentBar: "bg-rose-400/75 dark:bg-rose-500/50",
-    headerGlow: "from-rose-100/80 via-rose-50/20 to-transparent dark:from-rose-950/20 dark:via-transparent dark:to-transparent",
-    badge: "border border-rose-200/80 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/22 dark:text-rose-200",
-    textEmpty: "text-slate-500 dark:text-text-muted",
-    bgEmpty: "bg-rose-50/80 border-rose-100 text-rose-500 dark:bg-rose-950/16 dark:border-rose-900/35 dark:text-rose-200",
-    emptyIcon: ClipboardList,
-    emptySub: "Avaliações em andamento.",
-  },
-  entrevista: {
-    accentBar: "bg-cyan-400/80 dark:bg-cyan-500/52",
-    headerGlow: "from-cyan-100/90 via-cyan-50/20 to-transparent dark:from-cyan-950/20 dark:via-transparent dark:to-transparent",
-    badge: "border border-cyan-200/80 bg-cyan-50 text-cyan-700 dark:border-cyan-900/40 dark:bg-cyan-950/22 dark:text-cyan-200",
-    textEmpty: "text-slate-500 dark:text-text-muted",
-    bgEmpty: "bg-cyan-50/80 border-cyan-100 text-cyan-500 dark:bg-cyan-950/16 dark:border-cyan-900/35 dark:text-cyan-200",
-    emptyIcon: CalendarDays,
-    emptySub: "Agende entrevistas para avançar no processo.",
-  },
-  decisao: {
-    accentBar: "bg-violet-400/80 dark:bg-violet-500/50",
-    headerGlow: "from-violet-100/90 via-violet-50/20 to-transparent dark:from-violet-950/18 dark:via-transparent dark:to-transparent",
-    badge: "border border-violet-200/80 bg-violet-50 text-violet-700 dark:border-violet-900/40 dark:bg-violet-950/22 dark:text-violet-200",
-    textEmpty: "text-slate-500 dark:text-text-muted",
-    bgEmpty: "bg-violet-50/80 border-violet-100 text-violet-500 dark:bg-violet-950/16 dark:border-violet-900/35 dark:text-violet-200",
-    emptyIcon: Handshake,
-    emptySub: "Avaliação final.",
-  },
-  finalizado: {
-    accentBar: "bg-slate-400/80 dark:bg-slate-500/55",
-    headerGlow: "from-slate-100/90 via-slate-50/20 to-transparent dark:from-slate-900/28 dark:via-transparent dark:to-transparent",
-    badge: "border border-slate-200/80 bg-slate-100 text-slate-700 dark:border-border dark:bg-surface dark:text-text-muted",
-    textEmpty: "text-slate-500 dark:text-text-muted",
-    bgEmpty: "bg-slate-100 border-slate-200 text-slate-400 dark:bg-surface dark:border-border dark:text-text-muted",
-    emptyIcon: CheckCircle,
-    emptySub: "Processos concluídos.",
-  },
-  admissao: {
-    accentBar: "bg-teal-400/75 dark:bg-teal-500/50",
-    headerGlow: "from-teal-100/90 via-teal-50/20 to-transparent dark:from-teal-950/20 dark:via-transparent dark:to-transparent",
-    badge: "border border-teal-200/80 bg-teal-50 text-teal-700 dark:border-teal-900/40 dark:bg-teal-950/22 dark:text-teal-200",
-    textEmpty: "text-slate-500 dark:text-text-muted",
-    bgEmpty: "bg-teal-50/80 border-teal-100 text-teal-500 dark:bg-teal-950/16 dark:border-teal-900/35 dark:text-teal-200",
-    emptyIcon: CheckCircle,
-    emptySub: "Aguardando documentação.",
-  },
+// Paleta harmonizada (mesma saturação/luminosidade entre etapas), fora da
+// faixa do vermelho da marca — a cor vira só a "assinatura" da etapa,
+// concentrada na barra de 3px do topo da coluna.
+const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, { accentBar: string }>> = {
+  entrada: { accentBar: "bg-[#3B7DDB]" },
+  analise: { accentBar: "bg-[#C98A2E]" },
+  entrevista: { accentBar: "bg-[#1F9E8F]" },
+  avaliacao: { accentBar: "bg-[#7C5CD4]" },
+  decisao: { accentBar: "bg-[#B44FA6]" },
+  admissao: { accentBar: "bg-[#2E9E63]" },
+  finalizado: { accentBar: "bg-[#6B7280]" },
 };
+
+const EMPTY_STATE_ICON_BG = "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300";
 
 const getEmptyStateConfig = (visualKey: string) => {
-  const configs: Record<string, { icon: any; bg: string; subtitle: string }> = {
-    entrada: {
-      icon: Plus,
-      bg: "bg-[#E6F9F0] text-[#10B981] dark:bg-emerald-950/30 dark:text-[#10B981]",
-      subtitle: "Aguardando novos perfis.",
-    },
-    analise: {
-      icon: Search,
-      bg: "bg-[#FFF9E6] text-[#F59E0B] dark:bg-amber-950/30 dark:text-[#F59E0B]",
-      subtitle: "Os candidatos avançam após a triagem inicial.",
-    },
-    entrevista: {
-      icon: CalendarDays,
-      bg: "bg-[#E6F7FF] text-[#0ea5e9] dark:bg-cyan-950/30 dark:text-[#0ea5e9]",
-      subtitle: "Agende entrevistas para avançar no processo.",
-    },
-    avaliacao: {
-      icon: ClipboardList,
-      bg: "bg-[#FFF1F2] text-[#F43F5E] dark:bg-rose-950/30 dark:text-[#F43F5E]",
-      subtitle: "Avaliações em andamento.",
-    },
-    decisao: {
-      icon: Handshake,
-      bg: "bg-[#F3E8FF] text-[#8B5CF6] dark:bg-violet-950/30 dark:text-[#8B5CF6]",
-      subtitle: "Avaliação final.",
-    },
-    admissao: {
-      icon: UserPlus,
-      bg: "bg-[#E6FDF9] text-[#14B8A6] dark:bg-teal-950/30 dark:text-[#14B8A6]",
-      subtitle: "Aguardando contratação.",
-    },
-    finalizado: {
-      icon: CheckCircle,
-      bg: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
-      subtitle: "Processos concluídos.",
-    },
+  const configs: Record<string, { icon: any; subtitle: string }> = {
+    entrada: { icon: Plus, subtitle: "Aguardando novos perfis." },
+    analise: { icon: Search, subtitle: "Os candidatos avançam após a triagem inicial." },
+    entrevista: { icon: CalendarDays, subtitle: "Agende entrevistas para avançar no processo." },
+    avaliacao: { icon: ClipboardList, subtitle: "Consolidação das evidências e decisão final." },
+    decisao: { icon: Handshake, subtitle: "Oferta e negociação." },
+    admissao: { icon: UserPlus, subtitle: "Processo aprovado! Contratação realizada." },
+    finalizado: { icon: CheckCircle, subtitle: "Processos concluídos." },
   };
-  return configs[visualKey] || { icon: ClipboardList, bg: "bg-slate-100 text-slate-500", subtitle: "Aguardando candidatos." };
+  const config = configs[visualKey] || { icon: ClipboardList, subtitle: "Aguardando candidatos." };
+  return { ...config, bg: EMPTY_STATE_ICON_BG };
 };
 
 interface KanbanColumnProps {
@@ -213,7 +129,7 @@ export const KanbanColumn = memo(function KanbanColumn({
       <div className={`h-1.5 w-full shrink-0 ${theme.accentBar}`} />
 
       {/* Column Header */}
-      <div className={`pipeline-kanban-column__header relative flex items-center justify-between border-b border-slate-100/90 bg-gradient-to-r px-3.5 pb-2.5 pt-3 dark:border-border/70 ${theme.headerGlow}`}>
+      <div className="pipeline-kanban-column__header relative flex items-center justify-between border-b border-slate-100/90 bg-white px-3.5 pb-2.5 pt-3 dark:border-border/70 dark:bg-surface">
         <div className="min-w-0">
           <span className="block truncate text-[13px] font-black tracking-tight text-slate-800 dark:text-text" title={column.label}>
             {column.label}
@@ -240,7 +156,8 @@ export const KanbanColumn = memo(function KanbanColumn({
             </TooltipProvider>
           ) : null}
           <span
-            className={`flex h-6 min-w-[30px] items-center justify-center rounded-full px-2 text-[10px] font-extrabold shadow-sm ${theme.badge}`}
+            data-testid="kanban-column-count"
+            className="flex h-6 min-w-[30px] items-center justify-center rounded-full border border-slate-200 bg-slate-100/90 px-2 text-[10px] font-extrabold text-slate-700 shadow-sm dark:border-border dark:bg-surface dark:text-text-muted"
           >
             {isFiltered ? `${column.candidates.length}/${totalCount}` : column.candidates.length}
           </span>

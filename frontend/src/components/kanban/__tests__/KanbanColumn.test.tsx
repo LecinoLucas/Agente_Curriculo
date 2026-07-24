@@ -97,4 +97,45 @@ describe("KanbanColumn", () => {
     expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", "1");
     expect(onColumnDrop).toHaveBeenCalledWith("entry");
   });
+
+  it("não usa mais cor de fundo por etapa no header da coluna (fica neutro)", () => {
+    const column = { stage: "offer", macroId: "decisao", label: "Decisão", candidates: [] } as unknown as PipelineColumn;
+    render(<KanbanColumn column={column} colIndex={0} />);
+
+    const header = screen.getByText("Decisão").closest("div.pipeline-kanban-column__header");
+    expect(header).not.toBeNull();
+    expect(header!.className).not.toMatch(/#[0-9A-Fa-f]{6}/);
+  });
+
+  it("contador de candidatos usa o mesmo estilo neutro em qualquer etapa", () => {
+    const stages = [
+      { stage: "entry", macroId: "entrada", label: "Entrada" },
+      { stage: "offer", macroId: "decisao", label: "Decisão" },
+    ] as const;
+
+    const classNames = stages.map((s) => {
+      const column = { ...s, candidates: [] } as unknown as PipelineColumn;
+      const { getByTestId, unmount } = render(<KanbanColumn column={column} colIndex={0} />);
+      const className = getByTestId("kanban-column-count").className;
+      unmount();
+      return className;
+    });
+
+    expect(classNames[0]).toBe(classNames[1]);
+  });
+
+  it("estado vazio usa círculo de ícone neutro em qualquer etapa", () => {
+    const macroIds = ["entrada", "decisao"] as const;
+
+    const classNames = macroIds.map((macroId) => {
+      const column = { stage: macroId, macroId, label: macroId, candidates: [] } as unknown as PipelineColumn;
+      const { container, unmount } = render(<KanbanColumn column={column} colIndex={0} />);
+      const circle = container.querySelector(".pipeline-kanban-column__empty div[class*='rounded-full']");
+      const className = circle?.className;
+      unmount();
+      return className;
+    });
+
+    expect(classNames[0]).toBe(classNames[1]);
+  });
 });
