@@ -98,5 +98,9 @@ test_output.log
 
 # REPO-VERSIONED-ARTIFACTS-CLEANUP-1 - artefatos locais não cobertos anteriormente
 .tmp-smoke/
+.artifacts/
+.design/
+.ruff_cache/
 backend/.seeded
 backend/full_output.txt
+backend/celerybeat-schedule
