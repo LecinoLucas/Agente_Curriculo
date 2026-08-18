@@ -13,7 +13,7 @@ import type { UserRole } from "../types/auth";
 
 function postPasswordChangeRoute(role?: UserRole | null): string {
   if (isCandidate(role)) return "/candidato/portal";
-  return "/rh";
+  return "/dashboard";
 }
 
 function passwordStrengthLabel(password: string): { label: string; tone: string } {

@@ -105,12 +105,12 @@ export function JobCombobox({ jobs, loading, value, onChange }: JobComboboxProps
         className="flex w-full items-center gap-4 text-left focus:outline-none"
       >
         {/* Briefcase Icon Area */}
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] bg-[#7B1829] text-white shadow-sm dark:border dark:border-[hsl(var(--primary))]/30 dark:bg-[hsl(var(--primary))]/14 dark:text-[hsl(var(--text))]">
-          <Briefcase className="h-6 w-6" />
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-rose-50 text-rose-600 border border-rose-200/80 shadow-xs dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-300">
+          <Briefcase className="h-5 w-5" />
         </div>
 
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-[9px] font-black tracking-widest text-[#7B1829] uppercase leading-none">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-[9px] font-extrabold tracking-widest text-rose-600 dark:text-rose-400 uppercase leading-none">
             Vaga da pipeline
           </span>
           

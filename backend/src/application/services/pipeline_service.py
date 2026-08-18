@@ -1398,6 +1398,7 @@ class PipelineService:
                 job_id=job["job_id"],
                 job_title=job["job_title"],
                 job_status=job["job_status"],
+                job_area=job.get("job_area"),
                 seniority_level=job.get("seniority_level"),
                 work_model=job.get("work_model"),
                 location=job.get("location"),
@@ -1405,6 +1406,7 @@ class PipelineService:
                 total_candidates=sum(job_stats.get(job["job_id"], {}).get("counts", {}).values()),
                 stage_counts=job_stats.get(job["job_id"], {}).get("counts", {}),
                 latest_activity=job_stats.get(job["job_id"], {}).get("latest"),
+                created_at=job["created_at"],
             )
             for job in jobs
         ]

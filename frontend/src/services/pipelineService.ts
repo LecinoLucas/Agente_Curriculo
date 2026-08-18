@@ -177,6 +177,7 @@ export type PipelineJobSummary = {
   id: string;
   title: string;
   status: string;
+  job_area: string | null;
   seniority_level: string | null;
   work_model: string | null;
   location: string | null;
@@ -184,6 +185,7 @@ export type PipelineJobSummary = {
   total_candidates: number;
   stage_counts: Record<string, number>;
   latest_activity: string | null;
+  created_at: string;
 };
 
 function normalizeTransition(item: any): PipelineStageTransition {
@@ -232,6 +234,7 @@ export const pipelineService = {
       id: item?.job_id ?? "",
       title: item?.job_title ?? "",
       status: item?.job_status ?? "draft",
+      job_area: item?.job_area ?? null,
       seniority_level: item?.seniority_level ?? null,
       work_model: item?.work_model ?? null,
       location: item?.location ?? null,
@@ -239,6 +242,7 @@ export const pipelineService = {
       total_candidates: item?.total_candidates ?? 0,
       stage_counts: item?.stage_counts ?? {},
       latest_activity: item?.latest_activity ?? null,
+      created_at: item?.created_at ?? new Date(0).toISOString(),
     }));
   },
 

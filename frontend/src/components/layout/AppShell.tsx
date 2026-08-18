@@ -22,14 +22,12 @@ import {
   FlaskConical,
   PanelTop,
   UserRound,
-  ClipboardList,
-  LayoutGrid
+  ClipboardList
 } from "lucide-react";
 
 import { useAuth } from "../../features/auth/useAuth";
 import { usePipeline } from "../../features/pipeline/PipelineContext";
 import { useTheme } from "../../hooks/useTheme";
-import { cn } from "../../lib/utils";
 import {
   ADMIN_ONLY_ROLES,
   AGENDA_ACCESS_ROLES,
@@ -58,6 +56,7 @@ export type NavItem = {
   roles: UserRole[];
   external?: boolean;
   iconKey?: string;
+  children?: NavItem[];
 };
 
 export type NavGroup = {
@@ -82,12 +81,21 @@ function buildNavigationConfig(): NavGroup[] {
 
   return [
     {
-      label: "Central RH",
-      caption: "Pendências do dia",
+      label: "Dashboard",
+      caption: "Tendências de recrutamento",
       roles: RH_DASHBOARD_ROLES,
       isDropdown: false,
       items: [
-        { to: "/rh", label: "Central RH", caption: "Pendências do dia", roles: RH_DASHBOARD_ROLES }
+        { to: "/dashboard", label: "Dashboard", caption: "Tendências de recrutamento", roles: RH_DASHBOARD_ROLES }
+      ],
+    },
+    {
+      label: "Pipeline",
+      caption: "Centro do recrutamento",
+      roles: STAFF_ROLES,
+      isDropdown: false,
+      items: [
+        { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: STAFF_ROLES },
       ],
     },
     {
@@ -96,23 +104,23 @@ function buildNavigationConfig(): NavGroup[] {
       roles: STAFF_ROLES,
       isDropdown: true,
       items: [
-        { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: STAFF_ROLES },
         { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: STAFF_ROLES },
         { to: "/candidaturas", label: "Candidaturas", caption: "Triagem rápida", roles: STAFF_ROLES },
         { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: CANDIDATES_ACCESS_ROLES },
         { to: "/agenda", label: "Agenda", caption: "Calendário", roles: AGENDA_ACCESS_ROLES },
         { to: "/admin/assistente-candidato", label: "Assistente do Candidato", caption: "Conversas Portal 2", roles: INTERNAL_STAFF_ROLES },
-      ],
-    },
-    {
-      label: "Avaliações",
-      caption: "Gestão Comportamental e IA",
-      roles: ANALYSIS_ROLES,
-      isDropdown: true,
-      items: [
-        { to: "/analises-ia", label: "Análises IA", caption: "Currículos e matching", roles: ANALYSIS_ROLES },
-        { to: "/analises-ia/comportamental", label: "Avaliação comportamental", caption: "Fila e avaliações", roles: ANALYSIS_ROLES },
-        { to: "/admin/behavioral-templates", label: "Templates comportamentais", caption: "Templates de testes", roles: ANALYSIS_ROLES },
+        {
+          to: "/avaliacoes",
+          label: "Avaliações",
+          caption: "Gestão comportamental e IA",
+          roles: ANALYSIS_ROLES,
+          iconKey: "Avaliações",
+          children: [
+            { to: "/analises-ia", label: "Análises IA", caption: "Currículos e matching", roles: ANALYSIS_ROLES },
+            { to: "/analises-ia/comportamental", label: "Avaliação comportamental", caption: "Fila e avaliações", roles: ANALYSIS_ROLES },
+            { to: "/admin/behavioral-templates", label: "Templates comportamentais", caption: "Templates de testes", roles: ANALYSIS_ROLES },
+          ],
+        },
       ],
     },
     {
@@ -147,6 +155,33 @@ function buildNavigationConfig(): NavGroup[] {
         { to: "/admin/ia/uso", label: "Uso de IA", caption: "Tokens, custos e eventos", roles: ADMIN_ONLY_ROLES },
         { to: "/admin/bi", label: "BI", caption: "Indicadores e métricas", roles: ADMIN_ONLY_ROLES },
         { to: "/importar", label: "Importação", caption: "Carga de candidatos", roles: JOB_MANAGEMENT_ROLES },
+        {
+          to: "/admin/outros",
+          label: "Outros",
+          caption: "Ferramentas extras",
+          roles: JOB_MANAGEMENT_ROLES,
+          children: [
+            { to: "/candidato/portal", label: "Rota antiga do candidato", caption: "Tela de transição", roles: JOB_MANAGEMENT_ROLES },
+            {
+              to: standaloneCandidatePortalUrl || "/candidato",
+              label: "Novo portal do candidato",
+              caption: "Frontend separado",
+              roles: JOB_MANAGEMENT_ROLES,
+              external: Boolean(standaloneCandidatePortalUrl),
+              iconKey: "Novo portal do candidato",
+            },
+            {
+              to: candidatePortalPrototypeUrl || "/candidato",
+              label: "Protótipo do portal",
+              caption: "Mock visual separado",
+              roles: JOB_MANAGEMENT_ROLES,
+              external: Boolean(candidatePortalPrototypeUrl),
+              iconKey: "Protótipo do portal",
+            },
+            { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: JOB_MANAGEMENT_ROLES },
+            { to: "/demo-2", label: "Demo 2", caption: "Apresentação RH IA", roles: JOB_MANAGEMENT_ROLES },
+          ],
+        },
       ],
     },
     {
@@ -158,38 +193,11 @@ function buildNavigationConfig(): NavGroup[] {
         { to: "/candidato/portal", label: "Portal do Candidato", caption: "Sua candidatura", roles: CANDIDATE_PORTAL_ROLES }
       ],
     },
-    {
-      label: "Outros",
-      caption: "Ferramentas extras",
-      roles: JOB_MANAGEMENT_ROLES,
-      isDropdown: true,
-      items: [
-        { to: "/candidato/portal", label: "Rota antiga do candidato", caption: "Tela de transição", roles: JOB_MANAGEMENT_ROLES },
-        {
-          to: standaloneCandidatePortalUrl || "/candidato",
-          label: "Novo portal do candidato",
-          caption: "Frontend separado",
-          roles: JOB_MANAGEMENT_ROLES,
-          external: Boolean(standaloneCandidatePortalUrl),
-          iconKey: "Novo portal do candidato",
-        },
-        {
-          to: candidatePortalPrototypeUrl || "/candidato",
-          label: "Protótipo do portal",
-          caption: "Mock visual separado",
-          roles: JOB_MANAGEMENT_ROLES,
-          external: Boolean(candidatePortalPrototypeUrl),
-          iconKey: "Protótipo do portal",
-        },
-        { to: "/demo-rh", label: "Demo RH", caption: "Fluxo RH Simples", roles: JOB_MANAGEMENT_ROLES },
-        { to: "/demo-2", label: "Demo 2", caption: "Apresentação RH IA", roles: JOB_MANAGEMENT_ROLES },
-      ],
-    },
   ];
 }
 
 const ICON_MAP: Record<string, any> = {
-  "/rh": LayoutGrid,
+  "/dashboard": Activity,
   "/pipeline": Kanban,
   "/vagas": Briefcase,
   "/candidaturas": FileSpreadsheet,
@@ -219,7 +227,7 @@ const ICON_MAP: Record<string, any> = {
   "Protótipo do portal": ExternalLink,
   "/demo-rh": FlaskConical,
   "/demo-2": Sparkles,
-  "Central RH": LayoutGrid,
+  "Dashboard": Activity,
   "Recrutamento": Briefcase,
   "Avaliações": GraduationCap,
   "Gestores": UserRound,
@@ -261,9 +269,11 @@ function usePathAllowed() {
           if (s.path === "/") return path === "/";
           return path === s.path || path.startsWith(s.path + "/");
         });
-        if (matched) {
-          return matched.roles.includes(userRole);
-        }
+        // When an explicit screen configuration exists, treat it as an
+        // allowlist so newly grouped modules do not bypass the admin screen
+        // permissions by being absent from the configuration.
+        if (!matched) return false;
+        return matched.roles.includes(userRole);
       } catch {}
     }
     return true;
@@ -315,10 +325,16 @@ export function AppShell() {
   const visibleGroups = useMemo(() => {
     if (!user) return [];
 
+    const filterItems = (items: NavItem[]): NavItem[] => items.flatMap((item) => {
+      if (!item.roles.includes(user.role)) return [];
+      const children = item.children ? filterItems(item.children) : undefined;
+      const itemAllowed = isAllowed(item.to, user.role);
+      if (!itemAllowed && (!children || children.length === 0)) return [];
+      return [{ ...item, children }];
+    });
+
     return buildNavigationConfig().map((group) => {
-      const allowedItems = group.items.filter(
-        (item) => item.roles.includes(user.role) && isAllowed(item.to, user.role)
-      );
+      const allowedItems = filterItems(group.items);
       return { ...group, items: allowedItems };
     }).filter((group) => {
       const hasAccess = group.roles.includes(user.role);
@@ -353,10 +369,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
-      {/* Spacer matching fixed sidebar width */}
-      <div className={cn("hidden lg:block shrink-0 transition-all duration-300", sidebarExpanded ? "lg:w-56" : "lg:w-16")} />
-
-      {/* ── Sidebar Navigation ── */}
+      {/* Mobile-only navigation drawer. Desktop navigation lives in TopNavbar. */}
       <Sidebar
         groups={visibleGroups as any}
         mobileMenuOpen={mobileMenuOpen}
@@ -384,6 +397,10 @@ export function AppShell() {
           onToggleTheme={toggleTheme}
           onNavigate={(path) => navigate(path)}
           onOpenAssistant={() => setAssistantOpen(true)}
+          groups={visibleGroups as any}
+          isItemActive={isItemActive}
+          renderIcon={getNavIcon}
+          onPipelineClick={closeCandidate}
         />
 
         <main className="flex-1 flex flex-col p-4 sm:p-6">

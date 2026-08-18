@@ -158,8 +158,8 @@ const CandidaturasPage = lazy(() =>
   import("../pages/CandidaturasPage").then((m) => ({ default: m.CandidaturasPage }))
 );
 
-const RhDashboardPage = lazy(() =>
-  import("../pages/RhDashboardPage").then((m) => ({ default: m.RhDashboardPage }))
+const DashboardPage = lazy(() =>
+  import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
 );
 
 const AgendaPage = lazy(() =>
@@ -256,16 +256,16 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/rh" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
 
         <Route
           path="dashboard"
-          element={<Navigate to="/rh" replace />}
+          element={protectedPage(<DashboardPage />, RH_DASHBOARD_ROLES)}
         />
 
         <Route
           path="rh"
-          element={protectedPage(<RhDashboardPage />, RH_DASHBOARD_ROLES)}
+          element={<Navigate to="/dashboard" replace />}
         />
 
         <Route

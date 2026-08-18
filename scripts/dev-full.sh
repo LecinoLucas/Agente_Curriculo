@@ -18,10 +18,10 @@ DEV_MODE=${DEV_MODE:-local}
 DEV_HOST=${DEV_HOST:-}
 DEV_PUBLIC_HOST=${DEV_PUBLIC_HOST:-}
 INCLUDE_CANDIDATE_PORTAL=${INCLUDE_CANDIDATE_PORTAL:-true}
-# Celery é opt-in: use DEV_FULL_WITH_WORKER=1 para habilitar.
-# Motivo: worker usa ~300-600 MB em dev; não é necessário para o sistema abrir.
-# Compatibilidade retroativa: INCLUDE_CELERY=true também funciona.
-INCLUDE_CELERY=${INCLUDE_CELERY:-false}
+# Celery sobe por padrao no dev:full.
+# Compatibilidade retroativa: DEV_FULL_WITH_WORKER=1 e INCLUDE_CELERY=true
+# continuam funcionando; para desligar use --no-celery ou INCLUDE_CELERY=false.
+INCLUDE_CELERY=${INCLUDE_CELERY:-true}
 if [ "${DEV_FULL_WITH_WORKER:-}" = "1" ]; then
   INCLUDE_CELERY=true
 fi
@@ -43,12 +43,12 @@ Opcoes:
   --host <host>       127.0.0.1 para local ou 0.0.0.0 para network
   --public-host <ip>  IP/host mostrado para outros dispositivos na LAN
   --no-candidate      Nao sobe candidate-portal
-  --no-celery         Nao sobe worker Celery (redundante quando INCLUDE_CELERY=false)
-  --with-worker       Sobe worker Celery (equivalente a DEV_FULL_WITH_WORKER=1)
+  --no-celery         Nao sobe worker/beat do Celery
+  --with-worker       Mantido por compatibilidade; Celery ja sobe por padrao
 
 Variaveis de ambiente:
-  DEV_FULL_WITH_WORKER=1  Habilita o worker Celery (opt-in; default: desligado)
-  INCLUDE_CELERY=true     Alternativa para habilitar Celery
+  INCLUDE_CELERY=false    Desliga worker/beat do Celery
+  DEV_FULL_WITH_WORKER=1  Compatibilidade retroativa; mantem Celery ligado
 
 Este modo network e somente para LAN/desenvolvimento, nao para producao.
 EOF
@@ -508,6 +508,13 @@ print_info "Aplicando migrations..."
 )
 print_ok "Migrations aplicadas."
 
+print_info "Sincronizando super admin de desenvolvimento..."
+(
+  cd "$BACKEND_DIR"
+  .venv/bin/python scripts/seed_dev_admin.py
+)
+print_ok "Super admin de desenvolvimento sincronizado."
+
 if [ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ]; then
   print_error "uvicorn nao encontrado em $BACKEND_DIR/.venv/bin/uvicorn."
   exit 1
@@ -631,7 +638,7 @@ if [ "$INCLUDE_CELERY" = "true" ]; then
   CHILD_PIDS+=("$CELERY_BEAT_PID")
   print_ok "Celery beat iniciado (PID $CELERY_BEAT_PID)"
 else
-  print_info "Worker Celery omitido. Use DEV_FULL_WITH_WORKER=1 para habilitar."
+  print_info "Worker Celery omitido por INCLUDE_CELERY=false/--no-celery."
 fi
 
 print_section "Verificacao"

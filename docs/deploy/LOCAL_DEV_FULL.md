@@ -100,17 +100,15 @@ Isso sobe:
 - Backend FastAPI em `http://localhost:8000`
 - Frontend staff/admin em `http://localhost:5173`
 - Candidate portal em `http://localhost:5174`
+- Celery worker + Celery beat
 
-Celery worker **não** sobe por padrão (ver abaixo).
-
-### Iniciar com worker Celery
+### Iniciar sem Celery
 
 ```bash
-DEV_FULL_WITH_WORKER=1 npm run dev:full
+npm run dev:full -- --no-celery
 ```
 
-O worker Celery é necessário para processamento de análise de currículos, matching e document AI.
-Consome ~300–600 MB adicionais.
+Use isso apenas se quiser subir a interface sem filas locais.
 
 ### Flags disponíveis
 
@@ -118,11 +116,11 @@ Consome ~300–600 MB adicionais.
 # Modo local (padrão)
 npm run dev:full
 
-# Com worker Celery
-DEV_FULL_WITH_WORKER=1 npm run dev:full
-
 # Sem candidate-portal (economiza recursos)
 npm run dev:full -- --no-candidate
+
+# Sem Celery
+npm run dev:full -- --no-celery
 
 # Modo rede LAN (outros dispositivos acessam pelo IP)
 npm run dev:full -- --network
@@ -225,7 +223,7 @@ psql -U postgres -c "SELECT 1"
 
 ### Celery: `kombu.exceptions.OperationalError`
 
-Redis não está rodando. Inicie Redis antes de usar `DEV_FULL_WITH_WORKER=1`.
+Redis não está rodando. Inicie Redis antes de usar `npm run dev:full`.
 
 ### Migrations falham: `relation does not exist`
 
@@ -248,4 +246,5 @@ cd backend
 | `BACKEND_PORT` | `8000` | Porta do backend FastAPI |
 | `FRONTEND_PORT` | `5173` | Porta do frontend staff |
 | `CANDIDATE_PORTAL_PORT` | `5174` | Porta do candidate portal |
-| `DEV_FULL_WITH_WORKER` | `""` (desligado) | `=1` para habilitar worker Celery |
+| `INCLUDE_CELERY` | `true` | `false` para desligar worker/beat do Celery |
+| `DEV_FULL_WITH_WORKER` | `1` opcional | Compatibilidade retroativa; mantém Celery ligado |

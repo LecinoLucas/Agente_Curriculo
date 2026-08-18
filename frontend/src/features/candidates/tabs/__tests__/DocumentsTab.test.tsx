@@ -53,6 +53,7 @@ vi.mock("../../../../services/resumeService", () => ({
     downloadCandidateResume: vi.fn(),
     fetchCandidateResumeFile: vi.fn(),
     getCandidateResumeDownloadUrl: vi.fn(),
+    retryExtraction: vi.fn(),
   },
 }));
 
@@ -319,4 +320,5 @@ describe("CandidateProfilePage documents tab", () => {
 
     expect(await screen.findByText("Não foi possível carregar o currículo.")).toBeInTheDocument();
   });
+
 });

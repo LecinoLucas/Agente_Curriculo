@@ -945,7 +945,7 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-4 text-slate-800 bg-[#F4F7FB] dark:bg-background dark:text-text sm:px-2 sm:pt-4 lg:px-3">
+    <div className="pipeline-page flex flex-1 h-full w-full min-h-0 min-w-0 flex-col gap-2 px-1 pb-1 pt-2 text-slate-800 bg-[#F4F7FB] dark:bg-background dark:text-text sm:px-2 sm:pt-2 lg:px-3">
       
       {/* ── Header Area ── */}
       <div className="mb-2 mt-0 flex flex-col gap-2">
@@ -958,11 +958,204 @@ export function PipelinePage() {
         {/* sr-only heading for accessibility and tests */}
         <h1 className="sr-only">Pipeline</h1>
 
+        {/* Compact working bar: vacancy, filters and actions in one card. */}
+        <div className="pipeline-toolbar relative z-30 mb-2 flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.38)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:flex-nowrap lg:items-center">
+            <div className="relative z-20 min-w-0 flex-1 lg:max-w-[400px] xl:max-w-[520px]">
+              {pipelineJobsError ? (
+                <span className="text-xs font-bold text-rose-500">{pipelineJobsError}</span>
+              ) : (
+                <JobCombobox
+                  jobs={pipelineJobs}
+                  loading={pipelineJobsLoading}
+                  value={activeJobId ?? null}
+                  onChange={handleSelectJob}
+                />
+              )}
+            </div>
+
+            <div className="hidden h-10 w-px shrink-0 bg-slate-200 lg:block dark:bg-border" />
+
+            <div className="flex min-w-0 flex-[1.35] flex-wrap items-center gap-2 lg:flex-nowrap">
+              <div className="flex min-w-[180px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 shadow-sm transition-all focus-within:border-[hsl(var(--petroleum))] focus-within:bg-white focus-within:ring-2 focus-within:ring-[hsl(var(--petroleum-soft))] dark:border-border dark:bg-surface-muted dark:shadow-none dark:focus-within:bg-surface dark:focus-within:ring-[hsl(var(--petroleum-soft))] lg:min-w-[240px] xl:min-w-[360px]">
+                <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar candidato..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  aria-label="Buscar candidato"
+                  data-testid="pipeline-search-input"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:text-text"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    aria-label="Limpar busca"
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-surface-muted"
+                    data-testid="pipeline-search-clear"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSortOrder(sortOrder === "score_desc" ? "name_az" : "score_desc")}
+                aria-pressed={sortOrder === "score_desc"}
+                className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-bold shadow-sm transition-all ${
+                  sortOrder === "score_desc"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/45 dark:bg-emerald-950/24 dark:text-emerald-200"
+                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted"
+                }`}
+                title="Melhor match IA"
+                aria-label="Melhor match IA"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOnlyPending((prev) => !prev)}
+                aria-pressed={onlyPending}
+                aria-label="Pendências"
+                data-testid="pipeline-pending-toggle"
+                className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-bold shadow-sm transition-all ${
+                  onlyPending
+                    ? "border-orange-300 bg-orange-100 text-orange-800 dark:border-orange-900/55 dark:bg-orange-950/26 dark:text-orange-200"
+                    : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-950/45 dark:bg-transparent dark:text-orange-300 dark:hover:bg-orange-950/18"
+                }`}
+              >
+                <AlertTriangle className="h-4 w-4" />
+                {totalPendencias > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-100 px-1 text-[9px] leading-none text-orange-700 dark:bg-orange-950/45 dark:text-orange-200">
+                    {totalPendencias}
+                  </span>
+                )}
+                <span className="sr-only">Pendências</span>
+              </button>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2 lg:ml-auto">
+              <button
+                type="button"
+                aria-label="Filtros"
+                onClick={() => setShowFilters((prev) => !prev)}
+                className={`relative inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold shadow-sm transition-all ${
+                  showFilters || hasActiveFilters
+                    ? "border-[hsl(var(--brand))]/30 bg-[hsl(var(--brand-soft))] text-[hsl(var(--brand-dark))] dark:border-[hsl(var(--brand))]/55 dark:bg-[hsl(var(--brand-dark))]/22 dark:text-[hsl(var(--brand-glow))]"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-[hsl(var(--petroleum-soft))] dark:border-border dark:bg-surface dark:text-text-muted dark:hover:bg-[hsl(var(--petroleum-soft))]/20"
+                }`}
+              >
+                <Filter className="h-4 w-4" />
+                <span>Filtro</span>
+                {activeFiltersCount > 0 && (
+                  <span data-testid="pipeline-active-filters-badge" className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[hsl(var(--brand-soft))] px-1.5 text-[10px] font-black text-[hsl(var(--brand-dark))] dark:bg-[hsl(var(--brand-dark))]/50 dark:text-[hsl(var(--brand-glow))]">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  data-testid="pipeline-clear-filters"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500 dark:border-border dark:bg-surface dark:hover:border-rose-900/50 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
+                  title="Limpar filtros"
+                  aria-label="Limpar filtros"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+
+              {activeJobId && (
+                <button
+                  type="button"
+                  onClick={() => setShowRanking((current) => !current)}
+                  aria-label="Alternar ranking IA"
+                  title="Ranking IA"
+                  className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border shadow-sm transition-all ${showRanking ? "border-[hsl(var(--petroleum))]/30 bg-[hsl(var(--petroleum-soft))] text-[hsl(var(--petroleum-dark))] dark:border-[hsl(var(--petroleum))]/55 dark:bg-[hsl(var(--petroleum-soft))]/20 dark:text-[hsl(var(--petroleum))]" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted"}`}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                </button>
+              )}
+
+              {activeJobId && (
+                <button
+                  type="button"
+                  aria-label="Atualizar board"
+                  title="Atualizar"
+                  onClick={() => void handleManualRefresh()}
+                  disabled={boardLoading}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:hover:bg-surface-muted"
+                >
+                  <RefreshCw className={`h-4 w-4 ${boardLoading ? "animate-spin" : ""}`} />
+                </button>
+              )}
+
+              {canMutate && (
+                <button
+                  type="button"
+                  aria-label="Vincular candidato"
+                  onClick={handleOpenSourceCandidates}
+                  disabled={!canUse}
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold shadow-sm transition-all ${
+                    canUse
+                      ? "bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-dark))] active:scale-[0.99]"
+                      : "cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-surface-muted dark:text-text-muted"
+                  }`}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Candidato</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {showFilters && (
+            <div className="pipeline-filter-panel flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 px-1 pb-1 pt-3 dark:border-border/70 animate-in slide-in-from-top-2 fade-in duration-200">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-bold text-slate-600 dark:text-text-muted">Período</span>
+                <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 dark:border-border dark:bg-surface-muted">
+                  <input type="date" value={urlBoardFilters.entered_from ?? ""} onChange={(event) => handleBoardDateFilterChange("entered_from", event.target.value)} className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-text" aria-label="Entrada no processo de" />
+                  <span className="text-slate-300 dark:text-text-muted">-</span>
+                  <input type="date" value={urlBoardFilters.entered_to ?? ""} onChange={(event) => handleBoardDateFilterChange("entered_to", event.target.value)} className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-text" aria-label="Entrada no processo até" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-bold text-slate-600 dark:text-text-muted">Última atividade</span>
+                <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 dark:border-border dark:bg-surface-muted">
+                  <input type="date" value={urlBoardFilters.updated_to ?? ""} onChange={(event) => handleBoardDateFilterChange("updated_to", event.target.value)} className="w-[110px] bg-transparent text-sm text-slate-700 focus:outline-none dark:text-slate-200" title="Última atividade até" aria-label="Última atividade até" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Ordenar por</span>
+                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "score_desc" | "score_asc" | "name_az")} className="rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 focus:outline-none dark:border-slate-700 dark:bg-surface-muted dark:text-slate-200">
+                  <option value="score_desc">Maior aderência</option>
+                  <option value="name_az">A-Z</option>
+                </select>
+              </div>
+              {boardUnits.length >= 2 && (
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Unidade</span>
+                  <select value={urlBoardFilters.operational_unit_id ?? ""} onChange={(e) => handleBoardDateFilterChange("operational_unit_id", e.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 focus:outline-none dark:border-slate-700 dark:bg-surface-muted dark:text-slate-200">
+                    <option value="">Todas</option>
+                    {boardUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Two-Column Grid: Vacancy details + Marajó RH IA Co-pilot */}
-        <div className="relative z-30 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.2fr)_1fr] xl:grid-cols-[minmax(0,1.4fr)_1fr] mb-2 pr-14">
+        <div className="hidden relative z-30 grid grid-cols-1 gap-2 mb-2">
           
           {/* Column 1: Vacancy Card */}
-          <div className="relative z-10 flex flex-col justify-between rounded-[22px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_8px_30px_rgb(0,0,0,0.015)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none min-h-[135px]">
+          <div className="relative z-10 flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-[0_8px_30px_rgb(0,0,0,0.015)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none">
             <div className="flex flex-col lg:flex-row lg:items-center">
               {/* Job Combobox */}
               {pipelineJobsError ? (
@@ -981,6 +1174,7 @@ export function PipelinePage() {
 
             {selectedJob && (selectedJob.seniority_level || selectedJob.work_model || selectedJob.location) && (
               <>
+                <div className="hidden">
                 <div className="my-3 border-t border-dashed border-slate-200 dark:border-border/60" />
                 <div className="flex flex-wrap items-center gap-y-2 gap-x-8">
                   {selectedJob.seniority_level && (
@@ -1019,20 +1213,21 @@ export function PipelinePage() {
                     </div>
                   )}
                 </div>
+                </div>
               </>
             )}
           </div>
 
           {/* Column 2: Co-pilot Info Card */}
-          <div className="relative z-10 flex justify-between items-center rounded-[22px] border border-slate-200/60 bg-gradient-to-br from-[#E6F3FF]/45 via-[#E6FDF9]/45 to-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.01)] dark:border-border dark:bg-surface dark:shadow-none overflow-hidden min-h-[135px]">
+          <div className="hidden">
             <div className="flex flex-col justify-center max-w-[65%] z-10">
               <div className="flex items-center gap-1.5 mb-1.5">
-                <Sparkles className="h-4.5 w-4.5 text-teal-500 animate-pulse" />
-                <h2 className="text-[15px] font-black tracking-tight text-slate-800 dark:text-slate-100">
-                  Marajó <span className="text-[#14B8A6]">RH IA</span>
+                <Sparkles className="h-4.5 w-4.5 text-rose-500 animate-pulse" />
+                <h2 className="text-[15px] font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
+                  Marajó <span className="text-rose-600">RH IA</span>
                 </h2>
               </div>
-              <p className="text-xs font-bold text-slate-600 dark:text-text-muted mb-1 leading-snug">
+              <p className="text-xs font-bold text-slate-700 dark:text-text-muted mb-1 leading-snug">
                 Seu copiloto de recrutamento inteligente
               </p>
               <p className="text-[10px] font-semibold text-slate-400 dark:text-text-muted leading-snug">
@@ -1053,7 +1248,7 @@ export function PipelinePage() {
         </div>
 
         {/* Action Controls hidden on desktop since portal renders them */}
-        <div className={`flex flex-wrap gap-2 rounded-[18px] border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-border dark:bg-surface dark:shadow-none sm:flex-nowrap sm:items-center ${portalTarget ? "lg:hidden" : ""}`}>
+        <div className="hidden">
           {canMutate && (
             <button
               type="button"
@@ -1061,12 +1256,12 @@ export function PipelinePage() {
               disabled={!canUse}
               className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold transition-all shadow-sm ${
                 canUse
-                  ? "bg-[#7B1829] text-white hover:bg-[#60121E]"
+                  ? "bg-rose-600 text-white hover:bg-rose-700 active:scale-[0.99] shadow-sm"
                   : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
               }`}
             >
               <Plus className="h-4 w-4" />
-              Vincular candidato
+              <span className="sr-only">Vincular candidato</span>
             </button>
           )}
           
@@ -1077,7 +1272,7 @@ export function PipelinePage() {
               className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
             >
               <BarChart3 className="h-4 w-4 text-slate-400 dark:text-text-muted" />
-              Ver Ranking IA
+              <span className="sr-only">Ver Ranking IA</span>
             </button>
           )}
 
@@ -1090,12 +1285,12 @@ export function PipelinePage() {
               className="pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
             >
               <RefreshCw className={`h-4 w-4 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
-              Atualizar
+              <span className="sr-only">Atualizar</span>
             </button>
           )}
         </div>
 
-        {portalTarget && createPortal(
+        {false && portalTarget && createPortal(
           <>
             {canMutate && (
               <button
@@ -1104,12 +1299,12 @@ export function PipelinePage() {
                 disabled={!canUse}
                 className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold transition-all shadow-sm ${
                   canUse
-                    ? "bg-[#7B1829] text-white hover:bg-[#60121E]"
+                    ? "bg-rose-600 text-white hover:bg-rose-700 active:scale-[0.99] shadow-sm"
                     : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-border dark:bg-surface-muted dark:text-text-muted"
                 }`}
               >
                 <Plus className="h-4 w-4" />
-                Vincular candidato
+                <span className="sr-only">Vincular candidato</span>
               </button>
             )}
             
@@ -1120,7 +1315,7 @@ export function PipelinePage() {
                 className={`pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted ${showRanking ? "bg-slate-50 text-slate-800 dark:bg-surface-muted dark:text-text" : ""}`}
               >
                 <BarChart3 className="h-4 w-4 text-slate-400 dark:text-text-muted" />
-                Ver Ranking IA
+                <span className="sr-only">Ver Ranking IA</span>
               </button>
             )}
 
@@ -1133,7 +1328,7 @@ export function PipelinePage() {
                 className="pipeline-action-button inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-surface dark:text-text-muted dark:shadow-none dark:hover:bg-surface-muted"
               >
                 <RefreshCw className={`h-4 w-4 text-slate-400 dark:text-text-muted ${boardLoading ? "animate-spin" : ""}`} />
-                Atualizar
+                <span className="sr-only">Atualizar</span>
               </button>
             )}
           </>,
@@ -1143,7 +1338,7 @@ export function PipelinePage() {
       
       {/* ── KPIs (Métricas) ── */}
       {activeJobId && !pipelineJobsLoading && selectedJob && board && !boardError && (
-        <div className="mb-3 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.01)] dark:divide-slate-800 dark:border-border dark:bg-surface">
+        <div className="hidden">
           {/* Segment 1: Total de candidatos */}
           <div className="flex items-center gap-3.5 pb-3 md:pb-0 md:pr-4">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
@@ -1223,13 +1418,14 @@ export function PipelinePage() {
               
 
                 {/* Filters Toolbar */}
-                <div className="pipeline-toolbar mb-3 mt-0 flex flex-col gap-2 rounded-[20px] border border-slate-200/80 bg-white/95 px-3 py-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.38)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none">
+                {false && (
+                <div className="pipeline-toolbar mb-3 mt-0 flex flex-col gap-2 rounded-2xl border border-slate-200/80 bg-white/95 px-2 py-2 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.38)] backdrop-blur dark:border-border dark:bg-surface dark:shadow-none">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     
                     {/* Left: Search & Toggles */}
                     <div className="flex flex-wrap items-center gap-2.5">
                       {/* Search Bar */}
-                      <div className="flex w-full items-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-2 shadow-sm transition-all focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-100 dark:border-border dark:bg-surface-muted dark:shadow-none dark:focus-within:bg-surface dark:focus-within:ring-emerald-900/30 sm:w-64">
+                      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 shadow-sm transition-all focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-100 dark:border-border dark:bg-surface-muted dark:shadow-none dark:focus-within:bg-surface dark:focus-within:ring-emerald-900/30 sm:w-64">
                         <Search className="h-4 w-4 shrink-0 text-slate-400" />
                         <input
                           type="text"
@@ -1295,19 +1491,20 @@ export function PipelinePage() {
 
                       <button
                         type="button"
+                        aria-label="Abrir filtros"
                         onClick={() => setShowFilters((prev) => !prev)}
-                        className={`flex h-10 items-center gap-2 rounded-[14px] border px-4 text-sm font-bold shadow-sm transition-all ${
+                        className={`relative flex h-10 w-10 items-center justify-center gap-2 rounded-xl border shadow-sm transition-all ${
                           showFilters || hasActiveFilters
                             ? "border-indigo-200 bg-indigo-50/50 text-indigo-700 dark:border-indigo-950/55 dark:bg-indigo-950/22 dark:text-indigo-200"
                             : "border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 dark:border-border dark:bg-surface dark:text-indigo-400 dark:hover:bg-indigo-950/20"
                         }`}
                       >
                         <Filter className="h-4 w-4" />
-                        Filtros
+                        <span className="sr-only">Filtros</span>
                         {activeFiltersCount > 0 && (
                           <span
                             data-testid="pipeline-active-filters-badge"
-                            className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
+                            className={`absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black ${
                               showFilters || hasActiveFilters
                                 ? "bg-indigo-100/80 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-200"
                                 : "bg-slate-100 text-slate-500 dark:bg-surface-muted dark:text-text-muted"
@@ -1316,7 +1513,7 @@ export function PipelinePage() {
                             {activeFiltersCount}
                           </span>
                         )}
-                        <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showFilters ? "rotate-180" : ""}`} />
+                        <ChevronDown className={`hidden h-4 w-4 ml-1 transition-transform ${showFilters ? "rotate-180" : ""}`} />
                       </button>
 
                       {hasActiveFilters && (
@@ -1335,11 +1532,11 @@ export function PipelinePage() {
 
                   {/* Expanded Filters Area */}
                   {showFilters && (
-                    <div className="pipeline-filter-panel mt-1 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[18px] border border-slate-200 bg-slate-50/65 p-3 shadow-inner shadow-white/70 dark:border-border dark:bg-surface-muted/50 animate-in slide-in-from-top-2 fade-in duration-200">
+                    <div className="pipeline-filter-panel flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 px-1 pb-1 pt-2 dark:border-border/70 animate-in slide-in-from-top-2 fade-in duration-200">
                       {/* Period */}
                       <div className="flex items-center gap-2.5">
                         <span className="text-xs font-bold text-slate-600 dark:text-text-muted">Período</span>
-                        <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-sm border border-slate-200 dark:border-border dark:bg-surface">
+                        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 dark:border-border dark:bg-surface-muted">
                           <input
                             type="date"
                             value={urlBoardFilters.entered_from ?? ""}
@@ -1361,7 +1558,7 @@ export function PipelinePage() {
                       {/* Last activity */}
                       <div className="flex items-center gap-2.5">
                         <span className="text-xs font-bold text-slate-600 dark:text-text-muted">Última atividade</span>
-                        <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-sm border border-slate-200 dark:border-border dark:bg-surface">
+                        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 dark:border-border dark:bg-surface-muted">
                           <input
                             type="date"
                             value={urlBoardFilters.updated_to ?? ""}
@@ -1379,7 +1576,7 @@ export function PipelinePage() {
                         <select
                           value={sortOrder}
                           onChange={(e) => setSortOrder(e.target.value as any)}
-                          className="rounded-lg bg-white py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 shadow-sm border border-slate-200 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                          className="rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 focus:outline-none dark:border-slate-700 dark:bg-surface-muted dark:text-slate-200"
                         >
                           <option value="score_desc">Maior aderência</option>
                           <option value="name_az">A-Z</option>
@@ -1393,7 +1590,7 @@ export function PipelinePage() {
                           <select
                             value={urlBoardFilters.operational_unit_id ?? ""}
                             onChange={(e) => handleBoardDateFilterChange("operational_unit_id", e.target.value)}
-                            className="rounded-lg bg-white py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 shadow-sm border border-slate-200 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                            className="rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-2 pr-6 text-sm font-medium text-slate-700 focus:outline-none dark:border-slate-700 dark:bg-surface-muted dark:text-slate-200"
                           >
                             <option value="">Todas</option>
                             {boardUnits.map((u) => (
@@ -1405,6 +1602,7 @@ export function PipelinePage() {
                     </div>
                   )}
                 </div>
+                )}
 
               {selectedJob && !activeJobAcceptsCandidates && !isDraft && (
                 <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">

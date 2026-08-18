@@ -43,14 +43,14 @@
 
 @layer base {
   /* ==========================================================================
-     LIGHT THEME — ELECTRIC AMETHYST
+     LIGHT THEME — MARAJÓ RED & PETROLEUM
      --------------------------------------------------------------------------
      Direção visual:
-     - Fundo gelo ultra-limpo, quase branco com levíssimo toque violeta.
+     - Fundo gelo ultra-limpo, quase branco com toque frio muito sutil.
      - Cards brancos puros com sombra muito sutil.
      - Texto grafite frio para máxima legibilidade.
-     - Roxo elétrico vibrante como cor de ação, foco e CTA.
-     - Navbar midnight profundo para presença premium.
+     - Vermelho Marajó como ação e petróleo suave como apoio/foco.
+     - Navbar clara, discreta e institucional.
      ========================================================================== */
 
   :root {
@@ -66,6 +66,9 @@
     --brand-soft:      354 90% 95%;
     /* Tom luminoso da marca para glows e gradientes. */
     --brand-glow:      354 92% 64%;
+    --petroleum:       183 52% 35%;
+    --petroleum-dark:  184 56% 27%;
+    --petroleum-soft:  180 38% 94%;
 
     /* -----------------------------------------------------------------------
        Core surfaces — Clean White Porcelain
@@ -210,13 +213,13 @@
   }
 
   /* ==========================================================================
-     DARK THEME — ELECTRIC AMETHYST MIDNIGHT
+     DARK THEME — MARAJÓ RED & PETROLEUM MIDNIGHT
      --------------------------------------------------------------------------
      Direção visual:
-     - Midnight profundo: fundos quase-preto com subtom violeta.
+     - Midnight profundo: fundos quase-preto com subtom petróleo.
      - Cards levemente mais claros com profundidade real.
-     - Roxo elétrico luminoso para CTA, foco e destaques.
-     - Detalhes em ciano para contraponto vibrante.
+     - Vermelho Marajó luminoso para CTA, foco e destaques.
+     - Detalhes em petróleo para contraponto discreto.
      ========================================================================== */
 
   :root[data-theme="dark"] {
@@ -232,6 +235,9 @@
     --brand-soft:      263 38% 24%;
     /* Tom luminoso da marca para glow. */
     --brand-glow:      263 92% 76%;
+    --petroleum:       181 58% 58%;
+    --petroleum-dark:  182 62% 42%;
+    --petroleum-soft:  181 32% 18%;
 
     /* -----------------------------------------------------------------------
        Core surfaces — Midnight
@@ -374,26 +380,30 @@
 
   :root[data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 — Crimson Ruby & Warm Slate (Executivo Refinado)
+       Visual Theme 1 — Marajó Institucional & Clean Porcelain
        -----------------------------------------------------------------------
        Direção:
-       - Vermelho Rubí Carmim para marca, botões e destaque principal.
-       - Fundo Warm Slate Peróxido com cartões em branco aveludado.
-       - Sidebar e Navbar Deep Slate Midnight para contraste sênior imponente.
+       - Vermelho Marajó e petróleo suave para marcas, botões e destaque ativo.
+       - Fundo limpo suave e cards arredondados em branco porcelana.
+       - Bordas ultra-suaves (rounded-xl e shadow-xs).
        ----------------------------------------------------------------------- */
 
-    /* Cor principal da marca no tema atual: Crimson Ruby. */
-    --brand:               354 84% 48%;
-    --brand-dark:          354 86% 38%;
-    --brand-soft:          354 90% 95%;
-    --brand-glow:          354 92% 64%;
+    /* Cor principal da marca: vermelho Marajó, sem saturação agressiva. */
+    --brand:               354 66% 48%;
+    --brand-dark:          354 70% 37%;
+    --brand-soft:          354 82% 96%;
+    --brand-glow:          354 70% 64%;
+    /* Cor de apoio: petróleo claro para foco e estados informativos. */
+    --petroleum:           183 52% 35%;
+    --petroleum-dark:      184 56% 27%;
+    --petroleum-soft:      180 38% 94%;
 
     /* Fundo principal da aplicação. */
     --bg:                  210 40% 98%;
     --surface:             0 0% 100%;
-    --surface-muted:       214 20% 94%;
-    --border:              214 20% 88%;
-    --border-strong:       214 16% 75%;
+    --surface-muted:       214 20% 95%;
+    --border:              214 20% 90%;
+    --border-strong:       214 20% 82%;
 
     --background:          210 40% 98%;
     --foreground:          222 47% 11%;
@@ -401,49 +411,49 @@
     --card-foreground:     222 47% 11%;
     --popover:             0 0% 100%;
     --popover-foreground:  222 47% 11%;
-    --secondary:           220 14% 90%;
+    --secondary:           214 20% 95%;
     --secondary-foreground:222 47% 11%;
-    --muted:               220 14% 90%;
-    --muted-foreground:    215 16% 44%;
+    --muted:               214 20% 95%;
+    --muted-foreground:    215 16% 46%;
 
     --text:                222 47% 11%;
-    --text-muted:          215 16% 44%;
+    --text-muted:          215 16% 46%;
 
-    /* Cor principal de ação: vermelho carmim rubí. */
-    --primary:             354 84% 48%;
-    --primary-hover:       354 86% 38%;
-    --primary-soft:        354 90% 95%;
+    /* Cor principal de ação: vermelho Marajó. */
+    --primary:             354 66% 48%;
+    --primary-hover:       354 70% 37%;
+    --primary-soft:        354 82% 96%;
     --primary-foreground:  0 0% 100%;
-    --ring:                354 84% 48%;
+    --ring:                183 52% 35%;
 
-    --accent:              354 90% 95%;
-    --accent-foreground:   354 84% 38%;
-    --accent-soft:         354 90% 95%;
+    --accent:              180 38% 94%;
+    --accent-foreground:   184 56% 27%;
+    --accent-soft:         180 38% 94%;
     --accent-contrast:     222 47% 11%;
 
-    --danger:              354 84% 48%;
-    --danger-soft:         354 90% 95%;
-    --destructive:         354 84% 48%;
+    --danger:              0 84% 60%;
+    --danger-soft:         0 90% 96%;
+    --destructive:         0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --input:               220 14% 84%;
+    --input:               214 20% 90%;
 
     --nav-bg:              0 0% 100%;
     --nav-text:            222 47% 11%;
-    --nav-muted:           215 25% 25%;
-    --nav-active-bg:       354 84% 48%;
+    --nav-muted:           215 25% 40%;
+    --nav-active-bg:       354 66% 48%;
     --nav-active-text:     0 0% 100%;
     --nav-border:          214 20% 90%;
 
-    --sidebar-accent:      354 84% 48%;
+    --sidebar-accent:      354 66% 48%;
 
-    --hero-start:          354 84% 48%;
-    --hero-end:            224 82% 54%;
+    --hero-start:          354 66% 48%;
+    --hero-end:            183 52% 35%;
 
-    --page-glow-start:     354 90% 94%;
-    --page-glow-end:       220 18% 92%;
-    --page-gradient-start: 220 18% 94%;
-    --page-gradient-end:   220 14% 90%;
+    --page-glow-start:     354 82% 96%;
+    --page-glow-end:       180 38% 94%;
+    --page-gradient-start: 210 40% 98%;
+    --page-gradient-end:   214 20% 95%;
   }
 
   :root[data-visual-theme="theme-2"] {
@@ -678,6 +688,9 @@
     --brand-soft:          220 14% 18%;
     /* Tom luminoso da marca, usado em brilhos e gradientes. */
     --brand-glow:          356 52% 46%;
+    --petroleum:           181 58% 58%;
+    --petroleum-dark:      182 62% 42%;
+    --petroleum-soft:      181 32% 18%;
 
     /* Fundo principal da aplicação. */
     --bg:                  220 12% 10%;
@@ -1709,7 +1722,7 @@
 
   .visual-theme-preview-theme-1 {
     background:
-      linear-gradient(135deg, hsl(220 12% 10%) 0 34%, hsl(356 76% 42%) 34% 68%, hsl(220 4% 98%) 68% 100%);
+      linear-gradient(135deg, hsl(183 52% 35%) 0 34%, hsl(354 66% 48%) 34% 68%, hsl(180 38% 94%) 68% 100%);
   }
 
   .visual-theme-preview-theme-2 {
@@ -2617,6 +2630,49 @@
 :root[data-visual-theme="theme-2"] aside nav a.active {
   background-color: hsl(var(--nav-active-bg)) !important;
   color: hsl(var(--nav-active-text)) !important;
+}
+
+/* Theme 1 brand bridge: legacy indigo utilities follow the Marajó palette. */
+:root[data-visual-theme="theme-1"] [class~="bg-indigo-600"] {
+  background-color: hsl(var(--brand)) !important;
+}
+
+:root[data-visual-theme="theme-1"] [class~="bg-indigo-700"] {
+  background-color: hsl(var(--brand-dark)) !important;
+}
+
+:root[data-visual-theme="theme-1"] [class~="bg-indigo-50"],
+:root[data-visual-theme="theme-1"] [class~="bg-indigo-100"],
+:root[data-visual-theme="theme-1"] [class~="bg-purple-100"] {
+  background-color: hsl(var(--brand-soft)) !important;
+}
+
+:root[data-visual-theme="theme-1"] [class~="text-indigo-600"],
+:root[data-visual-theme="theme-1"] [class~="text-indigo-700"],
+:root[data-visual-theme="theme-1"] [class~="text-purple-700"] {
+  color: hsl(var(--brand-dark)) !important;
+}
+
+:root[data-visual-theme="theme-1"] [class~="text-indigo-400"],
+:root[data-visual-theme="theme-1"] [class~="text-purple-400"] {
+  color: hsl(var(--brand-glow)) !important;
+}
+
+:root[data-visual-theme="theme-1"] [class~="border-indigo-200"] {
+  border-color: hsl(var(--brand) / 0.3) !important;
+}
+
+:root[data-visual-theme="theme-1"] [class~="border-indigo-950\/55"] {
+  border-color: hsl(var(--brand) / 0.55) !important;
+}
+
+:root[data-visual-theme="theme-1"] [class~="from-indigo-600"] {
+  --tw-gradient-from: hsl(var(--brand)) var(--tw-gradient-from-position);
+  --tw-gradient-to: hsl(var(--brand) / 0) var(--tw-gradient-to-position);
+}
+
+:root[data-visual-theme="theme-1"] [class~="to-purple-500"] {
+  --tw-gradient-to: hsl(var(--petroleum)) var(--tw-gradient-to-position);
 }
 
 /* ==========================================================================

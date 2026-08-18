@@ -288,6 +288,7 @@ class PipelineJobSummaryResponse(BaseModel):
     job_id: UUID
     job_title: str
     job_status: str
+    job_area: str | None = None
     seniority_level: str | None = None
     work_model: str | None = None
     location: str | None = None
@@ -295,6 +296,7 @@ class PipelineJobSummaryResponse(BaseModel):
     total_candidates: int
     stage_counts: dict[str, int]
     latest_activity: datetime | None
+    created_at: datetime
 
 
 # ---------------------------------------------------------------------------

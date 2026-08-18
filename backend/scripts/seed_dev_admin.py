@@ -35,6 +35,7 @@ from src.infrastructure.ai.prompts.resume_profiler import (
 from src.infrastructure.ai.prompts.resume_profiler import VERSION as RESUME_PROFILER_VERSION
 from src.infrastructure.database.models.analysis_model import PromptTemplateModel
 from src.infrastructure.database.connection import AsyncSessionFactory, engine
+from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import (
     SQLAlchemyUserRepository,
 )
@@ -92,8 +93,27 @@ async def _ensure_dev_admin(session) -> tuple[object, str | None]:
     repository = SQLAlchemyUserRepository(session)
     existing_user = await repository.find_by_email(DEFAULT_ADMIN_EMAIL)
 
+    # Em um banco de desenvolvimento normalmente existe apenas um admin.
+    # Quando o e-mail do .env muda, use esse único admin como a identidade
+    # canônica em vez de criar um segundo super admin.
+    if existing_user is None:
+        admin_rows = await session.execute(
+            sa.select(UserModel).where(
+                UserModel.role == UserRole.ADMIN.value,
+                UserModel.deleted_at.is_(None),
+            )
+        )
+        admins = admin_rows.scalars().all()
+        if len(admins) == 1:
+            existing_user = repository._to_entity(admins[0])
+            existing_user.email = DEFAULT_ADMIN_EMAIL
+            print(f"E-mail do admin de desenvolvimento reconciliado: {DEFAULT_ADMIN_EMAIL}")
+
     if existing_user is not None:
         print(f"Admin de desenvolvimento já existe: {DEFAULT_ADMIN_EMAIL}")
+        existing_user.role = UserRole.ADMIN
+        existing_user.full_name = DEFAULT_ADMIN_FULL_NAME
+        password_reconciled = False
         if DEFAULT_ADMIN_PASSWORD and not verify_password(
             DEFAULT_ADMIN_PASSWORD, existing_user.password_hash
         ):
@@ -101,8 +121,10 @@ async def _ensure_dev_admin(session) -> tuple[object, str | None]:
                 hash_password(DEFAULT_ADMIN_PASSWORD),
                 must_change_password=False,
             )
-            await repository.save(existing_user)
-            await session.flush()
+            password_reconciled = True
+        await repository.save(existing_user)
+        await session.flush()
+        if password_reconciled:
             print("Senha do admin reconciliada com DEV_ADMIN_PASSWORD.")
         return existing_user.id, None
 

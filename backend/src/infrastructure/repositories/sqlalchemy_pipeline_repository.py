@@ -1093,6 +1093,7 @@ class SQLAlchemyPipelineRepository:
                 JobModel.id.label("job_id"),
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
+                JobModel.job_area,
                 JobModel.seniority_level,
                 JobModel.work_model,
                 JobModel.location,

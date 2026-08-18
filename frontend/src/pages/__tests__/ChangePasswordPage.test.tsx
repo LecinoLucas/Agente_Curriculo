@@ -54,7 +54,7 @@ function renderPage(user: AuthUser = adminUser, updateUser = vi.fn()) {
     <MemoryRouter initialEntries={["/trocar-senha"]}>
       <Routes>
         <Route path="/trocar-senha" element={<ChangePasswordPage />} />
-        <Route path="/rh" element={<div>RH destino</div>} />
+        <Route path="/dashboard" element={<div>RH destino</div>} />
         <Route path="/candidato/portal" element={<div>Portal candidato destino</div>} />
       </Routes>
     </MemoryRouter>,

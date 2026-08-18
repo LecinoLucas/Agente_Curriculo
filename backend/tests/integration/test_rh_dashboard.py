@@ -136,6 +136,7 @@ async def test_rh_dashboard_empty_state_contract(
         "new_candidates": 0,
         "interviews_today": 0,
         "pending_decisions": 0,
+        "active_jobs": 0,
         "pending_pre_admissions": 0,
         "admitted_this_month": 0,
     }
@@ -164,3 +165,56 @@ async def test_rh_dashboard_blocks_candidate_role(
     response = await client.get(ENDPOINT, headers=headers)
 
     assert response.status_code == 403
+
+
+async def test_rh_dashboard_trends_returns_contiguous_daily_points(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await _create_active_user(
+        db_session,
+        f"rh-trends-{uuid4().hex[:8]}@test.com",
+        "pass1234",
+        UserRole.ADMIN,
+    )
+    headers = await _auth_headers(client, user.email, "pass1234")
+
+    candidate = _candidate("Carlos Silva")
+    job = _job(user.id)
+    db_session.add_all([candidate, job])
+    await db_session.flush()
+
+    interview = _today_interview(candidate.id, job.id)
+    db_session.add(interview)
+    await db_session.commit()
+
+    # Test default 14 days
+    res = await client.get("/api/v1/rh/dashboard/trends", headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["days"] == 14
+    assert len(body["points"]) == 14
+
+    # Verify point structure
+    for pt in body["points"]:
+        assert "date" in pt
+        assert "candidates" in pt
+        assert "interviews" in pt
+        assert "hires" in pt
+
+    # Test custom 7 days param
+    res7 = await client.get("/api/v1/rh/dashboard/trends", params={"days": 7}, headers=headers)
+    assert res7.status_code == 200
+    body7 = res7.json()
+    assert body7["days"] == 7
+    assert len(body7["points"]) == 7
+
+
+async def test_rh_dashboard_trends_blocks_candidate_role(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers = await _headers(client, db_session, UserRole.CANDIDATE)
+    res = await client.get("/api/v1/rh/dashboard/trends", headers=headers)
+    assert res.status_code == 403
+

@@ -54,12 +54,12 @@ Uma extração legitimamente ativa nunca passa de 3 min. Qualquer versão em `pr
 
 ### Modo local (`npm run dev:full`)
 
-O beat só sobe com `DEV_FULL_WITH_WORKER=1`:
+O `dev:full` sobe worker e beat do Celery por padrão:
 
 ```bash
-DEV_FULL_WITH_WORKER=1 npm run dev:full
-# ou
-npm run dev:full -- --with-worker
+npm run dev:full
+# para desligar explicitamente:
+npm run dev:full -- --no-celery
 ```
 
 Você verá no terminal:

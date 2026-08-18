@@ -203,7 +203,19 @@ function createMockContext(override: Partial<PipelineContextValue> = {}): Pipeli
     invalidateCandidateOverview: vi.fn(),
     invalidateCandidate: vi.fn(),
     patchCandidate: vi.fn(),
-    moveCandidateStage: vi.fn(),
+    moveCandidateStage: vi.fn((candidateId: string, stage: PipelineStage, options?: { reason?: string; notes?: string | null }) =>
+      pipelineService.moveCandidateStage("job-1", candidateId, {
+        stage,
+        reason: options?.reason,
+        notes: options?.notes,
+      }),
+    ),
+    scheduleCandidateInterview: vi.fn((candidateId: string, stage: PipelineStage, payload: any) =>
+      pipelineService.schedulePipelineInterview("job-1", candidateId, {
+        stage,
+        ...payload,
+      }),
+    ),
     setCandidateAiStatus: vi.fn(),
     syncAnalysisStart: vi.fn(),
     ensureAnalysisMatch: vi.fn(),

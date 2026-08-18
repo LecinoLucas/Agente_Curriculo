@@ -171,7 +171,7 @@ if command -v pgrep >/dev/null 2>&1; then
   if [ -n "$_celery_pids" ]; then
     _ok "Celery worker rodando (PIDs: $_celery_pids)"
   else
-    _warn "Celery worker nao rodando (use DEV_FULL_WITH_WORKER=1 npm run dev:full para habilitar)"
+    _warn "Celery worker nao rodando"
   fi
 else
   _warn "pgrep nao disponivel — pulando checagem de processos"

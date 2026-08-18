@@ -1,6 +1,6 @@
 import type { AIAnalysisStatus, JobCandidate, PipelineStage } from "../../../types/domain";
 
-export type PipelineCardBadgeTone = "danger" | "warning" | "progress" | "success" | "neutral";
+export type PipelineCardBadgeTone = "danger" | "warning" | "orange" | "progress" | "success" | "neutral";
 
 export type PipelineCardBadge = {
   label: string;
@@ -298,7 +298,7 @@ export function derivePipelineCardBadges(
   if (candidate.requires_scorecard && scorecardStatus !== "submitted" && (stage === "final" || stage === "offer")) {
     badges.push({
       label: "Scorecard pendente",
-      tone: "warning",
+      tone: "orange",
       priority: 74,
       reason: "A vaga exige scorecard antes da decisão final.",
       icon: "scorecard",

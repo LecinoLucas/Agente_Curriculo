@@ -6,10 +6,10 @@ import { useVisualTheme } from "../../hooks/useVisualTheme";
 import { type VisualTheme } from "../../hooks/visualThemeStorage";
 
 const THEMES: Array<{ value: VisualTheme; label: string; description: string }> = [
-  { value: "theme-1", label: "Tema 1", description: "Vermelho com Cinza Escuro" },
-  { value: "theme-2", label: "Cobre Executivo", description: "Premium, quente e corporativo" },
-  { value: "theme-3", label: "Aurora Corporativa", description: "Moderno e Tecnológico" },
-  { value: "theme-4", label: "Tema 4", description: "Creme Vibrante" },
+  { value: "theme-1", label: "Marajó Institucional (Recomendado)", description: "Vermelho Marajó com petróleo claro e sutil" },
+  { value: "theme-3", label: "Aurora Corporativa", description: "Moderno e Tecnológico (Teal / Azul)" },
+  { value: "theme-2", label: "Cobre Executivo", description: "Premium e corporativo (Tons Quentes)" },
+  { value: "theme-4", label: "Creme Vibrante", description: "Claro e contemporâneo" },
 ];
 
 function getInitials(name: string): string {
@@ -59,7 +59,7 @@ export function SidebarUserMenu({
               <span className="sidebar-user-menu-name">{userName}</span>
               <span className="sidebar-user-menu-email">{userEmail}</span>
             </span>
-            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--nav-muted))]" />
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-text-muted" />
           </>
         )}
       </button>

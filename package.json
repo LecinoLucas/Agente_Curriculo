@@ -5,7 +5,7 @@
     "validate:repo-root": "node scripts/validate-repo-root.js",
     "dev": "npm run validate:repo-root && npm run dev:all",
 
-    "dev:full": "npm run validate:repo-root && bash scripts/dev-full.sh",
+    "dev:full": "npm run validate:repo-root && bash scripts/dev-full.sh --network",
     "docker:full": "bash scripts/docker-full.sh",
     "dev:user": "npm run validate:repo-root && ./scripts/dev-user.sh",
     "check:protheus-bridge-readonly": "npm run validate:repo-root && bash scripts/check-protheus-bridge-readonly-integration.sh",

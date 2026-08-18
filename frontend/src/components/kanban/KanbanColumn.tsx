@@ -19,7 +19,7 @@ const DEFAULT_THEME = {
 // Paleta harmonizada (mesma saturação/luminosidade entre etapas), fora da
 // faixa do vermelho da marca — a cor vira só a "assinatura" da etapa,
 // concentrada na barra de 3px do topo da coluna.
-const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, { accentBar: string }>> = {
+export const PIPELINE_STAGE_ACCENT_COLORS: Partial<Record<PipelineStage | PipelineMacroColumnId, { accentBar: string }>> = {
   entrada: { accentBar: "bg-[#3B7DDB]" },
   analise: { accentBar: "bg-[#C98A2E]" },
   entrevista: { accentBar: "bg-[#1F9E8F]" },
@@ -78,7 +78,10 @@ export const KanbanColumn = memo(function KanbanColumn({
   onColumnDragLeave,
   onColumnDrop,
 }: KanbanColumnProps) {
-  const theme = COL_THEMES[column.macroId ?? column.stage] || COL_THEMES[column.stage] || DEFAULT_THEME;
+  const theme =
+    PIPELINE_STAGE_ACCENT_COLORS[column.macroId ?? column.stage] ||
+    PIPELINE_STAGE_ACCENT_COLORS[column.stage] ||
+    DEFAULT_THEME;
   const columnTestId = column.macroId ?? column.stage;
   const columnVisualKey = column.macroId ?? column.stage;
   const targetStage = column.dropTargetStage ?? column.stage;
